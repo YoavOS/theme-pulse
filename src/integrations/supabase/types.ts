@@ -14,7 +14,59 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      theme_tickers: {
+        Row: {
+          added_at: string
+          id: string
+          theme_id: string
+          ticker_symbol: string
+        }
+        Insert: {
+          added_at?: string
+          id?: string
+          theme_id: string
+          ticker_symbol: string
+        }
+        Update: {
+          added_at?: string
+          id?: string
+          theme_id?: string
+          ticker_symbol?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "theme_tickers_theme_id_fkey"
+            columns: ["theme_id"]
+            isOneToOne: false
+            referencedRelation: "themes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      themes: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          name: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          name: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          name?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
