@@ -1,7 +1,8 @@
 import { useState, useMemo } from "react";
-import { demoThemes, getProcessedThemes, ThemeData } from "@/data/themeData";
+import { getProcessedThemes, ThemeData } from "@/data/themeData";
+import { useLiveThemeData } from "@/hooks/useLiveThemeData";
 import ThemeCard from "@/components/ThemeCard";
-import { RefreshCw, Download, TrendingUp, TrendingDown } from "lucide-react";
+import { RefreshCw, Download, TrendingUp, TrendingDown, Wifi, WifiOff, Loader2 } from "lucide-react";
 
 const TIMEFRAMES = ["Today", "1W", "1M", "3M", "YTD"] as const;
 
@@ -13,23 +14,30 @@ function formatTime(d: Date) {
 }
 
 export default function Index() {
-  const [lastUpdated, setLastUpdated] = useState(new Date());
   const [activeTimeframe, setActiveTimeframe] = useState<string>("Today");
   const [showPlaceholders, setShowPlaceholders] = useState(false);
 
+  const {
+    themes: allThemes,
+    isLoading,
+    isLive,
+    lastFetched,
+    rateLimited,
+    symbolsFetched,
+    fetchLiveData,
+    resetToDemo,
+  } = useLiveThemeData();
+
   const themes = useMemo(() => {
-    const processed = getProcessedThemes(demoThemes);
-    if (showPlaceholders) return processed;
-    return processed.filter(
+    if (showPlaceholders) return allThemes;
+    return allThemes.filter(
       (t) => t.tickers.length > 0 || t.up_count > 0 || t.down_count > 0
     );
-  }, [showPlaceholders]);
+  }, [allThemes, showPlaceholders]);
 
   const strong = themes.filter((t) => t.category === "Strong");
   const neutral = themes.filter((t) => t.category === "Neutral");
   const weak = themes.filter((t) => t.category === "Weak");
-
-  const handleRefresh = () => setLastUpdated(new Date());
 
   const handleExport = () => {
     const rows = themes.map((t) =>
@@ -40,7 +48,7 @@ export default function Index() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `themes_${formatDate(lastUpdated).replace(/\//g, "-")}.csv`;
+    a.download = `themes_${formatDate(lastFetched).replace(/\//g, "-")}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -53,10 +61,24 @@ export default function Index() {
           <div>
             <h1 className="text-2xl font-extrabold tracking-tight text-foreground sm:text-3xl">
               Best Performing Themes{" "}
-              <span className="text-primary">{formatDate(lastUpdated)}</span>
+              <span className="text-primary">{formatDate(lastFetched)}</span>
             </h1>
-            <p className="mt-0.5 text-xs text-muted-foreground">
-              Last updated: {formatTime(lastUpdated)} · {themes.length} themes tracked
+            <p className="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground">
+              {isLive ? (
+                <span className="inline-flex items-center gap-1 text-gain-medium">
+                  <Wifi size={12} /> Live
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1">
+                  <WifiOff size={12} /> Demo data
+                </span>
+              )}
+              · Last updated: {formatTime(lastFetched)}
+              · {themes.length} themes
+              {isLive && ` · ${symbolsFetched} symbols`}
+              {rateLimited && (
+                <span className="text-loss-mild"> · Rate limited</span>
+              )}
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -76,6 +98,31 @@ export default function Index() {
                 </button>
               ))}
             </div>
+
+            {/* Live / Demo toggle */}
+            {isLive ? (
+              <button
+                onClick={resetToDemo}
+                className="rounded-md border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+              >
+                Demo Data
+              </button>
+            ) : (
+              <button
+                onClick={() => fetchLiveData()}
+                disabled={isLoading}
+                className="rounded-md border border-gain-medium/40 bg-gain-medium/10 px-3 py-1.5 text-xs font-semibold text-gain-medium transition-colors hover:bg-gain-medium/20 disabled:opacity-50"
+              >
+                {isLoading ? (
+                  <span className="inline-flex items-center gap-1">
+                    <Loader2 size={12} className="animate-spin" /> Fetching…
+                  </span>
+                ) : (
+                  "Go Live"
+                )}
+              </button>
+            )}
+
             <button
               onClick={() => setShowPlaceholders(!showPlaceholders)}
               className="rounded-md border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
@@ -90,15 +137,31 @@ export default function Index() {
               <Download size={16} />
             </button>
             <button
-              onClick={handleRefresh}
-              className="rounded-md bg-primary/10 p-1.5 text-primary transition-colors hover:bg-primary/20"
+              onClick={() => isLive ? fetchLiveData() : undefined}
+              disabled={isLoading || !isLive}
+              className="rounded-md bg-primary/10 p-1.5 text-primary transition-colors hover:bg-primary/20 disabled:opacity-30"
               title="Refresh"
             >
-              <RefreshCw size={16} />
+              <RefreshCw size={16} className={isLoading ? "animate-spin" : ""} />
             </button>
           </div>
         </div>
       </header>
+
+      {/* Loading overlay */}
+      {isLoading && (
+        <div className="container py-4">
+          <div className="flex items-center gap-3 rounded-lg border border-border bg-card p-4">
+            <Loader2 size={20} className="animate-spin text-primary" />
+            <div>
+              <p className="text-sm font-medium text-foreground">Fetching live data from Alpha Vantage…</p>
+              <p className="text-xs text-muted-foreground">
+                Free tier: 5 requests/min. This may take a few minutes for all themes.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       <main className="container py-6">
         {/* ─── STRONG THEMES ─────────────────────────── */}
@@ -132,14 +195,10 @@ export default function Index() {
 
       {/* ─── FOOTER ──────────────────────────────────── */}
       <footer className="border-t border-border py-6 text-center text-xs text-muted-foreground">
-        Demo data only · Connect to Polygon.io, yfinance, or any REST API for live prices
-        {/* 
-          To make live:
-          - Use yfinance.download() or polygon REST API for group % changes
-          - theme_groups = {"Fiber Optics": ["AAOI","LITE","COHR",...], ...}
-          - Compute equal-weight return for each group daily
-          - Auto-refresh every 15 min via setInterval or cloud scheduler
-        */}
+        {isLive
+          ? `Live data via Alpha Vantage · ${symbolsFetched} symbols fetched`
+          : "Demo data · Click \"Go Live\" to fetch real-time prices from Alpha Vantage"
+        }
       </footer>
     </div>
   );
