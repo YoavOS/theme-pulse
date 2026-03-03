@@ -2,7 +2,8 @@ import { useState, useMemo } from "react";
 import { getProcessedThemes, ThemeData } from "@/data/themeData";
 import { useLiveThemeData } from "@/hooks/useLiveThemeData";
 import ThemeCard from "@/components/ThemeCard";
-import { RefreshCw, Download, TrendingUp, TrendingDown, Wifi, WifiOff, Loader2 } from "lucide-react";
+import { RefreshCw, Download, TrendingUp, TrendingDown, Wifi, WifiOff, Loader2, Settings } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 
 const TIMEFRAMES = ["Today", "1W", "1M", "3M", "YTD"] as const;
 
@@ -14,6 +15,7 @@ function formatTime(d: Date) {
 }
 
 export default function Index() {
+  const navigate = useNavigate();
   const [activeTimeframe, setActiveTimeframe] = useState<string>("Today");
   const [showPlaceholders, setShowPlaceholders] = useState(false);
 
@@ -143,6 +145,13 @@ export default function Index() {
               title="Refresh"
             >
               <RefreshCw size={16} className={isLoading ? "animate-spin" : ""} />
+            </button>
+            <button
+              onClick={() => navigate("/admin")}
+              className="rounded-md border border-border p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+              title="Manage Themes & Tickers"
+            >
+              <Settings size={16} />
             </button>
           </div>
         </div>
