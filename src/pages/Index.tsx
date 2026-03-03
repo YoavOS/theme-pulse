@@ -145,13 +145,13 @@ export default function Index() {
             >
               <RefreshCw size={16} className={isLoading ? "animate-spin" : ""} />
             </button>
-            <button
-              onClick={() => navigate("/admin")}
+            <Link
+              to="/admin"
               className="rounded-md border border-border p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
               title="Manage Themes & Tickers"
             >
               <Settings size={16} />
-            </button>
+            </Link>
           </div>
         </div>
       </header>
