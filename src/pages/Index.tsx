@@ -15,7 +15,6 @@ function formatTime(d: Date) {
 }
 
 export default function Index() {
-  const navigate = useNavigate();
   const [activeTimeframe, setActiveTimeframe] = useState<string>("Today");
   const [showPlaceholders, setShowPlaceholders] = useState(false);
 
