@@ -189,7 +189,7 @@ export default function Index() {
             <div>
               <p className="text-sm font-medium text-foreground">Fetching live data from Alpha Vantage…</p>
               <p className="text-xs text-muted-foreground">
-                Free tier: 5 requests/min. This may take a few minutes for all themes.
+                Finnhub free tier: 60 calls/min. Should complete quickly.
               </p>
             </div>
           </div>
