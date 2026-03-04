@@ -137,10 +137,17 @@ export default function Index() {
                     <Loader2 size={12} className="animate-spin" /> Fetching…
                   </span>
                 ) : (
-                  "Go Live"
+                  "Go Live (All)"
                 )}
               </button>
             )}
+
+            <button
+              onClick={() => setShowSelector(!showSelector)}
+              className="rounded-md border border-primary/40 bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary transition-colors hover:bg-primary/20"
+            >
+              {showSelector ? "Hide Selector" : "Select Themes"}
+            </button>
 
             <button
               onClick={() => setShowPlaceholders(!showPlaceholders)}
