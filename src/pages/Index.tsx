@@ -196,6 +196,61 @@ export default function Index() {
         </div>
       )}
 
+      {/* ─── THEME SELECTOR ──────────────────────────── */}
+      {showSelector && (
+        <div className="container py-4">
+          <div className="rounded-lg border border-border bg-card p-4">
+            <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-sm font-medium text-foreground">
+                  Select Themes to Refresh ({selectedThemes.size} selected)
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Select specific themes to save daily API calls (free limit: 25/day).
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <button onClick={selectAll} className="text-xs text-primary hover:underline">All</button>
+                <button onClick={selectNone} className="text-xs text-muted-foreground hover:underline">None</button>
+                <button
+                  onClick={() => fetchLiveData([...selectedThemes])}
+                  disabled={isLoading || selectedThemes.size === 0}
+                  className="rounded-md border border-gain-medium/40 bg-gain-medium/10 px-3 py-1.5 text-xs font-semibold text-gain-medium transition-colors hover:bg-gain-medium/20 disabled:opacity-50"
+                >
+                  {isLoading ? (
+                    <span className="inline-flex items-center gap-1">
+                      <Loader2 size={12} className="animate-spin" /> Fetching…
+                    </span>
+                  ) : (
+                    `Refresh Selected (${selectedThemes.size})`
+                  )}
+                </button>
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {nonEmptyThemeNames.map((name) => (
+                <label
+                  key={name}
+                  className={`inline-flex cursor-pointer items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs transition-colors ${
+                    selectedThemes.has(name)
+                      ? "border-primary/50 bg-primary/10 text-foreground"
+                      : "border-border bg-secondary/30 text-muted-foreground hover:bg-secondary/60"
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={selectedThemes.has(name)}
+                    onChange={() => toggleTheme(name)}
+                    className="sr-only"
+                  />
+                  {name}
+                </label>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
       <main className="container py-6">
         {/* ─── STRONG THEMES ─────────────────────────── */}
         <Section
