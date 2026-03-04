@@ -92,12 +92,20 @@ export default function Index() {
                   <WifiOff size={12} /> Demo data
                 </span>
               )}
+              {isLive && (
+                rateLimited ? (
+                  <span className="inline-flex items-center gap-1 rounded border border-destructive/30 bg-destructive/10 px-1.5 py-0.5 text-[10px] font-semibold text-destructive">
+                    Finnhub: Rate limit
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 rounded border border-gain-medium/30 bg-gain-medium/10 px-1.5 py-0.5 text-[10px] font-semibold text-gain-medium">
+                    Finnhub: OK
+                  </span>
+                )
+              )}
               · Last updated: {formatTime(lastFetched)}
               · {themes.length} themes
               {isLive && ` · ${symbolsFetched} symbols`}
-              {rateLimited && (
-                <span className="text-loss-mild"> · Rate limited</span>
-              )}
             </p>
           </div>
           <div className="flex items-center gap-2">
