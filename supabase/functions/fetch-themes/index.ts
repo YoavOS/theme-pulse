@@ -6,7 +6,7 @@ const corsHeaders = {
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const ALPHA_VANTAGE_KEY = Deno.env.get("ALPHA_VANTAGE_API_KEY") || "";
+const FINNHUB_KEY = Deno.env.get("FINNHUB_API_KEY") || "";
 
 interface QuoteResult {
   symbol: string;
@@ -17,22 +17,23 @@ interface QuoteResult {
 
 async function fetchQuote(symbol: string): Promise<QuoteResult> {
   try {
-    const url = `https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${symbol}&apikey=${ALPHA_VANTAGE_KEY}`;
+    const url = `https://finnhub.io/api/v1/quote?symbol=${encodeURIComponent(symbol)}&token=${FINNHUB_KEY}`;
     const res = await fetch(url);
-    const data = await res.json();
 
-    if (data["Note"] || data["Information"]) {
+    if (res.status === 429) {
       return { symbol, pct: 0, price: 0, error: "rate_limited" };
     }
 
-    const quote = data["Global Quote"];
-    if (!quote || !quote["10. change percent"]) {
+    const data = await res.json();
+
+    // Finnhub returns { c, d, dp, h, l, o, pc, t }
+    // dp = percent change, c = current price
+    if (!data || data.c === 0) {
       return { symbol, pct: 0, price: 0, error: "no_data" };
     }
 
-    const pct = parseFloat(quote["10. change percent"].replace("%", ""));
-    const price = parseFloat(quote["05. price"]);
-    return { symbol, pct, price };
+    const pct = data.dp ?? ((data.c - data.pc) / data.pc) * 100;
+    return { symbol, pct: Math.round(pct * 100) / 100, price: data.c };
   } catch (e) {
     return { symbol, pct: 0, price: 0, error: String(e) };
   }
@@ -68,7 +69,7 @@ Deno.serve(async (req) => {
 
     const url = new URL(req.url);
     const themesParam = url.searchParams.get("themes");
-    const limit = Math.min(parseInt(url.searchParams.get("limit") || "5"), 20);
+    const limit = Math.min(parseInt(url.searchParams.get("limit") || "10"), 50);
 
     let themeEntries: { id: string; name: string; description: string | null; symbols: string[] }[];
 
@@ -78,7 +79,6 @@ Deno.serve(async (req) => {
         .filter(([, v]) => requested.includes(v.name))
         .map(([id, v]) => ({ id, ...v }));
     } else {
-      // Only fetch themes that have tickers
       themeEntries = Array.from(themeTickerMap.entries())
         .filter(([, v]) => v.symbols.length > 0)
         .map(([id, v]) => ({ id, ...v }))
@@ -86,17 +86,26 @@ Deno.serve(async (req) => {
     }
 
     const uniqueSymbols = [...new Set(themeEntries.flatMap(t => t.symbols))];
-    console.log(`Fetching ${uniqueSymbols.length} symbols for ${themeEntries.length} themes`);
+    console.log(`Fetching ${uniqueSymbols.length} symbols for ${themeEntries.length} themes via Finnhub`);
 
+    // Finnhub free: 60 calls/min. Batch 10 at a time with small delay.
     const quoteMap: Record<string, QuoteResult> = {};
-    const batchSize = 5;
+    const batchSize = 10;
+    let rateLimited = false;
+
     for (let i = 0; i < uniqueSymbols.length; i += batchSize) {
       const batch = uniqueSymbols.slice(i, i + batchSize);
       const results = await Promise.all(batch.map(fetchQuote));
       for (const r of results) quoteMap[r.symbol] = r;
-      if (results.some(r => r.error === "rate_limited")) break;
+
+      if (results.some(r => r.error === "rate_limited")) {
+        rateLimited = true;
+        break;
+      }
+
+      // Small delay between batches to stay within 60/min
       if (i + batchSize < uniqueSymbols.length) {
-        await new Promise(r => setTimeout(r, 12000));
+        await new Promise(r => setTimeout(r, 1200));
       }
     }
 
@@ -115,7 +124,6 @@ Deno.serve(async (req) => {
       return { theme_name: name, notes: description, performance_pct, up_count, down_count, tickers };
     });
 
-    const rateLimited = Object.values(quoteMap).some(q => q.error === "rate_limited");
     const allThemeNames = Array.from(themeTickerMap.values()).map(v => v.name);
 
     return new Response(

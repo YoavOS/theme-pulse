@@ -189,7 +189,7 @@ export default function Index() {
             <div>
               <p className="text-sm font-medium text-foreground">Fetching live data from Alpha Vantage…</p>
               <p className="text-xs text-muted-foreground">
-                Free tier: 5 requests/min. This may take a few minutes for all themes.
+                Finnhub free tier: 60 calls/min. Should complete quickly.
               </p>
             </div>
           </div>
@@ -205,8 +205,8 @@ export default function Index() {
                 <p className="text-sm font-medium text-foreground">
                   Select Themes to Refresh ({selectedThemes.size} selected)
                 </p>
-                <p className="text-xs text-muted-foreground">
-                  Select specific themes to save daily API calls (free limit: 25/day).
+              <p className="text-xs text-muted-foreground">
+                  Select specific themes to refresh. Finnhub free: 60 calls/min — plenty for normal use.
                 </p>
               </div>
               <div className="flex items-center gap-2">
@@ -284,8 +284,8 @@ export default function Index() {
       {/* ─── FOOTER ──────────────────────────────────── */}
       <footer className="border-t border-border py-6 text-center text-xs text-muted-foreground">
         {isLive
-          ? `Live data via Alpha Vantage · ${symbolsFetched} symbols fetched`
-          : "Demo data · Click \"Go Live\" to fetch real-time prices from Alpha Vantage"
+          ? `Live data via Finnhub · ${symbolsFetched} symbols fetched`
+          : "Demo data · Click \"Go Live\" to fetch real-time prices via Finnhub"
         }
       </footer>
     </div>
