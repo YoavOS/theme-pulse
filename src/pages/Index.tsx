@@ -42,6 +42,22 @@ export default function Index() {
   const neutral = themes.filter((t) => t.category === "Neutral");
   const weak = themes.filter((t) => t.category === "Weak");
 
+  const nonEmptyThemeNames = allThemes
+    .filter((t) => t.tickers.length > 0 || t.up_count > 0 || t.down_count > 0)
+    .map((t) => t.theme_name);
+
+  const toggleTheme = (name: string) => {
+    setSelectedThemes((prev) => {
+      const next = new Set(prev);
+      if (next.has(name)) next.delete(name);
+      else next.add(name);
+      return next;
+    });
+  };
+
+  const selectAll = () => setSelectedThemes(new Set(nonEmptyThemeNames));
+  const selectNone = () => setSelectedThemes(new Set());
+
   const handleExport = () => {
     const rows = themes.map((t) =>
       [t.rank, t.theme_name, t.performance_pct, t.up_count, t.down_count, t.category, t.notes || ""].join(",")
