@@ -205,8 +205,8 @@ export default function Index() {
                 <p className="text-sm font-medium text-foreground">
                   Select Themes to Refresh ({selectedThemes.size} selected)
                 </p>
-                <p className="text-xs text-muted-foreground">
-                  Select specific themes to save daily API calls (free limit: 25/day).
+              <p className="text-xs text-muted-foreground">
+                  Select specific themes to refresh. Finnhub free: 60 calls/min — plenty for normal use.
                 </p>
               </div>
               <div className="flex items-center gap-2">
