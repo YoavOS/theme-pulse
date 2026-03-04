@@ -17,6 +17,8 @@ function formatTime(d: Date) {
 export default function Index() {
   const [activeTimeframe, setActiveTimeframe] = useState<string>("Today");
   const [showPlaceholders, setShowPlaceholders] = useState(false);
+  const [selectedThemes, setSelectedThemes] = useState<Set<string>>(new Set());
+  const [showSelector, setShowSelector] = useState(false);
 
   const {
     themes: allThemes,
