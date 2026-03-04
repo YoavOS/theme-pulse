@@ -91,7 +91,7 @@ export function useLiveThemeData() {
       if (result.rate_limited) {
         toast({
           title: "Rate Limited",
-          description: "Alpha Vantage free tier limit reached. Some data may be stale. Upgrade to premium for more requests.",
+          description: "Finnhub rate limit hit. Some data may be stale. Try again in a minute.",
           variant: "destructive",
         });
       } else {

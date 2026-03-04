@@ -284,8 +284,8 @@ export default function Index() {
       {/* ─── FOOTER ──────────────────────────────────── */}
       <footer className="border-t border-border py-6 text-center text-xs text-muted-foreground">
         {isLive
-          ? `Live data via Alpha Vantage · ${symbolsFetched} symbols fetched`
-          : "Demo data · Click \"Go Live\" to fetch real-time prices from Alpha Vantage"
+          ? `Live data via Finnhub · ${symbolsFetched} symbols fetched`
+          : "Demo data · Click \"Go Live\" to fetch real-time prices via Finnhub"
         }
       </footer>
     </div>
