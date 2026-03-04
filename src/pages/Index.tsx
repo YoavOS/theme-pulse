@@ -17,6 +17,8 @@ function formatTime(d: Date) {
 export default function Index() {
   const [activeTimeframe, setActiveTimeframe] = useState<string>("Today");
   const [showPlaceholders, setShowPlaceholders] = useState(false);
+  const [selectedThemes, setSelectedThemes] = useState<Set<string>>(new Set());
+  const [showSelector, setShowSelector] = useState(false);
 
   const {
     themes: allThemes,
@@ -39,6 +41,22 @@ export default function Index() {
   const strong = themes.filter((t) => t.category === "Strong");
   const neutral = themes.filter((t) => t.category === "Neutral");
   const weak = themes.filter((t) => t.category === "Weak");
+
+  const nonEmptyThemeNames = allThemes
+    .filter((t) => t.tickers.length > 0 || t.up_count > 0 || t.down_count > 0)
+    .map((t) => t.theme_name);
+
+  const toggleTheme = (name: string) => {
+    setSelectedThemes((prev) => {
+      const next = new Set(prev);
+      if (next.has(name)) next.delete(name);
+      else next.add(name);
+      return next;
+    });
+  };
+
+  const selectAll = () => setSelectedThemes(new Set(nonEmptyThemeNames));
+  const selectNone = () => setSelectedThemes(new Set());
 
   const handleExport = () => {
     const rows = themes.map((t) =>
@@ -119,10 +137,17 @@ export default function Index() {
                     <Loader2 size={12} className="animate-spin" /> Fetching…
                   </span>
                 ) : (
-                  "Go Live"
+                  "Go Live (All)"
                 )}
               </button>
             )}
+
+            <button
+              onClick={() => setShowSelector(!showSelector)}
+              className="rounded-md border border-primary/40 bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary transition-colors hover:bg-primary/20"
+            >
+              {showSelector ? "Hide Selector" : "Select Themes"}
+            </button>
 
             <button
               onClick={() => setShowPlaceholders(!showPlaceholders)}
@@ -166,6 +191,61 @@ export default function Index() {
               <p className="text-xs text-muted-foreground">
                 Free tier: 5 requests/min. This may take a few minutes for all themes.
               </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── THEME SELECTOR ──────────────────────────── */}
+      {showSelector && (
+        <div className="container py-4">
+          <div className="rounded-lg border border-border bg-card p-4">
+            <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-sm font-medium text-foreground">
+                  Select Themes to Refresh ({selectedThemes.size} selected)
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Select specific themes to save daily API calls (free limit: 25/day).
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <button onClick={selectAll} className="text-xs text-primary hover:underline">All</button>
+                <button onClick={selectNone} className="text-xs text-muted-foreground hover:underline">None</button>
+                <button
+                  onClick={() => fetchLiveData([...selectedThemes])}
+                  disabled={isLoading || selectedThemes.size === 0}
+                  className="rounded-md border border-gain-medium/40 bg-gain-medium/10 px-3 py-1.5 text-xs font-semibold text-gain-medium transition-colors hover:bg-gain-medium/20 disabled:opacity-50"
+                >
+                  {isLoading ? (
+                    <span className="inline-flex items-center gap-1">
+                      <Loader2 size={12} className="animate-spin" /> Fetching…
+                    </span>
+                  ) : (
+                    `Refresh Selected (${selectedThemes.size})`
+                  )}
+                </button>
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {nonEmptyThemeNames.map((name) => (
+                <label
+                  key={name}
+                  className={`inline-flex cursor-pointer items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs transition-colors ${
+                    selectedThemes.has(name)
+                      ? "border-primary/50 bg-primary/10 text-foreground"
+                      : "border-border bg-secondary/30 text-muted-foreground hover:bg-secondary/60"
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={selectedThemes.has(name)}
+                    onChange={() => toggleTheme(name)}
+                    className="sr-only"
+                  />
+                  {name}
+                </label>
+              ))}
             </div>
           </div>
         </div>
