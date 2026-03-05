@@ -21,6 +21,10 @@ export default function Index() {
   const [selectedThemes, setSelectedThemes] = useState<Set<string>>(new Set());
   const [showSelector, setShowSelector] = useState(false);
 
+  const handleFullScanComplete = useCallback(() => {
+    fetchLiveData();
+  }, []);
+
   const {
     themes: allThemes,
     isLoading,
