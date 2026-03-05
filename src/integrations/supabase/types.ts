@@ -14,6 +14,30 @@ export type Database = {
   }
   public: {
     Tables: {
+      full_update_progress: {
+        Row: {
+          id: string
+          last_theme_index: number
+          last_updated: string
+          status: string
+          total_themes: number
+        }
+        Insert: {
+          id?: string
+          last_theme_index?: number
+          last_updated?: string
+          status?: string
+          total_themes?: number
+        }
+        Update: {
+          id?: string
+          last_theme_index?: number
+          last_updated?: string
+          status?: string
+          total_themes?: number
+        }
+        Relationships: []
+      }
       theme_tickers: {
         Row: {
           added_at: string

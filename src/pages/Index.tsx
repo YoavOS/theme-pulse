@@ -1,8 +1,9 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { getProcessedThemes, ThemeData } from "@/data/themeData";
 import { useLiveThemeData } from "@/hooks/useLiveThemeData";
 import ThemeCard from "@/components/ThemeCard";
-import { RefreshCw, Download, TrendingUp, TrendingDown, Wifi, WifiOff, Loader2, Settings } from "lucide-react";
+import { RefreshCw, Download, TrendingUp, TrendingDown, Wifi, WifiOff, Loader2, Settings, ScanLine } from "lucide-react";
+import { useFullScan } from "@/hooks/useFullScan";
 import { Link } from "react-router-dom";
 
 const TIMEFRAMES = ["Today", "1W", "1M", "3M", "YTD"] as const;
@@ -30,6 +31,14 @@ export default function Index() {
     fetchLiveData,
     resetToDemo,
   } = useLiveThemeData();
+
+  const {
+    isRunning: isFullScanning,
+    statusText: fullScanStatus,
+    startFullScan,
+  } = useFullScan(useCallback(() => {
+    fetchLiveData();
+  }, [fetchLiveData]));
 
   const themes = useMemo(() => {
     if (showPlaceholders) return allThemes;
@@ -170,6 +179,27 @@ export default function Index() {
             >
               <Download size={16} />
             </button>
+            <button
+              onClick={startFullScan}
+              disabled={isFullScanning || isLoading}
+              className="rounded-md border border-primary/40 bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary transition-colors hover:bg-primary/20 disabled:opacity-50"
+              title="Update all themes sequentially with rate limit handling"
+            >
+              {isFullScanning ? (
+                <span className="inline-flex items-center gap-1">
+                  <Loader2 size={12} className="animate-spin" /> Scanning…
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1">
+                  <ScanLine size={12} /> Full Scan
+                </span>
+              )}
+            </button>
+            {fullScanStatus && (
+              <span className="max-w-[220px] truncate text-[10px] text-muted-foreground" title={fullScanStatus}>
+                {fullScanStatus}
+              </span>
+            )}
             <button
               onClick={() => isLive ? fetchLiveData() : undefined}
               disabled={isLoading || !isLive}
