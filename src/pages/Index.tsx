@@ -36,6 +36,7 @@ export default function Index() {
     isRunning: isFullScanning,
     statusText: fullScanStatus,
     startFullScan,
+    clearProgress,
   } = useFullScan(useCallback(() => {
     fetchLiveData();
   }, [fetchLiveData]));
