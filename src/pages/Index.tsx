@@ -2,7 +2,7 @@ import { useState, useMemo, useCallback } from "react";
 import { getProcessedThemes, ThemeData } from "@/data/themeData";
 import { useLiveThemeData } from "@/hooks/useLiveThemeData";
 import ThemeCard from "@/components/ThemeCard";
-import { RefreshCw, Download, TrendingUp, TrendingDown, Wifi, WifiOff, Loader2, Settings, ScanLine } from "lucide-react";
+import { RefreshCw, Download, TrendingUp, TrendingDown, Wifi, WifiOff, Loader2, Settings, ScanLine, X } from "lucide-react";
 import { useFullScan } from "@/hooks/useFullScan";
 import { Link } from "react-router-dom";
 
@@ -36,6 +36,7 @@ export default function Index() {
     isRunning: isFullScanning,
     statusText: fullScanStatus,
     startFullScan,
+    clearProgress,
   } = useFullScan(useCallback(() => {
     fetchLiveData();
   }, [fetchLiveData]));
@@ -196,8 +197,17 @@ export default function Index() {
               )}
             </button>
             {fullScanStatus && (
-              <span className="max-w-[220px] truncate text-[10px] text-muted-foreground" title={fullScanStatus}>
+              <span className="inline-flex max-w-[260px] items-center gap-1 truncate text-[10px] text-muted-foreground" title={fullScanStatus}>
                 {fullScanStatus}
+                {!isFullScanning && fullScanStatus.includes("theme") && (
+                  <button
+                    onClick={clearProgress}
+                    className="ml-1 rounded p-0.5 text-destructive hover:bg-destructive/10"
+                    title="Clear scan progress"
+                  >
+                    <X size={10} />
+                  </button>
+                )}
               </span>
             )}
             <button

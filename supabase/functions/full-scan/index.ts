@@ -7,6 +7,8 @@ const corsHeaders = {
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const FINNHUB_KEY = Deno.env.get("FINNHUB_API_KEY") || "";
+const CHUNK_SIZE = 5; // themes per invocation to stay under edge function timeout
+const MAX_RETRIES = 3;
 
 interface QuoteResult {
   symbol: string;
@@ -21,6 +23,9 @@ async function fetchQuote(symbol: string): Promise<QuoteResult> {
     const res = await fetch(url);
     if (res.status === 429) {
       return { symbol, pct: 0, price: 0, error: "rate_limited" };
+    }
+    if (!res.ok) {
+      return { symbol, pct: 0, price: 0, error: `http_${res.status}` };
     }
     const data = await res.json();
     if (!data || data.c === 0) {
@@ -48,9 +53,9 @@ Deno.serve(async (req) => {
     const sb = createClient(supabaseUrl, supabaseKey);
 
     const url = new URL(req.url);
-    const action = url.searchParams.get("action"); // "status", "start", "reset"
+    const action = url.searchParams.get("action");
 
-    // --- STATUS: return current progress ---
+    // --- STATUS ---
     if (action === "status") {
       const { data } = await sb.from("full_update_progress").select("*").limit(1).single();
       return new Response(JSON.stringify({ progress: data }), {
@@ -58,50 +63,57 @@ Deno.serve(async (req) => {
       });
     }
 
-    // --- RESET: clear progress ---
+    // --- RESET ---
     if (action === "reset") {
       await sb.from("full_update_progress").update({
         last_theme_index: 0,
         total_themes: 0,
         status: "idle",
         last_updated: new Date().toISOString(),
-      }).neq("id", "00000000-0000-0000-0000-000000000000"); // update all rows
+      }).neq("id", "00000000-0000-0000-0000-000000000000");
       return new Response(JSON.stringify({ ok: true }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // --- START / RESUME full scan ---
-    // Load all themes + tickers from DB
+    // --- CHUNK: process next N themes ---
+    // Load all themes + tickers
     const { data: dbThemes } = await sb.from("themes").select("id, name, description");
     const { data: dbTickers } = await sb.from("theme_tickers").select("theme_id, ticker_symbol");
 
     if (!dbThemes || !dbTickers) throw new Error("Failed to read themes");
 
-    // Build ordered list of themes with their tickers
-    const themeList: { id: string; name: string; description: string | null; symbols: string[] }[] = [];
     const tickerMap = new Map<string, string[]>();
     for (const tk of dbTickers) {
       if (!tickerMap.has(tk.theme_id)) tickerMap.set(tk.theme_id, []);
       tickerMap.get(tk.theme_id)!.push(tk.ticker_symbol);
     }
+
+    const themeList: { id: string; name: string; symbols: string[] }[] = [];
     for (const t of dbThemes) {
       const symbols = tickerMap.get(t.id) || [];
       if (symbols.length > 0) {
-        themeList.push({ id: t.id, name: t.name, description: t.description, symbols });
+        themeList.push({ id: t.id, name: t.name, symbols });
       }
     }
 
     const totalThemes = themeList.length;
 
-    // Check for resume point
+    // Get current progress
     const { data: progress } = await sb.from("full_update_progress").select("*").limit(1).single();
     let startIndex = 0;
-    if (progress && progress.status === "in_progress" && progress.last_theme_index > 0) {
-      startIndex = progress.last_theme_index; // resume from next one
+    if (progress && (progress.status === "in_progress" || progress.status === "paused_failed") && progress.last_theme_index > 0) {
+      startIndex = progress.last_theme_index;
     }
 
-    // Update progress to in_progress
+    // If already complete or starting fresh
+    if (action === "start" && (!progress || progress.status === "complete" || progress.status === "idle")) {
+      startIndex = 0;
+    }
+
+    const endIndex = Math.min(startIndex + CHUNK_SIZE, totalThemes);
+
+    // Update progress
     await sb.from("full_update_progress").update({
       last_theme_index: startIndex,
       total_themes: totalThemes,
@@ -109,57 +121,52 @@ Deno.serve(async (req) => {
       last_updated: new Date().toISOString(),
     }).neq("id", "00000000-0000-0000-0000-000000000000");
 
-    // Process themes one by one
-    const allResults: Record<string, { theme_name: string; performance_pct: number; up_count: number; down_count: number; tickers: QuoteResult[] }> = {};
+    const skipped: string[] = [];
 
-    for (let i = startIndex; i < totalThemes; i++) {
+    // Process this chunk of themes
+    for (let i = startIndex; i < endIndex; i++) {
       const theme = themeList[i];
       const tickers: QuoteResult[] = [];
+      let themeSkipped = false;
 
       // Fetch tickers in batches of 4
       for (let j = 0; j < theme.symbols.length; j += 4) {
         const batch = theme.symbols.slice(j, j + 4);
-        const results = await Promise.all(batch.map(fetchQuote));
+        let retryCount = 0;
+        let batchResults: QuoteResult[] = [];
 
-        // Check for rate limit
-        const rateLimited = results.some((r) => r.error === "rate_limited");
-        if (rateLimited) {
-          // Wait 60s and retry
-          console.log(`Rate limited at theme ${i + 1}/${totalThemes} (${theme.name}), waiting 60s...`);
-          await sb.from("full_update_progress").update({
-            last_theme_index: i,
-            status: "rate_limited_waiting",
-            last_updated: new Date().toISOString(),
-          }).neq("id", "00000000-0000-0000-0000-000000000000");
+        while (retryCount < MAX_RETRIES) {
+          batchResults = await Promise.all(batch.map(fetchQuote));
+          const rateLimited = batchResults.some((r) => r.error === "rate_limited");
 
-          await delay(60000);
+          if (!rateLimited) break;
 
-          // Retry batch
-          const retryResults = await Promise.all(batch.map(fetchQuote));
-          tickers.push(...retryResults);
-        } else {
-          tickers.push(...results);
+          retryCount++;
+          if (retryCount < MAX_RETRIES) {
+            console.log(`Rate limited on theme ${i + 1}/${totalThemes} (${theme.name}), retry ${retryCount}/${MAX_RETRIES}, waiting 15s...`);
+            await sb.from("full_update_progress").update({
+              last_theme_index: i,
+              status: "rate_limited_waiting",
+              last_updated: new Date().toISOString(),
+            }).neq("id", "00000000-0000-0000-0000-000000000000");
+            await delay(15000); // 15s wait (short enough to stay under timeout)
+          }
         }
 
-        // Delay between ticker batches (1.5s)
-        if (j + 4 < theme.symbols.length) {
-          await delay(1500);
+        if (retryCount >= MAX_RETRIES) {
+          console.log(`Skipped theme ${i + 1}/${totalThemes} (${theme.name}) after ${MAX_RETRIES} retries`);
+          skipped.push(theme.name);
+          themeSkipped = true;
+          break;
         }
+
+        tickers.push(...batchResults);
+        if (j + 4 < theme.symbols.length) await delay(1200);
       }
 
-      const up_count = tickers.filter((t) => t.pct > 0).length;
-      const down_count = tickers.filter((t) => t.pct <= 0).length;
-      const performance_pct = tickers.length > 0
-        ? Math.round((tickers.reduce((sum, t) => sum + t.pct, 0) / tickers.length) * 100) / 100
-        : 0;
-
-      allResults[theme.name] = {
-        theme_name: theme.name,
-        performance_pct,
-        up_count,
-        down_count,
-        tickers: tickers.sort((a, b) => b.pct - a.pct),
-      };
+      if (!themeSkipped) {
+        console.log(`Completed theme ${i + 1}/${totalThemes}: ${theme.name}`);
+      }
 
       // Save progress after each theme
       await sb.from("full_update_progress").update({
@@ -168,36 +175,43 @@ Deno.serve(async (req) => {
         last_updated: new Date().toISOString(),
       }).neq("id", "00000000-0000-0000-0000-000000000000");
 
-      console.log(`Completed theme ${i + 1}/${totalThemes}: ${theme.name}`);
-
-      // Delay between themes (2s)
-      if (i + 1 < totalThemes) {
-        await delay(2000);
-      }
+      if (i + 1 < endIndex) await delay(1500);
     }
 
-    // Mark complete
+    const done = endIndex >= totalThemes;
+
+    // Mark complete or save position for next chunk
     await sb.from("full_update_progress").update({
-      last_theme_index: totalThemes,
+      last_theme_index: endIndex,
       total_themes: totalThemes,
-      status: "complete",
+      status: done ? "complete" : "in_progress",
       last_updated: new Date().toISOString(),
     }).neq("id", "00000000-0000-0000-0000-000000000000");
 
-    const themes = Object.values(allResults);
-
     return new Response(
       JSON.stringify({
-        themes,
-        fetched_at: new Date().toISOString(),
-        symbols_fetched: themes.reduce((sum, t) => sum + t.tickers.length, 0),
+        done,
+        processed_from: startIndex,
+        processed_to: endIndex,
         total_themes: totalThemes,
-        started_from: startIndex,
+        skipped,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error) {
     console.error("Full scan error:", error);
+
+    // Try to mark as failed
+    try {
+      const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+      const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+      const sb = createClient(supabaseUrl, supabaseKey);
+      await sb.from("full_update_progress").update({
+        status: "paused_failed",
+        last_updated: new Date().toISOString(),
+      }).neq("id", "00000000-0000-0000-0000-000000000000");
+    } catch (_) { /* ignore */ }
+
     return new Response(
       JSON.stringify({ error: String(error) }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }

@@ -1,5 +1,4 @@
 import { useState, useCallback, useRef, useEffect } from "react";
-import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 
 export interface FullScanProgress {
@@ -14,110 +13,135 @@ export function useFullScan(onComplete: () => void) {
   const [isRunning, setIsRunning] = useState(false);
   const [progress, setProgress] = useState<FullScanProgress | null>(null);
   const [statusText, setStatusText] = useState("");
-  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const abortRef = useRef(false);
 
-  const fetchProgress = useCallback(async () => {
-    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-    const anonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
-    const res = await fetch(`${supabaseUrl}/functions/v1/full-scan?action=status`, {
-      headers: { apikey: anonKey, Authorization: `Bearer ${anonKey}` },
-    });
-    const data = await res.json();
-    return data.progress as FullScanProgress | null;
-  }, []);
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+  const anonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+  const headers = { apikey: anonKey, Authorization: `Bearer ${anonKey}` };
 
-  const stopPolling = useCallback(() => {
-    if (pollingRef.current) {
-      clearInterval(pollingRef.current);
-      pollingRef.current = null;
+  const fetchProgress = useCallback(async (): Promise<FullScanProgress | null> => {
+    try {
+      const res = await fetch(`${supabaseUrl}/functions/v1/full-scan?action=status`, { headers });
+      const data = await res.json();
+      return data.progress as FullScanProgress | null;
+    } catch {
+      return null;
     }
-  }, []);
+  }, [supabaseUrl, anonKey]);
 
-  const startPolling = useCallback(() => {
-    stopPolling();
-    pollingRef.current = setInterval(async () => {
-      const p = await fetchProgress();
-      if (p) {
-        setProgress(p);
-        if (p.status === "rate_limited_waiting") {
-          setStatusText(`Paused — waiting 60s for rate limit... (${p.last_theme_index}/${p.total_themes})`);
-        } else if (p.status === "in_progress") {
-          setStatusText(`Updating theme ${p.last_theme_index}/${p.total_themes}...`);
-        } else if (p.status === "complete") {
-          setStatusText("Full update complete — all themes refreshed");
-          setIsRunning(false);
-          stopPolling();
-        }
-      }
-    }, 3000);
-  }, [fetchProgress, stopPolling]);
+  const clearProgress = useCallback(async () => {
+    await fetch(`${supabaseUrl}/functions/v1/full-scan?action=reset`, { headers });
+    setProgress(null);
+    setStatusText("");
+    setIsRunning(false);
+    abortRef.current = true;
+    toast({ title: "Scan progress cleared" });
+  }, [supabaseUrl, anonKey, toast]);
 
   const startFullScan = useCallback(async () => {
     setIsRunning(true);
+    abortRef.current = false;
     setStatusText("Starting full scan...");
 
-    // Check for unfinished progress
-    const existing = await fetchProgress();
-    if (existing && existing.status === "in_progress" && existing.last_theme_index < existing.total_themes && existing.last_theme_index > 0) {
-      setStatusText(`Resuming from theme ${existing.last_theme_index + 1}/${existing.total_themes}...`);
-    }
-
-    startPolling();
-
     try {
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-      const anonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
-      const res = await fetch(`${supabaseUrl}/functions/v1/full-scan?action=start`, {
-        headers: { apikey: anonKey, Authorization: `Bearer ${anonKey}` },
-      });
+      // Loop: call edge function repeatedly, each processes a chunk
+      let done = false;
+      let isFirst = true;
 
-      const result = await res.json();
+      while (!done && !abortRef.current) {
+        const action = isFirst ? "start" : "chunk";
+        isFirst = false;
 
-      if (result.error) {
-        throw new Error(result.error);
+        // Fetch progress first for UI
+        const p = await fetchProgress();
+        if (p) {
+          setProgress(p);
+          if (p.status === "rate_limited_waiting") {
+            setStatusText(`Rate limited — retrying... (${p.last_theme_index}/${p.total_themes})`);
+          } else if (p.status === "in_progress" || p.status === "paused_failed") {
+            setStatusText(`Updating theme ${p.last_theme_index}/${p.total_themes}...`);
+          }
+        }
+
+        const res = await fetch(`${supabaseUrl}/functions/v1/full-scan?action=${action}`, { headers });
+
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+          console.error("Full scan chunk failed:", err);
+          setStatusText(`Failed at chunk — will retry on next click (${err.error || "unknown error"})`);
+          // Don't clear isRunning yet, fetch progress to show where we stopped
+          const latest = await fetchProgress();
+          if (latest) {
+            setProgress(latest);
+            setStatusText(`Scan paused at theme ${latest.last_theme_index}/${latest.total_themes} — click to resume`);
+          }
+          setIsRunning(false);
+          return;
+        }
+
+        const result = await res.json();
+        console.log("Chunk result:", result);
+
+        if (result.skipped?.length > 0) {
+          console.warn("Skipped themes:", result.skipped);
+        }
+
+        done = result.done;
+
+        if (!done) {
+          setStatusText(`Updating theme ${result.processed_to}/${result.total_themes}...`);
+          // Small delay between chunks
+          await new Promise((r) => setTimeout(r, 1000));
+        }
+      }
+
+      if (abortRef.current) {
+        setIsRunning(false);
+        return;
       }
 
       setStatusText("Full update complete — all themes refreshed");
       setIsRunning(false);
-      stopPolling();
 
       toast({
         title: "Full Scan Complete",
-        description: `Updated ${result.total_themes} themes, ${result.symbols_fetched} symbols fetched`,
+        description: "All themes have been updated",
       });
 
       onComplete();
     } catch (err) {
+      console.error("Full scan error:", err);
       setIsRunning(false);
-      stopPolling();
-      setStatusText("Full scan failed");
+      const latest = await fetchProgress();
+      if (latest) {
+        setProgress(latest);
+        setStatusText(`Scan failed at theme ${latest.last_theme_index}/${latest.total_themes} — click to resume`);
+      } else {
+        setStatusText("Full scan failed — click to retry");
+      }
       toast({
-        title: "Full Scan Failed",
+        title: "Full Scan Error",
         description: String(err instanceof Error ? err.message : err),
         variant: "destructive",
       });
     }
-  }, [fetchProgress, startPolling, stopPolling, toast, onComplete]);
+  }, [fetchProgress, supabaseUrl, anonKey, toast, onComplete]);
 
   // Check for unfinished progress on mount
   useEffect(() => {
     fetchProgress().then((p) => {
-      if (p && p.status === "in_progress" && p.last_theme_index < p.total_themes) {
+      if (p && (p.status === "in_progress" || p.status === "paused_failed") && p.last_theme_index < p.total_themes) {
         setProgress(p);
-        setStatusText(`Resumable: theme ${p.last_theme_index}/${p.total_themes} — click to resume`);
+        setStatusText(`Resumable: theme ${p.last_theme_index}/${p.total_themes} — click Full Scan to resume`);
       }
     });
   }, [fetchProgress]);
-
-  // Cleanup
-  useEffect(() => {
-    return () => stopPolling();
-  }, [stopPolling]);
 
   return {
     isRunning,
     progress,
     statusText,
     startFullScan,
+    clearProgress,
   };
 }
