@@ -2,7 +2,8 @@ import { useState, useMemo } from "react";
 import { getProcessedThemes, ThemeData } from "@/data/themeData";
 import { useLiveThemeData } from "@/hooks/useLiveThemeData";
 import ThemeCard from "@/components/ThemeCard";
-import { RefreshCw, Download, TrendingUp, TrendingDown, Wifi, WifiOff, Loader2, Settings } from "lucide-react";
+import { RefreshCw, Download, TrendingUp, TrendingDown, Wifi, WifiOff, Loader2, Settings, ScanLine } from "lucide-react";
+import { useFullScan } from "@/hooks/useFullScan";
 import { Link } from "react-router-dom";
 
 const TIMEFRAMES = ["Today", "1W", "1M", "3M", "YTD"] as const;
