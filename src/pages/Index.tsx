@@ -21,10 +21,6 @@ export default function Index() {
   const [selectedThemes, setSelectedThemes] = useState<Set<string>>(new Set());
   const [showSelector, setShowSelector] = useState(false);
 
-  const handleFullScanComplete = useCallback(() => {
-    fetchLiveData();
-  }, []);
-
   const {
     themes: allThemes,
     isLoading,
@@ -35,6 +31,14 @@ export default function Index() {
     fetchLiveData,
     resetToDemo,
   } = useLiveThemeData();
+
+  const {
+    isRunning: isFullScanning,
+    statusText: fullScanStatus,
+    startFullScan,
+  } = useFullScan(useCallback(() => {
+    fetchLiveData();
+  }, [fetchLiveData]));
 
   const themes = useMemo(() => {
     if (showPlaceholders) return allThemes;
