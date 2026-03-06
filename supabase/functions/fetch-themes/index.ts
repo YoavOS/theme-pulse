@@ -26,8 +26,6 @@ async function fetchQuote(symbol: string): Promise<QuoteResult> {
 
     const data = await res.json();
 
-    // Finnhub returns { c, d, dp, h, l, o, pc, t }
-    // dp = percent change, c = current price
     if (!data || data.c === 0) {
       return { symbol, pct: 0, price: 0, error: "no_data" };
     }
@@ -69,7 +67,6 @@ Deno.serve(async (req) => {
 
     const url = new URL(req.url);
     const themesParam = url.searchParams.get("themes");
-    const limit = Math.min(parseInt(url.searchParams.get("limit") || "10"), 50);
 
     let themeEntries: { id: string; name: string; description: string | null; symbols: string[] }[];
 
@@ -79,10 +76,10 @@ Deno.serve(async (req) => {
         .filter(([, v]) => requested.includes(v.name))
         .map(([id, v]) => ({ id, ...v }));
     } else {
+      // Return ALL themes with tickers — no limit
       themeEntries = Array.from(themeTickerMap.entries())
         .filter(([, v]) => v.symbols.length > 0)
-        .map(([id, v]) => ({ id, ...v }))
-        .slice(0, limit);
+        .map(([id, v]) => ({ id, ...v }));
     }
 
     const uniqueSymbols = [...new Set(themeEntries.flatMap(t => t.symbols))];
@@ -103,7 +100,6 @@ Deno.serve(async (req) => {
         break;
       }
 
-      // Small delay between batches to stay within 60/min
       if (i + batchSize < uniqueSymbols.length) {
         await new Promise(r => setTimeout(r, 1200));
       }
