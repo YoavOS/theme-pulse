@@ -235,7 +235,7 @@ export default function Index() {
           <div className="flex items-center gap-3 rounded-lg border border-border bg-card p-4">
             <Loader2 size={20} className="animate-spin text-primary" />
             <div>
-              <p className="text-sm font-medium text-foreground">Fetching live data from Alpha Vantage…</p>
+              <p className="text-sm font-medium text-foreground">Fetching live data from Finnhub…</p>
               <p className="text-xs text-muted-foreground">
                 Finnhub free tier: 60 calls/min. Should complete quickly.
               </p>
