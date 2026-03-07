@@ -30,16 +30,16 @@ export default function Index() {
     symbolsFetched,
     fetchLiveData,
     resetToDemo,
+    mergeScanResults,
   } = useLiveThemeData();
 
   const {
     isRunning: isFullScanning,
     statusText: fullScanStatus,
+    totalSkipped: fullScanSkipped,
     startFullScan,
     clearProgress,
-  } = useFullScan(useCallback(() => {
-    fetchLiveData();
-  }, [fetchLiveData]));
+  } = useFullScan(mergeScanResults);
 
   const themes = useMemo(() => {
     if (showPlaceholders) return allThemes;
