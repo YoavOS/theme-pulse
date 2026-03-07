@@ -1,5 +1,4 @@
 import { useState, useCallback, useEffect, useRef } from "react";
-
 import { ThemeData, demoThemes, getProcessedThemes } from "@/data/themeData";
 import { useToast } from "@/hooks/use-toast";
 
@@ -16,7 +15,7 @@ interface CachedData {
 function saveCache(data: CachedData) {
   try {
     localStorage.setItem(CACHE_KEY, JSON.stringify(data));
-  } catch { /* quota exceeded, ignore */ }
+  } catch { /* quota exceeded */ }
 }
 
 function loadCache(): CachedData | null {
@@ -47,6 +46,7 @@ interface LiveDataState {
 function buildInitialState(): LiveDataState {
   const cached = loadCache();
   if (cached) {
+    console.log("Loaded real data from cache, age:", Math.round((Date.now() - new Date(cached.fetchedAt).getTime()) / 60000), "min");
     return {
       themes: getProcessedThemes(cached.themes),
       isLoading: false,
@@ -56,6 +56,7 @@ function buildInitialState(): LiveDataState {
       symbolsFetched: cached.symbolsFetched,
     };
   }
+  console.log("No cache – starting with demo data");
   return {
     themes: getProcessedThemes(demoThemes),
     isLoading: false,
@@ -70,13 +71,16 @@ export function useLiveThemeData() {
   const { toast } = useToast();
   const [state, setState] = useState<LiveDataState>(buildInitialState);
   const mountedRef = useRef(true);
+  // Use ref to always have latest themes for merging without stale closures
+  const themesRef = useRef(state.themes);
+  useEffect(() => { themesRef.current = state.themes; }, [state.themes]);
 
   useEffect(() => {
     mountedRef.current = true;
     return () => { mountedRef.current = false; };
   }, []);
 
-  // Restore from cache on tab focus / visibility change
+  // Restore from cache on tab focus
   useEffect(() => {
     function handleVisibility() {
       if (document.visibilityState !== "visible") return;
@@ -91,19 +95,57 @@ export function useLiveThemeData() {
           rateLimited: cached.rateLimited,
           symbolsFetched: cached.symbolsFetched,
         });
-        toast({
-          title: "Data restored",
-          description: "Showing cached real data from " + new Date(cached.fetchedAt).toLocaleTimeString(),
-        });
       }
     }
-
     document.addEventListener("visibilitychange", handleVisibility);
     return () => document.removeEventListener("visibilitychange", handleVisibility);
-  }, [toast]);
+  }, []);
+
+  // Merge partial scan results into current state + cache
+  const mergeScanResults = useCallback((scanThemes: ThemeData[]) => {
+    if (!mountedRef.current) return;
+
+    setState((prev) => {
+      // Build map from current themes
+      const themeMap = new Map<string, ThemeData>();
+      for (const t of prev.themes) {
+        themeMap.set(t.theme_name, t);
+      }
+      // Overwrite with scan results
+      for (const t of scanThemes) {
+        themeMap.set(t.theme_name, t);
+      }
+      // Also include any demo themes not yet in map
+      for (const d of demoThemes) {
+        if (!themeMap.has(d.theme_name)) {
+          themeMap.set(d.theme_name, d);
+        }
+      }
+
+      const merged = Array.from(themeMap.values());
+      const processed = getProcessedThemes(merged);
+
+      const now = new Date().toISOString();
+      saveCache({
+        themes: merged,
+        fetchedAt: now,
+        symbolsFetched: merged.reduce((sum, t) => sum + t.tickers.length, 0),
+        rateLimited: false,
+      });
+
+      return {
+        themes: processed,
+        isLoading: false,
+        isLive: true,
+        lastFetched: new Date(now),
+        rateLimited: false,
+        symbolsFetched: merged.reduce((sum, t) => sum + t.tickers.length, 0),
+      };
+    });
+  }, []);
 
   const fetchLiveData = useCallback(async (themeNames?: string[]) => {
-    setState(prev => ({ ...prev, isLoading: true }));
+    setState((prev) => ({ ...prev, isLoading: true }));
 
     try {
       const params: Record<string, string> = {};
@@ -114,75 +156,46 @@ export function useLiveThemeData() {
 
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
       const anonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
-      if (!supabaseUrl || !anonKey) {
-        throw new Error("Supabase config missing");
-      }
+      if (!supabaseUrl || !anonKey) throw new Error("Config missing");
 
       const url = `${supabaseUrl}/functions/v1/fetch-themes${queryString ? `?${queryString}` : ""}`;
       const res = await fetch(url, {
-        headers: {
-          apikey: anonKey,
-          Authorization: `Bearer ${anonKey}`,
-        },
+        headers: { apikey: anonKey, Authorization: `Bearer ${anonKey}` },
       });
 
-      if (!res.ok) {
-        throw new Error(`HTTP ${res.status}`);
-      }
-
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const result = await res.json();
+      if (result.error) throw new Error(result.error);
 
-      if (result.error) {
-        throw new Error(result.error);
-      }
-
-      // Build a map of live themes keyed by theme_name
-      const liveThemeMap = new Map<string, ThemeData>();
-      for (const t of result.themes) {
-        // Recompute up/down from actual ticker data
-        const up_count = t.tickers.filter((tk: { pct: number }) => tk.pct > 0).length;
-        const down_count = t.tickers.filter((tk: { pct: number }) => tk.pct <= 0).length;
+      const liveThemes: ThemeData[] = result.themes.map((t: any) => {
+        const up_count = t.tickers.filter((tk: any) => tk.pct > 0).length;
+        const down_count = t.tickers.filter((tk: any) => tk.pct <= 0).length;
         const performance_pct = t.tickers.length > 0
-          ? Math.round((t.tickers.reduce((sum: number, tk: { pct: number }) => sum + tk.pct, 0) / t.tickers.length) * 100) / 100
+          ? Math.round((t.tickers.reduce((sum: number, tk: any) => sum + tk.pct, 0) / t.tickers.length) * 100) / 100
           : 0;
-        liveThemeMap.set(t.theme_name, {
+        return {
           theme_name: t.theme_name,
           performance_pct,
           up_count,
           down_count,
           tickers: t.tickers,
           notes: t.notes || undefined,
-        });
-      }
+        };
+      });
 
-      // Merge: start with all live themes, then add any demo themes not in live
+      // Merge with existing
+      const currentThemes = themesRef.current;
       const mergedMap = new Map<string, ThemeData>();
-
-      // Add all live themes first
-      for (const [name, theme] of liveThemeMap) {
-        mergedMap.set(name, theme);
-      }
-
-      // Add demo themes that weren't fetched live (preserving their demo data or previous cache)
-      for (const demo of demoThemes) {
-        if (!mergedMap.has(demo.theme_name)) {
-          // If we fetched selectively, keep previous state for non-selected themes
-          if (themeNames?.length) {
-            // Find in current state
-            const existing = state.themes.find(t => t.theme_name === demo.theme_name);
-            mergedMap.set(demo.theme_name, existing || demo);
-          } else {
-            mergedMap.set(demo.theme_name, demo);
-          }
-        }
+      for (const t of currentThemes) mergedMap.set(t.theme_name, t);
+      for (const t of liveThemes) mergedMap.set(t.theme_name, t);
+      for (const d of demoThemes) {
+        if (!mergedMap.has(d.theme_name)) mergedMap.set(d.theme_name, d);
       }
 
       const merged = Array.from(mergedMap.values());
       const processed = getProcessedThemes(merged);
-
       const fetchedAt = result.fetched_at || new Date().toISOString();
 
-      // Save to cache
       saveCache({
         themes: merged,
         fetchedAt,
@@ -202,29 +215,17 @@ export function useLiveThemeData() {
       });
 
       if (result.rate_limited) {
-        toast({
-          title: "Rate Limited",
-          description: "Finnhub rate limit hit. Some data may be stale. Try again in a minute.",
-          variant: "destructive",
-        });
+        toast({ title: "Rate Limited", description: "Some data may be stale.", variant: "destructive" });
       } else {
-        toast({
-          title: "Live Data Loaded",
-          description: `Fetched ${result.symbols_fetched} symbols across ${result.themes.length} themes`,
-        });
+        toast({ title: "Live Data Loaded", description: `${result.symbols_fetched} symbols across ${result.themes.length} themes` });
       }
     } catch (err) {
       console.error("Failed to fetch live data:", err);
       if (!mountedRef.current) return;
-      // On error, keep current state (don't revert to demo)
-      setState(prev => ({ ...prev, isLoading: false }));
-      toast({
-        title: "Failed to fetch live data",
-        description: String(err instanceof Error ? err.message : err),
-        variant: "destructive",
-      });
+      setState((prev) => ({ ...prev, isLoading: false }));
+      toast({ title: "Failed to fetch live data", description: String(err instanceof Error ? err.message : err), variant: "destructive" });
     }
-  }, [toast, state.themes]);
+  }, [toast]);
 
   const resetToDemo = useCallback(() => {
     localStorage.removeItem(CACHE_KEY);
@@ -242,5 +243,6 @@ export function useLiveThemeData() {
     ...state,
     fetchLiveData,
     resetToDemo,
+    mergeScanResults,
   };
 }
