@@ -121,12 +121,20 @@ Deno.serve(async (req) => {
     // Get current progress
     const { data: progress } = await sb.from("full_update_progress").select("*").limit(1).single();
     let startIndex = 0;
-    if (progress && (progress.status === "in_progress" || progress.status === "paused_failed" || progress.status === "rate_limited_waiting") && progress.last_theme_index > 0) {
-      startIndex = progress.last_theme_index;
-    }
 
-    if (action === "start" && (!progress || progress.status === "complete" || progress.status === "idle")) {
+    if (action === "start") {
+      // Fresh scan: always reset to 0
       startIndex = 0;
+      console.log("Action=start: starting fresh from 0");
+    } else {
+      // action=chunk: resume from where we left off
+      if (progress && progress.last_theme_index > 0 && progress.last_theme_index < totalThemes) {
+        startIndex = progress.last_theme_index;
+        console.log(`Action=chunk: resuming from index ${startIndex}/${totalThemes}`);
+      } else {
+        startIndex = 0;
+        console.log("Action=chunk: no valid progress, starting from 0");
+      }
     }
 
     const endIndex = Math.min(startIndex + CHUNK_SIZE, totalThemes);

@@ -73,30 +73,46 @@ export function useFullScan(onChunkComplete: (themes: ThemeData[]) => void) {
   const startFullScan = useCallback(async () => {
     setIsRunning(true);
     abortRef.current = false;
-    setStatusText("Starting full scan...");
     setTotalSkipped(0);
     let skippedCount = 0;
 
     try {
+      // STEP 1: Check progress FIRST to decide start vs resume
+      const existing = await fetchProgress();
+      console.log("Button clicked – checking progress:", existing ? `index = ${existing.last_theme_index} / status = ${existing.status}` : "no progress row");
+
+      let action: string;
+      if (existing && (existing.status === "in_progress" || existing.status === "paused_failed" || existing.status === "rate_limited_waiting") && existing.last_theme_index > 0 && existing.last_theme_index < existing.total_themes) {
+        action = "chunk"; // Resume — edge function will read last_theme_index
+        setStatusText(`Resuming scan from theme ${existing.last_theme_index + 1}/${existing.total_themes}...`);
+        setProgress(existing);
+        console.log(`Resuming from ${existing.last_theme_index + 1}/${existing.total_themes}`);
+      } else {
+        action = "start"; // Fresh scan
+        setStatusText("Starting full scan...");
+        console.log("Starting fresh scan");
+      }
+
       let done = false;
-      let isFirst = true;
 
       while (!done && !abortRef.current) {
-        const action = isFirst ? "start" : "chunk";
-        isFirst = false;
-
-        // Fetch progress for UI
-        const p = await fetchProgress();
-        if (p) {
-          setProgress(p);
-          if (p.status === "rate_limited_waiting") {
-            setStatusText(`Rate limited — waiting... (${p.last_theme_index}/${p.total_themes})`);
-          } else if (p.status === "in_progress" || p.status === "paused_failed") {
-            setStatusText(`Updating theme ${p.last_theme_index}/${p.total_themes}...`);
+        // Fetch progress for UI (skip on first iteration, we already have it)
+        if (action === "chunk") {
+          const p = await fetchProgress();
+          if (p) {
+            setProgress(p);
+            if (p.status === "rate_limited_waiting") {
+              setStatusText(`Rate limited — waiting... (${p.last_theme_index}/${p.total_themes})`);
+            } else if (p.status === "in_progress" || p.status === "paused_failed") {
+              setStatusText(`Updating theme ${p.last_theme_index}/${p.total_themes}...`);
+            }
           }
         }
 
         const res = await fetch(`${supabaseUrl}/functions/v1/full-scan?action=${action}`, { headers });
+
+        // After first call, always use "chunk" for subsequent calls
+        action = "chunk";
 
         if (!res.ok) {
           const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
@@ -113,7 +129,6 @@ export function useFullScan(onChunkComplete: (themes: ThemeData[]) => void) {
         const result = await res.json();
         console.log("Chunk result:", result);
 
-        // KEY: merge chunk results into UI immediately
         if (result.themes?.length > 0) {
           const converted = chunkThemesToThemeData(result.themes);
           onChunkComplete(converted);
