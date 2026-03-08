@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useContext, createContext, ReactNode } from "react";
+import { useState, useCallback, useEffect, useContext, createContext, type ReactNode } from "react";
 
 const PINNED_KEY = "pinnedThemes";
 const ALERTS_KEY = "watchlistAlerts";
