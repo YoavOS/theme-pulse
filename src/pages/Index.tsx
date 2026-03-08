@@ -523,7 +523,7 @@ function Section({
           {themes.length}
         </span>
       </div>
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 min-[1800px]:grid-cols-4">
         {themes.map((t, i) => (
           <ThemeCard key={t.theme_name} theme={t} index={i} />
         ))}
