@@ -344,6 +344,7 @@ export default function Index() {
                     { key: "cards" as const, icon: <LayoutGrid size={14} />, label: "Card Grid" },
                     { key: "list" as const, icon: <List size={14} />, label: "Ranked List" },
                     { key: "heatmap" as const, icon: <Flame size={14} />, label: "Heatmap" },
+                    { key: "bars" as const, icon: <BarChart3 size={14} />, label: "Bar Chart" },
                     { key: "bubble" as const, icon: <Circle size={14} />, label: "Bubble Chart" },
                   ]).map((v) => (
                     <Tooltip key={v.key}>
