@@ -7,6 +7,7 @@ const ALERTS_KEY = "watchlistAlerts";
 export interface AlertConfig {
   up: number | null;
   down: number | null;
+  relVol: number | null;
 }
 
 interface WatchlistContextType {
@@ -31,7 +32,18 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
 
   const [alerts, setAlerts] = useState<Record<string, AlertConfig>>(() => {
     try {
-      return JSON.parse(localStorage.getItem(ALERTS_KEY) || "{}");
+      const raw = JSON.parse(localStorage.getItem(ALERTS_KEY) || "{}");
+      // Migrate old configs missing relVol
+      const migrated: Record<string, AlertConfig> = {};
+      for (const [k, v] of Object.entries(raw)) {
+        const config = v as any;
+        migrated[k] = {
+          up: config.up ?? null,
+          down: config.down ?? null,
+          relVol: config.relVol ?? null,
+        };
+      }
+      return migrated;
     } catch {
       return {};
     }
@@ -63,7 +75,7 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const getAlert = useCallback(
-    (themeName: string): AlertConfig => alerts[themeName] || { up: null, down: null },
+    (themeName: string): AlertConfig => alerts[themeName] || { up: null, down: null, relVol: null },
     [alerts]
   );
 
@@ -80,7 +92,7 @@ const fallback: WatchlistContextType = {
   isPinned: () => false,
   alerts: {},
   setAlert: () => {},
-  getAlert: () => ({ up: null, down: null }),
+  getAlert: () => ({ up: null, down: null, relVol: null }),
 };
 
 // Safe fallback — never throws, never causes blank screen
