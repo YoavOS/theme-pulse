@@ -503,6 +503,7 @@ export default function Index() {
           title="Strong / Best Performing"
           accent="primary"
           themes={strong}
+          onCardClick={setDrilldownTheme}
         />
 
         {/* ─── NEUTRAL ───────────────────────────────── */}
