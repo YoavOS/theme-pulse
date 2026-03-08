@@ -692,7 +692,7 @@ export default function Index() {
       </footer>
 
       <ValidateTickersDialog open={showValidateDialog} onOpenChange={setShowValidateDialog} />
-      <ThemeDrilldownModal theme={drilldownTheme} open={!!drilldownTheme} onOpenChange={(o) => { if (!o) setDrilldownTheme(null); }} newsArticles={drilldownTheme ? getThemeArticles(drilldownTheme.tickers.map(t => t.symbol)) : []} fetchNewsForTheme={fetchThemeNews} />
+      <ThemeDrilldownModal theme={drilldownTheme} open={!!drilldownTheme} onOpenChange={(o) => { if (!o) { setDrilldownTheme(null); setDrilldownDefaultTab("tickers"); } }} newsArticles={drilldownTheme ? getThemeArticles(drilldownTheme.tickers.map(t => t.symbol)) : []} fetchNewsForTheme={fetchThemeNews} fundamentals={drilldownTheme ? getCachedFundamentals(drilldownTheme.tickers.filter(t => !t.skipped).map(t => t.symbol)) : null} fetchFundamentals={fetchFundamentals} isFundamentalsLoading={drilldownTheme ? isFundLoading(drilldownTheme.tickers.filter(t => !t.skipped).map(t => t.symbol)) : false} defaultTab={drilldownDefaultTab} />
 
       {/* News Panel (slide-in) */}
       {newsPanelTheme && (
