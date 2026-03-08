@@ -4,6 +4,7 @@ import { ArrowLeft, BarChart3, TrendingUp, LineChart, Grid3X3, Sparkles } from "
 import { useThemeIntelligence } from "@/hooks/useThemeIntelligence";
 import OverviewTab from "@/components/intelligence/OverviewTab";
 import MomentumTab from "@/components/intelligence/MomentumTab";
+import InsightsTab from "@/components/intelligence/InsightsTab";
 
 const SUB_TABS = [
   { id: "overview", label: "Overview", icon: BarChart3 },
