@@ -75,6 +75,7 @@ export default function Index() {
     canSaveFriday,
     tooltip: eodTooltip,
     fridayTooltip,
+    fridayLastSavedAt,
     autoSave: eodAutoSave,
     startEodSave,
     toggleAutoSave: toggleEodAutoSave,
