@@ -29,17 +29,17 @@ function Section({ title, items, defaultOpen = false }: { title: string; items: 
       </button>
       {open && (
         <div className="px-5 pb-4 space-y-3">
-          {items.map((item, i) => (
-            <div key={i} className="flex items-start gap-3">
-              <div
-                className="shrink-0 min-w-[140px] text-right"
-                dangerouslySetInnerHTML={{ __html: item.labelStyle }}
-              />
-              <p className="text-xs text-muted-foreground leading-relaxed flex-1">
-                {item.explanation}
-              </p>
-            </div>
-          ))}
+           {items.map((item, i) => (
+             <div key={i} className="flex items-start gap-3">
+               <div
+                 className="shrink-0 min-w-[140px] text-right"
+                 dangerouslySetInnerHTML={{ __html: item.labelStyle }}
+               />
+               <p className="text-sm text-muted-foreground leading-relaxed flex-1">
+                 {item.explanation}
+               </p>
+             </div>
+           ))}
         </div>
       )}
     </div>
