@@ -181,6 +181,7 @@ export default function FundamentalsIntelTab({
     const avoid: ThemeFundamentals[] = [];
 
     for (const t of themeFundamentals) {
+      if (t.avgScore === null) { avoid.push(t); continue; }
       const strongFund = t.avgScore >= 55;
       const strongMom = t.momentumScore >= 55;
 
