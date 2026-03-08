@@ -344,7 +344,7 @@ export default function Index() {
                     <div className="absolute right-0 top-full z-50 mt-1 w-56 rounded-lg border border-border bg-card p-1 shadow-xl">
                       {isLive ? (
                         <button
-                          onClick={() => { resetToDemo(); setShowOptions(false); }}
+                          onClick={() => { setShowDemoConfirm(true); setShowOptions(false); }}
                           className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-xs text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
                         >
                           <WifiOff size={13} /> Switch to Demo Data
