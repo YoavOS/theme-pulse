@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { ThemeIntelData } from "@/hooks/useThemeIntelligence";
-import { FundamentalsData, getScoreLabel, getStockTypeInfo, getScoreBadgeColor } from "@/hooks/useFundamentals";
+import { FundamentalsData, getScoreLabel, getStockTypeInfo, getScoreBadgeColor, getSmartMoneyColor } from "@/hooks/useFundamentals";
 import { supabase } from "@/integrations/supabase/client";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Progress } from "@/components/ui/progress";
@@ -20,9 +20,13 @@ interface ThemeFundamentals {
   dataCount: number;
   tickers: { symbol: string; score: number | null; stockType: string | null }[];
   momentumScore: number;
+  avgInstitutionalPct: number | null;
+  avgSmartMoneyScore: number | null;
+  insiderNetBuying: number;
+  insiderNetBuyingTotal: number;
 }
 
-type SortKey = "rank" | "name" | "score" | "growth" | "margin" | "debt" | "type";
+type SortKey = "rank" | "name" | "score" | "growth" | "margin" | "debt" | "type" | "smartMoney" | "instPct";
 type SortDir = "asc" | "desc";
 
 function mostCommon(arr: string[]): string {
@@ -100,6 +104,20 @@ export default function FundamentalsIntelTab({
       const types = tickerData.map(d => d.stock_type).filter((v): v is string => v !== null);
       const ratings = tickerData.map(d => d.analyst_rating);
 
+      // Smart money aggregation
+      const instPcts = tickerData.map(d => d.institutional_ownership_pct).filter((v): v is number => v !== null);
+      const smScores = tickerData.map(d => d.smart_money_score).filter((v): v is number => v !== null);
+      let insiderNetBuying = 0;
+      let insiderNetBuyingTotal = 0;
+      for (const d of tickerData) {
+        const buys = d.recent_insider_buys ?? 0;
+        const sells = d.recent_insider_sells ?? 0;
+        if (buys > 0 || sells > 0) {
+          insiderNetBuyingTotal++;
+          if (buys > sells) insiderNetBuying++;
+        }
+      }
+
       return {
         themeName: t.themeName,
         avgScore,
@@ -116,6 +134,10 @@ export default function FundamentalsIntelTab({
           stockType: allFundamentals[s]?.stock_type ?? null,
         })),
         momentumScore: t.momentumScore,
+        avgInstitutionalPct: instPcts.length > 0 ? Math.round(instPcts.reduce((a, b) => a + b, 0) / instPcts.length * 10) / 10 : null,
+        avgSmartMoneyScore: smScores.length > 0 ? Math.round(smScores.reduce((a, b) => a + b, 0) / smScores.length) : null,
+        insiderNetBuying,
+        insiderNetBuyingTotal,
       } as ThemeFundamentals;
     });
   }, [themes, allFundamentals]);
@@ -131,6 +153,8 @@ export default function FundamentalsIntelTab({
         case "margin": av = a.avgNetMargin ?? -999; bv = b.avgNetMargin ?? -999; break;
         case "debt": av = a.avgDebtToEquity ?? 999; bv = b.avgDebtToEquity ?? 999; break;
         case "type": return sortDir === "asc" ? a.dominantStockType.localeCompare(b.dominantStockType) : b.dominantStockType.localeCompare(a.dominantStockType);
+        case "smartMoney": av = a.avgSmartMoneyScore ?? -1; bv = b.avgSmartMoneyScore ?? -1; break;
+        case "instPct": av = a.avgInstitutionalPct ?? -1; bv = b.avgInstitutionalPct ?? -1; break;
         default: av = a.avgScore; bv = b.avgScore;
       }
       return sortDir === "asc" ? (av as number) - (bv as number) : (bv as number) - (av as number);
@@ -296,6 +320,8 @@ export default function FundamentalsIntelTab({
                   ["growth", "Avg Growth"],
                   ["margin", "Avg Margin"],
                   ["debt", "Avg D/E"],
+                  ["instPct", "Inst %"],
+                  ["smartMoney", "Smart $"],
                 ] as [SortKey, string][]).map(([key, label]) => (
                   <th
                     key={key}
@@ -308,7 +334,7 @@ export default function FundamentalsIntelTab({
                     </span>
                   </th>
                 ))}
-                <th className="px-3 py-2 text-left font-medium text-muted-foreground">Consensus</th>
+                <th className="px-3 py-2 text-left font-medium text-muted-foreground">Insider</th>
               </tr>
             </thead>
             <tbody>
@@ -316,6 +342,7 @@ export default function FundamentalsIntelTab({
                 const typeInfo = getStockTypeInfo(t.dominantStockType);
                 const scoreLabel = getScoreLabel(t.avgScore);
                 const isExpanded = expandedTheme === t.themeName;
+                const smColor = getSmartMoneyColor(t.avgSmartMoneyScore);
 
                 return (
                   <>
@@ -365,11 +392,29 @@ export default function FundamentalsIntelTab({
                           {t.avgDebtToEquity != null ? t.avgDebtToEquity.toFixed(2) : "—"}
                         </span>
                       </td>
-                      <td className="px-3 py-2 text-muted-foreground">{t.analystConsensus}</td>
+                      <td className="px-3 py-2">
+                        <span className="font-mono text-muted-foreground" style={{ fontFamily: DM_MONO }}>
+                          {t.avgInstitutionalPct != null ? `${t.avgInstitutionalPct.toFixed(0)}%` : "—"}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2">
+                        <span className={`font-semibold ${smColor}`} style={{ fontFamily: DM_MONO }}>
+                          {t.avgSmartMoneyScore != null ? t.avgSmartMoneyScore : "—"}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2">
+                        {t.insiderNetBuyingTotal > 0 ? (
+                          <span className={`text-[10px] ${t.insiderNetBuying > t.insiderNetBuyingTotal / 2 ? "text-[#00f5c4]" : "text-[#f5a623]"}`}>
+                            {t.insiderNetBuying}/{t.insiderNetBuyingTotal} buying
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground text-[10px]">—</span>
+                        )}
+                      </td>
                     </tr>
                     {isExpanded && (
                       <tr key={`${t.themeName}-expand`}>
-                        <td colSpan={8} className="px-8 py-2" style={{ background: "rgba(255,255,255,0.02)" }}>
+                        <td colSpan={11} className="px-8 py-2" style={{ background: "rgba(255,255,255,0.02)" }}>
                           <div className="flex flex-wrap gap-2">
                             {t.tickers.map(tk => {
                               const ti = getStockTypeInfo(tk.stockType);
@@ -430,6 +475,45 @@ export default function FundamentalsIntelTab({
           ))}
         </div>
       </div>
+
+      {/* Smart Money Leaders */}
+      {(() => {
+        const smLeaders = [...themeFundamentals]
+          .filter(t => t.avgSmartMoneyScore != null && t.avgSmartMoneyScore > 0)
+          .sort((a, b) => (b.avgSmartMoneyScore ?? 0) - (a.avgSmartMoneyScore ?? 0))
+          .slice(0, 5);
+        if (smLeaders.length === 0) return null;
+        return (
+          <div className="rounded-lg p-4" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}>
+            <h4 className="font-['Syne',sans-serif] text-xs font-semibold uppercase tracking-widest text-[#00f5c4] mb-3">
+              🏛️ Highest Institutional Backing
+            </h4>
+            <div className="space-y-2">
+              {smLeaders.map(t => {
+                const smScore = t.avgSmartMoneyScore ?? 0;
+                const barColor = smScore > 75 ? "hsl(var(--primary))" : smScore > 50 ? "hsl(152,100%,50%)" : "#facc15";
+                return (
+                  <div key={t.themeName} className="flex items-center gap-3 text-xs">
+                    <span className="font-['Syne',sans-serif] font-medium text-foreground w-32 truncate">{t.themeName}</span>
+                    <div className="flex-1 h-1.5 rounded-full bg-secondary/60 overflow-hidden">
+                      <div className="h-full rounded-full" style={{ width: `${smScore}%`, background: barColor }} />
+                    </div>
+                    <span className={`font-semibold w-8 text-right ${getSmartMoneyColor(smScore)}`} style={{ fontFamily: DM_MONO }}>{smScore}</span>
+                    <span className="text-muted-foreground w-12 text-right" style={{ fontFamily: DM_MONO }}>
+                      {t.avgInstitutionalPct != null ? `${t.avgInstitutionalPct.toFixed(0)}%` : "—"}
+                    </span>
+                    {t.insiderNetBuyingTotal > 0 && (
+                      <span className={`text-[10px] w-20 ${t.insiderNetBuying > t.insiderNetBuyingTotal / 2 ? "text-[#00f5c4]" : "text-[#f5a623]"}`}>
+                        {t.insiderNetBuying}/{t.insiderNetBuyingTotal} buying
+                      </span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }

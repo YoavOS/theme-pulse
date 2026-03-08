@@ -1,0 +1,18 @@
+ALTER TABLE fundamentals_cache
+  ADD COLUMN IF NOT EXISTS pe_ratio NUMERIC,
+  ADD COLUMN IF NOT EXISTS forward_pe NUMERIC,
+  ADD COLUMN IF NOT EXISTS ps_ratio NUMERIC,
+  ADD COLUMN IF NOT EXISTS pb_ratio NUMERIC,
+  ADD COLUMN IF NOT EXISTS ev_ebitda NUMERIC,
+  ADD COLUMN IF NOT EXISTS peg_ratio NUMERIC,
+  ADD COLUMN IF NOT EXISTS valuation_score NUMERIC,
+  ADD COLUMN IF NOT EXISTS valuation_label TEXT,
+  ADD COLUMN IF NOT EXISTS institutional_ownership_pct NUMERIC,
+  ADD COLUMN IF NOT EXISTS institutional_change NUMERIC,
+  ADD COLUMN IF NOT EXISTS top_institutions JSONB,
+  ADD COLUMN IF NOT EXISTS insider_sentiment_score NUMERIC,
+  ADD COLUMN IF NOT EXISTS insider_sentiment_label TEXT,
+  ADD COLUMN IF NOT EXISTS recent_insider_buys INT,
+  ADD COLUMN IF NOT EXISTS recent_insider_sells INT,
+  ADD COLUMN IF NOT EXISTS smart_money_score NUMERIC,
+  ADD COLUMN IF NOT EXISTS smart_money_label TEXT;

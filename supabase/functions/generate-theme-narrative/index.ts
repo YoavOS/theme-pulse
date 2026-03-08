@@ -43,6 +43,12 @@ FUNDAMENTAL RULES:
 - When a theme has weak momentum BUT strong fundamentals, mention it as a potential value opportunity
 - Always contextualize price moves with fundamental quality when relevant
 
+SMART MONEY RULES:
+- When a theme has strong momentum AND high smart money score (>70), describe it as "institutionally confirmed"
+- When insiders are net buying across a theme's tickers, mention it as a strong conviction signal
+- When institutions are reducing positions in a leading theme, flag it as a caution — "smart money may be rotating out"
+- When a theme has weak momentum but strong institutional buying, flag it as a potential accumulation phase
+
 NEWS CONTEXT RULES:
 - When recent headlines are provided for top themes, use them to explain WHY themes are moving, not just that they are moving
 - If a headline directly explains a theme's performance (e.g. a defense contract announcement for the Defense theme), reference it specifically
@@ -119,7 +125,7 @@ serve(async (req) => {
 
     // Fundamentals context
     const fundamentalsSection = themeFundamentals && (themeFundamentals as any[]).length > 0
-      ? `\n\nFUNDAMENTAL CONTEXT:\n${(themeFundamentals as any[]).map((f: any) => `- ${f.name}: F-Score ${f.fundamentalScore}/100 (${f.stockType}) | Rev Growth: ${f.avgRevenueGrowth != null ? f.avgRevenueGrowth + "%" : "N/A"} | Net Margin: ${f.avgNetMargin != null ? f.avgNetMargin + "%" : "N/A"} | Analyst: ${f.analystConsensus || "N/A"}`).join("\n")}`
+      ? `\n\nFUNDAMENTAL CONTEXT:\n${(themeFundamentals as any[]).map((f: any) => `- ${f.name}: F-Score ${f.fundamentalScore}/100 (${f.stockType}) | Rev Growth: ${f.avgRevenueGrowth != null ? f.avgRevenueGrowth + "%" : "N/A"} | Net Margin: ${f.avgNetMargin != null ? f.avgNetMargin + "%" : "N/A"} | Analyst: ${f.analystConsensus || "N/A"} | Smart Money: ${f.smartMoneyScore != null ? f.smartMoneyScore + "/100" : "N/A"} | Inst%: ${f.institutionalPct != null ? f.institutionalPct + "%" : "N/A"} | Insider: ${f.insiderSentiment || "N/A"}`).join("\n")}`
       : "";
 
     const userMessage = `Date: ${date} | Themes analyzed: ${totalThemes} | Request ID: ${requestTimestamp}
