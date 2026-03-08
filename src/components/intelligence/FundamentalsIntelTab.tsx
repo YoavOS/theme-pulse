@@ -1,9 +1,10 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { ThemeIntelData } from "@/hooks/useThemeIntelligence";
 import { FundamentalsData, getScoreLabel, getStockTypeInfo, getScoreBadgeColor } from "@/hooks/useFundamentals";
 import { supabase } from "@/integrations/supabase/client";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ArrowUpDown, ChevronDown, ChevronRight } from "lucide-react";
+import { Progress } from "@/components/ui/progress";
+import { ArrowUpDown, ChevronDown, ChevronRight, Loader2 } from "lucide-react";
 
 const DM_MONO = "'DM Mono', monospace";
 
