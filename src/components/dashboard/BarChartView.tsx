@@ -14,7 +14,10 @@ interface BarDataPoint {
   breadthTotal: number;
   breadthPct: number;
   relVol: number | null;
+  relVolEstimated: boolean;
+  sustainedVol: number | null;
   fScore: number | null;
+  stockType: string | null;
   rs: { text: string; color: string } | null;
   theme: ThemeData;
   isDimmed: boolean;
