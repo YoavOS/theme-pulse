@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { ArrowLeft, BarChart3, TrendingUp, LineChart, Grid3X3, Sparkles, Activity } from "lucide-react";
+import { ArrowLeft, BarChart3, TrendingUp, LineChart, Grid3X3, Sparkles, Activity, FlaskConical } from "lucide-react";
 import { useThemeIntelligence } from "@/hooks/useThemeIntelligence";
 import OverviewTab from "@/components/intelligence/OverviewTab";
 import MomentumTab from "@/components/intelligence/MomentumTab";
@@ -8,6 +8,7 @@ import BreadthTab from "@/components/intelligence/BreadthTab";
 import InsightsTab from "@/components/intelligence/InsightsTab";
 import TrendsTab from "@/components/intelligence/TrendsTab";
 import HeatmapTab from "@/components/intelligence/HeatmapTab";
+import FundamentalsIntelTab from "@/components/intelligence/FundamentalsIntelTab";
 import React from "react";
 import HelpButton from "@/components/HelpButton";
 
@@ -17,6 +18,7 @@ const SUB_TABS = [
   { id: "breadth", label: "Breadth", icon: Activity },
   { id: "trends", label: "Trends", icon: LineChart },
   { id: "heatmap", label: "Heatmap", icon: Grid3X3 },
+  { id: "fundamentals", label: "Fundamentals", icon: FlaskConical },
   { id: "insights", label: "Insights", icon: Sparkles },
 ] as const;
 
