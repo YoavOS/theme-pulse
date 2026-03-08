@@ -8,6 +8,7 @@ import WeeklyReportsSection from "./WeeklyReportsSection";
 import VolumeDryUpSection from "./VolumeDryUpSection";
 import { useVolumeDryUp } from "@/hooks/useVolumeDryUp";
 import { calculateDispersion, getDispersionLabel, getDispersionShortLabel } from "@/hooks/useDispersion";
+import { useSpyBenchmark } from "@/hooks/useSpyBenchmark";
 
 const DM_MONO = "'DM Mono', monospace";
 const COOLDOWN_MS = 30_000;
@@ -102,6 +103,7 @@ export default function InsightsTab({
   isLoading: boolean;
 }) {
   const { dryUpThemes } = useVolumeDryUp();
+  const { spy } = useSpyBenchmark();
   const [narrative, setNarrative] = useState<NarrativeState | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [cooldownEnd, setCooldownEnd] = useState(0);
@@ -191,6 +193,9 @@ export default function InsightsTab({
         outlierThemes,
         dispersionScore,
         dispersionLabel,
+        spyPerf1d: spy.perf_1d,
+        spyPerf1w: spy.perf_1w,
+        spyPerf1m: spy.perf_1m,
       };
 
       let data: any = null;

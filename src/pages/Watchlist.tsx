@@ -8,10 +8,12 @@ import AddThemeModal from "@/components/AddThemeModal";
 import { ThemeData } from "@/data/themeData";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { useSpyBenchmark, formatRS } from "@/hooks/useSpyBenchmark";
 
 export default function Watchlist() {
   const { pinned, togglePin, alerts, setAlert, getAlert } = useWatchlist();
   const { themes } = useLiveThemeData("Today");
+  const { getRelativeStrength } = useSpyBenchmark();
   const [triggeredAlerts, setTriggeredAlerts] = useState<
     { themeName: string; message: string; type: "up" | "down" | "volume" }[]
   >([]);
@@ -232,6 +234,16 @@ export default function Watchlist() {
                   <div style={{ boxShadow: "0 0 0 1px hsla(152,100%,50%,0.2), 0 0 12px hsla(152,100%,50%,0.08)" }} className="rounded-lg">
                     <ThemeCard theme={theme} index={i} />
                   </div>
+                  {/* vs SPY line below card */}
+                  {theme.dataSource === "real" && (() => {
+                    const rs = getRelativeStrength(theme.performance_pct);
+                    const f = formatRS(rs);
+                    return (
+                      <div className={`mt-1 px-3 text-[10px] font-medium ${f.color}`} style={{ fontFamily: "'DM Mono', monospace" }}>
+                        {f.text}
+                      </div>
+                    );
+                  })()}
                 </div>
                 <AlertRow
                   themeName={theme.theme_name}

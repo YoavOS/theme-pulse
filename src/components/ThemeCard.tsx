@@ -7,6 +7,7 @@ import DemandSignals from "@/components/DemandSignals";
 import { ThemeDemandSignals } from "@/hooks/useVolumeData";
 import { hasThemeBreadthEvent } from "@/hooks/useBreadthAlerts";
 import { useVolumeDryUp } from "@/hooks/useVolumeDryUp";
+import { useSpyBenchmark, formatRS } from "@/hooks/useSpyBenchmark";
 
 class DemandSignalsBoundary extends Component<{ children: ReactNode; resetKey?: string }, { hasError: boolean }> {
   state = { hasError: false };
@@ -79,6 +80,9 @@ export default function ThemeCard({ theme, index, onClick, fetchVolume, getTheme
   const breadthEvent = useMemo(() => hasThemeBreadthEvent(theme.theme_name), [theme.theme_name]);
   const { isThemeDryingUp } = useVolumeDryUp();
   const isDryingUp = useMemo(() => isThemeDryingUp(theme.theme_name), [theme.theme_name, isThemeDryingUp]);
+  const { getRelativeStrength } = useSpyBenchmark();
+  const rs = useMemo(() => getRelativeStrength(theme.performance_pct), [theme.performance_pct, getRelativeStrength]);
+  const rsFormatted = formatRS(rs);
   const validTickers = theme.tickers.filter(t => !t.skipped);
   const naTickers = theme.tickers.filter(t => t.skipped);
   const total = validTickers.length;
@@ -209,6 +213,13 @@ export default function ThemeCard({ theme, index, onClick, fetchVolume, getTheme
             )}
             <span className="ml-auto text-muted-foreground">{Math.round(ratio * 100)}% advancing</span>
           </div>
+
+          {/* vs SPY relative strength */}
+          {theme.dataSource === "real" && (
+            <div className={`text-[10px] font-medium mt-0.5 ${rsFormatted.color}`} style={{ fontFamily: "'DM Mono', monospace" }}>
+              {rsFormatted.text}
+            </div>
+          )}
 
           {/* Row 4: Tickers — single row, max 5 visible */}
           {visibleTickers.length > 0 && (

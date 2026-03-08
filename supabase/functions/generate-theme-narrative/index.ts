@@ -31,6 +31,12 @@ DISPERSION RULES:
 - If dispersion is <0.5, mention themes are moving in lockstep suggesting macro-driven action rather than stock-specific rotation
 - Only mention dispersion if the data includes it and it adds meaningful context
 
+RELATIVE STRENGTH RULES:
+- Always contextualize theme performance relative to SPY when SPY data is provided
+- A theme up 1% when SPY is up 2% is underperforming — call it out
+- A theme up 1% when SPY is down 0.5% is showing real strength — highlight this
+- Use relative strength language when it adds meaningful context, don't force it on every theme
+
 FORMAT:
 Write 6–8 sentences of flowing prose. No bullet points. No headers. No lists.
 Cover: what is genuinely leading with broad confirmation, what is a single-stock story masquerading as a theme move, what is fading and why, what the overall rotation suggests, and one specific actionable thing to watch next session.`;
@@ -60,7 +66,7 @@ serve(async (req) => {
       return jsonResponse({ error: "bad_request", message: "Invalid JSON in request body" }, 400);
     }
 
-    const { topThemes, bottomThemes, outlierThemes, date, totalThemes, requestTimestamp, dispersionScore, dispersionLabel } = payload;
+    const { topThemes, bottomThemes, outlierThemes, date, totalThemes, requestTimestamp, dispersionScore, dispersionLabel, spyPerf1d, spyPerf1w, spyPerf1m } = payload;
 
     console.log(`Payload: top=${(topThemes||[]).length}, bottom=${(bottomThemes||[]).length}, outliers=${(outlierThemes||[]).length}, date=${date}, total=${totalThemes}, ts=${requestTimestamp}`);
 
@@ -92,10 +98,11 @@ serve(async (req) => {
       ? (outlierThemes || []).map(formatTheme).join("\n\n")
       : "None identified";
 
-    const dispersionLine = dispersionScore != null ? `\nDISPERSION: ${dispersionScore.toFixed(2)}σ — ${dispersionLabel || "N/A"}\n` : "";
+    const dispersionLine = dispersionScore != null ? `\nDISPERSION: ${dispersionScore.toFixed(2)}σ — ${dispersionLabel || "N/A"}` : "";
+    const spyLine = spyPerf1d != null ? `\nSPY BENCHMARK: 1D: ${spyPerf1d >= 0 ? "+" : ""}${spyPerf1d}% | 1W: ${spyPerf1w != null ? (spyPerf1w >= 0 ? "+" : "") + spyPerf1w + "%" : "N/A"} | 1M: ${spyPerf1m != null ? (spyPerf1m >= 0 ? "+" : "") + spyPerf1m + "%" : "N/A"}` : "";
 
     const userMessage = `Date: ${date} | Themes analyzed: ${totalThemes} | Request ID: ${requestTimestamp}
-${dispersionLine}
+${dispersionLine}${spyLine}
 TOP 8 THEMES (strongest momentum):
 ${topLines}
 

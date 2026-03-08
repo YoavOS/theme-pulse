@@ -4,6 +4,7 @@ import { useWatchlist } from "@/hooks/useWatchlistContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Pin, X, ExternalLink, ArrowUpDown } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { useSpyBenchmark, formatRS } from "@/hooks/useSpyBenchmark";
 import {
   Dialog,
   DialogContent,
@@ -95,6 +96,7 @@ export default function ThemeDrilldownModal({
    const [sortKey, setSortKey] = useState<SortKey>(defaultSortKey || "pct");
    const [sortDir, setSortDir] = useState<SortDir>("desc");
    const [extras, setExtras] = useState<Record<string, TickerExtra>>({});
+   const { spy, getTickerRS } = useSpyBenchmark();
 
   useEffect(() => {
     if (!theme || !open) return;
@@ -309,6 +311,20 @@ export default function ThemeDrilldownModal({
 
         {/* Ticker table */}
         <div className="max-h-[400px] overflow-auto px-6 pb-2">
+          {/* SPY Benchmark row */}
+          {spy.perf_1d !== null && (
+            <div className="mb-2">
+              <div className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold mb-1 px-2">── Benchmark ──</div>
+              <div className="flex items-center gap-3 rounded-md px-2 py-1.5" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)" }}>
+                <span className="font-bold text-foreground text-xs" style={{ fontFamily: "'DM Mono', monospace" }}>SPY</span>
+                <span className="text-[10px] text-muted-foreground">S&P 500 ETF</span>
+                <span className={`text-xs font-semibold ml-auto ${spy.perf_1d >= 0 ? "text-gain-medium" : "text-loss-mild"}`} style={{ fontFamily: "'DM Mono', monospace" }}>
+                  {spy.perf_1d >= 0 ? "+" : ""}{spy.perf_1d.toFixed(2)}%
+                </span>
+              </div>
+              <div className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold mt-2 mb-1 px-2">── Theme Tickers ──</div>
+            </div>
+          )}
           <table className="w-full text-xs">
             <thead className="sticky top-0 z-10" style={{ background: "rgba(15,18,25,0.95)" }}>
               <tr className="border-b border-border">
@@ -332,12 +348,15 @@ export default function ThemeDrilldownModal({
                     </span>
                   </th>
                 ))}
+                <th className="px-2 py-2 text-left font-medium text-muted-foreground">vs SPY</th>
                 <th className="px-2 py-2 text-left font-medium text-muted-foreground">7D</th>
               </tr>
             </thead>
             <tbody>
               {sorted.map(ticker => {
                 const extra = extras[ticker.symbol];
+                const tickerRS = ticker.skipped ? null : getTickerRS(ticker.pct);
+                const rsF = formatRS(tickerRS);
                 const sparkUp = extra?.sparkline.length
                   ? extra.sparkline[extra.sparkline.length - 1] >= extra.sparkline[0]
                   : true;
@@ -415,6 +434,11 @@ export default function ThemeDrilldownModal({
                       ) : (
                         <span className="text-muted-foreground" style={{ fontFamily: "'DM Mono', monospace" }}>—</span>
                       )}
+                    </td>
+                    <td className="px-2 py-2">
+                      <span className={`font-mono text-[10px] ${rsF.color}`} style={{ fontFamily: "'DM Mono', monospace" }}>
+                        {tickerRS !== null ? `${tickerRS >= 0 ? "+" : ""}${tickerRS.toFixed(2)}%` : "—"}
+                      </span>
                     </td>
                     <td className="px-2 py-2">
                       <MiniSparkline data={extra?.sparkline || []} up={sparkUp} />

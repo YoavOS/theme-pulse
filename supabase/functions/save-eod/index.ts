@@ -116,6 +116,9 @@ Deno.serve(async (req) => {
         theme_name: themeMap.get(t.theme_id) || "Unknown",
       }));
 
+      // Always include SPY as benchmark
+      tickerList.push({ symbol: "SPY", theme_name: "__BENCHMARK__" });
+
       // Deduplicate by symbol (keep first theme_name)
       const seen = new Set<string>();
       const unique = tickerList.filter(t => {

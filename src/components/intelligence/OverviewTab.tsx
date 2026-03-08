@@ -9,6 +9,7 @@ import ThemeDrilldownModal from "@/components/ThemeDrilldownModal";
 import { useLiveThemeData } from "@/hooks/useLiveThemeData";
 import { useVolumeDryUp } from "@/hooks/useVolumeDryUp";
 import BubbleChartView from "./BubbleChartView";
+import { useSpyBenchmark, formatRS } from "@/hooks/useSpyBenchmark";
 
 const DM_MONO = "'DM Mono', monospace";
 const VIEW_KEY = "overviewView";
@@ -17,9 +18,9 @@ const EOD_TOOLTIP = "Accumulating EOD history — available after more daily sav
 const SIGNAL_TOOLTIP =
   "Divergence between momentum rank and breadth rank. '⚠ Thin' = momentum rank is much better than breadth — price move driven by few tickers, not confirmed by broad participation. '👀 Watch' = breadth rank is much better than momentum — broad quiet strength not yet reflected in price. Potential early rotation signal.";
 const VOL_TOOLTIP = "Average relative volume across all theme tickers vs their 20-day average. >1.8× = unusual institutional interest. >1.4× = elevated. <0.8× = quiet. Factors into momentum score as a conviction multiplier.";
-const MOMENTUM_TOOLTIP = "Weighted score: 20% today + 35% this week + 45% this month, adjusted for volume. Higher = stronger sustained momentum. Normalized 0-100 across all themes.";
-
-type SortMode = "momentum" | "breadth";
+const MOMENTUM_TOOLTIP = "Weighted score: 20% today + 35% this week + 45% this month, adjusted for volume. Higher = stronger sustained momentum. Normalized 0-100 across all themes. Note: uses absolute performance. Use 'vs SPY' column for relative strength.";
+const SPY_TOOLTIP = "Theme performance minus SPY performance. Positive = outperforming the S&P 500. Negative = underperforming even if nominally positive.";
+type SortMode = "momentum" | "breadth" | "spy";
 
 function getRelVolColor(val: number): string {
   if (val > 1.8) return "#00f5c4";
@@ -222,6 +223,7 @@ export default function OverviewTab({
 
    const { themes: liveThemes } = useLiveThemeData("Today");
    const { isThemeDryingUp } = useVolumeDryUp();
+   const { spy, getRelativeStrength } = useSpyBenchmark();
 
    const handleSelectTheme = useCallback((themeId: string) => {
      const el = rowRefs.current.get(themeId);
@@ -270,8 +272,15 @@ export default function OverviewTab({
     if (sortMode === "breadth") {
       return [...enriched].sort((a, b) => b.breadthPct - a.breadthPct);
     }
+    if (sortMode === "spy") {
+      return [...enriched].sort((a, b) => {
+        const aRS = getRelativeStrength(a.perf_1d) ?? -999;
+        const bRS = getRelativeStrength(b.perf_1d) ?? -999;
+        return bRS - aRS;
+      });
+    }
     return enriched;
-  }, [enriched, sortMode]);
+  }, [enriched, sortMode, getRelativeStrength]);
 
   return (
     <div className="h-full overflow-auto">
@@ -311,7 +320,7 @@ export default function OverviewTab({
 
         {viewMode === "table" && (
           <div className="flex items-center gap-1 rounded-lg bg-[rgba(255,255,255,0.03)] p-1">
-            {(["momentum", "breadth"] as const).map(mode => (
+            {(["momentum", "breadth", "spy"] as const).map(mode => (
               <button
                 key={mode}
                 onClick={() => setSortMode(mode)}
@@ -321,7 +330,7 @@ export default function OverviewTab({
                     : "text-muted-foreground hover:text-foreground hover:bg-[rgba(255,255,255,0.04)]"
                 }`}
               >
-                {mode === "momentum" ? "Momentum" : "Breadth"}
+                {mode === "momentum" ? "Momentum" : mode === "breadth" ? "Breadth" : "vs SPY"}
                 {sortMode === mode && (
                   <span className="absolute bottom-0 left-1/2 -translate-x-1/2 h-0.5 w-6 rounded-full bg-[#00f5c4]" />
                 )}
@@ -362,6 +371,18 @@ export default function OverviewTab({
                       </Tooltip>
                     </th>
                     <th className="px-3 py-2.5 text-right font-medium">1D</th>
+                    <th className="px-3 py-2.5 text-right font-medium">
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span className="cursor-help inline-flex items-center gap-1">
+                            vs SPY <Info size={10} className="opacity-50" />
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent side="top" className="max-w-[220px] text-xs">
+                          {SPY_TOOLTIP}
+                        </TooltipContent>
+                      </Tooltip>
+                    </th>
                     <th className="px-3 py-2.5 text-right font-medium">1W</th>
                     <th className="px-3 py-2.5 text-right font-medium">1M</th>
                     <th className="px-3 py-2.5 text-right font-medium">
@@ -429,6 +450,15 @@ export default function OverviewTab({
                             <MomentumBar score={t.momentumScore} />
                           </td>
                           <PerfCell value={t.perf_1d} hasData={true} />
+                          {(() => {
+                            const rs = getRelativeStrength(t.perf_1d);
+                            const f = formatRS(rs);
+                            return (
+                              <td className={`px-3 py-2.5 text-right text-sm ${f.color}`} style={{ fontFamily: DM_MONO }}>
+                                {rs !== null ? `${rs >= 0 ? "+" : ""}${rs.toFixed(2)}%` : "--"}
+                              </td>
+                            );
+                          })()}
                           <PerfCell value={t.perf_1w} hasData={t.hasEodHistory} />
                           <PerfCell value={t.perf_1m} hasData={t.hasEodHistory} />
                           <VolCell avgRelVol={t.avgRelVol} isDryingUp={isThemeDryingUp(t.themeName)} />
