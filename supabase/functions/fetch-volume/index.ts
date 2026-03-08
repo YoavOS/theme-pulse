@@ -22,60 +22,73 @@ interface VolumeResult {
   error?: string;
 }
 
-async function fetchVolumeFromCandles(symbol: string): Promise<VolumeResult> {
+async function fetchVolumeForSymbol(symbol: string): Promise<VolumeResult> {
   const result: VolumeResult = { symbol, today_vol: 0, avg_20d: 0, avg_10d: 0, avg_3m: 0 };
 
-  const now = Math.floor(Date.now() / 1000);
-  const from = now - 100 * 86400; // ~100 days back for 63 trading days
-
+  // 1. Fetch /quote for today's volume
   try {
-    const res = await fetch(
-      `https://finnhub.io/api/v1/stock/candle?symbol=${encodeURIComponent(symbol)}&resolution=D&from=${from}&to=${now}&token=${FINNHUB_KEY}`
+    const quoteRes = await fetch(
+      `https://finnhub.io/api/v1/quote?symbol=${encodeURIComponent(symbol)}&token=${FINNHUB_KEY}`
     );
-
-    if (res.status === 429) {
+    if (quoteRes.status === 429) {
       return { ...result, error: "rate_limited" };
     }
-    if (res.status === 403) {
-      return { ...result, error: "unsupported" };
+    if (quoteRes.ok) {
+      const q = await quoteRes.json();
+      // Finnhub quote doesn't include volume directly in free tier
+      // but some endpoints do - check if 'v' exists
+      if (q && typeof q.v === 'number') {
+        result.today_vol = q.v;
+      }
     }
-    if (!res.ok) {
-      return { ...result, error: `http_${res.status}` };
-    }
-
-    const data = await res.json();
-    if (!data || data.s === "no_data" || !data.v || data.v.length === 0) {
-      return { ...result, error: "no_data" };
-    }
-
-    const volumes = data.v as number[];
-    const len = volumes.length;
-
-    // Today's volume = last entry
-    result.today_vol = volumes[len - 1] || 0;
-
-    // 20-day average (last 20 entries excluding today)
-    const last20 = volumes.slice(Math.max(0, len - 21), len - 1);
-    if (last20.length > 0) {
-      result.avg_20d = Math.round(last20.reduce((a, b) => a + b, 0) / last20.length);
-    }
-
-    // 10-day average (last 10 entries excluding today)
-    const last10 = volumes.slice(Math.max(0, len - 11), len - 1);
-    if (last10.length > 0) {
-      result.avg_10d = Math.round(last10.reduce((a, b) => a + b, 0) / last10.length);
-    }
-
-    // 3-month average (~63 trading days, excluding today)
-    const last63 = volumes.slice(Math.max(0, len - 64), len - 1);
-    if (last63.length > 0) {
-      result.avg_3m = Math.round(last63.reduce((a, b) => a + b, 0) / last63.length);
-    }
-
-    return result;
   } catch (e) {
-    return { ...result, error: String(e) };
+    console.log(`Quote error for ${symbol}: ${e}`);
   }
+
+  await delay(280); // rate limit: ~4/sec
+
+  // 2. Fetch /stock/metric for volume averages
+  try {
+    const metricRes = await fetch(
+      `https://finnhub.io/api/v1/stock/metric?symbol=${encodeURIComponent(symbol)}&metric=all&token=${FINNHUB_KEY}`
+    );
+    if (metricRes.status === 429) {
+      // Keep what we have from quote
+      console.log(`Metric rate-limited for ${symbol}`);
+      return result;
+    }
+    if (metricRes.ok) {
+      const data = await metricRes.json();
+      const m = data?.metric;
+      if (m) {
+        // 10DayAverageTradingVolume is in millions on Finnhub
+        if (typeof m["10DayAverageTradingVolume"] === "number") {
+          result.avg_10d = Math.round(m["10DayAverageTradingVolume"] * 1_000_000);
+        }
+        if (typeof m["3MonthAverageTradingVolume"] === "number") {
+          result.avg_3m = Math.round(m["3MonthAverageTradingVolume"] * 1_000_000);
+        }
+        // Use 3-month as proxy for 20-day if we don't have a specific 20-day metric
+        // Finnhub provides 10-day and 3-month; interpolate 20-day as avg of both
+        if (result.avg_10d > 0 && result.avg_3m > 0) {
+          result.avg_20d = Math.round((result.avg_10d + result.avg_3m) / 2);
+        } else if (result.avg_10d > 0) {
+          result.avg_20d = result.avg_10d;
+        } else if (result.avg_3m > 0) {
+          result.avg_20d = result.avg_3m;
+        }
+      }
+    }
+  } catch (e) {
+    console.log(`Metric error for ${symbol}: ${e}`);
+  }
+
+  // If we got metric data but no today_vol from quote, estimate from averages
+  if (result.today_vol === 0 && result.avg_10d > 0) {
+    // Can't estimate today's vol - leave as 0, the frontend handles N/A
+  }
+
+  return result;
 }
 
 Deno.serve(async (req) => {
@@ -130,37 +143,27 @@ Deno.serve(async (req) => {
     const uncached = symbols.filter(s => !cachedMap.has(s));
     const results: VolumeResult[] = [...cachedMap.values()];
 
-    // Fetch uncached symbols sequentially with rate limiting (250ms = 4/sec)
+    // Fetch uncached symbols sequentially with rate limiting
     for (let i = 0; i < uncached.length; i++) {
-      const vol = await fetchVolumeFromCandles(uncached[i]);
+      const vol = await fetchVolumeForSymbol(uncached[i]);
 
       if (vol.error === "rate_limited") {
-        // Wait 60s then retry once
         console.log(`Rate limited on ${uncached[i]}, waiting 60s...`);
         await delay(60000);
-        const retry = await fetchVolumeFromCandles(uncached[i]);
-        if (!retry.error) {
-          results.push(retry);
-          // Upsert to cache
+        const retry = await fetchVolumeForSymbol(uncached[i]);
+        results.push(retry);
+        if (!retry.error && (retry.avg_10d > 0 || retry.avg_3m > 0)) {
           await sb.from("ticker_volume_cache").upsert({
-            symbol: retry.symbol,
-            today_vol: retry.today_vol,
-            avg_20d: retry.avg_20d,
-            avg_10d: retry.avg_10d,
-            avg_3m: retry.avg_3m,
+            symbol: retry.symbol, today_vol: retry.today_vol,
+            avg_20d: retry.avg_20d, avg_10d: retry.avg_10d, avg_3m: retry.avg_3m,
             last_updated: new Date().toISOString(),
           }, { onConflict: "symbol" });
-        } else {
-          results.push(retry);
         }
-      } else if (!vol.error) {
+      } else if (vol.avg_10d > 0 || vol.avg_3m > 0) {
         results.push(vol);
         await sb.from("ticker_volume_cache").upsert({
-          symbol: vol.symbol,
-          today_vol: vol.today_vol,
-          avg_20d: vol.avg_20d,
-          avg_10d: vol.avg_10d,
-          avg_3m: vol.avg_3m,
+          symbol: vol.symbol, today_vol: vol.today_vol,
+          avg_20d: vol.avg_20d, avg_10d: vol.avg_10d, avg_3m: vol.avg_3m,
           last_updated: new Date().toISOString(),
         }, { onConflict: "symbol" });
       } else {
@@ -168,7 +171,7 @@ Deno.serve(async (req) => {
       }
 
       if (i < uncached.length - 1) {
-        await delay(270); // ~4/sec
+        await delay(280); // ~4/sec between symbols (each symbol makes 2 calls internally)
       }
     }
 
