@@ -6,9 +6,14 @@ import { useWatchlist } from "@/hooks/useWatchlistContext";
 import DemandSignals from "@/components/DemandSignals";
 import { ThemeDemandSignals } from "@/hooks/useVolumeData";
 
-class DemandSignalsBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
+class DemandSignalsBoundary extends Component<{ children: ReactNode; resetKey?: string }, { hasError: boolean }> {
   state = { hasError: false };
   static getDerivedStateFromError() { return { hasError: true }; }
+  componentDidUpdate(prevProps: { resetKey?: string }) {
+    if (this.state.hasError && prevProps.resetKey !== this.props.resetKey) {
+      this.setState({ hasError: false });
+    }
+  }
   render() { return this.state.hasError ? null : this.props.children; }
 }
 
@@ -192,7 +197,7 @@ export default function ThemeCard({ theme, index, onClick, fetchVolume, getTheme
 
           {/* Row 5: Demand Signals */}
           {signals && (
-            <DemandSignalsBoundary>
+            <DemandSignalsBoundary resetKey={theme.theme_name}>
               <DemandSignals signals={signals} />
             </DemandSignalsBoundary>
           )}
