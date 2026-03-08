@@ -119,25 +119,27 @@ export default function InsightsTab({
 
     setIsGenerating(true);
     try {
+      // Build rich payload with ALL themes and ticker-level data
       const payload = {
-        topThemes: top5.map(t => ({
-          name: t.themeName,
-          score: t.momentumScore,
-          perf_1d: t.perf_1d,
-          perf_1w: t.perf_1w,
-          perf_1m: t.perf_1m,
-        })),
-        bottomThemes: bottom5.map(t => ({
-          name: t.themeName,
-          score: t.momentumScore,
-          perf_1d: t.perf_1d,
-          perf_1w: t.perf_1w,
-          perf_1m: t.perf_1m,
-        })),
-        accelerating: accelerating.slice(0, 5).map(t => t.themeName),
-        fading: fading.slice(0, 5).map(t => t.themeName),
         date: new Date().toISOString().split("T")[0],
         totalThemes: themes.length,
+        themes: themes.map(t => {
+          const validTickers = t.tickers.filter(tk => tk.status === "done");
+          return {
+            name: t.themeName,
+            score: t.momentumScore,
+            perf_1d: t.perf_1d,
+            perf_1w: t.perf_1w,
+            perf_1m: t.perf_1m,
+            breadth: `${t.breadthUp}/${t.breadthTotal}`,
+            advancing: t.breadthUp,
+            declining: t.breadthTotal - t.breadthUp,
+            tickers: validTickers.map(tk => ({
+              symbol: tk.symbol,
+              perf_1d: tk.perf_1d,
+            })),
+          };
+        }),
       };
 
       const { data, error } = await supabase.functions.invoke("generate-theme-narrative", {
@@ -157,7 +159,7 @@ export default function InsightsTab({
     } finally {
       setIsGenerating(false);
     }
-  }, [themes, top5, bottom5, accelerating, fading, isGenerating]);
+  }, [themes, isGenerating]);
 
   // Auto-generate on first load when data is ready
   useEffect(() => {
@@ -223,11 +225,14 @@ export default function InsightsTab({
             <Skeleton className="h-5 w-full" />
             <Skeleton className="h-5 w-full" />
             <Skeleton className="h-5 w-[85%]" />
+            <Skeleton className="h-5 w-full" />
+            <Skeleton className="h-5 w-[90%]" />
             <Skeleton className="h-5 w-[70%]" />
           </div>
         ) : narrative ? (
           <p
-            className="font-['Syne',sans-serif] text-[16px] leading-[1.75] text-foreground pr-12"
+            className="font-['Syne',sans-serif] text-foreground pr-12"
+            style={{ fontSize: "15px", lineHeight: 1.8 }}
           >
             {narrative.text}
           </p>
