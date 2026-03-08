@@ -7,13 +7,20 @@ const corsHeaders = {
 };
 
 const SYSTEM_PROMPT = `You are a professional market analyst specializing in thematic investing and sector rotation.
-You write concise, sharp, institutional-quality market narratives.
-Respond in exactly 4 sentences. No bullet points. No headers. Plain prose only.
-Sentence 1: What is leading and why it matters.
-Sentence 2: What is fading and what it signals.
-Sentence 3: What the rotation between themes suggests about the broader market.
-Sentence 4: One specific thing to watch going into the next session.
-Be specific — use the actual theme names provided. Do not use generic filler language.`;
+You write sharp, honest, institutional-quality market analysis.
+You have access to both theme-level and ticker-level performance data.
+
+CRITICAL RULES:
+- If a theme's move is driven by 1-2 outlier tickers while the majority are flat or down, flag it explicitly as a single-stock move, not a theme rotation
+- Only call a theme "leading" or "in rotation" if the majority of its tickers are advancing (breadth confirms)
+- If breadth is low (e.g. 1/5 or 2/5 advancing) despite a positive theme average, flag this as a warning
+- Be specific — always name the tickers driving moves and the tickers diverging
+- Never use generic filler language like "investors are showing interest" or "market participants are watching"
+- If the data shows contradictions, say so directly
+
+FORMAT:
+Write 6–8 sentences of flowing prose. No bullet points. No headers. No lists.
+Cover: what is genuinely leading with broad confirmation, what is a single-stock story masquerading as a theme move, what is fading and why, what the overall rotation suggests, and one specific actionable thing to watch next session.`;
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -29,25 +36,24 @@ serve(async (req) => {
       );
     }
 
-    const { topThemes, bottomThemes, accelerating, fading, date, totalThemes } = await req.json();
+    const { themes, date, totalThemes } = await req.json();
 
-    const topStr = (topThemes || [])
-      .map((t: any) => `${t.name} (Score: ${t.score}, 1D: ${t.perf_1d >= 0 ? "+" : ""}${t.perf_1d}%, 1W: ${t.perf_1w >= 0 ? "+" : ""}${t.perf_1w}%)`)
-      .join(", ");
+    // Build the rich user message with ticker-level detail
+    const themeLines = (themes || []).map((t: any) => {
+      const tickerStr = (t.tickers || [])
+        .map((tk: any) => `${tk.symbol}: ${tk.perf_1d >= 0 ? "+" : ""}${tk.perf_1d}%`)
+        .join(", ");
+      return `${t.name} | Score: ${t.score} | 1D: ${t.perf_1d >= 0 ? "+" : ""}${t.perf_1d}% | 1W: ${t.perf_1w >= 0 ? "+" : ""}${t.perf_1w}% | 1M: ${t.perf_1m >= 0 ? "+" : ""}${t.perf_1m}% | Breadth: ${t.breadth} (${t.advancing} up, ${t.declining} down)\n  Tickers: ${tickerStr}`;
+    }).join("\n\n");
 
-    const bottomStr = (bottomThemes || [])
-      .map((t: any) => `${t.name} (Score: ${t.score}, 1D: ${t.perf_1d >= 0 ? "+" : ""}${t.perf_1d}%, 1W: ${t.perf_1w >= 0 ? "+" : ""}${t.perf_1w}%)`)
-      .join(", ");
+    const userMessage = `Date: ${date} | Themes analyzed: ${totalThemes}
 
-    const userMessage = `Date: ${date}
-Leading themes: ${topStr}
-Fading themes: ${bottomStr}
-Accelerating (short-term > long-term): ${(accelerating || []).join(", ")}
-Fading (short-term < long-term): ${(fading || []).join(", ")}
-Total themes analyzed: ${totalThemes}
-Write the market narrative.`;
+Full theme and ticker breakdown (sorted by momentum score, best to worst):
 
-    // Direct Gemini API call — to switch back to Anthropic, replace this block
+${themeLines}
+
+Write a complete market analysis following your instructions.`;
+
     const response = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`,
       {
@@ -56,7 +62,7 @@ Write the market narrative.`;
         body: JSON.stringify({
           systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
           contents: [{ role: "user", parts: [{ text: userMessage }] }],
-          generationConfig: { maxOutputTokens: 512 },
+          generationConfig: { maxOutputTokens: 1024 },
         }),
       }
     );
