@@ -192,10 +192,8 @@ export default function OverviewTab({
    const [sortMode, setSortMode] = useState<SortMode>("momentum");
    const [highlightId, setHighlightId] = useState<string | null>(null);
    const [drilldownOpen, setDrilldownOpen] = useState(false);
-   const [drilldownTheme, setDrilldownTheme] = useState<string | null>(null);
+   const [drilldownTheme, setDrilldownTheme] = useState<typeof demoThemes[0] | null>(null);
    const rowRefs = useRef<Map<string, HTMLTableRowElement>>(new Map());
- 
-   const { themes: allThemesForDrilldown } = useWatchlist();
 
    const handleSelectTheme = useCallback((themeId: string) => {
      const el = rowRefs.current.get(themeId);
@@ -206,8 +204,11 @@ export default function OverviewTab({
    }, []);
 
    const handleOpenDrilldown = useCallback((themeName: string) => {
-     setDrilldownTheme(themeName);
-     setDrilldownOpen(true);
+     const theme = demoThemes.find(t => t.theme_name === themeName);
+     if (theme) {
+       setDrilldownTheme(theme);
+       setDrilldownOpen(true);
+     }
    }, []);
 
   useEffect(() => {
