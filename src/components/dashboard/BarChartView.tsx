@@ -283,7 +283,7 @@ export default function BarChartView({
       {/* Right panel — Bottom Performers */}
       <div className="pl-0 md:pl-3 mt-4 md:mt-0">
         <h3
-          className="mb-2 text-[10px] font-semibold uppercase tracking-[0.1em] text-destructive"
+          className="mb-2 text-[13px] font-semibold uppercase tracking-[0.1em] text-destructive"
         >
           Bottom Performers
         </h3>
