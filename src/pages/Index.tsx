@@ -3,7 +3,7 @@ import { getProcessedThemes, ThemeData } from "@/data/themeData";
 import { useLiveThemeData } from "@/hooks/useLiveThemeData";
 import ThemeCard from "@/components/ThemeCard";
 import ValidateTickersDialog from "@/components/ValidateTickersDialog";
-import { RefreshCw, Download, TrendingUp, TrendingDown, Wifi, WifiOff, Loader2, Settings, ScanLine, X, ShieldCheck, Save, Zap } from "lucide-react";
+import { RefreshCw, Download, TrendingUp, TrendingDown, Wifi, WifiOff, Loader2, Settings, ScanLine, X, ShieldCheck, Save, Zap, Calendar } from "lucide-react";
 import { useFullScan } from "@/hooks/useFullScan";
 import { useEodSave } from "@/hooks/useEodSave";
 import { Link } from "react-router-dom";
@@ -315,6 +315,13 @@ export default function Index() {
             >
               <RefreshCw size={16} className={isLoading ? "animate-spin" : ""} />
             </button>
+            <Link
+              to="/eod-history"
+              className="rounded-md border border-border p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+              title="EOD History"
+            >
+              <Calendar size={16} />
+            </Link>
             <Link
               to="/admin"
               className="rounded-md border border-border p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
