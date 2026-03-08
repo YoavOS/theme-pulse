@@ -91,6 +91,42 @@ export type Database = {
         }
         Relationships: []
       }
+      ticker_performance: {
+        Row: {
+          last_scanned: string | null
+          perf_1d: number | null
+          perf_1m: number | null
+          perf_1w: number | null
+          perf_3m: number | null
+          perf_ytd: number | null
+          price: number | null
+          status: string
+          symbol: string
+        }
+        Insert: {
+          last_scanned?: string | null
+          perf_1d?: number | null
+          perf_1m?: number | null
+          perf_1w?: number | null
+          perf_3m?: number | null
+          perf_ytd?: number | null
+          price?: number | null
+          status?: string
+          symbol: string
+        }
+        Update: {
+          last_scanned?: string | null
+          perf_1d?: number | null
+          perf_1m?: number | null
+          perf_1w?: number | null
+          perf_3m?: number | null
+          perf_ytd?: number | null
+          price?: number | null
+          status?: string
+          symbol?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

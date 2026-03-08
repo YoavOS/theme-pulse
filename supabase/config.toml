@@ -5,3 +5,6 @@ verify_jwt = false
 
 [functions.validate-tickers]
 verify_jwt = false
+
+[functions.full-scan]
+verify_jwt = false

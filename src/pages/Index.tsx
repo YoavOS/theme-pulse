@@ -30,31 +30,39 @@ export default function Index() {
     lastFetched,
     rateLimited,
     symbolsFetched,
+    usingCache,
     fetchLiveData,
     resetToDemo,
-    mergeScanResults,
+    setScanResults,
   } = useLiveThemeData(activeTimeframe);
 
-  // Auto-fetch when timeframe changes and no cached data exists
-  const prevTimeframe = useRef(activeTimeframe);
-  useEffect(() => {
-    if (prevTimeframe.current !== activeTimeframe) {
-      prevTimeframe.current = activeTimeframe;
-      // If not live (no cache for this timeframe), auto-fetch
-      if (!isLive && !isLoading) {
-        fetchLiveData();
-      }
-    }
-  }, [activeTimeframe, isLive, isLoading, fetchLiveData]);
+  // Full scan handler: receives themes + timeframe from scan
+  const handleScanComplete = useCallback((themes: ThemeData[], timeframe: string) => {
+    setScanResults(themes, timeframe);
+  }, [setScanResults]);
 
   const {
     isRunning: isFullScanning,
     statusText: fullScanStatus,
-    totalSkipped: fullScanSkipped,
-    totalInvalid: fullScanInvalid,
+    progress: scanProgress,
     startFullScan,
     clearProgress,
-  } = useFullScan(mergeScanResults);
+    loadTimeframe,
+  } = useFullScan(handleScanComplete);
+
+  // When timeframe changes, try to load from scan cache
+  const prevTimeframe = useRef(activeTimeframe);
+  useEffect(() => {
+    if (prevTimeframe.current !== activeTimeframe) {
+      prevTimeframe.current = activeTimeframe;
+      // Try loading from scan performance cache
+      loadTimeframe(activeTimeframe).then((loaded) => {
+        if (!loaded && !isLive && !isLoading) {
+          fetchLiveData();
+        }
+      });
+    }
+  }, [activeTimeframe, isLive, isLoading, fetchLiveData, loadTimeframe]);
 
   const themes = useMemo(() => {
     if (showPlaceholders) return allThemes;
@@ -128,9 +136,19 @@ export default function Index() {
                   </span>
                 )
               )}
+              {usingCache && (
+                <span className="inline-flex items-center gap-1 rounded border border-border bg-secondary/50 px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground">
+                  Using cached data
+                </span>
+              )}
               · Last updated: {formatTime(lastFetched)}
               · {themes.length} themes
               {isLive && ` · ${symbolsFetched} symbols`}
+              {scanProgress && scanProgress.failed > 0 && (
+                <span className="inline-flex items-center gap-1 text-[10px] text-destructive">
+                  ⚠ {scanProgress.failed} tickers unavailable
+                </span>
+              )}
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -223,7 +241,7 @@ export default function Index() {
             {fullScanStatus && (
               <span className="inline-flex max-w-[260px] items-center gap-1 truncate text-[10px] text-muted-foreground" title={fullScanStatus}>
                 {fullScanStatus}
-                {!isFullScanning && fullScanStatus.includes("theme") && (
+                {!isFullScanning && fullScanStatus.includes("ticker") && (
                   <button
                     onClick={clearProgress}
                     className="ml-1 rounded p-0.5 text-destructive hover:bg-destructive/10"
