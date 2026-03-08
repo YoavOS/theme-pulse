@@ -311,6 +311,20 @@ export default function ThemeDrilldownModal({
 
         {/* Ticker table */}
         <div className="max-h-[400px] overflow-auto px-6 pb-2">
+          {/* SPY Benchmark row */}
+          {spy.perf_1d !== null && (
+            <div className="mb-2">
+              <div className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold mb-1 px-2">── Benchmark ──</div>
+              <div className="flex items-center gap-3 rounded-md px-2 py-1.5" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)" }}>
+                <span className="font-bold text-foreground text-xs" style={{ fontFamily: "'DM Mono', monospace" }}>SPY</span>
+                <span className="text-[10px] text-muted-foreground">S&P 500 ETF</span>
+                <span className={`text-xs font-semibold ml-auto ${spy.perf_1d >= 0 ? "text-gain-medium" : "text-loss-mild"}`} style={{ fontFamily: "'DM Mono', monospace" }}>
+                  {spy.perf_1d >= 0 ? "+" : ""}{spy.perf_1d.toFixed(2)}%
+                </span>
+              </div>
+              <div className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold mt-2 mb-1 px-2">── Theme Tickers ──</div>
+            </div>
+          )}
           <table className="w-full text-xs">
             <thead className="sticky top-0 z-10" style={{ background: "rgba(15,18,25,0.95)" }}>
               <tr className="border-b border-border">
