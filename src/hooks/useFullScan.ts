@@ -1,43 +1,139 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
 import { ThemeData } from "@/data/themeData";
 
-export interface FullScanProgress {
-  last_theme_index: number;
-  total_themes: number;
-  status: string;
-  last_updated: string;
+export interface ScanProgress {
+  total: number;
+  done: number;
+  failed: number;
+  pending: number;
+  themes: number;
+  scanning: boolean;
 }
 
-export interface FullScanChunkTheme {
-  theme_name: string;
-  notes: string | null;
-  tickers: { symbol: string; pct: number; price: number; skipped?: boolean; skipReason?: string }[];
-  skipped_tickers: string[];
-  invalid_tickers?: string[];
+const PERF_CACHE_KEY = "ticker_perf_cache";
+const PERF_CACHE_MAX_AGE = 4 * 60 * 60 * 1000; // 4 hours
+
+interface PerfCache {
+  tickers: Record<string, { perf_1d: number; perf_1w: number; perf_1m: number; perf_3m: number; perf_ytd: number; price: number }>;
+  fetchedAt: string;
 }
 
-export function useFullScan(onChunkComplete: (themes: ThemeData[]) => void) {
+function savePerfCache(data: PerfCache) {
+  try { localStorage.setItem(PERF_CACHE_KEY, JSON.stringify(data)); } catch {}
+}
+
+function loadPerfCache(): PerfCache | null {
+  try {
+    const raw = localStorage.getItem(PERF_CACHE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as PerfCache;
+    if (Date.now() - new Date(parsed.fetchedAt).getTime() > PERF_CACHE_MAX_AGE) {
+      localStorage.removeItem(PERF_CACHE_KEY);
+      return null;
+    }
+    return parsed;
+  } catch { return null; }
+}
+
+export function useFullScan(onComplete: (themes: ThemeData[], timeframe: string) => void) {
   const { toast } = useToast();
   const [isRunning, setIsRunning] = useState(false);
-  const [progress, setProgress] = useState<FullScanProgress | null>(null);
+  const [progress, setProgress] = useState<ScanProgress | null>(null);
   const [statusText, setStatusText] = useState("");
-  const [totalSkipped, setTotalSkipped] = useState(0);
-  const [totalInvalid, setTotalInvalid] = useState(0);
   const abortRef = useRef(false);
 
   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
   const anonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
   const headers = { apikey: anonKey, Authorization: `Bearer ${anonKey}` };
 
-  const fetchProgress = useCallback(async (): Promise<FullScanProgress | null> => {
+  const fetchStatus = useCallback(async (): Promise<ScanProgress | null> => {
     try {
       const res = await fetch(`${supabaseUrl}/functions/v1/full-scan?action=status`, { headers });
-      const data = await res.json();
-      return data.progress as FullScanProgress | null;
-    } catch {
-      return null;
+      return await res.json() as ScanProgress;
+    } catch { return null; }
+  }, [supabaseUrl, anonKey]);
+
+  // Build theme data from ticker_performance + theme_tickers for a given timeframe
+  const buildThemesFromPerf = useCallback(async (timeframe: string = "Today"): Promise<ThemeData[]> => {
+    // Get theme structure
+    const { data: dbThemes } = await supabase.from("themes").select("id, name, description");
+    const { data: dbTickers } = await supabase.from("theme_tickers").select("theme_id, ticker_symbol");
+
+    if (!dbThemes || !dbTickers) return [];
+
+    // Try to get perf data from local cache first, then from edge function
+    let perfMap: Record<string, { perf_1d: number; perf_1w: number; perf_1m: number; perf_3m: number; perf_ytd: number; price: number }> = {};
+
+    const cached = loadPerfCache();
+    if (cached) {
+      perfMap = cached.tickers;
+    } else {
+      // Fetch from edge function
+      try {
+        const res = await fetch(`${supabaseUrl}/functions/v1/full-scan?action=results`, { headers });
+        const data = await res.json();
+        if (data.tickers) {
+          for (const t of data.tickers) {
+            perfMap[t.symbol] = {
+              perf_1d: t.perf_1d, perf_1w: t.perf_1w, perf_1m: t.perf_1m,
+              perf_3m: t.perf_3m, perf_ytd: t.perf_ytd, price: t.price,
+            };
+          }
+          savePerfCache({ tickers: perfMap, fetchedAt: new Date().toISOString() });
+        }
+      } catch { return []; }
     }
+
+    if (Object.keys(perfMap).length === 0) return [];
+
+    // Map timeframe to perf field
+    const perfField = timeframe === "1W" ? "perf_1w" : timeframe === "1M" ? "perf_1m" : timeframe === "3M" ? "perf_3m" : timeframe === "YTD" ? "perf_ytd" : "perf_1d";
+
+    // Build theme map
+    const themeTickerMap = new Map<string, { name: string; description: string | null; symbols: string[] }>();
+    for (const t of dbThemes) {
+      themeTickerMap.set(t.id, { name: t.name, description: t.description, symbols: [] });
+    }
+    for (const tk of dbTickers) {
+      const entry = themeTickerMap.get(tk.theme_id);
+      if (entry) entry.symbols.push(tk.ticker_symbol);
+    }
+
+    const themes: ThemeData[] = [];
+    for (const [, entry] of themeTickerMap) {
+      if (entry.symbols.length === 0) continue;
+
+      const tickers = entry.symbols.map(s => {
+        const perf = perfMap[s];
+        if (!perf) return { symbol: s, pct: 0, skipped: true, skipReason: "no_data" };
+        return { symbol: s, pct: perf[perfField] || 0 };
+      });
+
+      const validTickers = tickers.filter(t => !t.skipped);
+      const up_count = validTickers.filter(t => t.pct > 0).length;
+      const down_count = validTickers.filter(t => t.pct <= 0).length;
+      const na_count = tickers.filter(t => t.skipped).length;
+      const performance_pct = validTickers.length > 0
+        ? Math.round((validTickers.reduce((sum, t) => sum + t.pct, 0) / validTickers.length) * 100) / 100
+        : 0;
+
+      themes.push({
+        theme_name: entry.name,
+        performance_pct,
+        up_count,
+        down_count,
+        na_count,
+        valid_count: validTickers.length,
+        tickers: tickers.sort((a, b) => (b.pct || 0) - (a.pct || 0)),
+        notes: entry.description || undefined,
+        dataSource: "real",
+        lastUpdated: new Date().toISOString(),
+      });
+    }
+
+    return themes;
   }, [supabaseUrl, anonKey]);
 
   const clearProgress = useCallback(async () => {
@@ -45,177 +141,123 @@ export function useFullScan(onChunkComplete: (themes: ThemeData[]) => void) {
     setProgress(null);
     setStatusText("");
     setIsRunning(false);
-    setTotalSkipped(0);
-    setTotalInvalid(0);
     abortRef.current = true;
+    localStorage.removeItem(PERF_CACHE_KEY);
     toast({ title: "Scan progress cleared" });
   }, [supabaseUrl, anonKey, toast]);
-
-  function chunkThemesToThemeData(chunkThemes: FullScanChunkTheme[]): ThemeData[] {
-    return chunkThemes.map((t) => {
-      const validTickers = t.tickers.filter((tk) => !tk.skipped);
-      const skippedTickers = t.tickers.filter((tk) => tk.skipped);
-      const up_count = validTickers.filter((tk) => tk.pct > 0).length;
-      const down_count = validTickers.filter((tk) => tk.pct <= 0).length;
-      const na_count = skippedTickers.length;
-      const performance_pct =
-        validTickers.length > 0
-          ? Math.round(
-              (validTickers.reduce((sum, tk) => sum + tk.pct, 0) / validTickers.length) * 100
-            ) / 100
-          : 0;
-      return {
-        theme_name: t.theme_name,
-        performance_pct,
-        up_count,
-        down_count,
-        na_count,
-        valid_count: validTickers.length,
-        tickers: t.tickers.map((tk) => ({
-          symbol: tk.symbol,
-          pct: tk.pct,
-          skipped: tk.skipped,
-          skipReason: tk.skipReason,
-        })),
-        notes: t.notes || undefined,
-        dataSource: "real" as const,
-        lastUpdated: new Date().toISOString(),
-      };
-    });
-  }
 
   const startFullScan = useCallback(async () => {
     setIsRunning(true);
     abortRef.current = false;
-    setTotalSkipped(0);
-    setTotalInvalid(0);
-    let skippedCount = 0;
-    let invalidCount = 0;
 
     try {
-      // STEP 1: Check progress FIRST to decide start vs resume
-      const existing = await fetchProgress();
-      console.log("Button clicked – checking progress:", existing ? `index = ${existing.last_theme_index} / status = ${existing.status}` : "no progress row");
+      // Check if there's already a scan in progress (resume)
+      const status = await fetchStatus();
+      const hasResumable = status && status.pending > 0 && status.done > 0;
 
-      let action: string;
-      if (existing && (existing.status === "in_progress" || existing.status === "paused_failed" || existing.status === "rate_limited_waiting") && existing.last_theme_index > 0 && existing.last_theme_index < existing.total_themes) {
-        action = "chunk"; // Resume
-        setStatusText(`Resuming scan from theme ${existing.last_theme_index + 1}/${existing.total_themes}...`);
-        setProgress(existing);
-        console.log(`Resuming from ${existing.last_theme_index + 1}/${existing.total_themes}`);
+      if (!hasResumable) {
+        // Fresh scan: populate ticker_performance
+        setStatusText("Initializing scan...");
+        const startRes = await fetch(`${supabaseUrl}/functions/v1/full-scan?action=start`, { headers });
+        const startData = await startRes.json();
+        if (!startRes.ok) throw new Error(startData.error || `HTTP ${startRes.status}`);
+        console.log(`Scan initialized: ${startData.total} unique tickers`);
+        setStatusText(`Initialized: ${startData.total} tickers to scan`);
       } else {
-        action = "start"; // Fresh scan
-        setStatusText("Starting full scan...");
-        console.log("Starting fresh scan");
+        console.log(`Resuming scan: ${status.done} done, ${status.pending} pending, ${status.failed} failed`);
+        setStatusText(`Resuming: ${status.done}/${status.total} done`);
       }
 
+      // Process chunks until done
       let done = false;
-      let totalThemes = existing?.total_themes || 0;
-
       while (!done && !abortRef.current) {
-        const res = await fetch(`${supabaseUrl}/functions/v1/full-scan?action=${action}`, { headers });
-
-        // After first call, always use "chunk"
-        action = "chunk";
-
+        const res = await fetch(`${supabaseUrl}/functions/v1/full-scan?action=chunk`, { headers });
         if (!res.ok) {
           const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
-          console.error("Full scan chunk failed:", err);
-          const latest = await fetchProgress();
-          if (latest) {
-            setProgress(latest);
-            setStatusText(`Scan paused at theme ${latest.last_theme_index}/${latest.total_themes} — click Full Scan to resume`);
-          }
+          console.error("Chunk failed:", err);
+          setStatusText(`Scan paused — click Full Scan to resume`);
           setIsRunning(false);
           return;
         }
 
         const result = await res.json();
-        console.log("Chunk result:", result);
-        totalThemes = result.total_themes || totalThemes;
-
-        if (result.themes?.length > 0) {
-          const converted = chunkThemesToThemeData(result.themes);
-          onChunkComplete(converted);
-          console.log(`Merged ${converted.length} themes into cache`);
-        }
-
-        if (result.skipped_tickers?.length > 0) {
-          skippedCount += result.skipped_tickers.length;
-          setTotalSkipped(skippedCount);
-          console.warn("Skipped tickers:", result.skipped_tickers);
-        }
-
-        if (result.invalid_tickers?.length > 0) {
-          invalidCount += result.invalid_tickers.length;
-          setTotalInvalid(invalidCount);
-          console.warn("Invalid tickers:", result.invalid_tickers);
-        }
-
         done = result.done;
 
-        // Update progress UI
-        const p = await fetchProgress();
-        if (p) setProgress(p);
+        // Update progress
+        const p = await fetchStatus();
+        if (p) {
+          setProgress(p);
+          setStatusText(`Scanning: ${p.done}/${p.total} tickers${p.failed > 0 ? ` · ${p.failed} failed` : ""}`);
+        }
 
         if (!done) {
-          setStatusText(`Updated ${result.processed_to}/${totalThemes} themes${skippedCount > 0 ? ` | ${skippedCount} skipped` : ""}${invalidCount > 0 ? ` | ${invalidCount} invalid` : ""}...`);
-          await new Promise((r) => setTimeout(r, 1000));
+          // Brief pause between chunks
+          await new Promise(r => setTimeout(r, 500));
         }
       }
 
-      if (abortRef.current) {
-        setIsRunning(false);
-        return;
-      }
+      if (abortRef.current) { setIsRunning(false); return; }
 
-      const summaryParts = [`All ${totalThemes} themes updated`];
-      if (skippedCount > 0) summaryParts.push(`${skippedCount} tickers skipped (rate limit)`);
-      if (invalidCount > 0) summaryParts.push(`${invalidCount} invalid tickers skipped`);
+      // Scan complete — build theme data and push to dashboard
+      const finalStatus = await fetchStatus();
+      setProgress(finalStatus);
 
-      console.log(`Full scan complete: ${summaryParts.join(" | ")}`);
-      setStatusText(`✅ ${summaryParts.join(" | ")}`);
+      // Clear local perf cache so buildThemesFromPerf fetches fresh
+      localStorage.removeItem(PERF_CACHE_KEY);
+
+      // Build themes for all timeframes and push Today to dashboard
+      const todayThemes = await buildThemesFromPerf("Today");
+      if (todayThemes.length > 0) onComplete(todayThemes, "Today");
+
+      const total = finalStatus?.total || 0;
+      const failed = finalStatus?.failed || 0;
+      const summaryParts = [`${total - failed}/${total} tickers scanned`];
+      if (failed > 0) summaryParts.push(`${failed} unavailable`);
+
+      setStatusText(`✅ ${summaryParts.join(" · ")}`);
       setIsRunning(false);
 
-      toast({
-        title: "Full Scan Complete",
-        description: summaryParts.join(". "),
-      });
+      toast({ title: "Full Scan Complete", description: summaryParts.join(". ") });
     } catch (err) {
       console.error("Full scan error:", err);
       setIsRunning(false);
-      const latest = await fetchProgress();
-      if (latest) {
-        setProgress(latest);
-        setStatusText(`Scan failed at theme ${latest.last_theme_index}/${latest.total_themes} — click Full Scan to resume`);
-      } else {
-        setStatusText("Full scan failed — click to retry");
-      }
-      toast({
-        title: "Full Scan Error",
-        description: String(err instanceof Error ? err.message : err),
-        variant: "destructive",
-      });
+      setStatusText("Scan failed — click Full Scan to retry");
+      toast({ title: "Full Scan Error", description: String(err instanceof Error ? err.message : err), variant: "destructive" });
     }
-  }, [fetchProgress, supabaseUrl, anonKey, toast, onChunkComplete]);
+  }, [fetchStatus, buildThemesFromPerf, supabaseUrl, anonKey, toast, onComplete]);
 
-  // Check for unfinished progress on mount
+  // Load themes from cached scan data for a specific timeframe
+  const loadTimeframe = useCallback(async (timeframe: string) => {
+    const themes = await buildThemesFromPerf(timeframe);
+    if (themes.length > 0) onComplete(themes, timeframe);
+    return themes.length > 0;
+  }, [buildThemesFromPerf, onComplete]);
+
+  // Check for resumable/cached data on mount
   useEffect(() => {
-    fetchProgress().then((p) => {
-      if (p && (p.status === "in_progress" || p.status === "paused_failed") && p.last_theme_index > 0 && p.last_theme_index < p.total_themes) {
-        setProgress(p);
-        setStatusText(`Resumable: theme ${p.last_theme_index}/${p.total_themes} — click Full Scan to resume`);
+    (async () => {
+      const status = await fetchStatus();
+      if (status && status.pending > 0 && status.done > 0) {
+        setProgress(status);
+        setStatusText(`Resumable: ${status.done}/${status.total} tickers — click Full Scan to resume`);
+      } else if (status && status.done > 0 && status.pending === 0) {
+        // Scan was completed — check if cache is fresh
+        const cached = loadPerfCache();
+        if (cached) {
+          setStatusText(`Using cached data · ${status.done} tickers`);
+          setProgress(status);
+        }
       }
-    });
-  }, [fetchProgress]);
+    })();
+  }, [fetchStatus]);
 
   return {
     isRunning,
     progress,
     statusText,
-    totalSkipped,
-    totalInvalid,
     startFullScan,
     clearProgress,
+    loadTimeframe,
+    buildThemesFromPerf,
   };
 }
