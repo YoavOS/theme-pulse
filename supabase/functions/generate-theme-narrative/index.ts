@@ -22,6 +22,26 @@ FORMAT:
 Write 6–8 sentences of flowing prose. No bullet points. No headers. No lists.
 Cover: what is genuinely leading with broad confirmation, what is a single-stock story masquerading as a theme move, what is fading and why, what the overall rotation suggests, and one specific actionable thing to watch next session.`;
 
+async function callGeminiWithRetry(url: string, body: string, maxRetries = 3): Promise<Response> {
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    const response = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body,
+    });
+    if (response.status === 429 && attempt < maxRetries - 1) {
+      const wait = (attempt + 1) * 5000; // 5s, 10s, 15s
+      console.log(`Gemini 429 rate limit, retrying in ${wait}ms (attempt ${attempt + 1}/${maxRetries})`);
+      await response.text(); // consume body
+      await new Promise(r => setTimeout(r, wait));
+      continue;
+    }
+    return response;
+  }
+  // Should never reach here, but TypeScript needs it
+  throw new Error("Max retries exceeded");
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -37,6 +57,8 @@ serve(async (req) => {
     }
 
     const { themes, date, totalThemes } = await req.json();
+
+    console.log(`Received payload: ${(themes || []).length} themes, date=${date}, totalThemes=${totalThemes}`);
 
     // Build the rich user message with ticker-level detail
     const themeLines = (themes || []).map((t: any) => {
@@ -54,31 +76,32 @@ ${themeLines}
 
 Write a complete market analysis following your instructions.`;
 
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
-          contents: [{ role: "user", parts: [{ text: userMessage }] }],
-          generationConfig: { maxOutputTokens: 1024 },
-        }),
-      }
-    );
+    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`;
+    const geminiBody = JSON.stringify({
+      system_instruction: { parts: [{ text: SYSTEM_PROMPT }] },
+      contents: [{ role: "user", parts: [{ text: userMessage }] }],
+      generationConfig: { maxOutputTokens: 1024 },
+    });
+
+    const response = await callGeminiWithRetry(geminiUrl, geminiBody);
 
     if (!response.ok) {
       const errText = await response.text();
       console.error("Gemini API error:", response.status, errText);
+      const userMsg = response.status === 429
+        ? "AI rate limit exceeded — please wait a minute and try again"
+        : `Gemini API error: ${response.status}`;
       return new Response(
-        JSON.stringify({ error: `Gemini API error: ${response.status}` }),
-        { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        JSON.stringify({ error: userMsg }),
+        { status: response.status === 429 ? 429 : 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
     const result = await response.json();
     const narrative =
       result.candidates?.[0]?.content?.parts?.[0]?.text || "Unable to generate narrative.";
+
+    console.log("Narrative generated successfully, length:", narrative.length);
 
     return new Response(
       JSON.stringify({ narrative, generatedAt: new Date().toISOString() }),
