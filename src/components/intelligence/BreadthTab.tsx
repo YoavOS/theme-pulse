@@ -359,6 +359,202 @@ function BreadthHistory() {
   );
 }
 
+// Section — Dispersion History
+function DispersionHistory() {
+  const [timeframe, setTimeframe] = useState<"1W" | "2W" | "1M" | "All">("2W");
+  const [historyData, setHistoryData] = useState<{ date: string; dispersion: number }[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    (async () => {
+      setIsLoading(true);
+      try {
+        // Get all eod_prices grouped by date to compute dispersion per day
+        const { data: sessions } = await supabase
+          .from("eod_save_sessions")
+          .select("date, dispersion_score")
+          .not("dispersion_score", "is", null)
+          .order("date", { ascending: true });
+
+        if (sessions && sessions.length > 0) {
+          setHistoryData(sessions.map(s => ({ date: s.date, dispersion: Number(s.dispersion_score) })));
+          setIsLoading(false);
+          return;
+        }
+
+        // Fallback: compute from eod_prices if no dispersion_score saved yet
+        const { data: eodData } = await supabase
+          .from("eod_prices")
+          .select("date, theme_name, close_price, symbol")
+          .order("date", { ascending: true });
+
+        if (!eodData || eodData.length === 0) {
+          setHistoryData([]);
+          setIsLoading(false);
+          return;
+        }
+
+        // Group by date → theme → avg performance
+        const byDate = new Map<string, Map<string, number[]>>();
+        for (const row of eodData) {
+          if (!byDate.has(row.date)) byDate.set(row.date, new Map());
+          const themes = byDate.get(row.date)!;
+          if (!themes.has(row.theme_name)) themes.set(row.theme_name, []);
+          themes.get(row.theme_name)!.push(row.close_price);
+        }
+
+        // For each date, we need day-over-day % change per theme
+        const sortedDates = Array.from(byDate.keys()).sort();
+        const result: { date: string; dispersion: number }[] = [];
+
+        for (let i = 1; i < sortedDates.length; i++) {
+          const today = sortedDates[i];
+          const yesterday = sortedDates[i - 1];
+          const todayThemes = byDate.get(today)!;
+          const yesterdayThemes = byDate.get(yesterday)!;
+
+          const themePerfs: number[] = [];
+          for (const [theme, todayPrices] of todayThemes) {
+            const yesterdayPrices = yesterdayThemes.get(theme);
+            if (!yesterdayPrices) continue;
+
+            // Average close today vs yesterday
+            const avgToday = todayPrices.reduce((a, b) => a + b, 0) / todayPrices.length;
+            const avgYesterday = yesterdayPrices.reduce((a, b) => a + b, 0) / yesterdayPrices.length;
+            if (avgYesterday > 0) {
+              themePerfs.push(((avgToday - avgYesterday) / avgYesterday) * 100);
+            }
+          }
+
+          if (themePerfs.length >= 3) {
+            const mean = themePerfs.reduce((a, b) => a + b, 0) / themePerfs.length;
+            const variance = themePerfs.reduce((sum, p) => sum + Math.pow(p - mean, 2), 0) / themePerfs.length;
+            result.push({ date: today, dispersion: Math.round(Math.sqrt(variance) * 100) / 100 });
+          }
+        }
+
+        setHistoryData(result);
+      } catch (err) {
+        console.error("Dispersion history fetch error:", err);
+      } finally {
+        setIsLoading(false);
+      }
+    })();
+  }, []);
+
+  const filtered = useMemo(() => {
+    if (timeframe === "All") return historyData;
+    const days = timeframe === "1W" ? 7 : timeframe === "2W" ? 14 : 30;
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - days);
+    const cutoffStr = cutoff.toISOString().split("T")[0];
+    return historyData.filter(d => d.date >= cutoffStr);
+  }, [historyData, timeframe]);
+
+  function dispersionColor(score: number): string {
+    if (score >= 2.0) return "hsl(174, 80%, 50%)";
+    if (score >= 1.0) return "hsl(var(--muted-foreground))";
+    return "#f5a623";
+  }
+
+  if (isLoading) {
+    return (
+      <GlassCard>
+        <Skeleton className="h-52 w-full" />
+      </GlassCard>
+    );
+  }
+
+  if (historyData.length < 3) {
+    return (
+      <GlassCard className="text-center py-8">
+        <h3 className="font-['Syne',sans-serif] text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-2">
+          Daily Dispersion History
+        </h3>
+        <p className="text-sm text-muted-foreground">
+          Dispersion history builds with each EOD save — {historyData.length} day{historyData.length !== 1 ? "s" : ""} recorded so far
+        </p>
+      </GlassCard>
+    );
+  }
+
+  return (
+    <GlassCard>
+      <div className="flex items-center justify-between mb-3">
+        <div>
+          <h3 className="font-['Syne',sans-serif] text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+            Daily Dispersion History
+          </h3>
+          <p className="text-[10px] text-muted-foreground mt-0.5" style={{ fontFamily: DM_MONO }}>
+            σ of theme performances · High = rotation · Low = macro-driven
+          </p>
+        </div>
+        <div className="flex items-center gap-1 rounded-lg bg-[rgba(255,255,255,0.03)] p-0.5">
+          {(["1W", "2W", "1M", "All"] as const).map(tf => (
+            <button
+              key={tf}
+              onClick={() => setTimeframe(tf)}
+              className={`rounded-md px-2.5 py-1 text-[10px] font-medium transition-all ${
+                timeframe === tf
+                  ? "bg-[rgba(255,255,255,0.08)] text-foreground"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {tf}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="h-52 w-full">
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart data={filtered} margin={{ top: 5, right: 10, bottom: 5, left: 10 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
+            <XAxis
+              dataKey="date"
+              tick={{ fontSize: 9, fill: "hsl(var(--muted-foreground))" }}
+              tickFormatter={d => d.slice(5)}
+            />
+            <YAxis
+              tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
+              tickLine={false}
+            />
+            <ReferenceLine y={2.0} stroke="hsl(174, 80%, 50%)" strokeDasharray="6 4" strokeOpacity={0.4} label={{ value: "High", position: "right", fontSize: 9, fill: "hsl(174, 80%, 50%)" }} />
+            <ReferenceArea y1={2.0} y2={10} fill="hsl(174, 80%, 50%)" fillOpacity={0.03} />
+            <ReferenceArea y1={0} y2={0.5} fill="#f5a623" fillOpacity={0.03} />
+            <RechartsTooltip
+              content={({ active, payload }) => {
+                if (!active || !payload?.length) return null;
+                const d = payload[0].payload;
+                const label = d.dispersion > 3 ? "Very High" : d.dispersion >= 2 ? "High" : d.dispersion >= 1 ? "Moderate" : d.dispersion >= 0.5 ? "Low" : "Very Low";
+                return (
+                  <div
+                    className="rounded-lg px-3 py-2 text-xs shadow-xl"
+                    style={{ background: "rgba(20,20,30,0.95)", border: "1px solid rgba(255,255,255,0.12)" }}
+                  >
+                    <div style={{ fontFamily: DM_MONO }}>{d.date}</div>
+                    <div style={{ fontFamily: DM_MONO, color: dispersionColor(d.dispersion) }}>
+                      {d.dispersion.toFixed(2)}σ — {label} Dispersion
+                    </div>
+                  </div>
+                );
+              }}
+              cursor={false}
+            />
+            <Line
+              type="monotone"
+              dataKey="dispersion"
+              stroke="hsl(174, 80%, 50%)"
+              strokeWidth={2}
+              dot={false}
+              activeDot={{ r: 4, fill: "hsl(174, 80%, 50%)" }}
+            />
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+    </GlassCard>
+  );
+}
+
 // Section 4 — Leaders & Laggards
 function BreadthLeadersLaggards({ themes, isLoading }: { themes: ThemeIntelData[]; isLoading: boolean }) {
   const { top5, bottom5 } = useMemo(() => {
@@ -549,6 +745,7 @@ export default function BreadthTab({
       <MarketBreadthGauge themes={themes} isLoading={isLoading} />
       <BreadthByTheme themes={themes} isLoading={isLoading} onThemeClick={handleThemeClick} />
       <BreadthHistory />
+      <DispersionHistory />
       <BreadthLeadersLaggards themes={themes} isLoading={isLoading} />
       <BreadthAlertsHistory />
       <ThemeDrilldownModal

@@ -1,0 +1,1 @@
+ALTER TABLE public.eod_save_sessions ADD COLUMN IF NOT EXISTS dispersion_score numeric;

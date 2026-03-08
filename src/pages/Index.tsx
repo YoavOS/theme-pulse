@@ -7,6 +7,8 @@ import ValidateTickersDialog from "@/components/ValidateTickersDialog";
 import { RefreshCw, Download, TrendingUp, TrendingDown, Wifi, WifiOff, Loader2, Settings, ScanLine, X, ShieldCheck, Save, Zap, Calendar, Brain, Bookmark, Bell, ChevronDown, LayoutDashboard, AlertTriangle } from "lucide-react";
 import DemoDataConfirmDialog from "@/components/DemoDataConfirmDialog";
 import { getCacheAge } from "@/hooks/useScanCache";
+import { useDispersion, getDispersionColorClass } from "@/hooks/useDispersion";
+import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip";
 import { useFullScan } from "@/hooks/useFullScan";
 import { useEodSave } from "@/hooks/useEodSave";
 import { useSaveEodFromScan } from "@/hooks/useSaveEodFromScan";
@@ -49,6 +51,8 @@ export default function Index() {
     resetToDemo,
     setScanResults,
   } = useLiveThemeData(activeTimeframe);
+
+  const dispersion = useDispersion(allThemes);
 
   // Full scan handler: receives themes + timeframe from scan
   const handleScanComplete = useCallback((themes: ThemeData[], timeframe: string) => {
@@ -195,6 +199,21 @@ export default function Index() {
                 <span className="rounded border border-border bg-secondary/50 px-1.5 py-0.5 text-[10px] font-semibold">
                   Cached
                 </span>
+              )}
+              {dispersion && (
+                <TooltipProvider delayDuration={200}>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span className={`inline-flex items-center gap-1 rounded border ${getDispersionColorClass(dispersion.score).border} ${getDispersionColorClass(dispersion.score).bg} px-1.5 py-0.5 text-[10px] font-semibold ${getDispersionColorClass(dispersion.score).text} cursor-help`}>
+                        Dispersion: {dispersion.score.toFixed(1)}σ
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" className="max-w-[220px] text-xs">
+                      <p className="font-semibold mb-1">{dispersion.label}</p>
+                      <p className="text-muted-foreground">{dispersion.tooltip}</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
               )}
               <span className="hidden sm:inline">· {formatTime(lastFetched)}</span>
               <span className="hidden sm:inline">· {themes.length} themes</span>
