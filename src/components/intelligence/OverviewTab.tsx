@@ -8,8 +8,11 @@ import VolumeLeaders from "./VolumeLeaders";
 import ThemeDrilldownModal from "@/components/ThemeDrilldownModal";
 import { useLiveThemeData } from "@/hooks/useLiveThemeData";
 import { useVolumeDryUp } from "@/hooks/useVolumeDryUp";
+import BubbleChartView from "./BubbleChartView";
 
 const DM_MONO = "'DM Mono', monospace";
+const VIEW_KEY = "overviewView";
+type ViewMode = "table" | "bubble";
 const EOD_TOOLTIP = "Accumulating EOD history — available after more daily saves. 1W and 1M performance require at least 5 and 20 saved trading days respectively.";
 const SIGNAL_TOOLTIP =
   "Divergence between momentum rank and breadth rank. '⚠ Thin' = momentum rank is much better than breadth — price move driven by few tickers, not confirmed by broad participation. '👀 Watch' = breadth rank is much better than momentum — broad quiet strength not yet reflected in price. Potential early rotation signal.";
