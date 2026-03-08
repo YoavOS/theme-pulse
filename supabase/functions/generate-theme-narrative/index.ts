@@ -21,10 +21,10 @@ serve(async (req) => {
   }
 
   try {
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) {
+    const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
+    if (!GEMINI_API_KEY) {
       return new Response(
-        JSON.stringify({ error: "LOVABLE_API_KEY is not configured" }),
+        JSON.stringify({ error: "GEMINI_API_KEY is not configured" }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -47,49 +47,32 @@ Fading (short-term < long-term): ${(fading || []).join(", ")}
 Total themes analyzed: ${totalThemes}
 Write the market narrative.`;
 
-    // Use Lovable AI Gateway (supports Gemini models, no extra API key needed)
-    // To switch back to Anthropic later, replace this block with the Anthropic API call
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
-        messages: [
-          { role: "system", content: SYSTEM_PROMPT },
-          { role: "user", content: userMessage },
-        ],
-        max_tokens: 512,
-      }),
-    });
+    // Direct Gemini API call — to switch back to Anthropic, replace this block
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
+          contents: [{ role: "user", parts: [{ text: userMessage }] }],
+          generationConfig: { maxOutputTokens: 512 },
+        }),
+      }
+    );
 
     if (!response.ok) {
       const errText = await response.text();
-      console.error("AI Gateway error:", response.status, errText);
-
-      if (response.status === 429) {
-        return new Response(
-          JSON.stringify({ error: "Rate limit exceeded, please try again later." }),
-          { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-      if (response.status === 402) {
-        return new Response(
-          JSON.stringify({ error: "AI credits exhausted. Add credits in workspace settings." }),
-          { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-
+      console.error("Gemini API error:", response.status, errText);
       return new Response(
-        JSON.stringify({ error: `AI Gateway error: ${response.status}` }),
+        JSON.stringify({ error: `Gemini API error: ${response.status}` }),
         { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
     const result = await response.json();
-    const narrative = result.choices?.[0]?.message?.content || "Unable to generate narrative.";
+    const narrative =
+      result.candidates?.[0]?.content?.parts?.[0]?.text || "Unable to generate narrative.";
 
     return new Response(
       JSON.stringify({ narrative, generatedAt: new Date().toISOString() }),
