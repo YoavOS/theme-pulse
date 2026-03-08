@@ -127,7 +127,7 @@ function BarRow({
 
       {/* Tooltip on hover */}
       <div
-        className="pointer-events-none absolute z-50 rounded-lg px-3 py-2.5 text-xs shadow-xl opacity-0 group-hover:opacity-100 transition-opacity"
+        className="pointer-events-none absolute z-50 rounded-lg px-3.5 py-3 text-xs shadow-xl opacity-0 group-hover:opacity-100 transition-opacity"
         style={{
           background: "rgba(10,10,15,0.95)",
           border: "1px solid rgba(255,255,255,0.08)",
@@ -135,19 +135,57 @@ function BarRow({
           [isPositive ? "left" : "right"]: "50%",
           top: "100%",
           marginTop: 4,
+          minWidth: 220,
         }}
       >
-        <div className="font-['Syne',sans-serif] text-sm font-semibold text-foreground mb-1">{d.name}</div>
-        <div className="space-y-0.5 text-muted-foreground whitespace-nowrap" style={{ fontFamily: DM_MONO }}>
-          <div>
-            1D: <span style={{ color: isPositive ? "#00ff88" : "#ef4444" }}>{sign}{d.perf.toFixed(2)}%</span>
-            {d.rs && <span className={`ml-2 ${d.rs.color}`}>vs SPY: {d.rs.text}</span>}
+        <div className="font-['Syne',sans-serif] text-sm font-semibold text-foreground mb-1.5">{d.name}</div>
+        <div className="border-t border-[rgba(255,255,255,0.08)] mb-1.5" />
+        <div className="space-y-1 text-muted-foreground whitespace-nowrap" style={{ fontFamily: DM_MONO }}>
+          <div className="flex justify-between gap-4">
+            <span>1D:</span>
+            <span>
+              <span style={{ color: isPositive ? "#00ff88" : "#ef4444" }}>{sign}{d.perf.toFixed(2)}%</span>
+              {d.rs && <span className={`ml-2 ${d.rs.color}`}>vs SPY: {d.rs.text}</span>}
+            </span>
           </div>
-          <div>Breadth: {d.breadthPct}% ({d.breadthUp}/{d.breadthTotal})</div>
-          <div>
-            {d.relVol != null ? `Rel Vol: ~${d.relVol.toFixed(1)}×` : ""}
-            {d.fScore != null ? `  F:${d.fScore}` : ""}
+          <div className="flex justify-between gap-4">
+            <span>Breadth:</span>
+            <span>{d.breadthPct}% ({d.breadthUp}/{d.breadthTotal} advancing)</span>
           </div>
+          {d.relVol != null && (
+            <div className="flex justify-between gap-4">
+              <span>Rel Vol:</span>
+              <span style={{ color: d.relVolEstimated ? "rgba(255,255,255,0.4)" : undefined }}>
+                ~{d.relVol.toFixed(1)}×{d.relVolEstimated ? " (estimated)" : ""}
+              </span>
+            </div>
+          )}
+          {d.sustainedVol != null && (
+            <div className="flex justify-between gap-4">
+              <span>Sustained Vol:</span>
+              <span style={{
+                color: d.sustainedVol > 15 ? "#00ff88" : d.sustainedVol > 5 ? "#f5a623" : "rgba(255,255,255,0.4)",
+              }}>
+                {d.sustainedVol >= 0 ? "+" : ""}{d.sustainedVol.toFixed(0)}%
+              </span>
+            </div>
+          )}
+          {(d.fScore != null || d.stockType) && (
+            <div className="flex justify-between gap-4">
+              <span>F:</span>
+              <span>
+                {d.fScore ?? "—"}
+                {d.stockType && (
+                  <span className="ml-1.5">
+                    {d.stockType === "Growth" ? "🚀" : d.stockType === "Value" ? "💎" : d.stockType === "Blend" ? "⚖️" : "⚠️"} {d.stockType}
+                  </span>
+                )}
+              </span>
+            </div>
+          )}
+        </div>
+        <div className="border-t border-[rgba(255,255,255,0.08)] mt-1.5 pt-1.5">
+          <span className="text-[9px] text-muted-foreground">Click to open full breakdown</span>
         </div>
       </div>
     </div>
