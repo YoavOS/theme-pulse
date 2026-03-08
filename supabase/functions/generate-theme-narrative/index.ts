@@ -29,46 +29,15 @@ function jsonResponse(body: Record<string, unknown>, status = 200) {
   });
 }
 
-async function callGeminiWithRetry(url: string, body: string, maxRetries = 3): Promise<Response> {
-  let lastResponse: Response | null = null;
-  for (let attempt = 0; attempt < maxRetries; attempt++) {
-    try {
-      lastResponse = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body,
-      });
-      if (lastResponse.status === 429 && attempt < maxRetries - 1) {
-        const wait = (attempt + 1) * 15000;
-        console.log(`Gemini 429, retrying in ${wait / 1000}s (attempt ${attempt + 1}/${maxRetries})`);
-        await lastResponse.text(); // consume body to avoid leak
-        await new Promise(r => setTimeout(r, wait));
-        continue;
-      }
-      return lastResponse;
-    } catch (fetchErr) {
-      console.error(`Gemini fetch error attempt ${attempt + 1}:`, fetchErr);
-      if (attempt < maxRetries - 1) {
-        await new Promise(r => setTimeout(r, (attempt + 1) * 15000));
-        continue;
-      }
-      throw fetchErr;
-    }
-  }
-  return lastResponse!;
-}
-
 serve(async (req) => {
-  // CORS preflight
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
 
-  // Top-level try/catch — every code path returns a Response, never throws
   try {
-    const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
-    if (!GEMINI_API_KEY) {
-      return jsonResponse({ error: "config_error", message: "GEMINI_API_KEY is not configured" }, 500);
+    const GROQ_API_KEY = Deno.env.get("GROQ_API_KEY");
+    if (!GROQ_API_KEY) {
+      return jsonResponse({ error: "config_error", message: "GROQ_API_KEY is not configured" }, 500);
     }
 
     let payload: any;
@@ -108,24 +77,31 @@ ${outlierLines}
 
 Write a complete market analysis following your instructions.`;
 
-    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`;
-    const geminiBody = JSON.stringify({
-      system_instruction: { parts: [{ text: SYSTEM_PROMPT }] },
-      contents: [{ role: "user", parts: [{ text: userMessage }] }],
-      generationConfig: { maxOutputTokens: 1024 },
-    });
-
     let response: Response;
     try {
-      response = await callGeminiWithRetry(geminiUrl, geminiBody);
+      response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${GROQ_API_KEY}`,
+        },
+        body: JSON.stringify({
+          model: "llama-3.3-70b-versatile",
+          max_tokens: 1024,
+          messages: [
+            { role: "system", content: SYSTEM_PROMPT },
+            { role: "user", content: userMessage },
+          ],
+        }),
+      });
     } catch (fetchErr) {
-      console.error("All Gemini retries failed:", fetchErr);
+      console.error("Groq fetch error:", fetchErr);
       return jsonResponse({ error: "network_error", message: "Could not reach AI service — try again later" }, 503);
     }
 
     if (!response.ok) {
       const errText = await response.text();
-      console.error("Gemini API error:", response.status, errText);
+      console.error("Groq API error:", response.status, errText);
       if (response.status === 429) {
         return jsonResponse({ error: "rate_limit", message: "AI rate limit exceeded — please wait a minute and try again" }, 429);
       }
@@ -139,12 +115,11 @@ Write a complete market analysis following your instructions.`;
       return jsonResponse({ error: "parse_error", message: "Failed to parse AI response" }, 502);
     }
 
-    const narrative = result.candidates?.[0]?.content?.parts?.[0]?.text || "Unable to generate narrative.";
+    const narrative = result.choices?.[0]?.message?.content || "Unable to generate narrative.";
     console.log("Narrative generated, length:", narrative.length);
 
     return jsonResponse({ narrative, generatedAt: new Date().toISOString() });
   } catch (e) {
-    // Final safety net — should never reach here, but guarantees no unhandled throw
     console.error("Unhandled error in generate-theme-narrative:", e);
     return jsonResponse({ error: "internal_error", message: "An unexpected error occurred" }, 500);
   }
