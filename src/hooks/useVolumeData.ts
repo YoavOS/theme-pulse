@@ -46,9 +46,12 @@ function saveLocalCache(data: Record<string, TickerVolume>) {
 }
 
 export function useVolumeData() {
-  const volumeMapRef = useRef<Record<string, TickerVolume>>(loadLocalCache() || {});
-  const [volumeMap, setVolumeMap] = useState<Record<string, TickerVolume>>(volumeMapRef.current);
-  const [loadingSymbols, setLoadingSymbols] = useState<Set<string>>(new Set());
+  const volumeMapRef = useRef<Record<string, TickerVolume> | null>(null);
+  if (volumeMapRef.current === null) {
+    volumeMapRef.current = loadLocalCache() || {};
+  }
+  const [volumeMap, setVolumeMap] = useState<Record<string, TickerVolume>>(() => volumeMapRef.current!);
+  const [loadingSymbols, setLoadingSymbols] = useState<Set<string>>(() => new Set());
   const pendingQueue = useRef<Set<string>>(new Set());
   const fetchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
