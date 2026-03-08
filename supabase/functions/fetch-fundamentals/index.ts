@@ -146,34 +146,30 @@ async function fetchSmartMoney(symbol: string, apiKey: string): Promise<{
     recent_insider_sells: 0,
   };
 
-  // 1. Institutional ownership
+  // 1. Mutual fund ownership (free tier alternative to institutional-ownership)
   try {
-    const resp = await fetch(`https://finnhub.io/api/v1/stock/institutional-ownership?symbol=${symbol}&token=${apiKey}`);
+    const resp = await fetch(`https://finnhub.io/api/v1/mutual-fund/ownership?symbol=${symbol}&token=${apiKey}`);
     if (resp.ok) {
       const data = await resp.json();
-      if (data?.ownership && data.ownership.length > 0) {
-        const latest = data.ownership[0];
-        result.institutional_ownership_pct = latest.ownership != null ? Math.round(latest.ownership * 10000) / 100 : null;
-        // Change vs prior quarter
-        if (data.ownership.length > 1) {
-          const prev = data.ownership[1];
-          if (latest.ownership != null && prev.ownership != null && prev.ownership > 0) {
-            result.institutional_change = Math.round(((latest.ownership - prev.ownership) / prev.ownership) * 10000) / 100;
-          }
-        }
-        // Top 3 institutions
-        if (latest.ownership_list && Array.isArray(latest.ownership_list)) {
-          const sorted = [...latest.ownership_list].sort((a: any, b: any) => (b.share || 0) - (a.share || 0));
-          result.top_institutions = sorted.slice(0, 3).map((inst: any) => ({
-            name: inst.investorName || inst.name || "Unknown",
-            pct: inst.ownership != null ? Math.round(inst.ownership * 10000) / 100 : null,
-            shares: inst.share || null,
-          }));
-        }
+      if (data?.ownership && Array.isArray(data.ownership) && data.ownership.length > 0) {
+        // Sum up percentage held by all mutual funds as proxy for institutional ownership
+        const totalPct = data.ownership.reduce((sum: number, fund: any) => sum + (fund.percentage || 0), 0);
+        result.institutional_ownership_pct = Math.round(totalPct * 100) / 100;
+
+        // Top 3 holders
+        const sorted = [...data.ownership].sort((a: any, b: any) => (b.percentage || 0) - (a.percentage || 0));
+        result.top_institutions = sorted.slice(0, 3).map((fund: any) => ({
+          name: fund.name || "Unknown Fund",
+          pct: fund.percentage != null ? Math.round(fund.percentage * 100) / 100 : null,
+          shares: fund.share || null,
+        }));
+
+        // Change vs prior period — check if there's a portfolioDate we can compare
+        // For now, just mark change as null (would need historical calls)
       }
     }
   } catch (e) {
-    console.warn(`Institutional ownership error for ${symbol}:`, e);
+    console.warn(`Mutual fund ownership error for ${symbol}:`, e);
   }
   await sleep(CALL_DELAY_MS);
 
