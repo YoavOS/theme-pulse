@@ -97,11 +97,13 @@ export default function InsightsTab({
   accelerating,
   fading,
   isLoading: dataLoading,
+  onOpenNewsPanel,
 }: {
   themes: ThemeIntelData[];
   accelerating: ThemeIntelData[];
   fading: ThemeIntelData[];
   isLoading: boolean;
+  onOpenNewsPanel?: (themeName: string) => void;
 }) {
   const { dryUpThemes } = useVolumeDryUp();
   const { spy } = useSpyBenchmark();
