@@ -8,3 +8,6 @@ verify_jwt = false
 
 [functions.full-scan]
 verify_jwt = false
+
+[functions.save-eod]
+verify_jwt = false

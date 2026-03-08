@@ -3,8 +3,9 @@ import { getProcessedThemes, ThemeData } from "@/data/themeData";
 import { useLiveThemeData } from "@/hooks/useLiveThemeData";
 import ThemeCard from "@/components/ThemeCard";
 import ValidateTickersDialog from "@/components/ValidateTickersDialog";
-import { RefreshCw, Download, TrendingUp, TrendingDown, Wifi, WifiOff, Loader2, Settings, ScanLine, X, ShieldCheck } from "lucide-react";
+import { RefreshCw, Download, TrendingUp, TrendingDown, Wifi, WifiOff, Loader2, Settings, ScanLine, X, ShieldCheck, Save, Zap } from "lucide-react";
 import { useFullScan } from "@/hooks/useFullScan";
+import { useEodSave } from "@/hooks/useEodSave";
 import { Link } from "react-router-dom";
 
 const TIMEFRAMES = ["Today", "1W", "1M", "3M", "YTD"] as const;
@@ -49,6 +50,17 @@ export default function Index() {
     clearProgress,
     loadTimeframe,
   } = useFullScan(handleScanComplete);
+
+  const {
+    status: eodStatus,
+    progress: eodProgress,
+    isSaving: isEodSaving,
+    canSave: canSaveEod,
+    tooltip: eodTooltip,
+    autoSave: eodAutoSave,
+    startEodSave,
+    toggleAutoSave: toggleEodAutoSave,
+  } = useEodSave();
 
   // When timeframe changes, try to load from scan cache
   const prevTimeframe = useRef(activeTimeframe);
@@ -147,6 +159,11 @@ export default function Index() {
               {scanProgress && scanProgress.failed > 0 && (
                 <span className="inline-flex items-center gap-1 text-[10px] text-destructive">
                   ⚠ {scanProgress.failed} tickers unavailable
+                </span>
+              )}
+              {eodStatus?.alreadySaved && (
+                <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground">
+                  · EOD: {eodStatus.date}
                 </span>
               )}
             </p>
@@ -252,6 +269,44 @@ export default function Index() {
                 )}
               </span>
             )}
+
+            {/* Save EOD button */}
+            {isEodSaving && eodProgress ? (
+              <span className="inline-flex items-center gap-1.5 rounded-md border border-primary/30 bg-primary/5 px-3 py-1.5 text-xs font-semibold text-primary">
+                <Loader2 size={12} className="animate-spin" />
+                Saving EOD: {eodProgress.saved}/{eodProgress.total}
+                {eodProgress.currentTheme && (
+                  <span className="max-w-[120px] truncate text-[10px] text-muted-foreground">
+                    · {eodProgress.currentTheme}
+                  </span>
+                )}
+              </span>
+            ) : (
+              <button
+                onClick={startEodSave}
+                disabled={!canSaveEod}
+                className="relative rounded-md border border-gain-medium/40 bg-gain-medium/10 px-3 py-1.5 text-xs font-semibold text-gain-medium transition-colors hover:bg-gain-medium/20 disabled:opacity-40 disabled:cursor-not-allowed"
+                title={eodTooltip}
+              >
+                <span className="inline-flex items-center gap-1">
+                  <Save size={12} /> Save EOD
+                </span>
+                {eodAutoSave && (
+                  <span className="absolute -right-1 -top-1 h-2 w-2 rounded-full bg-primary animate-pulse" title="Auto-save enabled" />
+                )}
+              </button>
+            )}
+            <button
+              onClick={toggleEodAutoSave}
+              className={`rounded-md border p-1.5 transition-colors ${
+                eodAutoSave
+                  ? "border-primary/40 bg-primary/10 text-primary"
+                  : "border-border text-muted-foreground hover:bg-accent hover:text-foreground"
+              }`}
+              title={eodAutoSave ? "Auto-save EOD: ON (triggers at 4:05 PM ET)" : "Auto-save EOD: OFF"}
+            >
+              <Zap size={14} />
+            </button>
             <button
               onClick={() => isLive ? fetchLiveData() : undefined}
               disabled={isLoading || !isLive}
