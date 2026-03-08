@@ -400,9 +400,6 @@ export default function FundamentalsIntelTab({
                         ) : (
                           <span className="text-muted-foreground" style={{ fontFamily: DM_MONO }}>—</span>
                         )}
-                          </div>
-                          <span className={`font-semibold ${scoreLabel.color}`} style={{ fontFamily: DM_MONO }}>{t.avgScore}</span>
-                        </div>
                       </td>
                       <td className="px-3 py-2">
                         <span className={`inline-flex items-center gap-1 rounded-full border px-1.5 py-0 text-[10px] font-semibold ${typeInfo.color}`}>
