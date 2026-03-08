@@ -294,6 +294,7 @@ export function useFullScan(onComplete: (themes: ThemeData[], timeframe: string)
     isRunning,
     progress,
     statusText,
+    scanCompletedAt,
     startFullScan,
     clearProgress,
     loadTimeframe,
