@@ -534,6 +534,8 @@ export default function Index() {
             accent="destructive"
             themes={weak}
             onCardClick={setDrilldownTheme}
+            fetchVolume={fetchVolume}
+            getThemeSignals={getThemeSignals}
           />
         )}
       </main>
