@@ -16,7 +16,7 @@ function getSustainedColor(val: number): string {
   return "text-muted-foreground";
 }
 
-function Skeleton() {
+function DemandSkeleton() {
   return (
     <div className="mt-2 space-y-1">
       <div className="h-2.5 w-24 animate-pulse rounded bg-muted" />
@@ -53,7 +53,7 @@ export default function DemandSignals({ signals }: Props) {
     );
   }
 
-  if (loading) return <Skeleton />;
+  if (loading) return <DemandSkeleton />;
 
   return (
     <div className="mt-2 border-t border-border/40 pt-1.5" onClick={(e) => e.stopPropagation()}>
