@@ -4,6 +4,7 @@ import { ArrowLeft, BarChart3, TrendingUp, LineChart, Grid3X3, Sparkles } from "
 import { useThemeIntelligence } from "@/hooks/useThemeIntelligence";
 import OverviewTab from "@/components/intelligence/OverviewTab";
 import MomentumTab from "@/components/intelligence/MomentumTab";
+import InsightsTab from "@/components/intelligence/InsightsTab";
 
 const SUB_TABS = [
   { id: "overview", label: "Overview", icon: BarChart3 },
@@ -87,7 +88,7 @@ export default function ThemeIntelligence() {
             <PlaceholderTab label="Heatmap" description="Calendar heatmap view — coming soon" />
           )}
           {activeTab === "insights" && (
-            <PlaceholderTab label="Insights" description="AI narrative & macro timeline — coming soon" />
+            <InsightsTab themes={themes} accelerating={accelerating} fading={fading} isLoading={isLoading} />
           )}
         </div>
       </main>

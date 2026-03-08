@@ -11,3 +11,6 @@ verify_jwt = false
 
 [functions.save-eod]
 verify_jwt = false
+
+[functions.generate-theme-narrative]
+verify_jwt = false
