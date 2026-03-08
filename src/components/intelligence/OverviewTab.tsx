@@ -6,7 +6,7 @@ import { LineChart, Line, ResponsiveContainer } from "recharts";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import VolumeLeaders from "./VolumeLeaders";
 import ThemeDrilldownModal from "@/components/ThemeDrilldownModal";
-import { demoThemes } from "@/data/themeData";
+import { useLiveThemeData } from "@/hooks/useLiveThemeData";
 
 const DM_MONO = "'DM Mono', monospace";
 const EOD_TOOLTIP = "Accumulating EOD history — available after more daily saves";
@@ -192,8 +192,10 @@ export default function OverviewTab({
    const [sortMode, setSortMode] = useState<SortMode>("momentum");
    const [highlightId, setHighlightId] = useState<string | null>(null);
    const [drilldownOpen, setDrilldownOpen] = useState(false);
-   const [drilldownTheme, setDrilldownTheme] = useState<typeof demoThemes[0] | null>(null);
+   const [drilldownTheme, setDrilldownTheme] = useState<ReturnType<typeof useLiveThemeData>["themes"][0] | null>(null);
    const rowRefs = useRef<Map<string, HTMLTableRowElement>>(new Map());
+
+   const { themes: liveThemes } = useLiveThemeData("Today");
 
    const handleSelectTheme = useCallback((themeId: string) => {
      const el = rowRefs.current.get(themeId);
@@ -204,12 +206,12 @@ export default function OverviewTab({
    }, []);
 
    const handleOpenDrilldown = useCallback((themeName: string) => {
-     const theme = demoThemes.find(t => t.theme_name === themeName);
+     const theme = liveThemes.find(t => t.theme_name === themeName);
      if (theme) {
        setDrilldownTheme(theme);
        setDrilldownOpen(true);
      }
-   }, []);
+   }, [liveThemes]);
 
   useEffect(() => {
     if (!highlightId) return;
