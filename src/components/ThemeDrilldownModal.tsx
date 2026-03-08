@@ -91,6 +91,10 @@ export default function ThemeDrilldownModal({
   defaultSortKey,
   newsArticles,
   fetchNewsForTheme,
+  fundamentals,
+  fetchFundamentals,
+  isFundamentalsLoading,
+  defaultTab,
 }: {
   theme: ThemeData | null;
   open: boolean;
@@ -98,6 +102,10 @@ export default function ThemeDrilldownModal({
   defaultSortKey?: SortKey;
   newsArticles?: NewsArticle[];
   fetchNewsForTheme?: (symbols: string[]) => Promise<NewsArticle[]>;
+  fundamentals?: Record<string, FundamentalsData> | null;
+  fetchFundamentals?: (symbols: string[]) => Promise<Record<string, FundamentalsData>>;
+  isFundamentalsLoading?: boolean;
+  defaultTab?: "tickers" | "news" | "fundamentals";
 }) {
    const { isPinned, togglePin } = useWatchlist();
    const navigate = useNavigate();
