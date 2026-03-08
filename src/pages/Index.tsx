@@ -37,10 +37,10 @@ function formatTime(d: Date) {
 }
 
 export default function Index() {
-  const [dashboardView, setDashboardView] = useState<"cards" | "list" | "heatmap" | "bubble">(() => {
+  const [dashboardView, setDashboardView] = useState<"cards" | "list" | "heatmap" | "bubble" | "bars">(() => {
     return (localStorage.getItem("dashboardView") as any) || "cards";
   });
-  const switchView = useCallback((v: "cards" | "list" | "heatmap" | "bubble") => {
+  const switchView = useCallback((v: "cards" | "list" | "heatmap" | "bubble" | "bars") => {
     setDashboardView(v);
     localStorage.setItem("dashboardView", v);
   }, []);
