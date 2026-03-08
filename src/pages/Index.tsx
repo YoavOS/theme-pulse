@@ -328,7 +328,10 @@ export default function Index() {
             {isEodSaving && eodProgress ? (
               <span className="inline-flex items-center gap-1.5 rounded-md border border-primary/30 bg-primary/5 px-3 py-1.5 text-xs font-semibold text-primary">
                 <Loader2 size={12} className="animate-spin" />
-                Saving EOD: {eodProgress.saved}/{eodProgress.total}
+                {eodProgress.currentTheme?.startsWith("Retry") ? "Retrying" : "Saving EOD"}: {eodProgress.saved}/{eodProgress.total}
+                {eodProgress.failed > 0 && (
+                  <span className="text-[10px] text-destructive">· {eodProgress.failed} failed</span>
+                )}
                 {eodProgress.currentTheme && (
                   <span className="max-w-[120px] truncate text-[10px] text-muted-foreground">
                     · {eodProgress.currentTheme}
