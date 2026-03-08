@@ -256,6 +256,18 @@ export default function Index() {
             </div>
           </div>
 
+          {/* Search bar */}
+          <div className="mt-2.5">
+            <ThemeSearchBar
+              query={searchQuery}
+              setQuery={setSearchQuery}
+              isSearching={isSearching}
+              clearSearch={clearSearch}
+              runSearch={runSearch}
+              history={searchHistory}
+            />
+          </div>
+
           {/* Row 2: Timeframes + Actions */}
           <div className="mt-2.5 flex items-center justify-between gap-3">
             {/* Left: Timeframe pills */}
