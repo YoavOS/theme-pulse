@@ -55,24 +55,36 @@ export function useEodSave() {
     }
   }, [supabaseUrl, anonKey]);
 
-  const startEodSave = useCallback(async () => {
+  const startEodSave = useCallback(async (usePc = false) => {
     setIsSaving(true);
     abortRef.current = false;
 
     try {
       // 1. Initialize session and get ticker list
-      const startRes = await fetch(`${supabaseUrl}/functions/v1/save-eod?action=start`, {
+      const startRes = await fetch(`${supabaseUrl}/functions/v1/save-eod?action=start${usePc ? "&use_pc=true" : ""}`, {
         method: "POST",
         headers,
       });
       const startData = await startRes.json();
       if (!startRes.ok) throw new Error(startData.error || `HTTP ${startRes.status}`);
 
-      const { tickers, date, total } = startData as {
+      const { tickers, date: returnedDate, total } = startData as {
         tickers: { symbol: string; theme_name: string }[];
         date: string;
         total: number;
       };
+
+      // For Friday save, override the date to last Friday
+      const saveDate = usePc && status?.fridayDate ? status.fridayDate : returnedDate;
+
+      // Re-upsert session with correct Friday date if needed
+      if (usePc && status?.fridayDate && status.fridayDate !== returnedDate) {
+        await fetch(`${supabaseUrl}/functions/v1/save-eod?action=start&use_pc=true`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({ overrideDate: status.fridayDate }),
+        }).catch(() => {});
+      }
 
       setProgress({ total, saved: 0, failed: 0, currentTheme: "", saving: true });
 
@@ -95,10 +107,10 @@ export function useEodSave() {
           saving: true,
         });
 
-        const res = await fetch(`${supabaseUrl}/functions/v1/save-eod?action=chunk`, {
+        const res = await fetch(`${supabaseUrl}/functions/v1/save-eod?action=chunk${usePc ? "&use_pc=true" : ""}`, {
           method: "POST",
           headers,
-          body: JSON.stringify({ tickers: chunk, date }),
+          body: JSON.stringify({ tickers: chunk, date: saveDate }),
         });
 
         if (!res.ok) {
@@ -123,7 +135,7 @@ export function useEodSave() {
       await fetch(`${supabaseUrl}/functions/v1/save-eod?action=complete`, {
         method: "POST",
         headers,
-        body: JSON.stringify({ date }),
+        body: JSON.stringify({ date: saveDate }),
       });
 
       setProgress({ total, saved: totalSaved, failed: totalFailed, currentTheme: "", saving: false });
@@ -132,9 +144,10 @@ export function useEodSave() {
       // Refresh status
       await checkStatus();
 
+      const label = usePc ? "Friday Close Save" : "EOD Save";
       toast({
-        title: totalFailed > 0 ? "EOD Saved with warnings" : "EOD Save Complete",
-        description: `${date} · ${totalSaved} tickers saved${totalFailed > 0 ? ` · ${totalFailed} failed` : ""}`,
+        title: totalFailed > 0 ? `${label} Complete (with warnings)` : `${label} Complete`,
+        description: `${saveDate} · ${totalSaved} tickers saved${totalFailed > 0 ? ` · ${totalFailed} failed` : ""}`,
         variant: totalFailed > 0 ? "destructive" : "default",
       });
     } catch (err) {
@@ -147,7 +160,7 @@ export function useEodSave() {
         variant: "destructive",
       });
     }
-  }, [supabaseUrl, anonKey, toast, checkStatus]);
+  }, [supabaseUrl, anonKey, toast, checkStatus, status]);
 
   const toggleAutoSave = useCallback(() => {
     setAutoSave((prev) => {
