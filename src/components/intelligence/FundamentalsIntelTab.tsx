@@ -10,7 +10,7 @@ const DM_MONO = "'DM Mono', monospace";
 
 interface ThemeFundamentals {
   themeName: string;
-  avgScore: number;
+  avgScore: number | null;
   avgRevenueGrowth: number | null;
   avgNetMargin: number | null;
   avgDebtToEquity: number | null;
