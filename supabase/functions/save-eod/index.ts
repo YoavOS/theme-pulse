@@ -70,10 +70,11 @@ Deno.serve(async (req) => {
         fridayDate = `${et.getFullYear()}-${String(et.getMonth() + 1).padStart(2, "0")}-${String(et.getDate()).padStart(2, "0")}`;
         const { data: fridaySession } = await sb
           .from("eod_save_sessions")
-          .select("status")
+          .select("status, completed_at")
           .eq("date", fridayDate)
           .single();
         fridayAlreadySaved = fridaySession?.status === "completed";
+        var fridayCompletedAt = fridaySession?.completed_at || null;
       }
 
       return new Response(JSON.stringify({
