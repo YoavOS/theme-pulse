@@ -683,6 +683,8 @@ export default function Index() {
             getNewsCount={getThemeNewsCount}
             hasNegativeNews={hasNegativeNews}
             onNewsBadgeClick={handleNewsBadgeClick}
+            getThemeFundamentalScore={getThemeFundamentalScore}
+            onFundamentalBadgeClick={(t) => { setDrilldownTheme(t); setDrilldownDefaultTab("fundamentals"); }}
           />
         )}
       </main>
