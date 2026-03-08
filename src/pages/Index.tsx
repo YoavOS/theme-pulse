@@ -603,6 +603,12 @@ function Section({
     } catch {}
   }
 
+  const sectionTooltips: Record<string, string> = {
+    "Strong / Best Performing": "Themes with positive average daily performance on the selected timeframe. These are the current market leaders showing the strongest price action.",
+    "Neutral / Mixed": "Themes with near-zero performance (between roughly -0.5% and +0.5%). No clear directional bias — could break either way.",
+    "Weaker / Lagging": "Themes with negative average daily performance. These are underperforming the market on the selected timeframe.",
+  };
+
   return (
     <section className="mb-8">
       <div className="mb-4 flex items-center gap-2">
