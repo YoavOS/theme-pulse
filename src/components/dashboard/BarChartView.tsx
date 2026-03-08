@@ -185,7 +185,7 @@ function BarRow({
           )}
         </div>
         <div className="border-t border-[rgba(255,255,255,0.08)] mt-1.5 pt-1.5">
-          <span className="text-[9px] text-muted-foreground">Click to open full breakdown</span>
+          <span className="text-[11px] text-muted-foreground">Click to open full breakdown</span>
         </div>
       </div>
     </div>
