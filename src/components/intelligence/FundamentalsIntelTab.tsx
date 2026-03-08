@@ -4,7 +4,7 @@ import { FundamentalsData, getScoreLabel, getStockTypeInfo, getScoreBadgeColor, 
 import { supabase } from "@/integrations/supabase/client";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Progress } from "@/components/ui/progress";
-import { ArrowUpDown, ChevronDown, ChevronRight, Loader2 } from "lucide-react";
+import { ArrowUpDown, ChevronDown, ChevronRight, Loader2, RefreshCw } from "lucide-react";
 
 const DM_MONO = "'DM Mono', monospace";
 
@@ -88,12 +88,12 @@ export default function FundamentalsIntelTab({
           map[row.symbol] = row as unknown as FundamentalsData;
         }
         setAllFundamentals(map);
-        return Object.keys(map).length;
+        return { total: data.length, nullInst: data.filter(r => r.institutional_ownership_pct == null).length };
       }
-      return 0;
+      return { total: 0, nullInst: 0 };
     } catch (e) {
       console.error("Failed to load fundamentals:", e);
-      return 0;
+      return { total: 0, nullInst: 0 };
     } finally {
       setLoading(false);
     }
@@ -195,42 +195,20 @@ export default function FundamentalsIntelTab({
 
   const hasData = Object.keys(allFundamentals).length > 0;
 
-  // Check if smart money data is missing from cached fundamentals
-  const smartMoneyMissing = useMemo(() => {
-    if (!hasData) return false;
-    const entries = Object.values(allFundamentals);
-    if (entries.length === 0) return false;
-    // If >80% of entries have null smart_money_score, consider it missing
-    const nullCount = entries.filter(e => e.smart_money_score === null).length;
-    return nullCount / entries.length > 0.8;
-  }, [allFundamentals, hasData]);
+  // Run prefetch for top themes — handles stale cache purge, localStorage, and smart money re-fetch
+  const runPrefetch = useCallback(async (forceClean = false) => {
+    if (themes.length === 0) return;
 
-  // Check localStorage for today's prefetch
-  const alreadyPrefetchedToday = useMemo(() => {
-    try {
-      const stored = localStorage.getItem("fundamentalsPrefetched");
-      if (!stored) return false;
-      const today = new Date().toISOString().slice(0, 10);
-      return stored === today;
-    } catch { return false; }
-  }, []);
-
-  // Auto-prefetch top 10 themes — runs once on mount only
-  useEffect(() => {
-    if (prefetchCompletedRef.current) return;
-    // Skip if already prefetched today AND smart money data exists
-    if (alreadyPrefetchedToday && !smartMoneyMissing) return;
-    if (dataLoading || themes.length === 0) return;
-
-    // Wait for initial cache load to finish
-    if (loading) return;
-    // If data exists and smart money is present, skip
-    if (hasData && !smartMoneyMissing) {
-      prefetchCompletedRef.current = true;
-      return;
+    // If forcing clean, purge DB cache first
+    if (forceClean) {
+      try {
+        await supabase.from("fundamentals_cache").delete().neq("symbol", "");
+        setAllFundamentals({});
+      } catch (e) {
+        console.error("Failed to purge fundamentals cache:", e);
+      }
+      try { localStorage.removeItem("fundamentalsPrefetched"); } catch {}
     }
-
-    prefetchCompletedRef.current = true; // mark immediately to prevent re-trigger
 
     const topThemes = [...themes]
       .sort((a, b) => b.momentumScore - a.momentumScore)
@@ -239,37 +217,70 @@ export default function FundamentalsIntelTab({
     const total = topThemes.length;
     setPrefetchState({ active: true, completed: 0, total, done: false });
 
+    for (let i = 0; i < topThemes.length; i++) {
+      try {
+        await supabase.functions.invoke("fetch-fundamentals", {
+          body: { symbols: topThemes[i].symbols },
+        });
+      } catch (e) {
+        console.error(`Prefetch failed for ${topThemes[i].themeName}:`, e);
+      }
+      setPrefetchState({ active: true, completed: i + 1, total, done: false });
+    }
+
+    try {
+      localStorage.setItem("fundamentalsPrefetched", new Date().toISOString().slice(0, 10));
+    } catch {}
+
+    setPrefetchState({ active: false, completed: total, total, done: true });
+    await loadFromCache();
+
+    setTimeout(() => {
+      setPrefetchState(prev => ({ ...prev, done: false }));
+    }, 2000);
+  }, [themes, loadFromCache]);
+
+  // Auto-prefetch on mount — detect stale cache and force re-fetch
+  useEffect(() => {
+    if (prefetchCompletedRef.current) return;
+    if (dataLoading || themes.length === 0) return;
+    if (loading) return;
+
+    prefetchCompletedRef.current = true;
+
+    // Check if localStorage date is stale
+    const storedDate = (() => { try { return localStorage.getItem("fundamentalsPrefetched"); } catch { return null; } })();
+    const today = new Date().toISOString().slice(0, 10);
+    const prefetchedToday = storedDate === today;
+
     (async () => {
-      for (let i = 0; i < topThemes.length; i++) {
-        const theme = topThemes[i];
-        try {
-          await supabase.functions.invoke("fetch-fundamentals", {
-            body: { symbols: theme.symbols },
-          });
-        } catch (e) {
-          console.error(`Prefetch failed for ${theme.themeName}:`, e);
-        }
-        setPrefetchState({ active: true, completed: i + 1, total, done: false });
+      const cacheInfo = await loadFromCache();
+      const totalRows = cacheInfo.total;
+      const nullInstCount = cacheInfo.nullInst;
+
+      // If >50% of rows have null institutional data, purge and re-fetch
+      if (totalRows > 0 && nullInstCount > totalRows * 0.5) {
+        console.log(`Stale smart money data: ${nullInstCount}/${totalRows} missing institutional — purging cache`);
+        await runPrefetch(true);
+        return;
       }
 
-      // Mark done in localStorage
-      try {
-        localStorage.setItem("fundamentalsPrefetched", new Date().toISOString().slice(0, 10));
-      } catch {}
+      // If not prefetched today and no data, run fresh
+      if (!prefetchedToday && totalRows === 0) {
+        await runPrefetch(false);
+        return;
+      }
 
-      // Show completion message briefly
-      setPrefetchState({ active: false, completed: total, total, done: true });
+      // If prefetched today and have data, skip
+      if (prefetchedToday && totalRows > 0) return;
 
-      // Reload cache
-      await loadFromCache();
-
-      // After 2 seconds, clear the done state to show the actual data
-      setTimeout(() => {
-        setPrefetchState(prev => ({ ...prev, done: false }));
-      }, 2000);
+      // If not prefetched today but have data, still run to refresh
+      if (!prefetchedToday) {
+        await runPrefetch(false);
+      }
     })();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loading, dataLoading, themes.length, smartMoneyMissing]);
+  }, [loading, dataLoading, themes.length]);
 
   const toggleSort = (key: SortKey) => {
     if (sortKey === key) setSortDir(d => d === "asc" ? "desc" : "asc");
@@ -328,10 +339,18 @@ export default function FundamentalsIntelTab({
     <div className="space-y-6">
       {/* Ranked Table */}
       <div className="rounded-lg overflow-hidden" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}>
-        <div className="px-4 py-3">
+        <div className="px-4 py-3 flex items-center justify-between">
           <h4 className="font-['Syne',sans-serif] text-xs font-semibold uppercase tracking-widest text-primary">
             Theme Fundamental Rankings
           </h4>
+          <button
+            onClick={() => { prefetchCompletedRef.current = false; runPrefetch(true); }}
+            disabled={prefetchState.active}
+            className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[10px] font-medium text-muted-foreground hover:text-foreground bg-secondary/40 hover:bg-secondary/60 transition-colors disabled:opacity-50"
+          >
+            <RefreshCw size={10} className={prefetchState.active ? "animate-spin" : ""} />
+            Update Fundamentals
+          </button>
         </div>
         <div className="max-h-[400px] overflow-auto">
           <table className="w-full text-xs">
