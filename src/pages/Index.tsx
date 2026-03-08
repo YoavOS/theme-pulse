@@ -17,6 +17,8 @@ import { useWatchlist } from "@/hooks/useWatchlistContext";
 import { useVolumeData } from "@/hooks/useVolumeData";
 import { Link } from "react-router-dom";
 import HelpButton from "@/components/HelpButton";
+import ThemeSearchBar from "@/components/ThemeSearchBar";
+import { useThemeSearch } from "@/hooks/useThemeSearch";
 
 const TIMEFRAMES = ["Today", "1W", "1M", "3M", "YTD"] as const;
 
@@ -55,6 +57,12 @@ export default function Index() {
 
   const dispersion = useDispersion(allThemes);
   const { spy, getRelativeStrength } = useSpyBenchmark();
+  const { query: searchQuery, setQuery: setSearchQuery, isSearching, result: searchResult, clearSearch, runSearch, history: searchHistory } = useThemeSearch(allThemes);
+
+  const searchMatchSet = useMemo(() => {
+    if (!searchResult) return null;
+    return new Set(searchResult.matchingThemes.map(n => n.toLowerCase()));
+  }, [searchResult]);
 
   // Full scan handler: receives themes + timeframe from scan
   const handleScanComplete = useCallback((themes: ThemeData[], timeframe: string) => {
@@ -246,6 +254,18 @@ export default function Index() {
                 <span className="text-[10px]">· EOD ✓</span>
               )}
             </div>
+          </div>
+
+          {/* Search bar */}
+          <div className="mt-2.5">
+            <ThemeSearchBar
+              query={searchQuery}
+              setQuery={setSearchQuery}
+              isSearching={isSearching}
+              clearSearch={clearSearch}
+              runSearch={runSearch}
+              history={searchHistory}
+            />
           </div>
 
           {/* Row 2: Timeframes + Actions */}
@@ -564,6 +584,23 @@ export default function Index() {
       )}
 
       <main className="container py-6">
+        {/* Search results banner */}
+        {searchResult && (
+          <div className="mb-4 flex items-center gap-2 rounded-lg border border-primary/20 bg-primary/5 px-4 py-2.5 text-sm">
+            <span className="font-medium text-foreground">
+              {searchResult.matchingThemes.length > 0
+                ? `Showing ${searchResult.matchingThemes.length} theme${searchResult.matchingThemes.length === 1 ? "" : "s"} matching "${searchQuery}"`
+                : `No themes match your query`}
+            </span>
+            {searchResult.explanation && (
+              <span className="text-xs text-muted-foreground">· {searchResult.explanation}</span>
+            )}
+            <button onClick={clearSearch} className="ml-auto inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground">
+              Clear <X size={12} />
+            </button>
+          </div>
+        )}
+
         {/* ─── STRONG THEMES ─────────────────────────── */}
         <Section
           icon={<TrendingUp size={18} />}
@@ -573,6 +610,7 @@ export default function Index() {
           onCardClick={setDrilldownTheme}
           fetchVolume={fetchVolume}
           getThemeSignals={getThemeSignals}
+          dimmedThemes={searchMatchSet}
         />
 
         {/* ─── NEUTRAL ───────────────────────────────── */}
@@ -585,6 +623,7 @@ export default function Index() {
             onCardClick={setDrilldownTheme}
             fetchVolume={fetchVolume}
             getThemeSignals={getThemeSignals}
+            dimmedThemes={searchMatchSet}
           />
         )}
 
@@ -598,6 +637,7 @@ export default function Index() {
             onCardClick={setDrilldownTheme}
             fetchVolume={fetchVolume}
             getThemeSignals={getThemeSignals}
+            dimmedThemes={searchMatchSet}
           />
         )}
       </main>
@@ -624,6 +664,7 @@ function Section({
   onCardClick,
   fetchVolume,
   getThemeSignals,
+  dimmedThemes,
 }: {
   icon: React.ReactNode;
   title: string;
@@ -632,6 +673,7 @@ function Section({
   onCardClick?: (theme: ThemeData) => void;
   fetchVolume?: (symbols: string[]) => void;
   getThemeSignals?: (symbols: string[]) => import("@/hooks/useVolumeData").ThemeDemandSignals;
+  dimmedThemes?: Set<string> | null;
 }) {
   const accentColor =
     accent === "primary"
@@ -661,12 +703,6 @@ function Section({
     } catch {}
   }
 
-  const sectionTooltips: Record<string, string> = {
-    "Strong / Best Performing": "Themes with positive average daily performance on the selected timeframe. These are the current market leaders showing the strongest price action.",
-    "Neutral / Mixed": "Themes with near-zero performance (between roughly -0.5% and +0.5%). No clear directional bias — could break either way.",
-    "Weaker / Lagging": "Themes with negative average daily performance. These are underperforming the market on the selected timeframe.",
-  };
-
   return (
     <section className="mb-8">
       <div className="mb-4 flex items-center gap-2">
@@ -680,9 +716,18 @@ function Section({
         {volBadge}
       </div>
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 min-[1800px]:grid-cols-4">
-        {themes.map((t, i) => (
-          <ThemeCard key={t.theme_name} theme={t} index={i} onClick={onCardClick} fetchVolume={fetchVolume} getThemeSignals={getThemeSignals} />
-        ))}
+        {themes.map((t, i) => {
+          const isDimmed = dimmedThemes ? !dimmedThemes.has(t.theme_name.toLowerCase()) : false;
+          return (
+            <div
+              key={t.theme_name}
+              className="transition-all duration-300"
+              style={isDimmed ? { opacity: 0.3, filter: "grayscale(60%)" } : {}}
+            >
+              <ThemeCard theme={t} index={i} onClick={onCardClick} fetchVolume={fetchVolume} getThemeSignals={getThemeSignals} />
+            </div>
+          );
+        })}
       </div>
     </section>
   );
