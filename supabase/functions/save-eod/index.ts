@@ -124,7 +124,7 @@ Deno.serve(async (req) => {
 
       // Upsert session
       await sb.from("eod_save_sessions").upsert({
-        date: dateStr,
+        date: saveDate,
         status: "in_progress",
         total_tickers: unique.length,
         saved_count: 0,
@@ -136,9 +136,9 @@ Deno.serve(async (req) => {
 
       return new Response(JSON.stringify({
         ok: true,
-        date: dateStr,
+        date: saveDate,
         total: unique.length,
-        tickers: unique, // client needs this to know what to send in chunks
+        tickers: unique,
       }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
