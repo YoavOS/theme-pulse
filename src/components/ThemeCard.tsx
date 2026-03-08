@@ -244,18 +244,20 @@ export default function ThemeCard({ theme, index, onClick, fetchVolume, getTheme
           )}
 
           {/* Row 6: News badge */}
-          {newsCount != null && newsCount > 0 && (
+          {newsCount != null && newsCount !== 0 && (
             <div className="mt-1.5">
               <button
                 onClick={(e) => { e.stopPropagation(); onNewsBadgeClick?.(theme); }}
                 className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-medium transition-colors ${
-                  newsNegative
+                  newsCount === -1
+                    ? "text-muted-foreground bg-secondary/60 border border-border hover:bg-secondary"
+                    : newsNegative
                     ? "text-destructive bg-destructive/10 border border-destructive/20 hover:bg-destructive/15"
                     : "text-primary bg-primary/10 border border-primary/20 hover:bg-primary/15"
                 }`}
                 style={{ fontFamily: "'DM Mono', monospace" }}
               >
-                📰 {newsCount}
+                📰{newsCount > 0 ? ` ${newsCount}` : ""}
               </button>
             </div>
           )}
