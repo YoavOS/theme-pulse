@@ -213,8 +213,7 @@ export default function InsightsTab({
     } finally {
       setIsGenerating(false);
     }
-    }
-  }, [themes, isGenerating]);
+  }, [themes, isGenerating, narrative]);
 
   // Auto-generate on first load when data is ready
   useEffect(() => {
