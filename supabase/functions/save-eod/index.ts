@@ -85,6 +85,7 @@ Deno.serve(async (req) => {
         session: existing || null,
         fridayDate,
         fridayAlreadySaved,
+        fridayCompletedAt: fridayCompletedAt ?? null,
       }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 

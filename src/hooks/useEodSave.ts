@@ -271,6 +271,7 @@ export function useEodSave() {
     canSaveFriday,
     tooltip,
     fridayTooltip,
+    fridayLastSavedAt,
     autoSave,
     startEodSave,
     toggleAutoSave,
