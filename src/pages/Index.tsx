@@ -3,8 +3,9 @@ import { getProcessedThemes, ThemeData } from "@/data/themeData";
 import { useLiveThemeData } from "@/hooks/useLiveThemeData";
 import ThemeCard from "@/components/ThemeCard";
 import ValidateTickersDialog from "@/components/ValidateTickersDialog";
-import { RefreshCw, Download, TrendingUp, TrendingDown, Wifi, WifiOff, Loader2, Settings, ScanLine, X, ShieldCheck } from "lucide-react";
+import { RefreshCw, Download, TrendingUp, TrendingDown, Wifi, WifiOff, Loader2, Settings, ScanLine, X, ShieldCheck, Save, Zap } from "lucide-react";
 import { useFullScan } from "@/hooks/useFullScan";
+import { useEodSave } from "@/hooks/useEodSave";
 import { Link } from "react-router-dom";
 
 const TIMEFRAMES = ["Today", "1W", "1M", "3M", "YTD"] as const;
