@@ -20,3 +20,9 @@ verify_jwt = false
 
 [functions.natural-language-search]
 verify_jwt = false
+
+[functions.fetch-theme-news]
+verify_jwt = false
+
+[functions.summarize-theme-news]
+verify_jwt = false

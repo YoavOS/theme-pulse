@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { ThemeIntelData } from "@/hooks/useThemeIntelligence";
 import { Skeleton } from "@/components/ui/skeleton";
-import { RefreshCw, AlertTriangle } from "lucide-react";
+import { RefreshCw, AlertTriangle, Newspaper, ExternalLink } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import WeeklyReportsSection from "./WeeklyReportsSection";
@@ -9,6 +9,7 @@ import VolumeDryUpSection from "./VolumeDryUpSection";
 import { useVolumeDryUp } from "@/hooks/useVolumeDryUp";
 import { calculateDispersion, getDispersionLabel, getDispersionShortLabel } from "@/hooks/useDispersion";
 import { useSpyBenchmark } from "@/hooks/useSpyBenchmark";
+import { useThemeNews, NewsArticle } from "@/hooks/useThemeNews";
 
 const DM_MONO = "'DM Mono', monospace";
 const COOLDOWN_MS = 30_000;
@@ -104,6 +105,9 @@ export default function InsightsTab({
 }) {
   const { dryUpThemes } = useVolumeDryUp();
   const { spy } = useSpyBenchmark();
+  const { news, fetchNews, marketNews, getAiSummary } = useThemeNews();
+  const [marketSummary, setMarketSummary] = useState<string | null>(null);
+  const [marketSummaryLoading, setMarketSummaryLoading] = useState(false);
   const [narrative, setNarrative] = useState<NarrativeState | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [cooldownEnd, setCooldownEnd] = useState(0);
@@ -361,6 +365,50 @@ export default function InsightsTab({
           </>
         )}
       </div>
+
+      {/* Market News Section */}
+      {marketNews.length > 0 && (
+        <div
+          className="rounded-lg p-4"
+          style={{
+            background: "rgba(255,255,255,0.04)",
+            border: "1px solid rgba(255,255,255,0.08)",
+            backdropFilter: "blur(12px)",
+          }}
+        >
+          <h4 className="font-['Syne',sans-serif] text-xs font-semibold uppercase tracking-widest text-primary mb-3 flex items-center gap-2">
+            <Newspaper size={14} /> Market News
+          </h4>
+          <div className="space-y-1.5 max-h-[300px] overflow-y-auto">
+            {marketNews.slice(0, 10).map((a, i) => (
+              <a
+                key={i}
+                href={a.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="group flex items-start gap-2 rounded-md p-2 transition-colors hover:bg-accent/50"
+              >
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-medium text-foreground leading-snug line-clamp-2 group-hover:text-primary transition-colors">
+                    {a.headline}
+                  </p>
+                  <div className="mt-0.5 flex items-center gap-2 text-[10px] text-muted-foreground">
+                    {a.source && <span>{a.source}</span>}
+                    {a.published_at && (
+                      <span>· {(() => {
+                        const diff = Date.now() - new Date(a.published_at).getTime();
+                        const hrs = Math.floor(diff / 3600000);
+                        return hrs < 24 ? `${hrs}h ago` : `${Math.floor(hrs / 24)}d ago`;
+                      })()}</span>
+                    )}
+                  </div>
+                </div>
+                <ExternalLink size={10} className="shrink-0 mt-1 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+              </a>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

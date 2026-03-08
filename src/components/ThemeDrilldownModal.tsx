@@ -2,9 +2,11 @@ import { useState, useMemo, useEffect } from "react";
 import { ThemeData } from "@/data/themeData";
 import { useWatchlist } from "@/hooks/useWatchlistContext";
 import { supabase } from "@/integrations/supabase/client";
-import { Pin, X, ExternalLink, ArrowUpDown } from "lucide-react";
+import { Pin, X, ExternalLink, ArrowUpDown, Newspaper } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useSpyBenchmark, formatRS } from "@/hooks/useSpyBenchmark";
+import { NewsArticle } from "@/hooks/useThemeNews";
+import { NewsTabContent } from "@/components/NewsPanel";
 import {
   Dialog,
   DialogContent,
@@ -85,11 +87,13 @@ export default function ThemeDrilldownModal({
   open,
   onOpenChange,
   defaultSortKey,
+  newsArticles,
 }: {
   theme: ThemeData | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   defaultSortKey?: SortKey;
+  newsArticles?: NewsArticle[];
 }) {
    const { isPinned, togglePin } = useWatchlist();
    const navigate = useNavigate();
@@ -97,6 +101,7 @@ export default function ThemeDrilldownModal({
    const [sortDir, setSortDir] = useState<SortDir>("desc");
    const [extras, setExtras] = useState<Record<string, TickerExtra>>({});
    const { spy, getTickerRS } = useSpyBenchmark();
+   const [activeTab, setActiveTab] = useState<"tickers" | "news">("tickers");
 
   useEffect(() => {
     if (!theme || !open) return;
@@ -309,7 +314,32 @@ export default function ThemeDrilldownModal({
           </div>
         </div>
 
-        {/* Ticker table */}
+        {/* Tab bar */}
+        <div className="flex items-center gap-1 px-6 border-b border-border/50">
+          <button
+            onClick={() => setActiveTab("tickers")}
+            className={`px-3 py-2 text-xs font-semibold transition-colors ${
+              activeTab === "tickers" ? "text-foreground border-b-2 border-primary" : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            Tickers
+          </button>
+          <button
+            onClick={() => setActiveTab("news")}
+            className={`px-3 py-2 text-xs font-semibold transition-colors inline-flex items-center gap-1.5 ${
+              activeTab === "news" ? "text-foreground border-b-2 border-primary" : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            <Newspaper size={12} /> News
+            {(newsArticles?.length || 0) > 0 && (
+              <span className="rounded-full bg-primary/20 px-1.5 py-0 text-[9px] font-bold text-primary">
+                {newsArticles!.length}
+              </span>
+            )}
+          </button>
+        </div>
+
+        {activeTab === "tickers" ? (
         <div className="max-h-[400px] overflow-auto px-6 pb-2">
           {/* SPY Benchmark row */}
           {spy.perf_1d !== null && (
@@ -449,6 +479,11 @@ export default function ThemeDrilldownModal({
             </tbody>
           </table>
         </div>
+        ) : (
+          <div className="max-h-[400px] overflow-auto px-6 pb-2 pt-2">
+            <NewsTabContent articles={newsArticles || []} />
+          </div>
+        )}
 
         {/* Footer */}
         <div className="flex items-center justify-between border-t border-border/50 px-6 py-3">

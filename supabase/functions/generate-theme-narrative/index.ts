@@ -37,6 +37,11 @@ RELATIVE STRENGTH RULES:
 - A theme up 1% when SPY is down 0.5% is showing real strength — highlight this
 - Use relative strength language when it adds meaningful context, don't force it on every theme
 
+NEWS CONTEXT RULES:
+- When recent headlines are provided for top themes, use them to explain WHY themes are moving, not just that they are moving
+- If a headline directly explains a theme's performance (e.g. a defense contract announcement for the Defense theme), reference it specifically
+- Do not fabricate or assume news — only reference headlines actually provided in the data
+
 FORMAT:
 Write 6–8 sentences of flowing prose. No bullet points. No headers. No lists.
 Cover: what is genuinely leading with broad confirmation, what is a single-stock story masquerading as a theme move, what is fading and why, what the overall rotation suggests, and one specific actionable thing to watch next session.`;
@@ -66,7 +71,7 @@ serve(async (req) => {
       return jsonResponse({ error: "bad_request", message: "Invalid JSON in request body" }, 400);
     }
 
-    const { topThemes, bottomThemes, outlierThemes, date, totalThemes, requestTimestamp, dispersionScore, dispersionLabel, spyPerf1d, spyPerf1w, spyPerf1m } = payload;
+    const { topThemes, bottomThemes, outlierThemes, date, totalThemes, requestTimestamp, dispersionScore, dispersionLabel, spyPerf1d, spyPerf1w, spyPerf1m, topThemeHeadlines } = payload;
 
     console.log(`Payload: top=${(topThemes||[]).length}, bottom=${(bottomThemes||[]).length}, outliers=${(outlierThemes||[]).length}, date=${date}, total=${totalThemes}, ts=${requestTimestamp}`);
 
@@ -101,6 +106,11 @@ serve(async (req) => {
     const dispersionLine = dispersionScore != null ? `\nDISPERSION: ${dispersionScore.toFixed(2)}σ — ${dispersionLabel || "N/A"}` : "";
     const spyLine = spyPerf1d != null ? `\nSPY BENCHMARK: 1D: ${spyPerf1d >= 0 ? "+" : ""}${spyPerf1d}% | 1W: ${spyPerf1w != null ? (spyPerf1w >= 0 ? "+" : "") + spyPerf1w + "%" : "N/A"} | 1M: ${spyPerf1m != null ? (spyPerf1m >= 0 ? "+" : "") + spyPerf1m + "%" : "N/A"}` : "";
 
+    // Headlines context
+    const headlinesSection = topThemeHeadlines && (topThemeHeadlines as any[]).length > 0
+      ? `\n\nRECENT HEADLINES FOR TOP THEMES:\n${(topThemeHeadlines as any[]).map((h: any) => `- [${h.theme}] ${h.headline} (${h.source || "Unknown"})`).join("\n")}`
+      : "";
+
     const userMessage = `Date: ${date} | Themes analyzed: ${totalThemes} | Request ID: ${requestTimestamp}
 ${dispersionLine}${spyLine}
 TOP 8 THEMES (strongest momentum):
@@ -111,6 +121,7 @@ ${bottomLines}
 
 SINGLE-STOCK OUTLIER THEMES (one ticker >5% while theme avg <1%):
 ${outlierLines}
+${headlinesSection}
 
 Write a complete market analysis following your instructions.`;
 

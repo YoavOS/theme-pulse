@@ -146,6 +146,51 @@ export type Database = {
         }
         Relationships: []
       }
+      news_cache: {
+        Row: {
+          ai_summary: string | null
+          ai_summary_generated_at: string | null
+          ai_summary_theme: string | null
+          category: string | null
+          fetched_at: string | null
+          headline: string
+          id: string
+          published_at: string | null
+          source: string | null
+          summary: string | null
+          symbol: string | null
+          url: string | null
+        }
+        Insert: {
+          ai_summary?: string | null
+          ai_summary_generated_at?: string | null
+          ai_summary_theme?: string | null
+          category?: string | null
+          fetched_at?: string | null
+          headline: string
+          id?: string
+          published_at?: string | null
+          source?: string | null
+          summary?: string | null
+          symbol?: string | null
+          url?: string | null
+        }
+        Update: {
+          ai_summary?: string | null
+          ai_summary_generated_at?: string | null
+          ai_summary_theme?: string | null
+          category?: string | null
+          fetched_at?: string | null
+          headline?: string
+          id?: string
+          published_at?: string | null
+          source?: string | null
+          summary?: string | null
+          symbol?: string | null
+          url?: string | null
+        }
+        Relationships: []
+      }
       theme_breadth_history: {
         Row: {
           advancing: number | null

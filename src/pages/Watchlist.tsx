@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { Link } from "react-router-dom";
-import { ArrowLeft, Pin, Bell, Check, X, Plus, Zap } from "lucide-react";
+import { ArrowLeft, Pin, Bell, Check, X, Plus, Zap, Newspaper } from "lucide-react";
 import { useWatchlist, AlertConfig } from "@/hooks/useWatchlistContext";
 import { useLiveThemeData } from "@/hooks/useLiveThemeData";
 import ThemeCard from "@/components/ThemeCard";
@@ -9,11 +9,17 @@ import { ThemeData } from "@/data/themeData";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useSpyBenchmark, formatRS } from "@/hooks/useSpyBenchmark";
+import { useThemeNews } from "@/hooks/useThemeNews";
+import NewsPanel from "@/components/NewsPanel";
 
 export default function Watchlist() {
   const { pinned, togglePin, alerts, setAlert, getAlert } = useWatchlist();
   const { themes } = useLiveThemeData("Today");
   const { getRelativeStrength } = useSpyBenchmark();
+  const { news, fetchNews, getThemeNewsCount, getThemeArticles, hasNegativeNews, getAiSummary } = useThemeNews();
+  const [newsPanelTheme, setNewsPanelTheme] = useState<ThemeData | null>(null);
+  const [newsPanelSummary, setNewsPanelSummary] = useState<string | null>(null);
+  const [newsPanelSummaryLoading, setNewsPanelSummaryLoading] = useState(false);
   const [triggeredAlerts, setTriggeredAlerts] = useState<
     { themeName: string; message: string; type: "up" | "down" | "volume" }[]
   >([]);
@@ -25,6 +31,53 @@ export default function Watchlist() {
     () => themes.filter(t => pinned.includes(t.theme_name)),
     [themes, pinned]
   );
+
+  // Lazy-load news for pinned themes
+  useEffect(() => {
+    if (pinnedThemes.length > 0 && !news) {
+      const allSymbols = pinnedThemes.flatMap(t => t.tickers.filter(tk => !tk.skipped).map(tk => tk.symbol));
+      const unique = [...new Set(allSymbols)];
+      if (unique.length > 0) fetchNews(unique);
+    }
+  }, [pinnedThemes, news, fetchNews]);
+
+  const handleNewsBadgeClick = useCallback(async (theme: ThemeData) => {
+    setNewsPanelTheme(theme);
+    setNewsPanelSummary(null);
+    setNewsPanelSummaryLoading(true);
+    const articles = getThemeArticles(theme.tickers.map(t => t.symbol));
+    const summary = await getAiSummary(theme.theme_name, articles);
+    setNewsPanelSummary(summary || null);
+    setNewsPanelSummaryLoading(false);
+  }, [getThemeArticles, getAiSummary]);
+
+  // Breaking news check for pinned themes
+  useEffect(() => {
+    if (!news || pinnedThemes.length === 0) return;
+    const lastChecked = JSON.parse(localStorage.getItem("news_last_checked") || "{}");
+    const now = Date.now();
+
+    for (const theme of pinnedThemes) {
+      const symbols = theme.tickers.map(t => t.symbol);
+      const articles = getThemeArticles(symbols);
+      const lastCheck = lastChecked[theme.theme_name] || 0;
+
+      const newArticles = articles.filter(a =>
+        a.published_at && new Date(a.published_at).getTime() > lastCheck
+      );
+
+      if (newArticles.length > 0 && now - lastCheck > 30 * 60 * 1000) {
+        toast(`📰 New news for ${theme.theme_name}`, {
+          description: newArticles[0].headline.slice(0, 80),
+          duration: 8000,
+        });
+      }
+
+      lastChecked[theme.theme_name] = now;
+    }
+
+    localStorage.setItem("news_last_checked", JSON.stringify(lastChecked));
+  }, [news, pinnedThemes, getThemeArticles]);
 
   useEffect(() => {
     checkAlerts();
@@ -232,7 +285,13 @@ export default function Watchlist() {
               >
                 <div className="relative">
                   <div style={{ boxShadow: "0 0 0 1px hsla(152,100%,50%,0.2), 0 0 12px hsla(152,100%,50%,0.08)" }} className="rounded-lg">
-                    <ThemeCard theme={theme} index={i} />
+                    <ThemeCard
+                      theme={theme}
+                      index={i}
+                      newsCount={getThemeNewsCount(theme.tickers.map(t => t.symbol))}
+                      newsNegative={hasNegativeNews(theme.tickers.map(t => t.symbol))}
+                      onNewsBadgeClick={handleNewsBadgeClick}
+                    />
                   </div>
                   {/* vs SPY line below card */}
                   {theme.dataSource === "real" && (() => {
@@ -289,6 +348,17 @@ export default function Watchlist() {
         onOpenChange={setShowAddModal}
         themes={themes}
       />
+
+      {/* News Panel */}
+      {newsPanelTheme && (
+        <NewsPanel
+          themeName={newsPanelTheme.theme_name}
+          articles={getThemeArticles(newsPanelTheme.tickers.map(t => t.symbol))}
+          onClose={() => setNewsPanelTheme(null)}
+          aiSummary={newsPanelSummary}
+          isLoadingSummary={newsPanelSummaryLoading}
+        />
+      )}
     </div>
   );
 }
