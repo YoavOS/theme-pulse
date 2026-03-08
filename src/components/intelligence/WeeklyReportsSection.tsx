@@ -60,11 +60,28 @@ export default function WeeklyReportsSection() {
       });
 
       if (error) {
-        const msg = error.message || "Failed to generate weekly report";
-        toast.error(msg);
-        console.error("Weekly report error:", error);
+        // Edge function errors come through error.context for non-2xx
+        try {
+          const ctx = (error as any)?.context;
+          if (ctx && typeof ctx.json === "function") {
+            const body = await ctx.json();
+            if (body?.insufficient_data) {
+              toast.info(body.error);
+            } else {
+              toast.error(body?.error || error.message || "Failed to generate weekly report");
+            }
+          } else {
+            toast.error(error.message || "Failed to generate weekly report");
+          }
+        } catch {
+          toast.error(error.message || "Failed to generate weekly report");
+        }
       } else if (data?.error) {
-        toast.error(data.error);
+        if (data.insufficient_data) {
+          toast.info(data.error);
+        } else {
+          toast.error(data.error);
+        }
       } else {
         toast.success(`Weekly report generated for week ending ${currentFriday}`);
         await fetchReports();
