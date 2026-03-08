@@ -122,6 +122,25 @@ export default function Index() {
     }
   }, [activeTimeframe, isLive, isLoading, fetchLiveData, loadTimeframe]);
 
+  // Lazy-load news after themes are available
+  useEffect(() => {
+    if (isLive && allThemes.length > 0 && !newsLoading && !news) {
+      const allSymbols = allThemes.flatMap(t => t.tickers.filter(tk => !tk.skipped).map(tk => tk.symbol));
+      const unique = [...new Set(allSymbols)];
+      if (unique.length > 0) fetchNews(unique);
+    }
+  }, [isLive, allThemes, newsLoading, news, fetchNews]);
+
+  const handleNewsBadgeClick = useCallback(async (theme: ThemeData) => {
+    setNewsPanelTheme(theme);
+    setNewsPanelSummary(null);
+    setNewsPanelSummaryLoading(true);
+    const articles = getThemeArticles(theme.tickers.map(t => t.symbol));
+    const summary = await getAiSummary(theme.theme_name, articles);
+    setNewsPanelSummary(summary || null);
+    setNewsPanelSummaryLoading(false);
+  }, [getThemeArticles, getAiSummary]);
+
   const themes = useMemo(() => {
     if (showPlaceholders) return allThemes;
     return allThemes.filter(
