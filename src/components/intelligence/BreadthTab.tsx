@@ -549,6 +549,7 @@ export default function BreadthTab({
       <MarketBreadthGauge themes={themes} isLoading={isLoading} />
       <BreadthByTheme themes={themes} isLoading={isLoading} onThemeClick={handleThemeClick} />
       <BreadthHistory />
+      <DispersionHistory />
       <BreadthLeadersLaggards themes={themes} isLoading={isLoading} />
       <BreadthAlertsHistory />
       <ThemeDrilldownModal
