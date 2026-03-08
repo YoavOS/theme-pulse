@@ -711,9 +711,10 @@ export default function Index() {
         <NewsPanel
           themeName={newsPanelTheme.theme_name}
           articles={getThemeArticles(newsPanelTheme.tickers.map(t => t.symbol))}
-          onClose={() => setNewsPanelTheme(null)}
+          onClose={() => { setNewsPanelTheme(null); setNewsPanelSentiment(null); }}
           aiSummary={newsPanelSummary}
           isLoadingSummary={newsPanelSummaryLoading}
+          sentiment={newsPanelSentiment}
         />
       )}
     </div>
