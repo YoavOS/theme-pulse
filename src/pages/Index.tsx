@@ -321,6 +321,9 @@ export default function Index() {
                 <Zap size={14} />
               </button>
 
+              {/* Help button */}
+              <HelpButton />
+
               {/* Options dropdown */}
               <div className="relative">
                 <button
