@@ -195,6 +195,15 @@ export default function InsightsTab({
       const dispersionScore = calculateDispersion(themePerfs);
       const dispersionLabel = getDispersionShortLabel(dispersionScore);
 
+      // Collect news sentiment for themes
+      const themeNewsSentiment = themes
+        .map(t => {
+          const s = getThemeSentiment(t.themeName);
+          if (!s) return null;
+          return { name: t.themeName, newsSentiment: s.sentiment, newsScore: s.score };
+        })
+        .filter(Boolean);
+
       const payload = {
         date: new Date().toISOString().split("T")[0],
         totalThemes: themes.length,
@@ -207,6 +216,7 @@ export default function InsightsTab({
         spyPerf1d: spy.perf_1d,
         spyPerf1w: spy.perf_1w,
         spyPerf1m: spy.perf_1m,
+        themeNewsSentiment,
       };
 
       let data: any = null;
