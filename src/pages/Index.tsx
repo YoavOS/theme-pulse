@@ -122,14 +122,20 @@ export default function Index() {
     }
   }, [activeTimeframe, isLive, isLoading, fetchLiveData, loadTimeframe]);
 
-  // Lazy-load news after themes are available
+  // Prefetch news for top 5 themes only (not all 56)
   useEffect(() => {
-    if (isLive && allThemes.length > 0 && !newsLoading && !news) {
-      const allSymbols = allThemes.flatMap(t => t.tickers.filter(tk => !tk.skipped).map(tk => tk.symbol));
-      const unique = [...new Set(allSymbols)];
-      if (unique.length > 0) fetchNews(unique);
+    if (isLive && themes.length > 0) {
+      const sorted = [...themes].sort((a, b) => {
+        // Sort by absolute performance desc as proxy for momentum
+        return Math.abs(b.performance_pct) - Math.abs(a.performance_pct);
+      });
+      const top5 = sorted.slice(0, 5).map(t => ({
+        name: t.theme_name,
+        symbols: t.tickers.filter(tk => !tk.skipped).map(tk => tk.symbol),
+      }));
+      prefetchTopThemes(top5);
     }
-  }, [isLive, allThemes, newsLoading, news, fetchNews]);
+  }, [isLive, themes, prefetchTopThemes]);
 
   const handleNewsBadgeClick = useCallback(async (theme: ThemeData) => {
     setNewsPanelTheme(theme);
