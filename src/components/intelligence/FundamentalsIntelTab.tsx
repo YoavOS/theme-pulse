@@ -490,7 +490,7 @@ export default function FundamentalsIntelTab({
                 {q.themes.slice(0, 8).map(t => (
                   <span key={t.themeName} className="rounded bg-secondary/50 px-1.5 py-0.5 text-[10px] text-foreground" style={{ fontFamily: DM_MONO }}>
                     {t.themeName}
-                    <span className="ml-1 text-muted-foreground">F:{t.avgScore}</span>
+                    <span className="ml-1 text-muted-foreground">F:{t.avgScore ?? "—"}</span>
                   </span>
                 ))}
                 {q.themes.length > 8 && (
