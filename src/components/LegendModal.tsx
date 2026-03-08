@@ -156,27 +156,27 @@ const breadthIndicators: LegendItem[] = [
 const scoringExplained: LegendItem[] = [
   {
     label: "Momentum Score",
-    labelStyle: `<div class="flex items-center gap-1"><div class="h-1.5 w-12 rounded-full bg-[rgba(255,255,255,0.06)]"><div class="h-full w-3/4 rounded-full bg-[#00f5c4]"></div></div><span class="text-xs text-muted-foreground" style="font-family: ${DM_MONO}">75</span></div>`,
+    labelStyle: `<div class="flex items-center gap-1"><div class="h-1.5 w-12 rounded-full bg-[rgba(255,255,255,0.06)]"><div class="h-full w-3/4 rounded-full bg-[#00f5c4]"></div></div><span class="text-sm text-muted-foreground" style="font-family: ${DM_MONO}">75</span></div>`,
     explanation: "Weighted score: 20% today + 35% this week + 45% this month, adjusted for volume. Higher = stronger sustained momentum. Normalized 0-100 across all themes.",
   },
   {
     label: "Section: Strong",
-    labelStyle: `<span class="text-[10px] font-semibold uppercase tracking-widest text-[#00f5c4]" style="font-family: ${SYNE}">Strong</span>`,
+    labelStyle: `<span class="text-xs font-semibold uppercase tracking-widest text-[#00f5c4]" style="font-family: ${SYNE}">Strong</span>`,
     explanation: "Themes with positive average daily performance. These are outperforming on the selected timeframe.",
   },
   {
     label: "Section: Neutral",
-    labelStyle: `<span class="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground" style="font-family: ${SYNE}">Neutral</span>`,
+    labelStyle: `<span class="text-xs font-semibold uppercase tracking-widest text-muted-foreground" style="font-family: ${SYNE}">Neutral</span>`,
     explanation: "Themes with near-zero performance (between -0.5% and +0.5%). No clear directional bias on the selected timeframe.",
   },
   {
     label: "Section: Weak",
-    labelStyle: `<span class="text-[10px] font-semibold uppercase tracking-widest text-[#f5a623]" style="font-family: ${SYNE}">Weak</span>`,
+    labelStyle: `<span class="text-xs font-semibold uppercase tracking-widest text-[#f5a623]" style="font-family: ${SYNE}">Weak</span>`,
     explanation: "Themes with negative average daily performance. These are underperforming on the selected timeframe.",
   },
   {
     label: "7D Sparkline",
-    labelStyle: `<span class="text-[10px] text-muted-foreground" style="font-family: ${DM_MONO}">7D chart</span>`,
+    labelStyle: `<span class="text-xs text-muted-foreground" style="font-family: ${DM_MONO}">7D chart</span>`,
     explanation: "Mini chart showing the primary ticker's closing price over the last 7 trading days. Green = trending up, amber = trending down.",
   },
   {
