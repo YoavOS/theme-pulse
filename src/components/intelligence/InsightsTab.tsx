@@ -193,6 +193,9 @@ export default function InsightsTab({
         outlierThemes,
         dispersionScore,
         dispersionLabel,
+        spyPerf1d: spy.perf_1d,
+        spyPerf1w: spy.perf_1w,
+        spyPerf1m: spy.perf_1m,
       };
 
       let data: any = null;
