@@ -141,11 +141,13 @@ export default function Index() {
     setNewsPanelTheme(theme);
     setNewsPanelSummary(null);
     setNewsPanelSummaryLoading(true);
-    const articles = getThemeArticles(theme.tickers.map(t => t.symbol));
+    // Fetch on demand if not cached
+    const symbols = theme.tickers.map(t => t.symbol);
+    const articles = await fetchThemeNews(symbols);
     const summary = await getAiSummary(theme.theme_name, articles);
     setNewsPanelSummary(summary || null);
     setNewsPanelSummaryLoading(false);
-  }, [getThemeArticles, getAiSummary]);
+  }, [fetchThemeNews, getAiSummary]);
 
   const themes = useMemo(() => {
     if (showPlaceholders) return allThemes;
