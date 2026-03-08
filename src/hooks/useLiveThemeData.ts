@@ -124,10 +124,13 @@ export function useLiveThemeData() {
       for (const t of scanThemes) {
         themeMap.set(t.theme_name, { ...t, dataSource: "real", lastUpdated: new Date().toISOString() });
       }
-      // Fill in any missing demo themes
-      for (const d of demoThemes) {
-        if (!themeMap.has(d.theme_name)) {
-          themeMap.set(d.theme_name, d);
+      // Only fill demo themes if we have NO real data yet
+      const hasAnyReal = Array.from(themeMap.values()).some(t => t.dataSource === "real");
+      if (!hasAnyReal) {
+        for (const d of demoThemes) {
+          if (!themeMap.has(d.theme_name)) {
+            themeMap.set(d.theme_name, d);
+          }
         }
       }
 
