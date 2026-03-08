@@ -47,11 +47,12 @@ export default function Watchlist() {
     setNewsPanelTheme(theme);
     setNewsPanelSummary(null);
     setNewsPanelSummaryLoading(true);
-    const articles = getThemeArticles(theme.tickers.map(t => t.symbol));
+    const symbols = theme.tickers.map(t => t.symbol);
+    const articles = await fetchThemeNews(symbols);
     const summary = await getAiSummary(theme.theme_name, articles);
     setNewsPanelSummary(summary || null);
     setNewsPanelSummaryLoading(false);
-  }, [getThemeArticles, getAiSummary]);
+  }, [fetchThemeNews, getAiSummary]);
 
   // Breaking news check for pinned themes
   useEffect(() => {
