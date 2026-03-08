@@ -76,6 +76,13 @@ export default function ThemeCard({ theme, index, onClick, fetchVolume, getTheme
   const tickerSymbols = useMemo(() => theme.tickers.map(t => t.symbol), [theme.tickers]);
   const signals = getThemeSignals ? getThemeSignals(tickerSymbols) : null;
 
+  // Trigger volume fetch from ThemeCard so data loads regardless of DemandSignals render state
+  useEffect(() => {
+    if (fetchVolume && tickerSymbols.length > 0) {
+      fetchVolume(tickerSymbols);
+    }
+  }, [tickerSymbols.join(","), fetchVolume]);
+
   // Sort tickers: non-skipped by absolute % desc, skipped at end. Show top 5.
   const sorted = [...theme.tickers].sort((a, b) => {
     if (a.skipped && !b.skipped) return 1;
