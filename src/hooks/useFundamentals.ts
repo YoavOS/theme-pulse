@@ -25,13 +25,32 @@ export interface FundamentalsData {
   fundamental_score: number | null;
   ai_summary: string | null;
   last_updated: string | null;
+  // Valuation
+  pe_ratio: number | null;
+  forward_pe: number | null;
+  ps_ratio: number | null;
+  pb_ratio: number | null;
+  ev_ebitda: number | null;
+  peg_ratio: number | null;
+  valuation_score: number | null;
+  valuation_label: string | null;
+  // Smart Money
+  institutional_ownership_pct: number | null;
+  institutional_change: number | null;
+  top_institutions: any[] | null;
+  insider_sentiment_score: number | null;
+  insider_sentiment_label: string | null;
+  recent_insider_buys: number | null;
+  recent_insider_sells: number | null;
+  smart_money_score: number | null;
+  smart_money_label: string | null;
 }
 
 interface FundamentalsCache {
   [key: string]: { data: Record<string, FundamentalsData>; fetchedAt: number };
 }
 
-const CACHE_TTL = 24 * 60 * 60 * 1000; // 24 hours
+const CACHE_TTL = 24 * 60 * 60 * 1000;
 
 export function getScoreLabel(score: number): { text: string; color: string } {
   if (score >= 80) return { text: "Excellent fundamentals", color: "text-[#00f5c4]" };
@@ -58,10 +77,29 @@ export function getStockTypeInfo(type: string | null): { emoji: string; label: s
   }
 }
 
+export function getValuationColor(label: string | null): string {
+  switch (label) {
+    case "Undervalued": return "text-[#00f5c4]";
+    case "Fairly valued": return "text-gain-medium";
+    case "Premium valuation": return "text-[#f5a623]";
+    case "Expensive":
+    case "Very expensive": return "text-destructive";
+    case "Not yet profitable": return "text-[#f5a623]";
+    default: return "text-muted-foreground";
+  }
+}
+
+export function getSmartMoneyColor(score: number | null): string {
+  if (score == null) return "text-muted-foreground";
+  if (score > 75) return "text-[#00f5c4]";
+  if (score > 50) return "text-gain-medium";
+  if (score > 25) return "text-[#f5a623]";
+  return "text-muted-foreground";
+}
+
 export function getMetricDot(value: number | null, thresholds: { green: number; yellow: number; reverse?: boolean }): string {
   if (value === null) return "bg-muted-foreground/30";
   if (thresholds.reverse) {
-    // Lower is better (e.g., debt_to_equity)
     if (value <= thresholds.green) return "bg-gain-medium";
     if (value <= thresholds.yellow) return "bg-[#facc15]";
     return "bg-destructive";
@@ -128,7 +166,6 @@ export function useFundamentals() {
     return loading.has(getCacheKey(symbols));
   }, [loading, getCacheKey]);
 
-  // Get average fundamental score for a theme from cache
   const getThemeFundamentalScore = useCallback((symbols: string[]): number | null => {
     const data = getCachedFundamentals(symbols);
     if (!data) return null;
@@ -139,7 +176,6 @@ export function useFundamentals() {
     return Math.round(scores.reduce((a, b) => a + b, 0) / scores.length);
   }, [getCachedFundamentals]);
 
-  // Prefetch fundamentals for top themes (background)
   const prefetchTopThemes = useCallback(async (
     themes: { symbols: string[] }[]
   ) => {
