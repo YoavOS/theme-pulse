@@ -88,12 +88,14 @@ export default function ThemeDrilldownModal({
   onOpenChange,
   defaultSortKey,
   newsArticles,
+  fetchNewsForTheme,
 }: {
   theme: ThemeData | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   defaultSortKey?: SortKey;
   newsArticles?: NewsArticle[];
+  fetchNewsForTheme?: (symbols: string[]) => Promise<NewsArticle[]>;
 }) {
    const { isPinned, togglePin } = useWatchlist();
    const navigate = useNavigate();
@@ -102,6 +104,8 @@ export default function ThemeDrilldownModal({
    const [extras, setExtras] = useState<Record<string, TickerExtra>>({});
    const { spy, getTickerRS } = useSpyBenchmark();
    const [activeTab, setActiveTab] = useState<"tickers" | "news">("tickers");
+   const [localNews, setLocalNews] = useState<NewsArticle[]>([]);
+   const [newsLoading, setNewsLoading] = useState(false);
 
   useEffect(() => {
     if (!theme || !open) return;
