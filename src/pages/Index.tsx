@@ -677,63 +677,93 @@ export default function Index() {
           </div>
         )}
 
-        {/* ─── STRONG THEMES ─────────────────────────── */}
-        <Section
-          icon={<TrendingUp size={18} />}
-          title="Strong / Best Performing"
-          accent="primary"
-          themes={strong}
-          onCardClick={setDrilldownTheme}
-          fetchVolume={fetchVolume}
-          getThemeSignals={getThemeSignals}
-          dimmedThemes={searchMatchSet}
-          getNewsCount={getThemeNewsCount}
-          hasNegativeNews={hasNegativeNews}
-          onNewsBadgeClick={handleNewsBadgeClick}
-          getThemeFundamentalScore={getThemeFundamentalScore}
-          onFundamentalBadgeClick={(t) => { setDrilldownTheme(t); setDrilldownDefaultTab("fundamentals"); }}
-          getThemeSentiment={getThemeSentiment}
-        />
+        <div className="transition-opacity duration-200" key={dashboardView}>
+          {dashboardView === "cards" && (
+            <>
+              <Section
+                icon={<TrendingUp size={18} />}
+                title="Strong / Best Performing"
+                accent="primary"
+                themes={strong}
+                onCardClick={setDrilldownTheme}
+                fetchVolume={fetchVolume}
+                getThemeSignals={getThemeSignals}
+                dimmedThemes={searchMatchSet}
+                getNewsCount={getThemeNewsCount}
+                hasNegativeNews={hasNegativeNews}
+                onNewsBadgeClick={handleNewsBadgeClick}
+                getThemeFundamentalScore={getThemeFundamentalScore}
+                onFundamentalBadgeClick={(t) => { setDrilldownTheme(t); setDrilldownDefaultTab("fundamentals"); }}
+                getThemeSentiment={getThemeSentiment}
+              />
+              {neutral.length > 0 && (
+                <Section
+                  icon={<TrendingUp size={18} />}
+                  title="Neutral / Mixed"
+                  accent="muted"
+                  themes={neutral}
+                  onCardClick={setDrilldownTheme}
+                  fetchVolume={fetchVolume}
+                  getThemeSignals={getThemeSignals}
+                  dimmedThemes={searchMatchSet}
+                  getNewsCount={getThemeNewsCount}
+                  hasNegativeNews={hasNegativeNews}
+                  onNewsBadgeClick={handleNewsBadgeClick}
+                  getThemeFundamentalScore={getThemeFundamentalScore}
+                  onFundamentalBadgeClick={(t) => { setDrilldownTheme(t); setDrilldownDefaultTab("fundamentals"); }}
+                  getThemeSentiment={getThemeSentiment}
+                />
+              )}
+              {weak.length > 0 && (
+                <Section
+                  icon={<TrendingDown size={18} />}
+                  title="Weaker / Lagging"
+                  accent="destructive"
+                  themes={weak}
+                  onCardClick={setDrilldownTheme}
+                  fetchVolume={fetchVolume}
+                  getThemeSignals={getThemeSignals}
+                  dimmedThemes={searchMatchSet}
+                  getNewsCount={getThemeNewsCount}
+                  hasNegativeNews={hasNegativeNews}
+                  onNewsBadgeClick={handleNewsBadgeClick}
+                  getThemeFundamentalScore={getThemeFundamentalScore}
+                  onFundamentalBadgeClick={(t) => { setDrilldownTheme(t); setDrilldownDefaultTab("fundamentals"); }}
+                  getThemeSentiment={getThemeSentiment}
+                />
+              )}
+            </>
+          )}
 
-        {/* ─── NEUTRAL ───────────────────────────────── */}
-        {neutral.length > 0 && (
-          <Section
-            icon={<TrendingUp size={18} />}
-            title="Neutral / Mixed"
-            accent="muted"
-            themes={neutral}
-            onCardClick={setDrilldownTheme}
-            fetchVolume={fetchVolume}
-            getThemeSignals={getThemeSignals}
-            dimmedThemes={searchMatchSet}
-            getNewsCount={getThemeNewsCount}
-            hasNegativeNews={hasNegativeNews}
-            onNewsBadgeClick={handleNewsBadgeClick}
-            getThemeFundamentalScore={getThemeFundamentalScore}
-            onFundamentalBadgeClick={(t) => { setDrilldownTheme(t); setDrilldownDefaultTab("fundamentals"); }}
-            getThemeSentiment={getThemeSentiment}
-          />
-        )}
+          {dashboardView === "list" && (
+            <RankedListView
+              themes={themes}
+              onCardClick={setDrilldownTheme}
+              getThemeSignals={getThemeSignals}
+              dimmedThemes={searchMatchSet}
+              getNewsCount={getThemeNewsCount}
+              getThemeFundamentalScore={getThemeFundamentalScore}
+              getThemeSentiment={getThemeSentiment}
+            />
+          )}
 
-        {/* ─── WEAK THEMES ───────────────────────────── */}
-        {weak.length > 0 && (
-          <Section
-            icon={<TrendingDown size={18} />}
-            title="Weaker / Lagging"
-            accent="destructive"
-            themes={weak}
-            onCardClick={setDrilldownTheme}
-            fetchVolume={fetchVolume}
-            getThemeSignals={getThemeSignals}
-            dimmedThemes={searchMatchSet}
-            getNewsCount={getThemeNewsCount}
-            hasNegativeNews={hasNegativeNews}
-            onNewsBadgeClick={handleNewsBadgeClick}
-            getThemeFundamentalScore={getThemeFundamentalScore}
-            onFundamentalBadgeClick={(t) => { setDrilldownTheme(t); setDrilldownDefaultTab("fundamentals"); }}
-            getThemeSentiment={getThemeSentiment}
-          />
-        )}
+          {dashboardView === "heatmap" && (
+            <HeatmapGridView
+              themes={themes}
+              onCardClick={setDrilldownTheme}
+              getThemeSignals={getThemeSignals}
+              dimmedThemes={searchMatchSet}
+            />
+          )}
+
+          {dashboardView === "bubble" && (
+            <DashboardBubbleView
+              themes={themes}
+              getThemeSignals={getThemeSignals}
+              dimmedThemes={searchMatchSet}
+            />
+          )}
+        </div>
       </main>
 
       {/* ─── FOOTER ──────────────────────────────────── */}
