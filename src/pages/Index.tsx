@@ -548,11 +548,13 @@ function Section({
   title,
   accent,
   themes,
+  onCardClick,
 }: {
   icon: React.ReactNode;
   title: string;
   accent: "primary" | "destructive" | "muted";
   themes: ThemeData[];
+  onCardClick?: (theme: ThemeData) => void;
 }) {
   const accentColor =
     accent === "primary"
@@ -574,7 +576,7 @@ function Section({
       </div>
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 min-[1800px]:grid-cols-4">
         {themes.map((t, i) => (
-          <ThemeCard key={t.theme_name} theme={t} index={i} />
+          <ThemeCard key={t.theme_name} theme={t} index={i} onClick={onCardClick} />
         ))}
       </div>
     </section>
