@@ -82,6 +82,7 @@ const fallback: WatchlistContextType = {
   getAlert: () => ({ up: null, down: null }),
 };
 
+// Safe fallback — never throws, never causes blank screen
 export function useWatchlist(): WatchlistContextType {
   const ctx = useContext(WatchlistContext);
   if (!ctx) {

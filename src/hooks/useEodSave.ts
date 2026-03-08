@@ -15,6 +15,7 @@ export interface EodStatus {
   } | null;
   fridayDate: string | null;
   fridayAlreadySaved: boolean;
+  fridayCompletedAt: string | null;
 }
 
 export interface EodSaveProgress {
