@@ -159,14 +159,14 @@ export default function FundamentalsIntelTab({
       let av: number | string, bv: number | string;
       switch (sortKey) {
         case "name": return sortDir === "asc" ? a.themeName.localeCompare(b.themeName) : b.themeName.localeCompare(a.themeName);
-        case "score": av = a.avgScore; bv = b.avgScore; break;
+        case "score": av = a.avgScore ?? -1; bv = b.avgScore ?? -1; break;
         case "growth": av = a.avgRevenueGrowth ?? -999; bv = b.avgRevenueGrowth ?? -999; break;
         case "margin": av = a.avgNetMargin ?? -999; bv = b.avgNetMargin ?? -999; break;
         case "debt": av = a.avgDebtToEquity ?? 999; bv = b.avgDebtToEquity ?? 999; break;
         case "type": return sortDir === "asc" ? a.dominantStockType.localeCompare(b.dominantStockType) : b.dominantStockType.localeCompare(a.dominantStockType);
         case "smartMoney": av = a.avgSmartMoneyScore ?? -1; bv = b.avgSmartMoneyScore ?? -1; break;
         case "instPct": av = a.avgInstitutionalPct ?? -1; bv = b.avgInstitutionalPct ?? -1; break;
-        default: av = a.avgScore; bv = b.avgScore;
+        default: av = a.avgScore ?? -1; bv = b.avgScore ?? -1;
       }
       return sortDir === "asc" ? (av as number) - (bv as number) : (bv as number) - (av as number);
     });
