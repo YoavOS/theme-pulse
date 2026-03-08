@@ -348,6 +348,17 @@ export default function Watchlist() {
         onOpenChange={setShowAddModal}
         themes={themes}
       />
+
+      {/* News Panel */}
+      {newsPanelTheme && (
+        <NewsPanel
+          themeName={newsPanelTheme.theme_name}
+          articles={getThemeArticles(newsPanelTheme.tickers.map(t => t.symbol))}
+          onClose={() => setNewsPanelTheme(null)}
+          aiSummary={newsPanelSummary}
+          isLoadingSummary={newsPanelSummaryLoading}
+        />
+      )}
     </div>
   );
 }
