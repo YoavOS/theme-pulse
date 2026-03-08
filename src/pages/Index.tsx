@@ -39,6 +39,10 @@ export default function Index() {
   const [dashboardView, setDashboardView] = useState<"cards" | "list" | "heatmap" | "bubble">(() => {
     return (localStorage.getItem("dashboardView") as any) || "cards";
   });
+  const switchView = useCallback((v: "cards" | "list" | "heatmap" | "bubble") => {
+    setDashboardView(v);
+    localStorage.setItem("dashboardView", v);
+  }, []);
   const [activeTimeframe, setActiveTimeframe] = useState<string>("Today");
   const [showPlaceholders, setShowPlaceholders] = useState(false);
   const [selectedThemes, setSelectedThemes] = useState<Set<string>>(new Set());
