@@ -63,6 +63,7 @@ export type Database = {
         Row: {
           completed_at: string | null
           date: string
+          dispersion_score: number | null
           failed_count: number | null
           failed_symbols: string[] | null
           id: string
@@ -74,6 +75,7 @@ export type Database = {
         Insert: {
           completed_at?: string | null
           date: string
+          dispersion_score?: number | null
           failed_count?: number | null
           failed_symbols?: string[] | null
           id?: string
@@ -85,6 +87,7 @@ export type Database = {
         Update: {
           completed_at?: string | null
           date?: string
+          dispersion_score?: number | null
           failed_count?: number | null
           failed_symbols?: string[] | null
           id?: string
