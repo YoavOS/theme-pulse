@@ -71,7 +71,7 @@ function BarRow({
             {/* Perf + breadth at bar end */}
             <div className="ml-1.5 flex items-baseline gap-1 shrink-0">
               <span
-                className="text-xs font-medium"
+                className="text-[15px] font-bold"
                 style={{ fontFamily: DM_MONO, color: barColor }}
               >
                 {sign}{d.perf.toFixed(2)}%
