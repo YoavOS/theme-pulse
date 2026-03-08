@@ -7,6 +7,8 @@ import ValidateTickersDialog from "@/components/ValidateTickersDialog";
 import { RefreshCw, Download, TrendingUp, TrendingDown, Wifi, WifiOff, Loader2, Settings, ScanLine, X, ShieldCheck, Save, Zap, Calendar, Brain, Bookmark, Bell, ChevronDown, LayoutDashboard, AlertTriangle } from "lucide-react";
 import DemoDataConfirmDialog from "@/components/DemoDataConfirmDialog";
 import { getCacheAge } from "@/hooks/useScanCache";
+import { useDispersion, getDispersionColorClass } from "@/hooks/useDispersion";
+import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip";
 import { useFullScan } from "@/hooks/useFullScan";
 import { useEodSave } from "@/hooks/useEodSave";
 import { useSaveEodFromScan } from "@/hooks/useSaveEodFromScan";
