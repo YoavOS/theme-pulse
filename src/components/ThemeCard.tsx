@@ -80,6 +80,9 @@ export default function ThemeCard({ theme, index, onClick, fetchVolume, getTheme
   const breadthEvent = useMemo(() => hasThemeBreadthEvent(theme.theme_name), [theme.theme_name]);
   const { isThemeDryingUp } = useVolumeDryUp();
   const isDryingUp = useMemo(() => isThemeDryingUp(theme.theme_name), [theme.theme_name, isThemeDryingUp]);
+  const { getRelativeStrength } = useSpyBenchmark();
+  const rs = useMemo(() => getRelativeStrength(theme.performance_pct), [theme.performance_pct, getRelativeStrength]);
+  const rsFormatted = formatRS(rs);
   const validTickers = theme.tickers.filter(t => !t.skipped);
   const naTickers = theme.tickers.filter(t => t.skipped);
   const total = validTickers.length;
