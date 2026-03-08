@@ -188,6 +188,22 @@ export default function OverviewTab({
   isLoading: boolean;
 }) {
   const [sortMode, setSortMode] = useState<SortMode>("momentum");
+  const [highlightId, setHighlightId] = useState<string | null>(null);
+  const rowRefs = useRef<Map<string, HTMLTableRowElement>>(new Map());
+
+  const handleSelectTheme = useCallback((themeId: string) => {
+    const el = rowRefs.current.get(themeId);
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+      setHighlightId(themeId);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!highlightId) return;
+    const timer = setTimeout(() => setHighlightId(null), 2000);
+    return () => clearTimeout(timer);
+  }, [highlightId]);
 
   const enriched = useMemo(() => {
     if (themes.length === 0) return [];
