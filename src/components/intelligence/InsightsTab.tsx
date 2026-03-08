@@ -105,7 +105,7 @@ export default function InsightsTab({
 }) {
   const { dryUpThemes } = useVolumeDryUp();
   const { spy } = useSpyBenchmark();
-  const { news, fetchNews, marketNews, getAiSummary } = useThemeNews();
+  const { fetchMarketNews, marketNews, getAiSummary } = useThemeNews();
   const [marketSummary, setMarketSummary] = useState<string | null>(null);
   const [marketSummaryLoading, setMarketSummaryLoading] = useState(false);
   const [narrative, setNarrative] = useState<NarrativeState | null>(null);
@@ -118,6 +118,11 @@ export default function InsightsTab({
     const id = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(id);
   }, []);
+
+  // Fetch market news lazily when Insights tab renders
+  useEffect(() => {
+    fetchMarketNews();
+  }, [fetchMarketNews]);
 
   const isCoolingDown = now < cooldownEnd;
   const cooldownSecs = Math.ceil((cooldownEnd - now) / 1000);

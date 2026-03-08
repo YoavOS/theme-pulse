@@ -88,12 +88,14 @@ export default function ThemeDrilldownModal({
   onOpenChange,
   defaultSortKey,
   newsArticles,
+  fetchNewsForTheme,
 }: {
   theme: ThemeData | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   defaultSortKey?: SortKey;
   newsArticles?: NewsArticle[];
+  fetchNewsForTheme?: (symbols: string[]) => Promise<NewsArticle[]>;
 }) {
    const { isPinned, togglePin } = useWatchlist();
    const navigate = useNavigate();
@@ -102,6 +104,8 @@ export default function ThemeDrilldownModal({
    const [extras, setExtras] = useState<Record<string, TickerExtra>>({});
    const { spy, getTickerRS } = useSpyBenchmark();
    const [activeTab, setActiveTab] = useState<"tickers" | "news">("tickers");
+   const [localNews, setLocalNews] = useState<NewsArticle[]>([]);
+   const [newsLoading, setNewsLoading] = useState(false);
 
   useEffect(() => {
     if (!theme || !open) return;
@@ -325,7 +329,16 @@ export default function ThemeDrilldownModal({
             Tickers
           </button>
           <button
-            onClick={() => setActiveTab("news")}
+            onClick={async () => {
+              setActiveTab("news");
+              // Fetch on-demand if no articles cached
+              if ((!newsArticles || newsArticles.length === 0) && fetchNewsForTheme && theme && !newsLoading) {
+                setNewsLoading(true);
+                const fetched = await fetchNewsForTheme(theme.tickers.map(t => t.symbol));
+                setLocalNews(fetched);
+                setNewsLoading(false);
+              }
+            }}
             className={`px-3 py-2 text-xs font-semibold transition-colors inline-flex items-center gap-1.5 ${
               activeTab === "news" ? "text-foreground border-b-2 border-primary" : "text-muted-foreground hover:text-foreground"
             }`}
@@ -481,7 +494,15 @@ export default function ThemeDrilldownModal({
         </div>
         ) : (
           <div className="max-h-[400px] overflow-auto px-6 pb-2 pt-2">
-            <NewsTabContent articles={newsArticles || []} />
+            {newsLoading ? (
+              <div className="space-y-2 py-4">
+                <div className="h-3 w-full rounded bg-secondary animate-pulse" />
+                <div className="h-3 w-[90%] rounded bg-secondary animate-pulse" />
+                <div className="h-3 w-[75%] rounded bg-secondary animate-pulse" />
+              </div>
+            ) : (
+              <NewsTabContent articles={(newsArticles && newsArticles.length > 0) ? newsArticles : localNews} />
+            )}
           </div>
         )}
 

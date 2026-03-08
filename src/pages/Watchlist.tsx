@@ -16,7 +16,7 @@ export default function Watchlist() {
   const { pinned, togglePin, alerts, setAlert, getAlert } = useWatchlist();
   const { themes } = useLiveThemeData("Today");
   const { getRelativeStrength } = useSpyBenchmark();
-  const { news, fetchNews, getThemeNewsCount, getThemeArticles, hasNegativeNews, getAiSummary } = useThemeNews();
+  const { fetchThemeNews, getThemeNewsCount, getThemeArticles, hasNegativeNews, getAiSummary, prefetchTopThemes, news } = useThemeNews();
   const [newsPanelTheme, setNewsPanelTheme] = useState<ThemeData | null>(null);
   const [newsPanelSummary, setNewsPanelSummary] = useState<string | null>(null);
   const [newsPanelSummaryLoading, setNewsPanelSummaryLoading] = useState(false);
@@ -32,24 +32,27 @@ export default function Watchlist() {
     [themes, pinned]
   );
 
-  // Lazy-load news for pinned themes
+  // Prefetch news for pinned themes (top 5 only)
   useEffect(() => {
-    if (pinnedThemes.length > 0 && !news) {
-      const allSymbols = pinnedThemes.flatMap(t => t.tickers.filter(tk => !tk.skipped).map(tk => tk.symbol));
-      const unique = [...new Set(allSymbols)];
-      if (unique.length > 0) fetchNews(unique);
+    if (pinnedThemes.length > 0) {
+      const top5 = pinnedThemes.slice(0, 5).map(t => ({
+        name: t.theme_name,
+        symbols: t.tickers.filter(tk => !tk.skipped).map(tk => tk.symbol),
+      }));
+      prefetchTopThemes(top5);
     }
-  }, [pinnedThemes, news, fetchNews]);
+  }, [pinnedThemes, prefetchTopThemes]);
 
   const handleNewsBadgeClick = useCallback(async (theme: ThemeData) => {
     setNewsPanelTheme(theme);
     setNewsPanelSummary(null);
     setNewsPanelSummaryLoading(true);
-    const articles = getThemeArticles(theme.tickers.map(t => t.symbol));
+    const symbols = theme.tickers.map(t => t.symbol);
+    const articles = await fetchThemeNews(symbols);
     const summary = await getAiSummary(theme.theme_name, articles);
     setNewsPanelSummary(summary || null);
     setNewsPanelSummaryLoading(false);
-  }, [getThemeArticles, getAiSummary]);
+  }, [fetchThemeNews, getAiSummary]);
 
   // Breaking news check for pinned themes
   useEffect(() => {

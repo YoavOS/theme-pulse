@@ -42,7 +42,7 @@ export default function Index() {
   const [showDemoConfirm, setShowDemoConfirm] = useState(false);
   const { pinned, alerts, getAlert } = useWatchlist();
   const { fetchVolume, getThemeSignals } = useVolumeData();
-  const { news, isLoading: newsLoading, fetchNews, getThemeNewsCount, getThemeArticles, hasNegativeNews, getAiSummary, marketNews } = useThemeNews();
+  const { fetchThemeNews, prefetchTopThemes, prefetchedThemes, getThemeNewsCount, getThemeArticles, hasNegativeNews, getAiSummary, marketNews } = useThemeNews();
   const [newsPanelTheme, setNewsPanelTheme] = useState<ThemeData | null>(null);
   const [newsPanelSummary, setNewsPanelSummary] = useState<string | null>(null);
   const [newsPanelSummaryLoading, setNewsPanelSummaryLoading] = useState(false);
@@ -122,24 +122,16 @@ export default function Index() {
     }
   }, [activeTimeframe, isLive, isLoading, fetchLiveData, loadTimeframe]);
 
-  // Lazy-load news after themes are available
-  useEffect(() => {
-    if (isLive && allThemes.length > 0 && !newsLoading && !news) {
-      const allSymbols = allThemes.flatMap(t => t.tickers.filter(tk => !tk.skipped).map(tk => tk.symbol));
-      const unique = [...new Set(allSymbols)];
-      if (unique.length > 0) fetchNews(unique);
-    }
-  }, [isLive, allThemes, newsLoading, news, fetchNews]);
-
   const handleNewsBadgeClick = useCallback(async (theme: ThemeData) => {
     setNewsPanelTheme(theme);
     setNewsPanelSummary(null);
     setNewsPanelSummaryLoading(true);
-    const articles = getThemeArticles(theme.tickers.map(t => t.symbol));
+    const symbols = theme.tickers.map(t => t.symbol);
+    const articles = await fetchThemeNews(symbols);
     const summary = await getAiSummary(theme.theme_name, articles);
     setNewsPanelSummary(summary || null);
     setNewsPanelSummaryLoading(false);
-  }, [getThemeArticles, getAiSummary]);
+  }, [fetchThemeNews, getAiSummary]);
 
   const themes = useMemo(() => {
     if (showPlaceholders) return allThemes;
@@ -147,6 +139,18 @@ export default function Index() {
       (t) => t.tickers.length > 0 || t.up_count > 0 || t.down_count > 0
     );
   }, [allThemes, showPlaceholders]);
+
+  // Prefetch news for top 5 themes only (not all 56)
+  useEffect(() => {
+    if (isLive && themes.length > 0) {
+      const sorted = [...themes].sort((a, b) => Math.abs(b.performance_pct) - Math.abs(a.performance_pct));
+      const top5 = sorted.slice(0, 5).map(t => ({
+        name: t.theme_name,
+        symbols: t.tickers.filter(tk => !tk.skipped).map(tk => tk.symbol),
+      }));
+      prefetchTopThemes(top5);
+    }
+  }, [isLive, themes, prefetchTopThemes]);
 
   const strong = themes.filter((t) => t.category === "Strong");
   const neutral = themes.filter((t) => t.category === "Neutral");
@@ -685,7 +689,7 @@ export default function Index() {
       </footer>
 
       <ValidateTickersDialog open={showValidateDialog} onOpenChange={setShowValidateDialog} />
-      <ThemeDrilldownModal theme={drilldownTheme} open={!!drilldownTheme} onOpenChange={(o) => { if (!o) setDrilldownTheme(null); }} newsArticles={drilldownTheme ? getThemeArticles(drilldownTheme.tickers.map(t => t.symbol)) : []} />
+      <ThemeDrilldownModal theme={drilldownTheme} open={!!drilldownTheme} onOpenChange={(o) => { if (!o) setDrilldownTheme(null); }} newsArticles={drilldownTheme ? getThemeArticles(drilldownTheme.tickers.map(t => t.symbol)) : []} fetchNewsForTheme={fetchThemeNews} />
 
       {/* News Panel (slide-in) */}
       {newsPanelTheme && (

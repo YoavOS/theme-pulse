@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect } from "react";
+import { useState, useCallback, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 
 export interface NewsArticle {
@@ -9,13 +9,6 @@ export interface NewsArticle {
   url: string;
   source: string | null;
   published_at: string | null;
-}
-
-interface NewsState {
-  bySymbol: Record<string, NewsArticle[]>;
-  market: NewsArticle[];
-  totalArticles: number;
-  fetchedAt: string | null;
 }
 
 interface AiSummaryCache {
@@ -30,88 +23,156 @@ export function hasNegativeNews(articles: NewsArticle[]): boolean {
   );
 }
 
-export function getThemeNewsCount(
-  newsState: NewsState | null,
-  symbols: string[]
-): number {
-  if (!newsState) return 0;
-  const oneDayAgo = Date.now() - 24 * 60 * 60 * 1000;
-  let count = 0;
-  for (const sym of symbols) {
-    const articles = newsState.bySymbol[sym] || [];
-    count += articles.filter(a =>
-      a.published_at && new Date(a.published_at).getTime() > oneDayAgo
-    ).length;
-  }
-  return count;
-}
-
-export function getThemeArticles(
-  newsState: NewsState | null,
-  symbols: string[]
-): NewsArticle[] {
-  if (!newsState) return [];
-  const articles: NewsArticle[] = [];
-  const seen = new Set<string>();
-  for (const sym of symbols) {
-    for (const a of (newsState.bySymbol[sym] || [])) {
-      if (!seen.has(a.url)) {
-        seen.add(a.url);
-        articles.push(a);
-      }
-    }
-  }
-  return articles.sort((a, b) => {
-    const ta = a.published_at ? new Date(a.published_at).getTime() : 0;
-    const tb = b.published_at ? new Date(b.published_at).getTime() : 0;
-    return tb - ta;
-  });
+// Per-theme news cache: theme symbols → articles
+interface ThemeNewsCache {
+  [key: string]: { articles: NewsArticle[]; fetchedAt: number };
 }
 
 export function useThemeNews() {
-  const [news, setNews] = useState<NewsState | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
+  // Per-theme cache keyed by sorted symbol string
+  const [themeCache, setThemeCache] = useState<ThemeNewsCache>({});
+  const [marketNews, setMarketNews] = useState<NewsArticle[]>([]);
+  const [marketFetchedAt, setMarketFetchedAt] = useState<number>(0);
   const [aiSummaries, setAiSummaries] = useState<AiSummaryCache>({});
-  const fetchedRef = useRef(false);
-  const lastFetchRef = useRef<number>(0);
+  const [prefetchedThemes, setPrefetchedThemes] = useState<Set<string>>(new Set());
+  const prefetchingRef = useRef(false);
 
-  const fetchNews = useCallback(async (symbols: string[]) => {
-    // Throttle: don't fetch more than once per 5 minutes
-    if (Date.now() - lastFetchRef.current < 5 * 60 * 1000 && fetchedRef.current) return;
+  const CACHE_TTL = 4 * 60 * 60 * 1000; // 4 hours
 
-    setIsLoading(true);
+  // Get cache key from symbols
+  const getCacheKey = useCallback((symbols: string[]) => {
+    return [...new Set(symbols)].sort().join(",");
+  }, []);
+
+  // Check if we have valid cached data for these symbols
+  const hasCachedNews = useCallback((symbols: string[]) => {
+    const key = getCacheKey(symbols);
+    const cached = themeCache[key];
+    return cached && (Date.now() - cached.fetchedAt < CACHE_TTL);
+  }, [themeCache, getCacheKey]);
+
+  // Fetch news for specific symbols (on-demand, for one theme)
+  const fetchThemeNews = useCallback(async (symbols: string[]): Promise<NewsArticle[]> => {
+    const key = getCacheKey(symbols);
+
+    // Return from cache if fresh
+    const cached = themeCache[key];
+    if (cached && (Date.now() - cached.fetchedAt < CACHE_TTL)) {
+      return cached.articles;
+    }
+
     try {
-      // Deduplicate and limit symbols
-      const uniqueSymbols = [...new Set(symbols)].slice(0, 15);
-
+      const uniqueSymbols = [...new Set(symbols)].slice(0, 8);
       const result = await supabase.functions.invoke("fetch-theme-news", {
-        body: { symbols: uniqueSymbols, categories: ["general"] },
+        body: { symbols: uniqueSymbols, categories: [] },
       });
 
       if (result.error) {
         console.error("News fetch error:", result.error);
-        return;
+        return [];
       }
 
-      setNews({
-        bySymbol: result.data.bySymbol || {},
-        market: result.data.market || [],
-        totalArticles: result.data.totalArticles || 0,
-        fetchedAt: new Date().toISOString(),
+      const bySymbol = result.data?.bySymbol || {};
+      const articles: NewsArticle[] = [];
+      const seen = new Set<string>();
+      for (const sym of uniqueSymbols) {
+        for (const a of (bySymbol[sym] || [])) {
+          if (!seen.has(a.url)) {
+            seen.add(a.url);
+            articles.push(a);
+          }
+        }
+      }
+
+      // Sort by recency
+      articles.sort((a, b) => {
+        const ta = a.published_at ? new Date(a.published_at).getTime() : 0;
+        const tb = b.published_at ? new Date(b.published_at).getTime() : 0;
+        return tb - ta;
       });
-      fetchedRef.current = true;
-      lastFetchRef.current = Date.now();
+
+      setThemeCache(prev => ({ ...prev, [key]: { articles, fetchedAt: Date.now() } }));
+      return articles;
     } catch (e) {
       console.error("News fetch failed:", e);
-    } finally {
-      setIsLoading(false);
+      return [];
     }
-  }, []);
+  }, [themeCache, getCacheKey]);
+
+  // Fetch general market news only (for Insights tab)
+  const fetchMarketNews = useCallback(async () => {
+    if (Date.now() - marketFetchedAt < CACHE_TTL) return marketNews;
+
+    try {
+      const result = await supabase.functions.invoke("fetch-theme-news", {
+        body: { symbols: [], categories: ["general"] },
+      });
+
+      if (result.error) return [];
+
+      const articles: NewsArticle[] = result.data?.market || [];
+      setMarketNews(articles);
+      setMarketFetchedAt(Date.now());
+      return articles;
+    } catch {
+      return [];
+    }
+  }, [marketFetchedAt, marketNews]);
+
+  // Prefetch news for top N themes (background, rate-limited)
+  const prefetchTopThemes = useCallback(async (
+    themes: { name: string; symbols: string[] }[]
+  ) => {
+    if (prefetchingRef.current) return;
+    prefetchingRef.current = true;
+
+    const top5 = themes.slice(0, 5);
+    for (const theme of top5) {
+      const key = getCacheKey(theme.symbols);
+      if (themeCache[key] && (Date.now() - themeCache[key].fetchedAt < CACHE_TTL)) {
+        setPrefetchedThemes(prev => new Set(prev).add(theme.name));
+        continue;
+      }
+
+      try {
+        const articles = await fetchThemeNews(theme.symbols);
+        setPrefetchedThemes(prev => new Set(prev).add(theme.name));
+      } catch {}
+
+      // 2s gap between theme fetches to stay well under rate limits
+      await new Promise(r => setTimeout(r, 2000));
+    }
+
+    prefetchingRef.current = false;
+  }, [getCacheKey, themeCache, fetchThemeNews]);
+
+  // Get cached article count for badge (returns -1 if not fetched yet)
+  const getThemeNewsCount = useCallback((symbols: string[]): number => {
+    const key = getCacheKey(symbols);
+    const cached = themeCache[key];
+    if (!cached || (Date.now() - cached.fetchedAt >= CACHE_TTL)) return -1; // not yet fetched
+    const oneDayAgo = Date.now() - 24 * 60 * 60 * 1000;
+    return cached.articles.filter(a =>
+      a.published_at && new Date(a.published_at).getTime() > oneDayAgo
+    ).length;
+  }, [themeCache, getCacheKey]);
+
+  // Get cached articles for a theme
+  const getThemeArticles = useCallback((symbols: string[]): NewsArticle[] => {
+    const key = getCacheKey(symbols);
+    const cached = themeCache[key];
+    if (!cached) return [];
+    return cached.articles;
+  }, [themeCache, getCacheKey]);
+
+  const hasNegativeNewsForTheme = useCallback((symbols: string[]): boolean => {
+    const articles = getThemeArticles(symbols);
+    return hasNegativeNews(articles);
+  }, [getThemeArticles]);
 
   const getAiSummary = useCallback(async (themeName: string, articles: NewsArticle[]) => {
-    // Check cache (4-hour TTL)
     const cached = aiSummaries[themeName];
-    if (cached && Date.now() - new Date(cached.generatedAt).getTime() < 4 * 60 * 60 * 1000) {
+    if (cached && Date.now() - new Date(cached.generatedAt).getTime() < CACHE_TTL) {
       return cached.summary;
     }
 
@@ -143,17 +204,23 @@ export function useThemeNews() {
   }, [aiSummaries]);
 
   return {
-    news,
-    isLoading,
-    fetchNews,
-    getThemeNewsCount: useCallback((symbols: string[]) => getThemeNewsCount(news, symbols), [news]),
-    getThemeArticles: useCallback((symbols: string[]) => getThemeArticles(news, symbols), [news]),
-    hasNegativeNews: useCallback((symbols: string[]) => {
-      const articles = getThemeArticles(news, symbols);
-      return hasNegativeNews(articles);
-    }, [news]),
+    // On-demand fetch for a specific theme
+    fetchThemeNews,
+    // Market news for Insights
+    fetchMarketNews,
+    marketNews,
+    // Prefetch top themes in background
+    prefetchTopThemes,
+    prefetchedThemes,
+    // Badge helpers
+    getThemeNewsCount,
+    getThemeArticles,
+    hasNegativeNews: hasNegativeNewsForTheme,
+    // AI
     getAiSummary,
     aiSummaries,
-    marketNews: news?.market || [],
+    // For backward compat — check if any news loaded
+    news: Object.keys(themeCache).length > 0 ? themeCache : null,
+    isLoading: false,
   };
 }
