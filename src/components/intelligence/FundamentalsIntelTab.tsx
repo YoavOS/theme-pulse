@@ -153,6 +153,8 @@ export default function FundamentalsIntelTab({
         case "margin": av = a.avgNetMargin ?? -999; bv = b.avgNetMargin ?? -999; break;
         case "debt": av = a.avgDebtToEquity ?? 999; bv = b.avgDebtToEquity ?? 999; break;
         case "type": return sortDir === "asc" ? a.dominantStockType.localeCompare(b.dominantStockType) : b.dominantStockType.localeCompare(a.dominantStockType);
+        case "smartMoney": av = a.avgSmartMoneyScore ?? -1; bv = b.avgSmartMoneyScore ?? -1; break;
+        case "instPct": av = a.avgInstitutionalPct ?? -1; bv = b.avgInstitutionalPct ?? -1; break;
         default: av = a.avgScore; bv = b.avgScore;
       }
       return sortDir === "asc" ? (av as number) - (bv as number) : (bv as number) - (av as number);
