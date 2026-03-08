@@ -75,6 +75,7 @@ export default function Index() {
     canSaveFriday,
     tooltip: eodTooltip,
     fridayTooltip,
+    fridayLastSavedAt,
     autoSave: eodAutoSave,
     startEodSave,
     toggleAutoSave: toggleEodAutoSave,
@@ -288,11 +289,18 @@ export default function Index() {
                 <button
                   onClick={() => startEodSave(true)}
                   disabled={!canSaveFriday}
-                  className="rounded-md border border-[hsl(40,80%,50%)]/40 bg-[hsl(40,80%,50%)]/10 px-3 py-1.5 text-xs font-semibold text-[hsl(40,80%,50%)] transition-colors hover:bg-[hsl(40,80%,50%)]/20 disabled:opacity-40 disabled:cursor-not-allowed"
+                  className={`rounded-md border px-3 py-1.5 text-xs font-semibold transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
+                    fridayLastSavedAt
+                      ? "border-primary/40 bg-primary/10 text-primary hover:bg-primary/20"
+                      : "border-green-500/40 bg-green-500/10 text-green-400 hover:bg-green-500/20"
+                  }`}
                   title={fridayTooltip}
                 >
                   <span className="inline-flex items-center gap-1">
-                    <Calendar size={12} /> Friday Close
+                    <Calendar size={12} />
+                    {fridayLastSavedAt
+                      ? `Re-save Friday Close · last saved at ${fridayLastSavedAt}`
+                      : "Save Friday Close"}
                   </span>
                 </button>
               )}
