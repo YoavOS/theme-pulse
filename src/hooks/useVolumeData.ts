@@ -21,7 +21,7 @@ export interface ThemeDemandSignals {
   loading: boolean;
 }
 
-const LOCAL_CACHE_KEY = "volume_cache_v2";
+const LOCAL_CACHE_KEY = "volume_cache_v3"; // bumped to force refetch with new fields
 const CACHE_MAX_AGE = 4 * 60 * 60 * 1000;
 
 interface LocalCache {
