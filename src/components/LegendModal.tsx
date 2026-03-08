@@ -115,17 +115,17 @@ const volumeSignals: LegendItem[] = [
 const demandSignals: LegendItem[] = [
   {
     label: "Rel Vol",
-    labelStyle: `<span class="text-[10px] font-medium text-[#00f5c4]" style="font-family: ${DM_MONO}">Rel Vol: 1.8×</span>`,
+    labelStyle: `<span class="text-xs font-medium text-[#00f5c4]" style="font-family: ${DM_MONO}">Rel Vol: 1.8×</span>`,
     explanation: "Today's volume vs 20-day average. >1.8× = unusual institutional interest. >1.4× = elevated. <0.8× = quiet, below average participation.",
   },
   {
     label: "Sustained Vol",
-    labelStyle: `<span class="text-[10px] font-medium text-[#4ade80]" style="font-family: ${DM_MONO}">+29% sus</span>`,
+    labelStyle: `<span class="text-xs font-medium text-[#4ade80]" style="font-family: ${DM_MONO}">+29% sus</span>`,
     explanation: "10-day average volume vs 3-month average. Positive = multi-day accumulation building. Negative = volume trend declining.",
   },
   {
     label: "Vol Spike",
-    labelStyle: `<span class="text-[10px] font-medium text-[#4ade80]" style="font-family: ${DM_MONO}">↑ +36%</span>`,
+    labelStyle: `<span class="text-xs font-medium text-[#4ade80]" style="font-family: ${DM_MONO}">↑ +36%</span>`,
     explanation: "Today's volume vs 20-day average as a percentage. Only shown when change exceeds 30% — filters out noise.",
   },
 ];
