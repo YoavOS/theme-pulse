@@ -206,11 +206,19 @@ export default function OverviewTab({
   themes: ThemeIntelData[];
   isLoading: boolean;
 }) {
+   const [viewMode, setViewMode] = useState<ViewMode>(() => {
+     try { return (localStorage.getItem(VIEW_KEY) as ViewMode) || "table"; } catch { return "table"; }
+   });
    const [sortMode, setSortMode] = useState<SortMode>("momentum");
    const [highlightId, setHighlightId] = useState<string | null>(null);
    const [drilldownOpen, setDrilldownOpen] = useState(false);
    const [drilldownTheme, setDrilldownTheme] = useState<ReturnType<typeof useLiveThemeData>["themes"][0] | null>(null);
    const rowRefs = useRef<Map<string, HTMLTableRowElement>>(new Map());
+
+   const handleViewChange = useCallback((mode: ViewMode) => {
+     setViewMode(mode);
+     try { localStorage.setItem(VIEW_KEY, mode); } catch {}
+   }, []);
 
    const { themes: liveThemes } = useLiveThemeData("Today");
    const { isThemeDryingUp } = useVolumeDryUp();
