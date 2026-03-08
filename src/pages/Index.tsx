@@ -47,10 +47,20 @@ export default function Index() {
     isRunning: isFullScanning,
     statusText: fullScanStatus,
     progress: scanProgress,
+    scanCompletedAt,
     startFullScan,
     clearProgress,
     loadTimeframe,
   } = useFullScan(handleScanComplete);
+
+  const {
+    showButton: showSaveEodFromScan,
+    isSaving: isSavingEodFromScan,
+    isAfterClose: scanAfterClose,
+    alreadySavedToday: eodAlreadySavedFromScan,
+    tooltip: saveEodFromScanTooltip,
+    saveEodFromScan,
+  } = useSaveEodFromScan(scanCompletedAt);
 
   const {
     status: eodStatus,
