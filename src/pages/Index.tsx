@@ -2,7 +2,8 @@ import { useState, useMemo, useCallback } from "react";
 import { getProcessedThemes, ThemeData } from "@/data/themeData";
 import { useLiveThemeData } from "@/hooks/useLiveThemeData";
 import ThemeCard from "@/components/ThemeCard";
-import { RefreshCw, Download, TrendingUp, TrendingDown, Wifi, WifiOff, Loader2, Settings, ScanLine, X } from "lucide-react";
+import ValidateTickersDialog from "@/components/ValidateTickersDialog";
+import { RefreshCw, Download, TrendingUp, TrendingDown, Wifi, WifiOff, Loader2, Settings, ScanLine, X, ShieldCheck } from "lucide-react";
 import { useFullScan } from "@/hooks/useFullScan";
 import { Link } from "react-router-dom";
 
@@ -20,6 +21,7 @@ export default function Index() {
   const [showPlaceholders, setShowPlaceholders] = useState(false);
   const [selectedThemes, setSelectedThemes] = useState<Set<string>>(new Set());
   const [showSelector, setShowSelector] = useState(false);
+  const [showValidateDialog, setShowValidateDialog] = useState(false);
 
   const {
     themes: allThemes,
@@ -182,6 +184,15 @@ export default function Index() {
               <Download size={16} />
             </button>
             <button
+              onClick={() => setShowValidateDialog(true)}
+              className="rounded-md border border-primary/40 bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary transition-colors hover:bg-primary/20"
+              title="Checks which tickers do not exist on Finnhub — helps clean up bad symbols"
+            >
+              <span className="inline-flex items-center gap-1">
+                <ShieldCheck size={12} /> Validate
+              </span>
+            </button>
+            <button
               onClick={startFullScan}
               disabled={isFullScanning || isLoading}
               className="rounded-md border border-primary/40 bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary transition-colors hover:bg-primary/20 disabled:opacity-50"
@@ -337,6 +348,8 @@ export default function Index() {
           : "Demo data · Click \"Go Live\" to fetch real-time prices via Finnhub"
         }
       </footer>
+
+      <ValidateTickersDialog open={showValidateDialog} onOpenChange={setShowValidateDialog} />
     </div>
   );
 }

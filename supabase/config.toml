@@ -2,3 +2,6 @@ project_id = "hhdvcqidyntxvwhyygxx"
 
 [functions.fetch-themes]
 verify_jwt = false
+
+[functions.validate-tickers]
+verify_jwt = false
