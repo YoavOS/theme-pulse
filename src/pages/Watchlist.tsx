@@ -285,7 +285,13 @@ export default function Watchlist() {
               >
                 <div className="relative">
                   <div style={{ boxShadow: "0 0 0 1px hsla(152,100%,50%,0.2), 0 0 12px hsla(152,100%,50%,0.08)" }} className="rounded-lg">
-                    <ThemeCard theme={theme} index={i} />
+                    <ThemeCard
+                      theme={theme}
+                      index={i}
+                      newsCount={getThemeNewsCount(theme.tickers.map(t => t.symbol))}
+                      newsNegative={hasNegativeNews(theme.tickers.map(t => t.symbol))}
+                      onNewsBadgeClick={handleNewsBadgeClick}
+                    />
                   </div>
                   {/* vs SPY line below card */}
                   {theme.dataSource === "real" && (() => {
