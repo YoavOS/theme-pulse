@@ -636,6 +636,9 @@ export default function Index() {
           fetchVolume={fetchVolume}
           getThemeSignals={getThemeSignals}
           dimmedThemes={searchMatchSet}
+          getNewsCount={getThemeNewsCount}
+          hasNegativeNews={hasNegativeNews}
+          onNewsBadgeClick={handleNewsBadgeClick}
         />
 
         {/* ─── NEUTRAL ───────────────────────────────── */}
@@ -649,6 +652,9 @@ export default function Index() {
             fetchVolume={fetchVolume}
             getThemeSignals={getThemeSignals}
             dimmedThemes={searchMatchSet}
+            getNewsCount={getThemeNewsCount}
+            hasNegativeNews={hasNegativeNews}
+            onNewsBadgeClick={handleNewsBadgeClick}
           />
         )}
 
@@ -663,6 +669,9 @@ export default function Index() {
             fetchVolume={fetchVolume}
             getThemeSignals={getThemeSignals}
             dimmedThemes={searchMatchSet}
+            getNewsCount={getThemeNewsCount}
+            hasNegativeNews={hasNegativeNews}
+            onNewsBadgeClick={handleNewsBadgeClick}
           />
         )}
       </main>
