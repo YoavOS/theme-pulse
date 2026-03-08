@@ -103,6 +103,7 @@ export default function InsightsTab({
   isLoading: boolean;
 }) {
   const { dryUpThemes } = useVolumeDryUp();
+  const { spy } = useSpyBenchmark();
   const [narrative, setNarrative] = useState<NarrativeState | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [cooldownEnd, setCooldownEnd] = useState(0);
