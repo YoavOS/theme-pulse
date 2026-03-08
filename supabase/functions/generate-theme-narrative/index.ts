@@ -37,6 +37,11 @@ RELATIVE STRENGTH RULES:
 - A theme up 1% when SPY is down 0.5% is showing real strength — highlight this
 - Use relative strength language when it adds meaningful context, don't force it on every theme
 
+NEWS CONTEXT RULES:
+- When recent headlines are provided for top themes, use them to explain WHY themes are moving, not just that they are moving
+- If a headline directly explains a theme's performance (e.g. a defense contract announcement for the Defense theme), reference it specifically
+- Do not fabricate or assume news — only reference headlines actually provided in the data
+
 FORMAT:
 Write 6–8 sentences of flowing prose. No bullet points. No headers. No lists.
 Cover: what is genuinely leading with broad confirmation, what is a single-stock story masquerading as a theme move, what is fading and why, what the overall rotation suggests, and one specific actionable thing to watch next session.`;
