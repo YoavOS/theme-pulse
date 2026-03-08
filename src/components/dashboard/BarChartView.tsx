@@ -1,18 +1,7 @@
-import { useState, useMemo, useCallback } from "react";
+import { useMemo } from "react";
 import { ThemeData } from "@/data/themeData";
 import { ThemeDemandSignals } from "@/hooks/useVolumeData";
 import { useSpyBenchmark, formatRS } from "@/hooks/useSpyBenchmark";
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  ReferenceLine,
-  ResponsiveContainer,
-  Tooltip as RechartsTooltip,
-  Cell,
-} from "recharts";
 
 const DM_MONO = "'DM Mono', monospace";
 
@@ -20,6 +9,7 @@ interface BarDataPoint {
   name: string;
   shortName: string;
   perf: number;
+  absPerf: number;
   breadthUp: number;
   breadthTotal: number;
   breadthPct: number;
@@ -30,83 +20,134 @@ interface BarDataPoint {
   isDimmed: boolean;
 }
 
-function CustomTooltip({ active, payload }: any) {
-  if (!active || !payload?.length) return null;
-  const d = payload[0].payload as BarDataPoint;
+function BarRow({
+  d,
+  maxAbs,
+  side,
+  onClick,
+}: {
+  d: BarDataPoint;
+  maxAbs: number;
+  side: "left" | "right";
+  onClick?: (theme: ThemeData) => void;
+}) {
+  const widthPct = maxAbs > 0 ? (d.absPerf / maxAbs) * 100 : 0;
   const sign = d.perf >= 0 ? "+" : "";
+  const isPositive = side === "left";
+  const barColor = isPositive ? "#00ff88" : "#ef4444";
+  const glowColor = isPositive ? "rgba(0,255,136,0.15)" : "rgba(239,68,68,0.15)";
+
   return (
     <div
-      className="rounded-lg px-3 py-2.5 text-xs shadow-xl"
-      style={{
-        background: "rgba(10,10,15,0.95)",
-        border: "1px solid rgba(255,255,255,0.08)",
-        backdropFilter: "blur(12px)",
-      }}
+      className="group flex items-center cursor-pointer transition-colors hover:bg-[rgba(255,255,255,0.04)]"
+      style={{ height: 25, opacity: d.isDimmed ? 0.3 : 1 }}
+      onClick={() => onClick?.(d.theme)}
     >
-      <div className="font-['Syne',sans-serif] text-sm font-semibold text-foreground mb-1.5">{d.name}</div>
-      <div className="space-y-0.5 text-muted-foreground" style={{ fontFamily: DM_MONO }}>
-        <div>
-          1D: <span className={d.perf >= 0 ? "text-[#00ff88]" : "text-[#ef4444]"}>
-            {sign}{d.perf.toFixed(2)}%
-          </span>
-          {d.rs && (
-            <span className={`ml-2 ${d.rs.color}`}>vs SPY: {d.rs.text}</span>
-          )}
-        </div>
-        <div>
-          Breadth: {d.breadthPct}% ({d.breadthUp}/{d.breadthTotal} advancing)
-        </div>
-        <div>
-          {d.relVol != null ? `Rel Vol: ~${d.relVol.toFixed(1)}×` : "Rel Vol: N/A"}
-          {d.fScore != null ? `  F:${d.fScore}` : ""}
+      {isPositive ? (
+        <>
+          {/* Theme name — left side */}
+          <div
+            className="shrink-0 truncate text-[11px] text-[rgba(255,255,255,0.85)] pr-2 text-right"
+            style={{ width: 130 }}
+            title={d.name}
+          >
+            {d.shortName}
+          </div>
+          {/* Bar growing right */}
+          <div className="flex-1 relative h-[18px] flex items-center">
+            <div
+              className="h-full rounded-r transition-all duration-400"
+              style={{
+                width: `${Math.max(widthPct, 1)}%`,
+                background: barColor,
+                opacity: 0.7,
+                boxShadow: `0 0 8px ${glowColor}`,
+                borderRadius: "0 4px 4px 0",
+              }}
+            />
+            {/* Perf + breadth at bar end */}
+            <div className="ml-1.5 flex items-baseline gap-1 shrink-0">
+              <span
+                className="text-xs font-medium"
+                style={{ fontFamily: DM_MONO, color: barColor }}
+              >
+                {sign}{d.perf.toFixed(2)}%
+              </span>
+              <span
+                className="text-[9px]"
+                style={{ fontFamily: DM_MONO, color: "rgba(255,255,255,0.3)" }}
+              >
+                {d.breadthUp}/{d.breadthTotal}
+              </span>
+            </div>
+          </div>
+        </>
+      ) : (
+        <>
+          {/* Bar growing left + perf label */}
+          <div className="flex-1 relative h-[18px] flex items-center justify-end">
+            <div className="mr-1.5 flex items-baseline gap-1 shrink-0">
+              <span
+                className="text-[9px]"
+                style={{ fontFamily: DM_MONO, color: "rgba(255,255,255,0.3)" }}
+              >
+                {d.breadthUp}/{d.breadthTotal}
+              </span>
+              <span
+                className="text-xs font-medium"
+                style={{ fontFamily: DM_MONO, color: barColor }}
+              >
+                {sign}{d.perf.toFixed(2)}%
+              </span>
+            </div>
+            <div
+              className="h-full transition-all duration-400"
+              style={{
+                width: `${Math.max(widthPct, 1)}%`,
+                background: barColor,
+                opacity: 0.7,
+                boxShadow: `0 0 8px ${glowColor}`,
+                borderRadius: "4px 0 0 4px",
+              }}
+            />
+          </div>
+          {/* Theme name — right side */}
+          <div
+            className="shrink-0 truncate text-[11px] text-[rgba(255,255,255,0.85)] pl-2 text-left"
+            style={{ width: 130 }}
+            title={d.name}
+          >
+            {d.shortName}
+          </div>
+        </>
+      )}
+
+      {/* Tooltip on hover */}
+      <div
+        className="pointer-events-none absolute z-50 rounded-lg px-3 py-2.5 text-xs shadow-xl opacity-0 group-hover:opacity-100 transition-opacity"
+        style={{
+          background: "rgba(10,10,15,0.95)",
+          border: "1px solid rgba(255,255,255,0.08)",
+          backdropFilter: "blur(12px)",
+          [isPositive ? "left" : "right"]: "50%",
+          top: "100%",
+          marginTop: 4,
+        }}
+      >
+        <div className="font-['Syne',sans-serif] text-sm font-semibold text-foreground mb-1">{d.name}</div>
+        <div className="space-y-0.5 text-muted-foreground whitespace-nowrap" style={{ fontFamily: DM_MONO }}>
+          <div>
+            1D: <span style={{ color: isPositive ? "#00ff88" : "#ef4444" }}>{sign}{d.perf.toFixed(2)}%</span>
+            {d.rs && <span className={`ml-2 ${d.rs.color}`}>vs SPY: {d.rs.text}</span>}
+          </div>
+          <div>Breadth: {d.breadthPct}% ({d.breadthUp}/{d.breadthTotal})</div>
+          <div>
+            {d.relVol != null ? `Rel Vol: ~${d.relVol.toFixed(1)}×` : ""}
+            {d.fScore != null ? `  F:${d.fScore}` : ""}
+          </div>
         </div>
       </div>
     </div>
-  );
-}
-
-function BarLabel({ x, y, width, height, value, payload }: any) {
-  if (!payload) return null;
-  const d = payload as BarDataPoint;
-  const sign = d.perf >= 0 ? "+" : "";
-  const isPositive = d.perf >= 0;
-
-  return (
-    <g>
-      {/* Theme name */}
-      <text
-        x={isPositive ? (x || 0) + 4 : (x || 0) + (width || 0) - 4}
-        y={(y || 0) + (height || 0) / 2}
-        dy={-1}
-        textAnchor={isPositive ? "start" : "end"}
-        fill="rgba(255,255,255,0.85)"
-        fontSize={11}
-        fontFamily="inherit"
-      >
-        {d.shortName}
-      </text>
-      {/* Perf + breadth */}
-      <text
-        x={isPositive ? (x || 0) + (width || 0) + 6 : (x || 0) - 6}
-        y={(y || 0) + (height || 0) / 2 + 1}
-        textAnchor={isPositive ? "start" : "end"}
-        fill={isPositive ? "#00ff88" : "#ef4444"}
-        fontSize={12}
-        fontFamily={DM_MONO}
-      >
-        {sign}{d.perf.toFixed(2)}%
-      </text>
-      <text
-        x={isPositive ? (x || 0) + (width || 0) + 6 + (sign + d.perf.toFixed(2) + "%").length * 7.5 + 4 : (x || 0) - 6 - (sign + d.perf.toFixed(2) + "%").length * 7.5 - 4}
-        y={(y || 0) + (height || 0) / 2 + 1}
-        textAnchor={isPositive ? "start" : "end"}
-        fill="rgba(255,255,255,0.3)"
-        fontSize={9}
-        fontFamily={DM_MONO}
-      >
-        · {d.breadthUp}/{d.breadthTotal}
-      </text>
-    </g>
   );
 }
 
@@ -125,7 +166,7 @@ export default function BarChartView({
 }) {
   const { getRelativeStrength } = useSpyBenchmark();
 
-  const { leftData, rightData } = useMemo(() => {
+  const { leftData, rightData, maxAbs } = useMemo(() => {
     const sorted = [...themes].sort((a, b) => b.performance_pct - a.performance_pct);
 
     const toPoint = (t: ThemeData): BarDataPoint => {
@@ -145,6 +186,7 @@ export default function BarChartView({
         name: t.theme_name,
         shortName,
         perf: t.performance_pct,
+        absPerf: Math.abs(t.performance_pct),
         breadthUp: up,
         breadthTotal: total,
         breadthPct,
@@ -169,140 +211,42 @@ export default function BarChartView({
       right = negative;
     }
 
-    return {
-      leftData: left.map(toPoint),
-      rightData: [...right].reverse().map(toPoint), // worst at bottom
-    };
+    const leftPts = left.map(toPoint);
+    const rightPts = [...right].reverse().map(toPoint);
+    const all = [...leftPts, ...rightPts];
+    const mx = all.length > 0 ? Math.max(...all.map(d => d.absPerf), 1) : 5;
+
+    return { leftData: leftPts, rightData: rightPts, maxAbs: mx };
   }, [themes, getThemeSignals, getRelativeStrength, getThemeFundamentalScore, dimmedThemes]);
-
-  const maxAbs = useMemo(() => {
-    const all = [...leftData, ...rightData];
-    if (all.length === 0) return 5;
-    return Math.max(Math.abs(Math.max(...all.map(d => d.perf))), Math.abs(Math.min(...all.map(d => d.perf))), 1);
-  }, [leftData, rightData]);
-
-  const barHeight = 22;
-  const barGap = 3;
-
-  const chartHeight = (data: BarDataPoint[]) => Math.max(200, data.length * (barHeight + barGap) + 60);
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-0">
       {/* Left panel — Top Performers */}
-      <div className="pr-0 md:pr-2 md:border-r md:border-[rgba(255,255,255,0.06)]">
+      <div className="pr-0 md:pr-3 md:border-r md:border-[rgba(255,255,255,0.06)]">
         <h3
-          className="mb-3 text-[10px] font-semibold uppercase tracking-[0.1em]"
+          className="mb-2 text-[10px] font-semibold uppercase tracking-[0.1em]"
           style={{ color: "#00f5c4" }}
         >
           Top Performers
         </h3>
-        <div style={{ height: chartHeight(leftData) }}>
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart
-              data={leftData}
-              layout="vertical"
-              margin={{ top: 5, right: 80, bottom: 5, left: 5 }}
-              barSize={barHeight}
-              barGap={barGap}
-            >
-              <CartesianGrid
-                horizontal
-                vertical={false}
-                stroke="rgba(255,255,255,0.05)"
-              />
-              <XAxis
-                type="number"
-                domain={[0, maxAbs * 1.15]}
-                tick={{ fontSize: 10, fill: "rgba(255,255,255,0.4)", fontFamily: DM_MONO }}
-                tickLine={false}
-                axisLine={false}
-                tickFormatter={(v: number) => `${v.toFixed(1)}%`}
-              />
-              <YAxis type="category" dataKey="shortName" hide />
-              <ReferenceLine x={0} stroke="rgba(255,255,255,0.15)" />
-              <RechartsTooltip content={<CustomTooltip />} cursor={{ fill: "rgba(255,255,255,0.04)" }} />
-              <Bar
-                dataKey="perf"
-                isAnimationActive
-                animationDuration={400}
-                animationBegin={0}
-                radius={[0, 4, 4, 0]}
-                label={<BarLabel />}
-                onClick={(_: any, index: number) => {
-                  if (leftData[index]) onCardClick?.(leftData[index].theme);
-                }}
-                style={{ cursor: "pointer" }}
-              >
-                {leftData.map((entry, i) => (
-                  <Cell
-                    key={entry.name}
-                    fill="#00ff88"
-                    fillOpacity={entry.isDimmed ? 0.1 : 0.7}
-                    stroke="none"
-                  />
-                ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
+        <div className="space-y-[3px]">
+          {leftData.map((d) => (
+            <BarRow key={d.name} d={d} maxAbs={maxAbs} side="left" onClick={onCardClick} />
+          ))}
         </div>
       </div>
 
       {/* Right panel — Bottom Performers */}
-      <div className="pl-0 md:pl-2 mt-4 md:mt-0">
+      <div className="pl-0 md:pl-3 mt-4 md:mt-0">
         <h3
-          className="mb-3 text-[10px] font-semibold uppercase tracking-[0.1em] text-destructive"
+          className="mb-2 text-[10px] font-semibold uppercase tracking-[0.1em] text-destructive"
         >
           Bottom Performers
         </h3>
-        <div style={{ height: chartHeight(rightData) }}>
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart
-              data={rightData}
-              layout="vertical"
-              margin={{ top: 5, right: 5, bottom: 5, left: 80 }}
-              barSize={barHeight}
-              barGap={barGap}
-            >
-              <CartesianGrid
-                horizontal
-                vertical={false}
-                stroke="rgba(255,255,255,0.05)"
-              />
-              <XAxis
-                type="number"
-                domain={[-(maxAbs * 1.15), 0]}
-                tick={{ fontSize: 10, fill: "rgba(255,255,255,0.4)", fontFamily: DM_MONO }}
-                tickLine={false}
-                axisLine={false}
-                tickFormatter={(v: number) => `${v.toFixed(1)}%`}
-                reversed
-              />
-              <YAxis type="category" dataKey="shortName" hide />
-              <ReferenceLine x={0} stroke="rgba(255,255,255,0.15)" />
-              <RechartsTooltip content={<CustomTooltip />} cursor={{ fill: "rgba(255,255,255,0.04)" }} />
-              <Bar
-                dataKey="perf"
-                isAnimationActive
-                animationDuration={400}
-                animationBegin={0}
-                radius={[4, 0, 0, 4]}
-                label={<BarLabel />}
-                onClick={(_: any, index: number) => {
-                  if (rightData[index]) onCardClick?.(rightData[index].theme);
-                }}
-                style={{ cursor: "pointer" }}
-              >
-                {rightData.map((entry, i) => (
-                  <Cell
-                    key={entry.name}
-                    fill="#ef4444"
-                    fillOpacity={entry.isDimmed ? 0.1 : 0.7}
-                    stroke="none"
-                  />
-                ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
+        <div className="space-y-[3px]">
+          {rightData.map((d) => (
+            <BarRow key={d.name} d={d} maxAbs={maxAbs} side="right" onClick={onCardClick} />
+          ))}
         </div>
       </div>
     </div>
