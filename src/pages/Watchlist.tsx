@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { Link } from "react-router-dom";
-import { ArrowLeft, Pin, Bell, Check, X, Plus, Zap } from "lucide-react";
+import { ArrowLeft, Pin, Bell, Check, X, Plus, Zap, Newspaper } from "lucide-react";
 import { useWatchlist, AlertConfig } from "@/hooks/useWatchlistContext";
 import { useLiveThemeData } from "@/hooks/useLiveThemeData";
 import ThemeCard from "@/components/ThemeCard";
@@ -9,6 +9,8 @@ import { ThemeData } from "@/data/themeData";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useSpyBenchmark, formatRS } from "@/hooks/useSpyBenchmark";
+import { useThemeNews } from "@/hooks/useThemeNews";
+import NewsPanel from "@/components/NewsPanel";
 
 export default function Watchlist() {
   const { pinned, togglePin, alerts, setAlert, getAlert } = useWatchlist();
