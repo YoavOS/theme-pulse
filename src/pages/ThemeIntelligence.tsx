@@ -8,6 +8,7 @@ import InsightsTab from "@/components/intelligence/InsightsTab";
 import TrendsTab from "@/components/intelligence/TrendsTab";
 import HeatmapTab from "@/components/intelligence/HeatmapTab";
 import React from "react";
+import HelpButton from "@/components/HelpButton";
 
 const SUB_TABS = [
   { id: "overview", label: "Overview", icon: BarChart3 },

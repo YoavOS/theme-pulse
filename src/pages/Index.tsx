@@ -11,6 +11,7 @@ import { useSaveEodFromScan } from "@/hooks/useSaveEodFromScan";
 import { useWatchlist } from "@/hooks/useWatchlistContext";
 import { useVolumeData } from "@/hooks/useVolumeData";
 import { Link } from "react-router-dom";
+import HelpButton from "@/components/HelpButton";
 
 const TIMEFRAMES = ["Today", "1W", "1M", "3M", "YTD"] as const;
 
