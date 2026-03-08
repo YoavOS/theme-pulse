@@ -339,10 +339,18 @@ export default function FundamentalsIntelTab({
     <div className="space-y-6">
       {/* Ranked Table */}
       <div className="rounded-lg overflow-hidden" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}>
-        <div className="px-4 py-3">
+        <div className="px-4 py-3 flex items-center justify-between">
           <h4 className="font-['Syne',sans-serif] text-xs font-semibold uppercase tracking-widest text-primary">
             Theme Fundamental Rankings
           </h4>
+          <button
+            onClick={() => { prefetchCompletedRef.current = false; runPrefetch(true); }}
+            disabled={prefetchState.active}
+            className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[10px] font-medium text-muted-foreground hover:text-foreground bg-secondary/40 hover:bg-secondary/60 transition-colors disabled:opacity-50"
+          >
+            <RefreshCw size={10} className={prefetchState.active ? "animate-spin" : ""} />
+            Update Fundamentals
+          </button>
         </div>
         <div className="max-h-[400px] overflow-auto">
           <table className="w-full text-xs">
