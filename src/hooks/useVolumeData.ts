@@ -6,11 +6,14 @@ export interface TickerVolume {
   avg_20d: number;
   avg_10d: number;
   avg_3m: number;
+  today_vol_estimated?: boolean;
+  vol_data_points?: number;
   error?: string;
 }
 
 export interface ThemeDemandSignals {
   relVol: number | null;       // today_vol / avg_20d ratio
+  relVolEstimated: boolean;    // true if using proxy data (not live volume)
   sustainedVol: number | null; // (avg_10d / avg_3m - 1) * 100
   spikingUp: number;
   spikingDown: number;
