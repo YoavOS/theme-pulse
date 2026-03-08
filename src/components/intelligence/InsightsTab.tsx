@@ -119,6 +119,11 @@ export default function InsightsTab({
     return () => clearInterval(id);
   }, []);
 
+  // Fetch market news lazily when Insights tab renders
+  useEffect(() => {
+    fetchMarketNews();
+  }, [fetchMarketNews]);
+
   const isCoolingDown = now < cooldownEnd;
   const cooldownSecs = Math.ceil((cooldownEnd - now) / 1000);
 
