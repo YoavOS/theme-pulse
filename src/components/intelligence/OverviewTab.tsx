@@ -189,17 +189,26 @@ export default function OverviewTab({
   themes: ThemeIntelData[];
   isLoading: boolean;
 }) {
-  const [sortMode, setSortMode] = useState<SortMode>("momentum");
-  const [highlightId, setHighlightId] = useState<string | null>(null);
-  const rowRefs = useRef<Map<string, HTMLTableRowElement>>(new Map());
+   const [sortMode, setSortMode] = useState<SortMode>("momentum");
+   const [highlightId, setHighlightId] = useState<string | null>(null);
+   const [drilldownOpen, setDrilldownOpen] = useState(false);
+   const [drilldownTheme, setDrilldownTheme] = useState<string | null>(null);
+   const rowRefs = useRef<Map<string, HTMLTableRowElement>>(new Map());
+ 
+   const { themes: allThemesForDrilldown } = useWatchlist();
 
-  const handleSelectTheme = useCallback((themeId: string) => {
-    const el = rowRefs.current.get(themeId);
-    if (el) {
-      el.scrollIntoView({ behavior: "smooth", block: "center" });
-      setHighlightId(themeId);
-    }
-  }, []);
+   const handleSelectTheme = useCallback((themeId: string) => {
+     const el = rowRefs.current.get(themeId);
+     if (el) {
+       el.scrollIntoView({ behavior: "smooth", block: "center" });
+       setHighlightId(themeId);
+     }
+   }, []);
+
+   const handleOpenDrilldown = useCallback((themeName: string) => {
+     setDrilldownTheme(themeName);
+     setDrilldownOpen(true);
+   }, []);
 
   useEffect(() => {
     if (!highlightId) return;
