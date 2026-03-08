@@ -35,6 +35,7 @@ function formatTime(d: Date) {
   return d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
 }
 
+export default function Index() {
   const [dashboardView, setDashboardView] = useState<"cards" | "list" | "heatmap" | "bubble">(() => {
     return (localStorage.getItem("dashboardView") as any) || "cards";
   });
