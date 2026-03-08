@@ -25,9 +25,10 @@ function sustainedColor(val: number): string {
 interface VolumeLeadersProps {
   themes: ThemeIntelData[];
   onSelectTheme: (themeId: string) => void;
+  onDrilldownOpen?: (themeName: string) => void;
 }
 
-export default function VolumeLeaders({ themes, onSelectTheme }: VolumeLeadersProps) {
+export default function VolumeLeaders({ themes, onSelectTheme, onDrilldownOpen }: VolumeLeadersProps) {
   const leaders = useMemo(() => {
     return themes
       .filter(t => t.avgRelVol !== null)
@@ -55,12 +56,24 @@ export default function VolumeLeaders({ themes, onSelectTheme }: VolumeLeadersPr
           return (
             <button
               key={t.themeId}
-              onClick={() => onSelectTheme(t.themeId)}
-              className="relative overflow-hidden rounded-lg p-3 text-left transition-all duration-200 hover:scale-[1.02] hover:shadow-lg cursor-pointer"
+              onClick={() => {
+                onSelectTheme(t.themeId);
+                onDrilldownOpen?.(t.themeName);
+              }}
+              className="relative overflow-hidden rounded-lg p-3 text-left transition-all duration-200 hover:scale-[1.02] hover:shadow-lg cursor-pointer hover:border-[#00f5c4]"
               style={{
                 background: "rgba(255,255,255,0.04)",
                 border: "1px solid rgba(255,255,255,0.08)",
                 backdropFilter: "blur(12px)",
+                boxShadow: "inset 0 0 0 1px rgba(0,245,196,0)",
+              }}
+              onMouseEnter={e => {
+                e.currentTarget.style.boxShadow = "inset 0 0 12px rgba(0,245,196,0.2), 0 0 12px rgba(0,245,196,0.1)";
+                e.currentTarget.style.borderColor = "rgba(0,245,196,0.4)";
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.boxShadow = "inset 0 0 0 1px rgba(0,245,196,0)";
+                e.currentTarget.style.borderColor = "rgba(255,255,255,0.08)";
               }}
             >
               {/* Hot watermark */}

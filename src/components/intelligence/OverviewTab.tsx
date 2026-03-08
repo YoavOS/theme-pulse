@@ -5,6 +5,8 @@ import { TrendingUp, TrendingDown, Minus, Info } from "lucide-react";
 import { LineChart, Line, ResponsiveContainer } from "recharts";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import VolumeLeaders from "./VolumeLeaders";
+import ThemeDrilldownModal from "@/components/ThemeDrilldownModal";
+import { demoThemes } from "@/data/themeData";
 
 const DM_MONO = "'DM Mono', monospace";
 const EOD_TOOLTIP = "Accumulating EOD history — available after more daily saves";
@@ -187,17 +189,27 @@ export default function OverviewTab({
   themes: ThemeIntelData[];
   isLoading: boolean;
 }) {
-  const [sortMode, setSortMode] = useState<SortMode>("momentum");
-  const [highlightId, setHighlightId] = useState<string | null>(null);
-  const rowRefs = useRef<Map<string, HTMLTableRowElement>>(new Map());
+   const [sortMode, setSortMode] = useState<SortMode>("momentum");
+   const [highlightId, setHighlightId] = useState<string | null>(null);
+   const [drilldownOpen, setDrilldownOpen] = useState(false);
+   const [drilldownTheme, setDrilldownTheme] = useState<typeof demoThemes[0] | null>(null);
+   const rowRefs = useRef<Map<string, HTMLTableRowElement>>(new Map());
 
-  const handleSelectTheme = useCallback((themeId: string) => {
-    const el = rowRefs.current.get(themeId);
-    if (el) {
-      el.scrollIntoView({ behavior: "smooth", block: "center" });
-      setHighlightId(themeId);
-    }
-  }, []);
+   const handleSelectTheme = useCallback((themeId: string) => {
+     const el = rowRefs.current.get(themeId);
+     if (el) {
+       el.scrollIntoView({ behavior: "smooth", block: "center" });
+       setHighlightId(themeId);
+     }
+   }, []);
+
+   const handleOpenDrilldown = useCallback((themeName: string) => {
+     const theme = demoThemes.find(t => t.theme_name === themeName);
+     if (theme) {
+       setDrilldownTheme(theme);
+       setDrilldownOpen(true);
+     }
+   }, []);
 
   useEffect(() => {
     if (!highlightId) return;
@@ -235,7 +247,7 @@ export default function OverviewTab({
 
   return (
     <div className="h-full overflow-auto">
-      <VolumeLeaders themes={themes} onSelectTheme={handleSelectTheme} />
+      <VolumeLeaders themes={themes} onSelectTheme={handleSelectTheme} onDrilldownOpen={handleOpenDrilldown} />
 
       <div className="mb-4 flex items-center justify-between">
         <div className="flex items-center gap-4 text-xs text-muted-foreground">
@@ -362,9 +374,16 @@ export default function OverviewTab({
                 );
               })
             )}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
+           </tbody>
+         </table>
+       </div>
+
+       <ThemeDrilldownModal 
+         theme={drilldownTheme} 
+         open={drilldownOpen} 
+         onOpenChange={setDrilldownOpen}
+         defaultSortKey="relVol"
+       />
+     </div>
+   );
 }
