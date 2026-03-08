@@ -131,22 +131,39 @@ export type Database = {
           debt_to_equity: number | null
           eps_growth_1y: number | null
           eps_growth_3y: number | null
+          ev_ebitda: number | null
+          forward_pe: number | null
           free_cash_flow: number | null
           fundamental_score: number | null
           gross_margin: number | null
+          insider_sentiment_label: string | null
+          insider_sentiment_score: number | null
+          institutional_change: number | null
+          institutional_ownership_pct: number | null
           last_updated: string | null
           market_cap: number | null
           net_margin: number | null
+          pb_ratio: number | null
+          pe_ratio: number | null
+          peg_ratio: number | null
+          ps_ratio: number | null
+          recent_insider_buys: number | null
+          recent_insider_sells: number | null
           revenue_growth_1y: number | null
           revenue_growth_3y: number | null
           roa: number | null
           roe: number | null
           sector: string | null
+          smart_money_label: string | null
+          smart_money_score: number | null
           stock_type: string | null
           symbol: string
           target_high: number | null
           target_low: number | null
           target_mean: number | null
+          top_institutions: Json | null
+          valuation_label: string | null
+          valuation_score: number | null
         }
         Insert: {
           ai_summary?: string | null
@@ -156,22 +173,39 @@ export type Database = {
           debt_to_equity?: number | null
           eps_growth_1y?: number | null
           eps_growth_3y?: number | null
+          ev_ebitda?: number | null
+          forward_pe?: number | null
           free_cash_flow?: number | null
           fundamental_score?: number | null
           gross_margin?: number | null
+          insider_sentiment_label?: string | null
+          insider_sentiment_score?: number | null
+          institutional_change?: number | null
+          institutional_ownership_pct?: number | null
           last_updated?: string | null
           market_cap?: number | null
           net_margin?: number | null
+          pb_ratio?: number | null
+          pe_ratio?: number | null
+          peg_ratio?: number | null
+          ps_ratio?: number | null
+          recent_insider_buys?: number | null
+          recent_insider_sells?: number | null
           revenue_growth_1y?: number | null
           revenue_growth_3y?: number | null
           roa?: number | null
           roe?: number | null
           sector?: string | null
+          smart_money_label?: string | null
+          smart_money_score?: number | null
           stock_type?: string | null
           symbol: string
           target_high?: number | null
           target_low?: number | null
           target_mean?: number | null
+          top_institutions?: Json | null
+          valuation_label?: string | null
+          valuation_score?: number | null
         }
         Update: {
           ai_summary?: string | null
@@ -181,22 +215,39 @@ export type Database = {
           debt_to_equity?: number | null
           eps_growth_1y?: number | null
           eps_growth_3y?: number | null
+          ev_ebitda?: number | null
+          forward_pe?: number | null
           free_cash_flow?: number | null
           fundamental_score?: number | null
           gross_margin?: number | null
+          insider_sentiment_label?: string | null
+          insider_sentiment_score?: number | null
+          institutional_change?: number | null
+          institutional_ownership_pct?: number | null
           last_updated?: string | null
           market_cap?: number | null
           net_margin?: number | null
+          pb_ratio?: number | null
+          pe_ratio?: number | null
+          peg_ratio?: number | null
+          ps_ratio?: number | null
+          recent_insider_buys?: number | null
+          recent_insider_sells?: number | null
           revenue_growth_1y?: number | null
           revenue_growth_3y?: number | null
           roa?: number | null
           roe?: number | null
           sector?: string | null
+          smart_money_label?: string | null
+          smart_money_score?: number | null
           stock_type?: string | null
           symbol?: string
           target_high?: number | null
           target_low?: number | null
           target_mean?: number | null
+          top_institutions?: Json | null
+          valuation_label?: string | null
+          valuation_score?: number | null
         }
         Relationships: []
       }
