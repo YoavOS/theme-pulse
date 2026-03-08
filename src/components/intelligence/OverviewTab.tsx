@@ -272,8 +272,15 @@ export default function OverviewTab({
     if (sortMode === "breadth") {
       return [...enriched].sort((a, b) => b.breadthPct - a.breadthPct);
     }
+    if (sortMode === "spy") {
+      return [...enriched].sort((a, b) => {
+        const aRS = getRelativeStrength(a.perf_1d) ?? -999;
+        const bRS = getRelativeStrength(b.perf_1d) ?? -999;
+        return bRS - aRS;
+      });
+    }
     return enriched;
-  }, [enriched, sortMode]);
+  }, [enriched, sortMode, getRelativeStrength]);
 
   return (
     <div className="h-full overflow-auto">
