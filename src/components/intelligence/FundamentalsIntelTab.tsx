@@ -172,12 +172,63 @@ export default function FundamentalsIntelTab({
 
   const hasData = Object.keys(allFundamentals).length > 0;
 
-  if (!hasData) {
+  // Auto-prefetch top 10 themes when no data exists
+  useEffect(() => {
+    if (loading || dataLoading || hasData || prefetchingRef.current || themes.length === 0) return;
+    prefetchingRef.current = true;
+
+    const topThemes = [...themes]
+      .sort((a, b) => b.momentumScore - a.momentumScore)
+      .slice(0, 10);
+
+    const total = topThemes.length;
+    setPrefetchState({ active: true, completed: 0, total });
+
+    (async () => {
+      for (let i = 0; i < topThemes.length; i++) {
+        const theme = topThemes[i];
+        try {
+          await supabase.functions.invoke("fetch-fundamentals", {
+            body: { symbols: theme.symbols },
+          });
+        } catch (e) {
+          console.error(`Prefetch failed for ${theme.themeName}:`, e);
+        }
+        setPrefetchState({ active: true, completed: i + 1, total });
+      }
+
+      // Reload cache after all prefetches
+      await loadFromCache();
+      setPrefetchState({ active: false, completed: total, total });
+      prefetchingRef.current = false;
+    })();
+  }, [loading, dataLoading, hasData, themes, loadFromCache]);
+
+  if (!hasData && !prefetchState.active) {
     return (
       <div className="flex flex-col items-center justify-center rounded-lg py-16 text-center" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}>
         <h3 className="font-['Syne',sans-serif] text-lg font-semibold text-foreground mb-1">No Fundamental Data Yet</h3>
         <p className="text-sm text-muted-foreground">Open any theme's drill-down modal and click the Fundamentals tab to start fetching data.</p>
         <p className="text-xs text-muted-foreground mt-1">Data will be cached for 24 hours once fetched.</p>
+      </div>
+    );
+  }
+
+  if (!hasData && prefetchState.active) {
+    const pct = prefetchState.total > 0 ? Math.round((prefetchState.completed / prefetchState.total) * 100) : 0;
+    return (
+      <div className="flex flex-col items-center justify-center rounded-lg py-16 text-center gap-4" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}>
+        <Loader2 className="h-6 w-6 animate-spin text-primary" />
+        <h3 className="font-['Syne',sans-serif] text-lg font-semibold text-foreground">
+          Fetching fundamentals for top themes…
+        </h3>
+        <p className="text-sm text-muted-foreground" style={{ fontFamily: "'DM Mono', monospace" }}>
+          {prefetchState.completed}/{prefetchState.total} complete
+        </p>
+        <div className="w-64">
+          <Progress value={pct} className="h-2" />
+        </div>
+        <p className="text-xs text-muted-foreground">This may take a few minutes due to API rate limits</p>
       </div>
     );
   }
