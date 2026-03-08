@@ -10,7 +10,7 @@ const DM_MONO = "'DM Mono', monospace";
 
 interface ThemeFundamentals {
   themeName: string;
-  avgScore: number;
+  avgScore: number | null;
   avgRevenueGrowth: number | null;
   avgNetMargin: number | null;
   avgDebtToEquity: number | null;
@@ -28,6 +28,17 @@ interface ThemeFundamentals {
 
 type SortKey = "rank" | "name" | "score" | "growth" | "margin" | "debt" | "type" | "smartMoney" | "instPct";
 type SortDir = "asc" | "desc";
+
+function sanitize(value: number | null, min: number, max: number): number | null {
+  if (value === null || value < min || value > max) return null;
+  return value;
+}
+
+function safeAvg(values: (number | null)[], min: number, max: number): number | null {
+  const clean = values.map(v => sanitize(v, min, max)).filter((v): v is number => v !== null);
+  if (clean.length === 0) return null;
+  return Math.round(clean.reduce((a, b) => a + b, 0) / clean.length * 10) / 10;
+}
 
 function mostCommon(arr: string[]): string {
   const counts: Record<string, number> = {};
@@ -96,11 +107,8 @@ export default function FundamentalsIntelTab({
     return themes.map(t => {
       const tickerData = t.symbols.map(s => allFundamentals[s]).filter(Boolean);
       const scores = tickerData.map(d => d.fundamental_score).filter((s): s is number => s !== null);
-      const avgScore = scores.length > 0 ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : 0;
+      const avgScore = scores.length > 0 ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : null;
 
-      const growths = tickerData.map(d => d.revenue_growth_1y).filter((v): v is number => v !== null);
-      const margins = tickerData.map(d => d.net_margin).filter((v): v is number => v !== null);
-      const debts = tickerData.map(d => d.debt_to_equity).filter((v): v is number => v !== null);
       const types = tickerData.map(d => d.stock_type).filter((v): v is string => v !== null);
       const ratings = tickerData.map(d => d.analyst_rating);
 
@@ -121,9 +129,12 @@ export default function FundamentalsIntelTab({
       return {
         themeName: t.themeName,
         avgScore,
-        avgRevenueGrowth: growths.length > 0 ? Math.round(growths.reduce((a, b) => a + b, 0) / growths.length * 10) / 10 : null,
-        avgNetMargin: margins.length > 0 ? Math.round(margins.reduce((a, b) => a + b, 0) / margins.length * 10) / 10 : null,
-        avgDebtToEquity: debts.length > 0 ? Math.round(debts.reduce((a, b) => a + b, 0) / debts.length * 100) / 100 : null,
+        avgRevenueGrowth: safeAvg(tickerData.map(d => d.revenue_growth_1y), -100, 500),
+        avgNetMargin: safeAvg(tickerData.map(d => d.net_margin), -200, 100),
+        avgDebtToEquity: (() => {
+          const clean = tickerData.map(d => sanitize(d.debt_to_equity, 0, 20)).filter((v): v is number => v !== null);
+          return clean.length > 0 ? Math.round(clean.reduce((a, b) => a + b, 0) / clean.length * 100) / 100 : null;
+        })(),
         dominantStockType: mostCommon(types),
         analystConsensus: avgRating(ratings),
         tickerCount: t.symbols.length,
@@ -148,14 +159,14 @@ export default function FundamentalsIntelTab({
       let av: number | string, bv: number | string;
       switch (sortKey) {
         case "name": return sortDir === "asc" ? a.themeName.localeCompare(b.themeName) : b.themeName.localeCompare(a.themeName);
-        case "score": av = a.avgScore; bv = b.avgScore; break;
+        case "score": av = a.avgScore ?? -1; bv = b.avgScore ?? -1; break;
         case "growth": av = a.avgRevenueGrowth ?? -999; bv = b.avgRevenueGrowth ?? -999; break;
         case "margin": av = a.avgNetMargin ?? -999; bv = b.avgNetMargin ?? -999; break;
         case "debt": av = a.avgDebtToEquity ?? 999; bv = b.avgDebtToEquity ?? 999; break;
         case "type": return sortDir === "asc" ? a.dominantStockType.localeCompare(b.dominantStockType) : b.dominantStockType.localeCompare(a.dominantStockType);
         case "smartMoney": av = a.avgSmartMoneyScore ?? -1; bv = b.avgSmartMoneyScore ?? -1; break;
         case "instPct": av = a.avgInstitutionalPct ?? -1; bv = b.avgInstitutionalPct ?? -1; break;
-        default: av = a.avgScore; bv = b.avgScore;
+        default: av = a.avgScore ?? -1; bv = b.avgScore ?? -1;
       }
       return sortDir === "asc" ? (av as number) - (bv as number) : (bv as number) - (av as number);
     });
@@ -170,6 +181,7 @@ export default function FundamentalsIntelTab({
     const avoid: ThemeFundamentals[] = [];
 
     for (const t of themeFundamentals) {
+      if (t.avgScore === null) { avoid.push(t); continue; }
       const strongFund = t.avgScore >= 55;
       const strongMom = t.momentumScore >= 55;
 
@@ -183,6 +195,16 @@ export default function FundamentalsIntelTab({
 
   const hasData = Object.keys(allFundamentals).length > 0;
 
+  // Check if smart money data is missing from cached fundamentals
+  const smartMoneyMissing = useMemo(() => {
+    if (!hasData) return false;
+    const entries = Object.values(allFundamentals);
+    if (entries.length === 0) return false;
+    // If >80% of entries have null smart_money_score, consider it missing
+    const nullCount = entries.filter(e => e.smart_money_score === null).length;
+    return nullCount / entries.length > 0.8;
+  }, [allFundamentals, hasData]);
+
   // Check localStorage for today's prefetch
   const alreadyPrefetchedToday = useMemo(() => {
     try {
@@ -195,12 +217,15 @@ export default function FundamentalsIntelTab({
 
   // Auto-prefetch top 10 themes — runs once on mount only
   useEffect(() => {
-    if (prefetchCompletedRef.current || alreadyPrefetchedToday) return;
+    if (prefetchCompletedRef.current) return;
+    // Skip if already prefetched today AND smart money data exists
+    if (alreadyPrefetchedToday && !smartMoneyMissing) return;
     if (dataLoading || themes.length === 0) return;
 
     // Wait for initial cache load to finish
     if (loading) return;
-    if (hasData) {
+    // If data exists and smart money is present, skip
+    if (hasData && !smartMoneyMissing) {
       prefetchCompletedRef.current = true;
       return;
     }
@@ -244,7 +269,7 @@ export default function FundamentalsIntelTab({
       }, 2000);
     })();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loading, dataLoading, themes.length]);
+  }, [loading, dataLoading, themes.length, smartMoneyMissing]);
 
   const toggleSort = (key: SortKey) => {
     if (sortKey === key) setSortDir(d => d === "asc" ? "desc" : "asc");
@@ -340,7 +365,7 @@ export default function FundamentalsIntelTab({
             <tbody>
               {sorted.map((t, i) => {
                 const typeInfo = getStockTypeInfo(t.dominantStockType);
-                const scoreLabel = getScoreLabel(t.avgScore);
+                const scoreLabel = t.avgScore !== null ? getScoreLabel(t.avgScore) : null;
                 const isExpanded = expandedTheme === t.themeName;
                 const smColor = getSmartMoneyColor(t.avgSmartMoneyScore);
 
@@ -362,15 +387,19 @@ export default function FundamentalsIntelTab({
                         </div>
                       </td>
                       <td className="px-3 py-2">
-                        <div className="flex items-center gap-2">
-                          <div className="w-12 h-1.5 rounded-full bg-secondary/60 overflow-hidden">
-                            <div className="h-full rounded-full" style={{
-                              width: `${t.avgScore}%`,
-                              background: t.avgScore >= 70 ? "hsl(var(--primary))" : t.avgScore >= 50 ? "hsl(152,100%,50%)" : t.avgScore >= 30 ? "#facc15" : "hsl(var(--destructive))"
-                            }} />
+                        {t.avgScore !== null ? (
+                          <div className="flex items-center gap-2">
+                            <div className="w-12 h-1.5 rounded-full bg-secondary/60 overflow-hidden">
+                              <div className="h-full rounded-full" style={{
+                                width: `${t.avgScore}%`,
+                                background: t.avgScore >= 70 ? "hsl(var(--primary))" : t.avgScore >= 50 ? "hsl(152,100%,50%)" : t.avgScore >= 30 ? "#facc15" : "hsl(var(--destructive))"
+                              }} />
+                            </div>
+                            <span className={`font-semibold ${scoreLabel!.color}`} style={{ fontFamily: DM_MONO }}>{t.avgScore}</span>
                           </div>
-                          <span className={`font-semibold ${scoreLabel.color}`} style={{ fontFamily: DM_MONO }}>{t.avgScore}</span>
-                        </div>
+                        ) : (
+                          <span className="text-muted-foreground" style={{ fontFamily: DM_MONO }}>—</span>
+                        )}
                       </td>
                       <td className="px-3 py-2">
                         <span className={`inline-flex items-center gap-1 rounded-full border px-1.5 py-0 text-[10px] font-semibold ${typeInfo.color}`}>
@@ -461,7 +490,7 @@ export default function FundamentalsIntelTab({
                 {q.themes.slice(0, 8).map(t => (
                   <span key={t.themeName} className="rounded bg-secondary/50 px-1.5 py-0.5 text-[10px] text-foreground" style={{ fontFamily: DM_MONO }}>
                     {t.themeName}
-                    <span className="ml-1 text-muted-foreground">F:{t.avgScore}</span>
+                    <span className="ml-1 text-muted-foreground">F:{t.avgScore ?? "—"}</span>
                   </span>
                 ))}
                 {q.themes.length > 8 && (
