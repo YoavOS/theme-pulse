@@ -253,20 +253,20 @@ export default function HeatmapTab() {
         </div>
       </div>
 
-      {/* Legend */}
-      <div className="mt-3 flex items-center justify-center gap-2 text-[10px] text-muted-foreground">
-        <span>Strong Down</span>
-        {[
-          "#ff4444",
-          "rgba(245,166,35,0.4)",
-          "#1a1a1a",
-          "rgba(0,245,196,0.35)",
-          "#00f5c4",
-        ].map((c, i) => (
-          <div key={i} style={{ width: 12, height: 12, borderRadius: 2, background: c }} />
-        ))}
-        <span>Strong Up</span>
-      </div>
+       {/* Legend */}
+       <div className="mt-3 flex items-center justify-center gap-2 text-xs text-muted-foreground">
+         <span>Strong Down</span>
+         {[
+           "#ff4444",
+           "rgba(245,166,35,0.4)",
+           "#1a1a1a",
+           "rgba(0,245,196,0.35)",
+           "#00f5c4",
+         ].map((c, i) => (
+           <div key={i} style={{ width: 12, height: 12, borderRadius: 2, background: c }} />
+         ))}
+         <span>Strong Up</span>
+       </div>
     </div>
   );
 }
