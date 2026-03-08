@@ -335,6 +335,34 @@ export default function Index() {
                   </button>
                 ))}
               </div>
+
+              {/* View switcher */}
+              <TooltipProvider delayDuration={200}>
+                <div className="flex items-center rounded-md border border-border bg-secondary/50">
+                  {([
+                    { key: "cards" as const, icon: <LayoutGrid size={14} />, label: "Card Grid" },
+                    { key: "list" as const, icon: <List size={14} />, label: "Ranked List" },
+                    { key: "heatmap" as const, icon: <Flame size={14} />, label: "Heatmap" },
+                    { key: "bubble" as const, icon: <Circle size={14} />, label: "Bubble Chart" },
+                  ]).map((v) => (
+                    <Tooltip key={v.key}>
+                      <TooltipTrigger asChild>
+                        <button
+                          onClick={() => switchView(v.key)}
+                          className={`p-1.5 transition-colors ${
+                            dashboardView === v.key
+                              ? "bg-primary text-primary-foreground"
+                              : "text-muted-foreground hover:text-foreground"
+                          }`}
+                        >
+                          {v.icon}
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent side="bottom" className="text-xs">{v.label}</TooltipContent>
+                    </Tooltip>
+                  ))}
+                </div>
+              </TooltipProvider>
             </div>
 
             {/* Right: Primary actions */}
