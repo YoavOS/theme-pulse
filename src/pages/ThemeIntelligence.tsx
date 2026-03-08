@@ -5,6 +5,9 @@ import { useThemeIntelligence } from "@/hooks/useThemeIntelligence";
 import OverviewTab from "@/components/intelligence/OverviewTab";
 import MomentumTab from "@/components/intelligence/MomentumTab";
 import InsightsTab from "@/components/intelligence/InsightsTab";
+import TrendsTab from "@/components/intelligence/TrendsTab";
+import HeatmapTab from "@/components/intelligence/HeatmapTab";
+import React from "react";
 
 const SUB_TABS = [
   { id: "overview", label: "Overview", icon: BarChart3 },
