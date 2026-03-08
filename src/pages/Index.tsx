@@ -385,24 +385,35 @@ export default function Index() {
             </button>
             <Link
               to="/intelligence"
-              className="rounded-md border border-[#00f5c4]/30 bg-[#00f5c4]/10 p-1.5 text-[#00f5c4] transition-colors hover:bg-[#00f5c4]/20"
+              className="inline-flex items-center gap-1.5 rounded-md border border-primary/30 bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary transition-colors hover:bg-primary/20"
               title="Theme Intelligence"
             >
-              <Brain size={16} />
+              <Brain size={14} />
+              <span className="hidden sm:inline">Intelligence</span>
             </Link>
             <Link
               to="/watchlist"
-              className="rounded-md border border-border p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+              className="relative inline-flex items-center gap-1.5 rounded-md border border-[hsl(40,80%,50%)]/30 bg-[hsl(40,80%,50%)]/10 px-3 py-1.5 text-xs font-semibold text-[hsl(40,80%,50%)] transition-colors hover:bg-[hsl(40,80%,50%)]/20"
               title="Watchlist"
             >
-              <Eye size={16} />
+              <Bookmark size={14} />
+              <span className="hidden sm:inline">Watchlist</span>
+              {pinned.length > 0 && (
+                <span className="inline-flex items-center gap-0.5 rounded-full bg-primary/20 px-1.5 py-0 text-[9px] font-bold text-primary">
+                  {pinned.length}
+                </span>
+              )}
             </Link>
             <Link
               to="/eod-history"
-              className="rounded-md border border-border p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+              className="relative inline-flex items-center gap-1.5 rounded-md border border-gain-medium/30 bg-gain-medium/10 px-3 py-1.5 text-xs font-semibold text-gain-medium transition-colors hover:bg-gain-medium/20"
               title="EOD History"
             >
-              <Calendar size={16} />
+              <Calendar size={14} />
+              <span className="hidden sm:inline">EOD</span>
+              {eodStatus && !eodStatus.alreadySaved && !eodStatus.isWeekend && (
+                <span className="h-2 w-2 rounded-full bg-[hsl(40,80%,50%)] animate-pulse" title="EOD not saved today" />
+              )}
             </Link>
             <Link
               to="/admin"
