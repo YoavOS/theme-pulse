@@ -450,6 +450,15 @@ export default function OverviewTab({
                             <MomentumBar score={t.momentumScore} />
                           </td>
                           <PerfCell value={t.perf_1d} hasData={true} />
+                          {(() => {
+                            const rs = getRelativeStrength(t.perf_1d);
+                            const f = formatRS(rs);
+                            return (
+                              <td className={`px-3 py-2.5 text-right text-sm ${f.color}`} style={{ fontFamily: DM_MONO }}>
+                                {rs !== null ? `${rs >= 0 ? "+" : ""}${rs.toFixed(2)}%` : "--"}
+                              </td>
+                            );
+                          })()}
                           <PerfCell value={t.perf_1w} hasData={t.hasEodHistory} />
                           <PerfCell value={t.perf_1m} hasData={t.hasEodHistory} />
                           <VolCell avgRelVol={t.avgRelVol} isDryingUp={isThemeDryingUp(t.themeName)} />
