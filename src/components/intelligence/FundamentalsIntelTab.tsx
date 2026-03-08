@@ -235,6 +235,17 @@ export default function FundamentalsIntelTab({
     );
   }
 
+  if (prefetchState.done) {
+    return (
+      <div className="flex flex-col items-center justify-center rounded-lg py-16 text-center gap-3" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}>
+        <span className="text-2xl">✓</span>
+        <h3 className="font-['Syne',sans-serif] text-lg font-semibold text-foreground">
+          Fundamentals loaded — showing top {prefetchState.total} themes
+        </h3>
+      </div>
+    );
+  }
+
   if (!hasData && !prefetchState.active) {
     return (
       <div className="flex flex-col items-center justify-center rounded-lg py-16 text-center" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}>
@@ -245,7 +256,7 @@ export default function FundamentalsIntelTab({
     );
   }
 
-  if (!hasData && prefetchState.active) {
+  if (prefetchState.active) {
     const pct = prefetchState.total > 0 ? Math.round((prefetchState.completed / prefetchState.total) * 100) : 0;
     return (
       <div className="flex flex-col items-center justify-center rounded-lg py-16 text-center gap-4" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}>
