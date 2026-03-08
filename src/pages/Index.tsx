@@ -3,7 +3,7 @@ import { getProcessedThemes, ThemeData } from "@/data/themeData";
 import { useLiveThemeData } from "@/hooks/useLiveThemeData";
 import ThemeCard from "@/components/ThemeCard";
 import ValidateTickersDialog from "@/components/ValidateTickersDialog";
-import { RefreshCw, Download, TrendingUp, TrendingDown, Wifi, WifiOff, Loader2, Settings, ScanLine, X, ShieldCheck, Save, Zap, Calendar, Brain } from "lucide-react";
+import { RefreshCw, Download, TrendingUp, TrendingDown, Wifi, WifiOff, Loader2, Settings, ScanLine, X, ShieldCheck, Save, Zap, Calendar, Brain, Eye } from "lucide-react";
 import { useFullScan } from "@/hooks/useFullScan";
 import { useEodSave } from "@/hooks/useEodSave";
 import { useSaveEodFromScan } from "@/hooks/useSaveEodFromScan";
@@ -369,6 +369,13 @@ export default function Index() {
               title="Theme Intelligence"
             >
               <Brain size={16} />
+            </Link>
+            <Link
+              to="/watchlist"
+              className="rounded-md border border-border p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+              title="Watchlist"
+            >
+              <Eye size={16} />
             </Link>
             <Link
               to="/eod-history"

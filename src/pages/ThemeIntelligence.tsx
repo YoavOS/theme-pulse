@@ -5,6 +5,9 @@ import { useThemeIntelligence } from "@/hooks/useThemeIntelligence";
 import OverviewTab from "@/components/intelligence/OverviewTab";
 import MomentumTab from "@/components/intelligence/MomentumTab";
 import InsightsTab from "@/components/intelligence/InsightsTab";
+import TrendsTab from "@/components/intelligence/TrendsTab";
+import HeatmapTab from "@/components/intelligence/HeatmapTab";
+import React from "react";
 
 const SUB_TABS = [
   { id: "overview", label: "Overview", icon: BarChart3 },
@@ -82,10 +85,14 @@ export default function ThemeIntelligence() {
             <MomentumTab accelerating={accelerating} fading={fading} isLoading={isLoading} />
           )}
           {activeTab === "trends" && (
-            <PlaceholderTab label="Trends" description="Theme flow chart & correlation matrix — coming soon" />
+            <ErrorBoundary label="Trends">
+              <TrendsTab />
+            </ErrorBoundary>
           )}
           {activeTab === "heatmap" && (
-            <PlaceholderTab label="Heatmap" description="Calendar heatmap view — coming soon" />
+            <ErrorBoundary label="Heatmap">
+              <HeatmapTab />
+            </ErrorBoundary>
           )}
           {activeTab === "insights" && (
             <InsightsTab themes={themes} accelerating={accelerating} fading={fading} isLoading={isLoading} />
@@ -94,6 +101,30 @@ export default function ThemeIntelligence() {
       </main>
     </div>
   );
+}
+
+class ErrorBoundary extends React.Component<
+  { children: React.ReactNode; label: string },
+  { error: Error | null }
+> {
+  constructor(props: any) {
+    super(props);
+    this.state = { error: null };
+  }
+  static getDerivedStateFromError(error: Error) {
+    return { error };
+  }
+  render() {
+    if (this.state.error) {
+      return (
+        <div className="flex flex-col items-center justify-center rounded-lg py-16 text-center" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}>
+          <h3 className="font-['Syne',sans-serif] text-lg font-semibold text-foreground mb-1">{this.props.label} Error</h3>
+          <p className="text-sm text-muted-foreground">{this.state.error.message}</p>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
 }
 
 function PlaceholderTab({ label, description }: { label: string; description: string }) {

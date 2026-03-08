@@ -1,5 +1,7 @@
 import { ThemeData } from "@/data/themeData";
 import { Badge } from "@/components/ui/badge";
+import { Pin } from "lucide-react";
+import { useWatchlist } from "@/hooks/useWatchlist";
 
 function getPctColor(pct: number): string {
   if (pct > 7) return "text-gain-strong";
@@ -45,6 +47,8 @@ function TickerChip({ symbol, pct, skipped, skipReason }: { symbol: string; pct:
 }
 
 export default function ThemeCard({ theme, index }: { theme: ThemeData; index: number }) {
+  const { isPinned, togglePin } = useWatchlist();
+  const themePinned = isPinned(theme.theme_name);
   const validTickers = theme.tickers.filter(t => !t.skipped);
   const naTickers = theme.tickers.filter(t => t.skipped);
   const total = validTickers.length;
@@ -72,10 +76,27 @@ export default function ThemeCard({ theme, index }: { theme: ThemeData; index: n
 
   return (
     <div
-      className="group rounded-lg border border-border bg-card px-3.5 py-3 transition-all hover:border-muted-foreground/30 hover:bg-surface-hover"
-      style={{ animationDelay: `${index * 40}ms` }}
+      className="group relative rounded-lg border bg-card px-3.5 py-3 transition-all hover:border-muted-foreground/30 hover:bg-surface-hover"
+      style={{
+        animationDelay: `${index * 40}ms`,
+        borderColor: themePinned ? "rgba(0,245,196,0.25)" : undefined,
+        boxShadow: themePinned ? "0 0 8px rgba(0,245,196,0.08)" : undefined,
+      }}
       title={isReal && theme.lastUpdated ? `Real data · Updated ${new Date(theme.lastUpdated).toLocaleTimeString()}` : "Demo/fallback data"}
     >
+      {/* Pin button */}
+      <button
+        onClick={(e) => { e.stopPropagation(); togglePin(theme.theme_name); }}
+        className={`absolute top-2 right-2 z-10 rounded p-1 transition-all ${
+          themePinned
+            ? "text-[#00f5c4] opacity-100"
+            : "text-muted-foreground opacity-0 group-hover:opacity-60 hover:!opacity-100"
+        }`}
+        title={themePinned ? "Unpin from watchlist" : "Pin to watchlist"}
+      >
+        <Pin size={12} className={themePinned ? "fill-current" : ""} />
+      </button>
+
       {/* Row 1: Name + Percentage + Badge */}
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0 flex-1">

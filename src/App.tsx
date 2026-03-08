@@ -9,6 +9,7 @@ import Login from "./pages/Login";
 import Admin from "./pages/Admin";
 import EodHistory from "./pages/EodHistory";
 import ThemeIntelligence from "./pages/ThemeIntelligence";
+import Watchlist from "./pages/Watchlist";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -26,6 +27,7 @@ const App = () => (
             <Route path="/admin" element={<Admin />} />
             <Route path="/eod-history" element={<EodHistory />} />
             <Route path="/intelligence" element={<ThemeIntelligence />} />
+            <Route path="/watchlist" element={<Watchlist />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>
