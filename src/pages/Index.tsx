@@ -125,16 +125,22 @@ export default function Index() {
     }
   }, [activeTimeframe, isLive, isLoading, fetchLiveData, loadTimeframe]);
 
+  const [newsPanelSentiment, setNewsPanelSentiment] = useState<import("@/hooks/useThemeNews").SentimentData | null>(null);
+
   const handleNewsBadgeClick = useCallback(async (theme: ThemeData) => {
     setNewsPanelTheme(theme);
     setNewsPanelSummary(null);
     setNewsPanelSummaryLoading(true);
+    setNewsPanelSentiment(null);
     const symbols = theme.tickers.map(t => t.symbol);
     const articles = await fetchThemeNews(symbols);
     const summary = await getAiSummary(theme.theme_name, articles);
     setNewsPanelSummary(summary || null);
     setNewsPanelSummaryLoading(false);
-  }, [fetchThemeNews, getAiSummary]);
+    // Sentiment is now available from the hook after getAiSummary returns
+    const sent = getThemeSentiment(theme.theme_name);
+    setNewsPanelSentiment(sent);
+  }, [fetchThemeNews, getAiSummary, getThemeSentiment]);
 
   const themes = useMemo(() => {
     if (showPlaceholders) return allThemes;
