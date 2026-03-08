@@ -53,12 +53,17 @@ export default function ThemeCard({ theme, index }: { theme: ThemeData; index: n
   const ratio = total > 0 ? up / total : 0;
   const bar = getBarColors(ratio);
   const sign = theme.performance_pct >= 0 ? "+" : "";
-  const sortedTickers = [...theme.tickers].sort((a, b) => {
-    // Put skipped at end
+
+  // Sort tickers: non-skipped by absolute % desc, skipped at end. Show top 5.
+  const sorted = [...theme.tickers].sort((a, b) => {
     if (a.skipped && !b.skipped) return 1;
     if (!a.skipped && b.skipped) return -1;
-    return b.pct - a.pct;
-  }).slice(0, 10);
+    return Math.abs(b.pct) - Math.abs(a.pct);
+  });
+  const MAX_VISIBLE = 5;
+  const visibleTickers = sorted.slice(0, MAX_VISIBLE);
+  const extraCount = sorted.length - MAX_VISIBLE;
+
   const isEmpty = total === 0 && theme.tickers.length === 0;
   const allSkipped = theme.tickers.length > 0 && total === 0;
 
@@ -67,15 +72,15 @@ export default function ThemeCard({ theme, index }: { theme: ThemeData; index: n
 
   return (
     <div
-      className="group rounded-lg border border-border bg-card p-4 transition-all hover:border-muted-foreground/30 hover:bg-surface-hover"
+      className="group rounded-lg border border-border bg-card px-3.5 py-3 transition-all hover:border-muted-foreground/30 hover:bg-surface-hover"
       style={{ animationDelay: `${index * 40}ms` }}
       title={isReal && theme.lastUpdated ? `Real data · Updated ${new Date(theme.lastUpdated).toLocaleTimeString()}` : "Demo/fallback data"}
     >
       {/* Row 1: Name + Percentage + Badge */}
-      <div className="flex items-start justify-between gap-3">
+      <div className="flex items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <h3 className="truncate text-[1.15rem] font-bold leading-tight text-foreground">
+          <div className="flex items-center gap-1.5">
+            <h3 className="truncate text-[1.05rem] font-bold leading-tight text-foreground">
               {theme.theme_name}
             </h3>
             {isReal ? (
@@ -89,24 +94,24 @@ export default function ThemeCard({ theme, index }: { theme: ThemeData; index: n
             )}
           </div>
           {theme.notes && (
-            <span className="mt-0.5 inline-block text-xs text-muted-foreground italic">
+            <span className="mt-0.5 inline-block text-[11px] text-muted-foreground italic leading-tight">
               {theme.notes}
             </span>
           )}
         </div>
-        <span className={`shrink-0 font-mono text-[2.2rem] font-bold leading-none tracking-tight ${getPctColor(theme.performance_pct)}`}>
+        <span className={`shrink-0 font-mono text-[1.85rem] font-bold leading-none tracking-tight ${getPctColor(theme.performance_pct)}`}>
           {sign}{theme.performance_pct.toFixed(2)}%
         </span>
       </div>
 
       {allSkipped ? (
-        <p className="mt-3 text-xs text-destructive">No valid tickers — all {naTickers.length} skipped (invalid or rate-limited). Add real symbols.</p>
+        <p className="mt-2 text-xs text-destructive">No valid tickers — all {naTickers.length} skipped (invalid or rate-limited). Add real symbols.</p>
       ) : isEmpty ? (
-        <p className="mt-3 text-xs text-muted-foreground">No data — placeholder theme</p>
+        <p className="mt-2 text-xs text-muted-foreground">No data — placeholder theme</p>
       ) : (
         <>
           {/* Row 2: Progress bar */}
-          <div className="mt-3 h-2.5 w-full overflow-hidden rounded-full bg-bar-track">
+          <div className="mt-2 h-2.5 w-full overflow-hidden rounded-full bg-bar-track">
             <div
               className="h-full rounded-full transition-all"
               style={{
@@ -117,7 +122,7 @@ export default function ThemeCard({ theme, index }: { theme: ThemeData; index: n
           </div>
 
           {/* Row 3: Up/Down/NA counts */}
-          <div className="mt-1.5 flex items-center gap-4 text-xs font-medium">
+          <div className="mt-1 flex items-center gap-3 text-[11px] font-medium">
             <span className="text-gain-medium">{up} up ↑</span>
             <span className="text-loss-mild">{down} down ↓</span>
             {naTickers.length > 0 && (
@@ -126,12 +131,15 @@ export default function ThemeCard({ theme, index }: { theme: ThemeData; index: n
             <span className="ml-auto text-muted-foreground">{Math.round(ratio * 100)}% advancing</span>
           </div>
 
-          {/* Row 4: Tickers */}
-          {sortedTickers.length > 0 && (
-            <div className="mt-2.5 flex flex-wrap gap-1.5">
-              {sortedTickers.map((t) => (
+          {/* Row 4: Tickers — single row, max 5 visible */}
+          {visibleTickers.length > 0 && (
+            <div className="mt-2 flex items-center gap-1.5 overflow-hidden">
+              {visibleTickers.map((t) => (
                 <TickerChip key={t.symbol} symbol={t.symbol} pct={t.pct} skipped={t.skipped} skipReason={t.skipReason} />
               ))}
+              {extraCount > 0 && (
+                <span className="shrink-0 text-[10px] text-muted-foreground">+{extraCount} more</span>
+              )}
             </div>
           )}
         </>
