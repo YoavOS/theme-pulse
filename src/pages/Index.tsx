@@ -44,6 +44,7 @@ export default function Index() {
     rateLimited,
     symbolsFetched,
     usingCache,
+    isStale,
     fetchLiveData,
     resetToDemo,
     setScanResults,
