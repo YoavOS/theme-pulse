@@ -77,7 +77,7 @@ function BarRow({
                 {sign}{d.perf.toFixed(2)}%
               </span>
               <span
-                className="text-[9px]"
+                className="text-[12px]"
                 style={{ fontFamily: DM_MONO, color: "rgba(255,255,255,0.3)" }}
               >
                 {d.breadthUp}/{d.breadthTotal}
