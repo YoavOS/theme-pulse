@@ -316,6 +316,13 @@ export default function Index() {
               <RefreshCw size={16} className={isLoading ? "animate-spin" : ""} />
             </button>
             <Link
+              to="/eod-history"
+              className="rounded-md border border-border p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+              title="EOD History"
+            >
+              <Calendar size={16} />
+            </Link>
+            <Link
               to="/admin"
               className="rounded-md border border-border p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
               title="Manage Themes & Tickers"
