@@ -348,6 +348,8 @@ export default function Index() {
           : "Demo data · Click \"Go Live\" to fetch real-time prices via Finnhub"
         }
       </footer>
+
+      <ValidateTickersDialog open={showValidateDialog} onOpenChange={setShowValidateDialog} />
     </div>
   );
 }
