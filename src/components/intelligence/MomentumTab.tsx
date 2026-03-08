@@ -136,6 +136,7 @@ function ThemeCard({ theme, isAccelerating }: { theme: ThemeIntelData; isAcceler
         </h4>
         <div className="flex flex-col items-end gap-0.5">
           <BreadthEventLabel themeName={theme.themeName} />
+          {!isAccelerating && <VolumeDryUpLabel themeName={theme.themeName} />}
           <span className={`text-[10px] font-semibold uppercase tracking-wide shrink-0 ${labelColor}`}>
             {theme.label}
           </span>

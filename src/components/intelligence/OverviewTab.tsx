@@ -389,7 +389,7 @@ export default function OverviewTab({
                     <PerfCell value={t.perf_1d} hasData={true} />
                     <PerfCell value={t.perf_1w} hasData={t.hasEodHistory} />
                     <PerfCell value={t.perf_1m} hasData={t.hasEodHistory} />
-                    <VolCell avgRelVol={t.avgRelVol} />
+                    <VolCell avgRelVol={t.avgRelVol} isDryingUp={isThemeDryingUp(t.themeName)} />
                     <BreadthCell up={t.breadthUp} total={t.breadthTotal} />
                     <td className="px-3 py-2.5 text-center">
                       <MiniSparkline data={t.sparklineData} />

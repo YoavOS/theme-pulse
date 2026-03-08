@@ -328,6 +328,9 @@ export default function InsightsTab({
 
       <WeeklyReportsSection />
 
+      {/* Volume Dry-Up section */}
+      <VolumeDryUpSection themes={dryUpThemes} />
+
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         {dataLoading ? (
           <>

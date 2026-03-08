@@ -76,8 +76,9 @@ serve(async (req) => {
         volParts.push(`Spike: ${t.volumeSpike}`);
       }
       const volStr = volParts.length > 0 ? ` | Volume: ${volParts.join(", ")}` : "";
+      const dryUpStr = t.volumeDryUp ? " | ⚠ VOLUME DRY-UP (sustained vol change: " + (t.sustainedVolChange ?? "N/A") + ")" : "";
 
-      return `${t.name} | Score: ${t.score} | 1D: ${t.perf_1d >= 0 ? "+" : ""}${t.perf_1d}% | 1W: ${t.perf_1w >= 0 ? "+" : ""}${t.perf_1w}% | 1M: ${t.perf_1m >= 0 ? "+" : ""}${t.perf_1m}% | Breadth: ${t.breadth} (${t.advancing} up, ${t.declining} down)${volStr}\n  Tickers: ${tickerStr}`;
+      return `${t.name} | Score: ${t.score} | 1D: ${t.perf_1d >= 0 ? "+" : ""}${t.perf_1d}% | 1W: ${t.perf_1w >= 0 ? "+" : ""}${t.perf_1w}% | 1M: ${t.perf_1m >= 0 ? "+" : ""}${t.perf_1m}% | Breadth: ${t.breadth} (${t.advancing} up, ${t.declining} down)${volStr}${dryUpStr}\n  Tickers: ${tickerStr}`;
     };
 
     const topLines = (topThemes || []).map(formatTheme).join("\n\n");

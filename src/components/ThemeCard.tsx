@@ -228,6 +228,23 @@ export default function ThemeCard({ theme, index, onClick, fetchVolume, getTheme
               <DemandSignals signals={signals} />
             </DemandSignalsBoundary>
           )}
+
+          {/* Row 6: Volume Dry-Up badge */}
+          {isDryingUp && (
+            <div className="mt-1.5">
+              <span
+                className="inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-medium"
+                style={{
+                  fontFamily: "'DM Mono', monospace",
+                  color: "#f5a623",
+                  background: "rgba(245, 166, 35, 0.08)",
+                  border: "1px solid rgba(245, 166, 35, 0.2)",
+                }}
+              >
+                📉 Vol drying up
+              </span>
+            </div>
+          )}
         </>
       )}
     </div>
