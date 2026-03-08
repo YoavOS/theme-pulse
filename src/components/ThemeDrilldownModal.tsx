@@ -314,7 +314,32 @@ export default function ThemeDrilldownModal({
           </div>
         </div>
 
-        {/* Ticker table */}
+        {/* Tab bar */}
+        <div className="flex items-center gap-1 px-6 border-b border-border/50">
+          <button
+            onClick={() => setActiveTab("tickers")}
+            className={`px-3 py-2 text-xs font-semibold transition-colors ${
+              activeTab === "tickers" ? "text-foreground border-b-2 border-primary" : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            Tickers
+          </button>
+          <button
+            onClick={() => setActiveTab("news")}
+            className={`px-3 py-2 text-xs font-semibold transition-colors inline-flex items-center gap-1.5 ${
+              activeTab === "news" ? "text-foreground border-b-2 border-primary" : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            <Newspaper size={12} /> News
+            {(newsArticles?.length || 0) > 0 && (
+              <span className="rounded-full bg-primary/20 px-1.5 py-0 text-[9px] font-bold text-primary">
+                {newsArticles!.length}
+              </span>
+            )}
+          </button>
+        </div>
+
+        {activeTab === "tickers" ? (
         <div className="max-h-[400px] overflow-auto px-6 pb-2">
           {/* SPY Benchmark row */}
           {spy.perf_1d !== null && (
@@ -454,6 +479,11 @@ export default function ThemeDrilldownModal({
             </tbody>
           </table>
         </div>
+        ) : (
+          <div className="max-h-[400px] overflow-auto px-6 pb-2 pt-2">
+            <NewsTabContent articles={newsArticles || []} />
+          </div>
+        )}
 
         {/* Footer */}
         <div className="flex items-center justify-between border-t border-border/50 px-6 py-3">
