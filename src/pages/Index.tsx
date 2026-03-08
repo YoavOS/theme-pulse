@@ -802,6 +802,7 @@ function Section({
           const nc = getNewsCount ? getNewsCount(symbols) : 0;
           const neg = hasNegativeNews ? hasNegativeNews(symbols) : false;
           const fScore = getThemeFundamentalScore ? getThemeFundamentalScore(t.tickers.filter(tk => !tk.skipped).map(tk => tk.symbol)) : null;
+          const sentiment = getThemeSentiment ? getThemeSentiment(t.theme_name) : null;
           return (
             <div
               key={t.theme_name}
@@ -819,6 +820,7 @@ function Section({
                 onNewsBadgeClick={onNewsBadgeClick}
                 fundamentalScore={fScore}
                 onFundamentalBadgeClick={onFundamentalBadgeClick}
+                newsSentiment={sentiment?.sentiment || null}
               />
             </div>
           );
