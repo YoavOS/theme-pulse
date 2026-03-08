@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
-import { useWatchlist } from "@/hooks/useWatchlist";
+import { useWatchlist } from "@/hooks/useWatchlistContext";
 import { ThemeData } from "@/data/themeData";
 import { Search, Check, X } from "lucide-react";
 import {

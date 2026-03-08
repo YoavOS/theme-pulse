@@ -8,7 +8,7 @@ import { RefreshCw, Download, TrendingUp, TrendingDown, Wifi, WifiOff, Loader2, 
 import { useFullScan } from "@/hooks/useFullScan";
 import { useEodSave } from "@/hooks/useEodSave";
 import { useSaveEodFromScan } from "@/hooks/useSaveEodFromScan";
-import { useWatchlist } from "@/hooks/useWatchlist";
+import { useWatchlist } from "@/hooks/useWatchlistContext";
 import { Link } from "react-router-dom";
 
 const TIMEFRAMES = ["Today", "1W", "1M", "3M", "YTD"] as const;

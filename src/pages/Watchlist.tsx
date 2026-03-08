@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { Link } from "react-router-dom";
 import { ArrowLeft, Pin, Bell, Check, X, Plus } from "lucide-react";
-import { useWatchlist, AlertConfig } from "@/hooks/useWatchlist";
+import { useWatchlist, AlertConfig } from "@/hooks/useWatchlistContext";
 import { useLiveThemeData } from "@/hooks/useLiveThemeData";
 import ThemeCard from "@/components/ThemeCard";
 import AddThemeModal from "@/components/AddThemeModal";

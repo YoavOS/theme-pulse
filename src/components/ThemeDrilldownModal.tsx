@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
 import { ThemeData } from "@/data/themeData";
-import { useWatchlist } from "@/hooks/useWatchlist";
+import { useWatchlist } from "@/hooks/useWatchlistContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Pin, X, ExternalLink, ArrowUpDown } from "lucide-react";
 import { useNavigate } from "react-router-dom";
