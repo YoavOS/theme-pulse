@@ -247,7 +247,7 @@ export default function OverviewTab({
 
   return (
     <div className="h-full overflow-auto">
-      <VolumeLeaders themes={themes} onSelectTheme={handleSelectTheme} />
+      <VolumeLeaders themes={themes} onSelectTheme={handleSelectTheme} onDrilldownOpen={handleOpenDrilldown} />
 
       <div className="mb-4 flex items-center justify-between">
         <div className="flex items-center gap-4 text-xs text-muted-foreground">
