@@ -11,11 +11,27 @@ export interface NewsArticle {
   published_at: string | null;
 }
 
+export interface SentimentData {
+  sentiment: "bullish" | "bearish" | "neutral" | "mixed";
+  score: number;
+  reasoning: string | null;
+}
+
 interface AiSummaryCache {
-  [themeName: string]: { summary: string; generatedAt: string };
+  [themeName: string]: { summary: string; generatedAt: string; sentiment?: SentimentData | null };
 }
 
 const NEGATIVE_KEYWORDS = ["crash", "warning", "investigation", "lawsuit", "decline", "fraud", "recall", "layoff", "default", "bankruptcy"];
+
+export const POSITIVE_KEYWORDS = ["beat", "record", "growth", "partnership", "upgrade", "raises", "wins", "expands", "approves", "strong", "surge", "rally", "breakout", "soars"];
+export const NEGATIVE_HEADLINE_KEYWORDS = ["miss", "cut", "investigation", "downgrade", "concern", "decline", "lawsuit", "warning", "loses", "drops", "crash", "recall", "fraud", "layoff"];
+
+export function getHeadlineSentimentTag(headline: string): "positive" | "negative" | "neutral" {
+  const lower = headline.toLowerCase();
+  if (POSITIVE_KEYWORDS.some(k => lower.includes(k))) return "positive";
+  if (NEGATIVE_HEADLINE_KEYWORDS.some(k => lower.includes(k))) return "negative";
+  return "neutral";
+}
 
 export function hasNegativeNews(articles: NewsArticle[]): boolean {
   return articles.some(a =>
@@ -170,7 +186,7 @@ export function useThemeNews() {
     return hasNegativeNews(articles);
   }, [getThemeArticles]);
 
-  const getAiSummary = useCallback(async (themeName: string, articles: NewsArticle[]) => {
+  const getAiSummary = useCallback(async (themeName: string, articles: NewsArticle[]): Promise<string | null> => {
     const cached = aiSummaries[themeName];
     if (cached && Date.now() - new Date(cached.generatedAt).getTime() < CACHE_TTL) {
       return cached.summary;
@@ -192,15 +208,30 @@ export function useThemeNews() {
 
       if (result.error || !result.data?.summary) return null;
 
+      const sentimentData: SentimentData | null = result.data.sentiment && result.data.sentimentScore != null
+        ? { sentiment: result.data.sentiment, score: result.data.sentimentScore, reasoning: result.data.sentimentReasoning || null }
+        : null;
+
       setAiSummaries(prev => ({
         ...prev,
-        [themeName]: { summary: result.data.summary, generatedAt: result.data.generatedAt },
+        [themeName]: {
+          summary: result.data.summary,
+          generatedAt: result.data.generatedAt,
+          sentiment: sentimentData,
+        },
       }));
 
       return result.data.summary as string;
     } catch {
       return null;
     }
+  }, [aiSummaries]);
+
+  // Get cached sentiment for a theme
+  const getThemeSentiment = useCallback((themeName: string): SentimentData | null => {
+    const cached = aiSummaries[themeName];
+    if (!cached?.sentiment) return null;
+    return cached.sentiment;
   }, [aiSummaries]);
 
   return {
@@ -219,6 +250,8 @@ export function useThemeNews() {
     // AI
     getAiSummary,
     aiSummaries,
+    // Sentiment
+    getThemeSentiment,
     // For backward compat — check if any news loaded
     news: Object.keys(themeCache).length > 0 ? themeCache : null,
     isLoading: false,

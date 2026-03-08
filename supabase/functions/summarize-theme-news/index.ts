@@ -9,13 +9,59 @@ Given these headlines, write 2-3 sentences explaining:
 1. What is the main story driving this theme today
 2. Whether the news is broadly positive, negative, or mixed for the theme
 3. One specific thing to watch based on the news
-Be concise and specific. No generic filler.`;
+Be concise and specific. No generic filler.
+
+After your summary, you MUST return a JSON block on the LAST line in this exact format:
+{"sentiment": "bullish|bearish|neutral|mixed", "score": 0-100, "reasoning": "one sentence"}
+
+Sentiment rules:
+- "bullish": majority of news suggests positive catalysts, earnings beats, expansion, partnerships, regulatory wins
+- "bearish": majority suggests negative catalysts, misses, investigations, losing contracts, regulatory concerns
+- "mixed": roughly equal positive and negative news
+- "neutral": news is factual/informational with no clear directional bias
+Score: 0 = extremely bearish, 50 = neutral, 100 = extremely bullish`;
 
 function jsonResponse(body: Record<string, unknown>, status = 200) {
   return new Response(JSON.stringify(body), {
     status,
     headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
+}
+
+function parseSentiment(text: string): { narrative: string; sentiment: string | null; score: number | null; reasoning: string | null } {
+  const lines = text.trim().split("\n");
+  const lastLine = lines[lines.length - 1].trim();
+  
+  try {
+    // Try parsing last line as JSON
+    if (lastLine.startsWith("{") && lastLine.includes("sentiment")) {
+      const parsed = JSON.parse(lastLine);
+      const narrative = lines.slice(0, -1).join("\n").trim();
+      return {
+        narrative: narrative || text,
+        sentiment: parsed.sentiment || null,
+        score: typeof parsed.score === "number" ? parsed.score : null,
+        reasoning: parsed.reasoning || null,
+      };
+    }
+  } catch {}
+
+  // Try finding JSON anywhere in the text
+  const jsonMatch = text.match(/\{"sentiment"\s*:\s*"[^"]+"\s*,\s*"score"\s*:\s*\d+[^}]*\}/);
+  if (jsonMatch) {
+    try {
+      const parsed = JSON.parse(jsonMatch[0]);
+      const narrative = text.replace(jsonMatch[0], "").trim();
+      return {
+        narrative,
+        sentiment: parsed.sentiment || null,
+        score: typeof parsed.score === "number" ? parsed.score : null,
+        reasoning: parsed.reasoning || null,
+      };
+    } catch {}
+  }
+
+  return { narrative: text, sentiment: null, score: null, reasoning: null };
 }
 
 Deno.serve(async (req) => {
@@ -46,7 +92,7 @@ Deno.serve(async (req) => {
       .map((h: any, i: number) => `${i + 1}. [${h.source || "Unknown"}] ${h.headline}`)
       .join("\n");
 
-    const userMessage = `Theme: ${themeName}\n\nRecent headlines:\n${headlineText}\n\nWrite your summary.`;
+    const userMessage = `Theme: ${themeName}\n\nRecent headlines:\n${headlineText}\n\nWrite your summary, then the sentiment JSON on the last line.`;
 
     let response: Response;
     try {
@@ -58,7 +104,7 @@ Deno.serve(async (req) => {
         },
         body: JSON.stringify({
           model: "llama-3.3-70b-versatile",
-          max_tokens: 256,
+          max_tokens: 350,
           messages: [
             { role: "system", content: SYSTEM_PROMPT },
             { role: "user", content: userMessage },
@@ -86,10 +132,14 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: "parse_error", message: "Failed to parse AI response" }, 502);
     }
 
-    const summary = result.choices?.[0]?.message?.content || "Unable to generate summary.";
+    const rawContent = result.choices?.[0]?.message?.content || "Unable to generate summary.";
+    const { narrative, sentiment, score, reasoning } = parseSentiment(rawContent);
 
     return jsonResponse({
-      summary,
+      summary: narrative,
+      sentiment,
+      sentimentScore: score,
+      sentimentReasoning: reasoning,
       themeName,
       generatedAt: new Date().toISOString(),
     });
