@@ -88,7 +88,7 @@ export default function ThemeIntelligence() {
             <PlaceholderTab label="Heatmap" description="Calendar heatmap view — coming soon" />
           )}
           {activeTab === "insights" && (
-            <PlaceholderTab label="Insights" description="AI narrative & macro timeline — coming soon" />
+            <InsightsTab themes={themes} accelerating={accelerating} fading={fading} isLoading={isLoading} />
           )}
         </div>
       </main>
