@@ -494,7 +494,15 @@ export default function ThemeDrilldownModal({
         </div>
         ) : (
           <div className="max-h-[400px] overflow-auto px-6 pb-2 pt-2">
-            <NewsTabContent articles={newsArticles || []} />
+            {newsLoading ? (
+              <div className="space-y-2 py-4">
+                <div className="h-3 w-full rounded bg-secondary animate-pulse" />
+                <div className="h-3 w-[90%] rounded bg-secondary animate-pulse" />
+                <div className="h-3 w-[75%] rounded bg-secondary animate-pulse" />
+              </div>
+            ) : (
+              <NewsTabContent articles={(newsArticles && newsArticles.length > 0) ? newsArticles : localNews} />
+            )}
           </div>
         )}
 
