@@ -640,8 +640,6 @@ export default function Index() {
             dimmedThemes={searchMatchSet}
           />
         )}
-          />
-        )}
       </main>
 
       {/* ─── FOOTER ──────────────────────────────────── */}
