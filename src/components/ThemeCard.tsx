@@ -191,9 +191,9 @@ export default function ThemeCard({ theme, index, onClick, fetchVolume, getTheme
           )}
 
           {/* Row 5: Demand Signals */}
-          {signals && fetchVolume && (
+          {signals && (
             <DemandSignalsBoundary>
-              <DemandSignals signals={signals} tickerSymbols={tickerSymbols} fetchVolume={fetchVolume} />
+              <DemandSignals signals={signals} />
             </DemandSignalsBoundary>
           )}
         </>
