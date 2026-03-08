@@ -21,17 +21,16 @@ serve(async (req) => {
   }
 
   try {
-    const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
-    if (!ANTHROPIC_API_KEY) {
+    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+    if (!LOVABLE_API_KEY) {
       return new Response(
-        JSON.stringify({ error: "ANTHROPIC_API_KEY is not configured" }),
+        JSON.stringify({ error: "LOVABLE_API_KEY is not configured" }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
     const { topThemes, bottomThemes, accelerating, fading, date, totalThemes } = await req.json();
 
-    // Build user message
     const topStr = (topThemes || [])
       .map((t: any) => `${t.name} (Score: ${t.score}, 1D: ${t.perf_1d >= 0 ? "+" : ""}${t.perf_1d}%, 1W: ${t.perf_1w >= 0 ? "+" : ""}${t.perf_1w}%)`)
       .join(", ");
@@ -48,32 +47,49 @@ Fading (short-term < long-term): ${(fading || []).join(", ")}
 Total themes analyzed: ${totalThemes}
 Write the market narrative.`;
 
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
+    // Use Lovable AI Gateway (supports Gemini models, no extra API key needed)
+    // To switch back to Anthropic later, replace this block with the Anthropic API call
+    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
-        "x-api-key": ANTHROPIC_API_KEY,
-        "anthropic-version": "2023-06-01",
+        Authorization: `Bearer ${LOVABLE_API_KEY}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "claude-sonnet-4-20250514",
+        model: "google/gemini-2.5-flash",
+        messages: [
+          { role: "system", content: SYSTEM_PROMPT },
+          { role: "user", content: userMessage },
+        ],
         max_tokens: 512,
-        system: SYSTEM_PROMPT,
-        messages: [{ role: "user", content: userMessage }],
       }),
     });
 
     if (!response.ok) {
       const errText = await response.text();
-      console.error("Anthropic API error:", response.status, errText);
+      console.error("AI Gateway error:", response.status, errText);
+
+      if (response.status === 429) {
+        return new Response(
+          JSON.stringify({ error: "Rate limit exceeded, please try again later." }),
+          { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      if (response.status === 402) {
+        return new Response(
+          JSON.stringify({ error: "AI credits exhausted. Add credits in workspace settings." }),
+          { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
       return new Response(
-        JSON.stringify({ error: `Anthropic API error: ${response.status}` }),
+        JSON.stringify({ error: `AI Gateway error: ${response.status}` }),
         { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
     const result = await response.json();
-    const narrative = result.content?.[0]?.text || "Unable to generate narrative.";
+    const narrative = result.choices?.[0]?.message?.content || "Unable to generate narrative.";
 
     return new Response(
       JSON.stringify({ narrative, generatedAt: new Date().toISOString() }),
