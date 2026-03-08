@@ -92,22 +92,22 @@ const momentumLabels: LegendItem[] = [
 const volumeSignals: LegendItem[] = [
   {
     label: "Volume confirming",
-    labelStyle: `<span class="text-[10px] font-medium text-[#00f5c4]" style="font-family: ${DM_MONO}">⚡ Volume confirming</span>`,
+    labelStyle: `<span class="text-xs font-medium text-[#00f5c4]" style="font-family: ${DM_MONO}">⚡ Volume confirming</span>`,
     explanation: "Today's volume is 40%+ above average AND the theme is accelerating. Institutional buying is supporting the move.",
   },
   {
     label: "High volume selling",
-    labelStyle: `<span class="text-[10px] font-medium text-[#ef4444]" style="font-family: ${DM_MONO}">⚡ High volume selling</span>`,
+    labelStyle: `<span class="text-xs font-medium text-[#ef4444]" style="font-family: ${DM_MONO}">⚡ High volume selling</span>`,
     explanation: "Today's volume is elevated AND the theme is fading. Suggests institutional distribution — more serious than low-volume fading.",
   },
   {
     label: "Low volume move",
-    labelStyle: `<span class="text-[10px] font-medium text-[#facc15]" style="font-family: ${DM_MONO}">⚠ Low volume move</span>`,
+    labelStyle: `<span class="text-xs font-medium text-[#facc15]" style="font-family: ${DM_MONO}">⚠ Low volume move</span>`,
     explanation: "Theme is accelerating but volume is below average. Price move is not confirmed by participation — treat with caution.",
   },
   {
     label: "~ prefix on Rel Vol",
-    labelStyle: `<span class="text-[10px] font-medium text-muted-foreground" style="font-family: ${DM_MONO}">~1.2×</span>`,
+    labelStyle: `<span class="text-xs font-medium text-muted-foreground" style="font-family: ${DM_MONO}">~1.2×</span>`,
     explanation: "Estimated value — market is closed or no live data available. Uses recent historical average as proxy. Updates to live data during market hours.",
   },
 ];
