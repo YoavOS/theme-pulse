@@ -54,6 +54,7 @@ export default function Index() {
   } = useLiveThemeData(activeTimeframe);
 
   const dispersion = useDispersion(allThemes);
+  const { spy, getRelativeStrength } = useSpyBenchmark();
 
   // Full scan handler: receives themes + timeframe from scan
   const handleScanComplete = useCallback((themes: ThemeData[], timeframe: string) => {
