@@ -43,7 +43,7 @@ export default function Index() {
   const [showDemoConfirm, setShowDemoConfirm] = useState(false);
   const { pinned, alerts, getAlert } = useWatchlist();
   const { fetchVolume, getThemeSignals } = useVolumeData();
-  const { fetchThemeNews, prefetchTopThemes, prefetchedThemes, getThemeNewsCount, getThemeArticles, hasNegativeNews, getAiSummary, marketNews } = useThemeNews();
+  const { fetchThemeNews, prefetchTopThemes, prefetchedThemes, getThemeNewsCount, getThemeArticles, hasNegativeNews, getAiSummary, marketNews, getThemeSentiment } = useThemeNews();
   const [newsPanelTheme, setNewsPanelTheme] = useState<ThemeData | null>(null);
   const [newsPanelSummary, setNewsPanelSummary] = useState<string | null>(null);
   const [newsPanelSummaryLoading, setNewsPanelSummaryLoading] = useState(false);
