@@ -67,7 +67,7 @@ function getLabel(perf1d: number, perf1w: number, perf1m: number, avgRelVol: num
   const lowVol = avgRelVol !== null && avgRelVol < 0.8;
 
   if (perf1d > 2 && perf1d > perf1m) {
-    return highVol ? "Breaking Out" : lowVol ? "Breaking Out (low vol)" : "Breaking Out";
+    return highVol ? "Breaking Out" : "Breaking Out (low vol)";
   }
   if (perf1d > 0 && perf1d > perf1m) return "Accelerating";
   if (perf1m > 2 && perf1d < perf1m * 0.5) return "Losing Steam";
