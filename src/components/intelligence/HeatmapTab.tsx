@@ -170,36 +170,36 @@ export default function HeatmapTab() {
 
       <div className="overflow-x-auto">
         <div className="inline-flex flex-col" style={{ fontFamily: DM_MONO }}>
-          {/* Month labels */}
-          <div className="flex ml-[20px]" style={{ gap: GAP }}>
-            {weeks.map((_, wi) => {
-              const label = monthLabels.find(m => m.weekIndex === wi);
-              return (
-                <div
-                  key={wi}
-                  style={{ width: CELL, fontSize: 9 }}
-                  className="text-muted-foreground text-center shrink-0"
-                >
-                  {label ? label.label : ""}
-                </div>
-              );
-            })}
-          </div>
+           {/* Month labels */}
+           <div className="flex ml-[20px]" style={{ gap: GAP }}>
+             {weeks.map((_, wi) => {
+               const label = monthLabels.find(m => m.weekIndex === wi);
+               return (
+                 <div
+                   key={wi}
+                   style={{ width: CELL, fontSize: 10 }}
+                   className="text-muted-foreground text-center shrink-0"
+                 >
+                   {label ? label.label : ""}
+                 </div>
+               );
+             })}
+           </div>
 
           {/* Grid */}
           <div className="flex">
-            {/* Day labels */}
-            <div className="flex flex-col mr-1" style={{ gap: GAP }}>
-              {DAY_LABELS.map((l, i) => (
-                <div
-                  key={i}
-                  style={{ height: CELL, width: 16, fontSize: 9, lineHeight: `${CELL}px` }}
-                  className="text-muted-foreground text-right"
-                >
-                  {l}
-                </div>
-              ))}
-            </div>
+             {/* Day labels */}
+             <div className="flex flex-col mr-1" style={{ gap: GAP }}>
+               {DAY_LABELS.map((l, i) => (
+                 <div
+                   key={i}
+                   style={{ height: CELL, width: 16, fontSize: 10, lineHeight: `${CELL}px` }}
+                   className="text-muted-foreground text-right"
+                 >
+                   {l}
+                 </div>
+               ))}
+             </div>
 
             {/* Weeks */}
             <div className="flex" style={{ gap: GAP }}>
@@ -253,20 +253,20 @@ export default function HeatmapTab() {
         </div>
       </div>
 
-      {/* Legend */}
-      <div className="mt-3 flex items-center justify-center gap-2 text-[10px] text-muted-foreground">
-        <span>Strong Down</span>
-        {[
-          "#ff4444",
-          "rgba(245,166,35,0.4)",
-          "#1a1a1a",
-          "rgba(0,245,196,0.35)",
-          "#00f5c4",
-        ].map((c, i) => (
-          <div key={i} style={{ width: 12, height: 12, borderRadius: 2, background: c }} />
-        ))}
-        <span>Strong Up</span>
-      </div>
+       {/* Legend */}
+       <div className="mt-3 flex items-center justify-center gap-2 text-xs text-muted-foreground">
+         <span>Strong Down</span>
+         {[
+           "#ff4444",
+           "rgba(245,166,35,0.4)",
+           "#1a1a1a",
+           "rgba(0,245,196,0.35)",
+           "#00f5c4",
+         ].map((c, i) => (
+           <div key={i} style={{ width: 12, height: 12, borderRadius: 2, background: c }} />
+         ))}
+         <span>Strong Up</span>
+       </div>
     </div>
   );
 }
