@@ -18,8 +18,8 @@ const EOD_TOOLTIP = "Accumulating EOD history — available after more daily sav
 const SIGNAL_TOOLTIP =
   "Divergence between momentum rank and breadth rank. '⚠ Thin' = momentum rank is much better than breadth — price move driven by few tickers, not confirmed by broad participation. '👀 Watch' = breadth rank is much better than momentum — broad quiet strength not yet reflected in price. Potential early rotation signal.";
 const VOL_TOOLTIP = "Average relative volume across all theme tickers vs their 20-day average. >1.8× = unusual institutional interest. >1.4× = elevated. <0.8× = quiet. Factors into momentum score as a conviction multiplier.";
-const MOMENTUM_TOOLTIP = "Weighted score: 20% today + 35% this week + 45% this month, adjusted for volume. Higher = stronger sustained momentum. Normalized 0-100 across all themes.";
-
+const MOMENTUM_TOOLTIP = "Weighted score: 20% today + 35% this week + 45% this month, adjusted for volume. Higher = stronger sustained momentum. Normalized 0-100 across all themes. Note: uses absolute performance. Use 'vs SPY' column for relative strength.";
+const SPY_TOOLTIP = "Theme performance minus SPY performance. Positive = outperforming the S&P 500. Negative = underperforming even if nominally positive.";
 type SortMode = "momentum" | "breadth";
 
 function getRelVolColor(val: number): string {
