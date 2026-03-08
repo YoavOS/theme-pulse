@@ -1,7 +1,10 @@
+import { useMemo } from "react";
 import { ThemeData } from "@/data/themeData";
 import { Badge } from "@/components/ui/badge";
 import { Pin } from "lucide-react";
 import { useWatchlist } from "@/hooks/useWatchlistContext";
+import DemandSignals from "@/components/DemandSignals";
+import { ThemeDemandSignals } from "@/hooks/useVolumeData";
 
 function getPctColor(pct: number): string {
   if (pct > 7) return "text-gain-strong";
@@ -46,7 +49,13 @@ function TickerChip({ symbol, pct, skipped, skipReason }: { symbol: string; pct:
   );
 }
 
-export default function ThemeCard({ theme, index, onClick }: { theme: ThemeData; index: number; onClick?: (theme: ThemeData) => void }) {
+export default function ThemeCard({ theme, index, onClick, fetchVolume, getThemeSignals }: {
+  theme: ThemeData;
+  index: number;
+  onClick?: (theme: ThemeData) => void;
+  fetchVolume?: (symbols: string[]) => void;
+  getThemeSignals?: (symbols: string[]) => ThemeDemandSignals;
+}) {
   const { isPinned, togglePin } = useWatchlist();
   const themePinned = isPinned(theme.theme_name);
   const validTickers = theme.tickers.filter(t => !t.skipped);
@@ -57,6 +66,9 @@ export default function ThemeCard({ theme, index, onClick }: { theme: ThemeData;
   const ratio = total > 0 ? up / total : 0;
   const bar = getBarColors(ratio);
   const sign = theme.performance_pct >= 0 ? "+" : "";
+
+  const tickerSymbols = useMemo(() => theme.tickers.map(t => t.symbol), [theme.tickers]);
+  const signals = getThemeSignals ? getThemeSignals(tickerSymbols) : null;
 
   // Sort tickers: non-skipped by absolute % desc, skipped at end. Show top 5.
   const sorted = [...theme.tickers].sort((a, b) => {
@@ -163,6 +175,11 @@ export default function ThemeCard({ theme, index, onClick }: { theme: ThemeData;
                 <span className="shrink-0 text-[10px] text-muted-foreground">+{extraCount} more</span>
               )}
             </div>
+          )}
+
+          {/* Row 5: Demand Signals */}
+          {signals && fetchVolume && (
+            <DemandSignals signals={signals} tickerSymbols={tickerSymbols} fetchVolume={fetchVolume} />
           )}
         </>
       )}

@@ -9,6 +9,7 @@ import { useFullScan } from "@/hooks/useFullScan";
 import { useEodSave } from "@/hooks/useEodSave";
 import { useSaveEodFromScan } from "@/hooks/useSaveEodFromScan";
 import { useWatchlist } from "@/hooks/useWatchlistContext";
+import { useVolumeData } from "@/hooks/useVolumeData";
 import { Link } from "react-router-dom";
 
 const TIMEFRAMES = ["Today", "1W", "1M", "3M", "YTD"] as const;
@@ -29,6 +30,7 @@ export default function Index() {
   const [drilldownTheme, setDrilldownTheme] = useState<ThemeData | null>(null);
   const [showOptions, setShowOptions] = useState(false);
   const { pinned, alerts, getAlert } = useWatchlist();
+  const { fetchVolume, getThemeSignals } = useVolumeData();
 
   const {
     themes: allThemes,
@@ -507,6 +509,8 @@ export default function Index() {
           accent="primary"
           themes={strong}
           onCardClick={setDrilldownTheme}
+          fetchVolume={fetchVolume}
+          getThemeSignals={getThemeSignals}
         />
 
         {/* ─── NEUTRAL ───────────────────────────────── */}
@@ -517,6 +521,8 @@ export default function Index() {
             accent="muted"
             themes={neutral}
             onCardClick={setDrilldownTheme}
+            fetchVolume={fetchVolume}
+            getThemeSignals={getThemeSignals}
           />
         )}
 
@@ -528,6 +534,8 @@ export default function Index() {
             accent="destructive"
             themes={weak}
             onCardClick={setDrilldownTheme}
+            fetchVolume={fetchVolume}
+            getThemeSignals={getThemeSignals}
           />
         )}
       </main>
@@ -552,12 +560,16 @@ function Section({
   accent,
   themes,
   onCardClick,
+  fetchVolume,
+  getThemeSignals,
 }: {
   icon: React.ReactNode;
   title: string;
   accent: "primary" | "destructive" | "muted";
   themes: ThemeData[];
   onCardClick?: (theme: ThemeData) => void;
+  fetchVolume?: (symbols: string[]) => void;
+  getThemeSignals?: (symbols: string[]) => import("@/hooks/useVolumeData").ThemeDemandSignals;
 }) {
   const accentColor =
     accent === "primary"
@@ -579,7 +591,7 @@ function Section({
       </div>
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 min-[1800px]:grid-cols-4">
         {themes.map((t, i) => (
-          <ThemeCard key={t.theme_name} theme={t} index={i} onClick={onCardClick} />
+          <ThemeCard key={t.theme_name} theme={t} index={i} onClick={onCardClick} fetchVolume={fetchVolume} getThemeSignals={getThemeSignals} />
         ))}
       </div>
     </section>

@@ -208,6 +208,33 @@ export type Database = {
         }
         Relationships: []
       }
+      ticker_volume_cache: {
+        Row: {
+          avg_10d: number | null
+          avg_20d: number | null
+          avg_3m: number | null
+          last_updated: string | null
+          symbol: string
+          today_vol: number | null
+        }
+        Insert: {
+          avg_10d?: number | null
+          avg_20d?: number | null
+          avg_3m?: number | null
+          last_updated?: string | null
+          symbol: string
+          today_vol?: number | null
+        }
+        Update: {
+          avg_10d?: number | null
+          avg_20d?: number | null
+          avg_3m?: number | null
+          last_updated?: string | null
+          symbol?: string
+          today_vol?: number | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
