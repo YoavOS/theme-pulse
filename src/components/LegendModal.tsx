@@ -133,22 +133,22 @@ const demandSignals: LegendItem[] = [
 const breadthIndicators: LegendItem[] = [
   {
     label: "X/Y advancing",
-    labelStyle: `<span class="text-[10px] text-muted-foreground" style="font-family: ${DM_MONO}">8/9 advancing</span>`,
+    labelStyle: `<span class="text-xs text-muted-foreground" style="font-family: ${DM_MONO}">8/9 advancing</span>`,
     explanation: "X out of Y tickers in the theme closed above their previous close today. Higher = broader participation in the move.",
   },
   {
     label: "Breadth %",
-    labelStyle: `<span class="text-sm font-medium text-[#00f5c4]" style="font-family: ${DM_MONO}">89%</span>`,
+    labelStyle: `<span class="text-base font-medium text-[#00f5c4]" style="font-family: ${DM_MONO}">89%</span>`,
     explanation: "Percentage of tickers advancing. >80% = very broad strength. <30% = narrow, single-stock driven.",
   },
   {
     label: "⚠ Thin signal",
-    labelStyle: `<span class="text-[11px] font-medium text-[#f5a623]" style="font-family: ${DM_MONO}">⚠ Thin</span>`,
+    labelStyle: `<span class="text-xs font-medium text-[#f5a623]" style="font-family: ${DM_MONO}">⚠ Thin</span>`,
     explanation: "Momentum rank is much better than breadth rank — price move not confirmed by broad participation. Caution warranted.",
   },
   {
     label: "👀 Watch signal",
-    labelStyle: `<span class="text-[11px] font-medium text-[#00f5c4]" style="font-family: ${DM_MONO}">👀 Watch</span>`,
+    labelStyle: `<span class="text-xs font-medium text-[#00f5c4]" style="font-family: ${DM_MONO}">👀 Watch</span>`,
     explanation: "Breadth rank is much better than momentum rank — broad quiet strength not yet reflected in price. Potential opportunity.",
   },
 ];
