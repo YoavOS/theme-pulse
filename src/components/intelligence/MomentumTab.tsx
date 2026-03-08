@@ -4,6 +4,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Rocket, TrendingDown } from "lucide-react";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { hasThemeBreadthEvent } from "@/hooks/useBreadthAlerts";
+import { useVolumeDryUp } from "@/hooks/useVolumeDryUp";
 
 const DM_MONO = "'DM Mono', monospace";
 const EOD_TOOLTIP = "Accumulating EOD history — available after more daily saves";
