@@ -37,6 +37,7 @@ export default function Index() {
     isRunning: isFullScanning,
     statusText: fullScanStatus,
     totalSkipped: fullScanSkipped,
+    totalInvalid: fullScanInvalid,
     startFullScan,
     clearProgress,
   } = useFullScan(mergeScanResults);
