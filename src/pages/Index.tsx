@@ -584,6 +584,23 @@ export default function Index() {
       )}
 
       <main className="container py-6">
+        {/* Search results banner */}
+        {searchResult && (
+          <div className="mb-4 flex items-center gap-2 rounded-lg border border-primary/20 bg-primary/5 px-4 py-2.5 text-sm">
+            <span className="font-medium text-foreground">
+              {searchResult.matchingThemes.length > 0
+                ? `Showing ${searchResult.matchingThemes.length} theme${searchResult.matchingThemes.length === 1 ? "" : "s"} matching "${searchQuery}"`
+                : `No themes match your query`}
+            </span>
+            {searchResult.explanation && (
+              <span className="text-xs text-muted-foreground">· {searchResult.explanation}</span>
+            )}
+            <button onClick={clearSearch} className="ml-auto inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground">
+              Clear <X size={12} />
+            </button>
+          </div>
+        )}
+
         {/* ─── STRONG THEMES ─────────────────────────── */}
         <Section
           icon={<TrendingUp size={18} />}
@@ -593,6 +610,7 @@ export default function Index() {
           onCardClick={setDrilldownTheme}
           fetchVolume={fetchVolume}
           getThemeSignals={getThemeSignals}
+          dimmedThemes={searchMatchSet}
         />
 
         {/* ─── NEUTRAL ───────────────────────────────── */}
@@ -605,6 +623,7 @@ export default function Index() {
             onCardClick={setDrilldownTheme}
             fetchVolume={fetchVolume}
             getThemeSignals={getThemeSignals}
+            dimmedThemes={searchMatchSet}
           />
         )}
 
@@ -618,6 +637,9 @@ export default function Index() {
             onCardClick={setDrilldownTheme}
             fetchVolume={fetchVolume}
             getThemeSignals={getThemeSignals}
+            dimmedThemes={searchMatchSet}
+          />
+        )}
           />
         )}
       </main>
