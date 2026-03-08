@@ -1,7 +1,10 @@
+import { useMemo } from "react";
 import { ThemeData } from "@/data/themeData";
 import { Badge } from "@/components/ui/badge";
 import { Pin } from "lucide-react";
 import { useWatchlist } from "@/hooks/useWatchlistContext";
+import DemandSignals from "@/components/DemandSignals";
+import { ThemeDemandSignals } from "@/hooks/useVolumeData";
 
 function getPctColor(pct: number): string {
   if (pct > 7) return "text-gain-strong";
