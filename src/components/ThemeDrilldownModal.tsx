@@ -113,9 +113,11 @@ export default function ThemeDrilldownModal({
    const [sortDir, setSortDir] = useState<SortDir>("desc");
    const [extras, setExtras] = useState<Record<string, TickerExtra>>({});
    const { spy, getTickerRS } = useSpyBenchmark();
-   const [activeTab, setActiveTab] = useState<"tickers" | "news">("tickers");
-   const [localNews, setLocalNews] = useState<NewsArticle[]>([]);
-   const [newsLoading, setNewsLoading] = useState(false);
+   const [activeTab, setActiveTab] = useState<"tickers" | "news" | "fundamentals">(defaultTab || "tickers");
+    const [localNews, setLocalNews] = useState<NewsArticle[]>([]);
+    const [newsLoading, setNewsLoading] = useState(false);
+    const [localFundamentals, setLocalFundamentals] = useState<Record<string, FundamentalsData> | null>(null);
+    const [fundLoading, setFundLoading] = useState(false);
 
   useEffect(() => {
     if (!theme || !open) return;
