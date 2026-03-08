@@ -1,42 +1,13 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { ThemeData, demoThemes, getProcessedThemes } from "@/data/themeData";
 import { useToast } from "@/hooks/use-toast";
-
-const CACHE_KEY_PREFIX = "theme_live_data_cache";
-const CACHE_MAX_AGE_MS = 4 * 60 * 60 * 1000; // 4 hours
-
-interface CachedData {
-  themes: ThemeData[];
-  fetchedAt: string;
-  symbolsFetched: number;
-  rateLimited: boolean;
-}
-
-function cacheKey(timeframe: string) {
-  return `${CACHE_KEY_PREFIX}_${timeframe}`;
-}
-
-function saveCache(timeframe: string, data: CachedData) {
-  try {
-    localStorage.setItem(cacheKey(timeframe), JSON.stringify(data));
-  } catch { /* quota exceeded */ }
-}
-
-function loadCache(timeframe: string): CachedData | null {
-  try {
-    const raw = localStorage.getItem(cacheKey(timeframe));
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as CachedData;
-    const age = Date.now() - new Date(parsed.fetchedAt).getTime();
-    if (age > CACHE_MAX_AGE_MS) {
-      localStorage.removeItem(cacheKey(timeframe));
-      return null;
-    }
-    return parsed;
-  } catch {
-    return null;
-  }
-}
+import {
+  saveScanCache,
+  loadScanCache,
+  loadLocalScanCache,
+  saveLocalScanCache,
+  clearLocalScanCache,
+} from "@/hooks/useScanCache";
 
 interface LiveDataState {
   themes: ThemeData[];
@@ -46,38 +17,27 @@ interface LiveDataState {
   rateLimited: boolean;
   symbolsFetched: number;
   usingCache: boolean;
+  isStale: boolean;
 }
 
-function buildInitialState(timeframe: string): LiveDataState {
-  const cached = loadCache(timeframe);
-  if (cached) {
-    return {
-      themes: getProcessedThemes(cached.themes),
-      isLoading: false,
-      isLive: true,
-      lastFetched: new Date(cached.fetchedAt),
-      rateLimited: cached.rateLimited,
-      symbolsFetched: cached.symbolsFetched,
-      usingCache: true,
-    };
-  }
-  return {
-    themes: getProcessedThemes(demoThemes),
-    isLoading: false,
-    isLive: false,
-    lastFetched: new Date(),
-    rateLimited: false,
-    symbolsFetched: 0,
-    usingCache: false,
-  };
-}
+const DEMO_STATE: LiveDataState = {
+  themes: getProcessedThemes(demoThemes),
+  isLoading: false,
+  isLive: false,
+  lastFetched: new Date(),
+  rateLimited: false,
+  symbolsFetched: 0,
+  usingCache: false,
+  isStale: false,
+};
 
 export function useLiveThemeData(timeframe: string = "Today") {
   const { toast } = useToast();
-  const [state, setState] = useState<LiveDataState>(() => buildInitialState(timeframe));
+  const [state, setState] = useState<LiveDataState>(DEMO_STATE);
   const mountedRef = useRef(true);
   const themesRef = useRef(state.themes);
   const timeframeRef = useRef(timeframe);
+  const initializedRef = useRef(false);
 
   useEffect(() => { themesRef.current = state.themes; }, [state.themes]);
   useEffect(() => { timeframeRef.current = timeframe; }, [timeframe]);
@@ -87,46 +47,98 @@ export function useLiveThemeData(timeframe: string = "Today") {
     return () => { mountedRef.current = false; };
   }, []);
 
-  // When timeframe changes, load from cache or show demo
+  // ── On mount: restore from cache (localStorage → Supabase) ──
   useEffect(() => {
-    const cached = loadCache(timeframe);
-    if (cached) {
+    if (initializedRef.current) return;
+    initializedRef.current = true;
+
+    // Instant: check localStorage
+    const local = loadLocalScanCache();
+    if (local && local.themes.length > 0) {
+      const age = Date.now() - new Date(local.scannedAt).getTime();
+      const isStale = age > 24 * 60 * 60 * 1000;
       setState({
-        themes: getProcessedThemes(cached.themes),
+        themes: getProcessedThemes(local.themes),
         isLoading: false,
         isLive: true,
-        lastFetched: new Date(cached.fetchedAt),
-        rateLimited: cached.rateLimited,
-        symbolsFetched: cached.symbolsFetched,
+        lastFetched: new Date(local.scannedAt),
+        rateLimited: false,
+        symbolsFetched: local.symbolsFetched,
         usingCache: true,
+        isStale,
       });
-    } else {
-      setState(prev => ({
-        ...prev,
-        themes: getProcessedThemes(demoThemes),
-        isLive: false,
-        usingCache: false,
-      }));
     }
-  }, [timeframe]);
 
-  // Restore from cache on tab focus
-  useEffect(() => {
-    function handleVisibility() {
-      if (document.visibilityState !== "visible") return;
-      const cached = loadCache(timeframeRef.current);
-      if (cached && mountedRef.current) {
+    // Then verify with Supabase in background
+    loadScanCache().then((cached) => {
+      if (!mountedRef.current) return;
+      if (cached && cached.themes.length > 0) {
         setState({
           themes: getProcessedThemes(cached.themes),
           isLoading: false,
           isLive: true,
-          lastFetched: new Date(cached.fetchedAt),
-          rateLimited: cached.rateLimited,
+          lastFetched: new Date(cached.scannedAt),
+          rateLimited: false,
           symbolsFetched: cached.symbolsFetched,
           usingCache: true,
+          isStale: cached.isStale,
+        });
+        // Sync to localStorage
+        saveLocalScanCache({
+          themes: cached.themes,
+          scannedAt: cached.scannedAt,
+          timeframe: cached.timeframe,
+          symbolsFetched: cached.symbolsFetched,
         });
       }
+    });
+  }, []);
+
+  // ── Restore from cache on tab focus ──
+  useEffect(() => {
+    function handleVisibility() {
+      if (document.visibilityState !== "visible") return;
+      
+      // Instant: check localStorage
+      const local = loadLocalScanCache();
+      if (local && local.themes.length > 0 && mountedRef.current) {
+        const age = Date.now() - new Date(local.scannedAt).getTime();
+        setState({
+          themes: getProcessedThemes(local.themes),
+          isLoading: false,
+          isLive: true,
+          lastFetched: new Date(local.scannedAt),
+          rateLimited: false,
+          symbolsFetched: local.symbolsFetched,
+          usingCache: true,
+          isStale: age > 24 * 60 * 60 * 1000,
+        });
+      }
+
+      // Verify with Supabase
+      loadScanCache().then((cached) => {
+        if (!mountedRef.current) return;
+        if (cached && cached.themes.length > 0) {
+          setState({
+            themes: getProcessedThemes(cached.themes),
+            isLoading: false,
+            isLive: true,
+            lastFetched: new Date(cached.scannedAt),
+            rateLimited: false,
+            symbolsFetched: cached.symbolsFetched,
+            usingCache: true,
+            isStale: cached.isStale,
+          });
+          saveLocalScanCache({
+            themes: cached.themes,
+            scannedAt: cached.scannedAt,
+            timeframe: cached.timeframe,
+            symbolsFetched: cached.symbolsFetched,
+          });
+        }
+      });
     }
+
     document.addEventListener("visibilitychange", handleVisibility);
     window.addEventListener("focus", handleVisibility);
     return () => {
@@ -140,10 +152,10 @@ export function useLiveThemeData(timeframe: string = "Today") {
     if (!mountedRef.current) return;
 
     const processed = getProcessedThemes(themes);
-    const now = new Date().toISOString();
     const totalSymbols = themes.reduce((sum, t) => sum + t.tickers.filter(tk => !tk.skipped).length, 0);
 
-    saveCache(tf, { themes, fetchedAt: now, symbolsFetched: totalSymbols, rateLimited: false });
+    // Save to both localStorage and Supabase
+    saveScanCache(themes, tf, totalSymbols);
 
     // Only update UI if currently viewing this timeframe
     if (timeframeRef.current !== tf) return;
@@ -152,10 +164,11 @@ export function useLiveThemeData(timeframe: string = "Today") {
       themes: processed,
       isLoading: false,
       isLive: true,
-      lastFetched: new Date(now),
+      lastFetched: new Date(),
       rateLimited: false,
       symbolsFetched: totalSymbols,
       usingCache: false,
+      isStale: false,
     });
   }, []);
 
@@ -212,12 +225,9 @@ export function useLiveThemeData(timeframe: string = "Today") {
       const processed = getProcessedThemes(merged);
       const fetchedAt = result.fetched_at || new Date().toISOString();
 
-      saveCache(tf, {
-        themes: merged,
-        fetchedAt,
-        symbolsFetched: result.symbols_fetched || 0,
-        rateLimited: result.rate_limited || false,
-      });
+      // Save to both layers
+      const totalSymbols = result.symbols_fetched || 0;
+      saveScanCache(merged, tf, totalSymbols);
 
       if (!mountedRef.current) return;
 
@@ -227,8 +237,9 @@ export function useLiveThemeData(timeframe: string = "Today") {
         isLive: true,
         lastFetched: new Date(fetchedAt),
         rateLimited: result.rate_limited || false,
-        symbolsFetched: result.symbols_fetched || 0,
+        symbolsFetched: totalSymbols,
         usingCache: false,
+        isStale: false,
       });
 
       if (result.rate_limited) {
@@ -245,16 +256,8 @@ export function useLiveThemeData(timeframe: string = "Today") {
   }, [toast]);
 
   const resetToDemo = useCallback(() => {
-    localStorage.removeItem(cacheKey(timeframeRef.current));
-    setState({
-      themes: getProcessedThemes(demoThemes),
-      isLoading: false,
-      isLive: false,
-      lastFetched: new Date(),
-      rateLimited: false,
-      symbolsFetched: 0,
-      usingCache: false,
-    });
+    clearLocalScanCache();
+    setState({ ...DEMO_STATE, themes: getProcessedThemes(demoThemes) });
   }, []);
 
   return {

@@ -4,7 +4,9 @@ import { useLiveThemeData } from "@/hooks/useLiveThemeData";
 import ThemeCard from "@/components/ThemeCard";
 import ThemeDrilldownModal from "@/components/ThemeDrilldownModal";
 import ValidateTickersDialog from "@/components/ValidateTickersDialog";
-import { RefreshCw, Download, TrendingUp, TrendingDown, Wifi, WifiOff, Loader2, Settings, ScanLine, X, ShieldCheck, Save, Zap, Calendar, Brain, Bookmark, Bell, ChevronDown, LayoutDashboard } from "lucide-react";
+import { RefreshCw, Download, TrendingUp, TrendingDown, Wifi, WifiOff, Loader2, Settings, ScanLine, X, ShieldCheck, Save, Zap, Calendar, Brain, Bookmark, Bell, ChevronDown, LayoutDashboard, AlertTriangle } from "lucide-react";
+import DemoDataConfirmDialog from "@/components/DemoDataConfirmDialog";
+import { getCacheAge } from "@/hooks/useScanCache";
 import { useFullScan } from "@/hooks/useFullScan";
 import { useEodSave } from "@/hooks/useEodSave";
 import { useSaveEodFromScan } from "@/hooks/useSaveEodFromScan";
@@ -30,6 +32,7 @@ export default function Index() {
   const [showValidateDialog, setShowValidateDialog] = useState(false);
   const [drilldownTheme, setDrilldownTheme] = useState<ThemeData | null>(null);
   const [showOptions, setShowOptions] = useState(false);
+  const [showDemoConfirm, setShowDemoConfirm] = useState(false);
   const { pinned, alerts, getAlert } = useWatchlist();
   const { fetchVolume, getThemeSignals } = useVolumeData();
 
@@ -41,6 +44,7 @@ export default function Index() {
     rateLimited,
     symbolsFetched,
     usingCache,
+    isStale,
     fetchLiveData,
     resetToDemo,
     setScanResults,
@@ -141,6 +145,20 @@ export default function Index() {
 
   return (
     <div className="min-h-screen bg-background">
+      {/* Stale data banner */}
+      {isStale && isLive && (
+        <div className="border-b border-[hsl(40,80%,50%)]/30 bg-[hsl(40,80%,50%)]/10 px-4 py-2 text-center text-xs text-[hsl(40,80%,50%)]">
+          <AlertTriangle size={12} className="mr-1 inline" />
+          Showing data from {getCacheAge(lastFetched.toISOString())} — run a fresh scan for latest
+        </div>
+      )}
+
+      {/* Demo data confirmation */}
+      <DemoDataConfirmDialog
+        open={showDemoConfirm}
+        onConfirm={() => { resetToDemo(); setShowDemoConfirm(false); }}
+        onCancel={() => setShowDemoConfirm(false)}
+      />
       {/* ─── ROW 1: Title + Status ──────────────────── */}
       <header className="sticky top-0 z-30 border-b border-border bg-background/80 backdrop-blur-md">
         <div className="container py-3">
@@ -340,7 +358,7 @@ export default function Index() {
                     <div className="absolute right-0 top-full z-50 mt-1 w-56 rounded-lg border border-border bg-card p-1 shadow-xl">
                       {isLive ? (
                         <button
-                          onClick={() => { resetToDemo(); setShowOptions(false); }}
+                          onClick={() => { setShowDemoConfirm(true); setShowOptions(false); }}
                           className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-xs text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
                         >
                           <WifiOff size={13} /> Switch to Demo Data
