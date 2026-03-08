@@ -4,6 +4,7 @@ import { useWatchlist } from "@/hooks/useWatchlistContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Pin, X, ExternalLink, ArrowUpDown } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { useSpyBenchmark, formatRS } from "@/hooks/useSpyBenchmark";
 import {
   Dialog,
   DialogContent,
