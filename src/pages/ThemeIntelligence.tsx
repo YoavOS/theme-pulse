@@ -105,6 +105,11 @@ export default function ThemeIntelligence() {
               <HeatmapTab />
             </ErrorBoundary>
           )}
+          {activeTab === "fundamentals" && (
+            <ErrorBoundary label="Fundamentals">
+              <FundamentalsIntelTab themes={themes} isLoading={isLoading} />
+            </ErrorBoundary>
+          )}
           {activeTab === "insights" && (
             <InsightsTab themes={themes} accelerating={accelerating} fading={fading} isLoading={isLoading} />
           )}
