@@ -210,7 +210,7 @@ Deno.serve(async (req) => {
               open_price: usePc ? null : (data.o || null),
               high_price: usePc ? null : (data.h || null),
               low_price: usePc ? null : (data.l || null),
-              volume: usePc ? null : (data.v ? Math.round(data.v) : null),
+              volume: usePc ? null : (typeof data.v === 'number' ? Math.round(data.v) : null),
               source: usePc ? "friday_pc_save" : "finnhub_quote",
               is_backfill: false,
             }, { onConflict: "symbol,date" });

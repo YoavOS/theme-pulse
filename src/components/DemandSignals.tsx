@@ -36,7 +36,7 @@ interface Props {
 export default function DemandSignals({ signals }: Props) {
   const [collapsed, setCollapsed] = useState(false);
 
-  const { relVol, sustainedVol, spikingUp, spikingDown, totalTickers, loading } = signals;
+  const { relVol, relVolEstimated, sustainedVol, spikingUp, spikingDown, totalTickers, loading } = signals;
   const hasSpike = spikingUp > 0 || spikingDown > 0;
 
   // Mobile collapse
@@ -78,14 +78,19 @@ export default function DemandSignals({ signals }: Props) {
         {/* A: Relative Volume */}
         {relVol !== null ? (
           <span
-            className={`inline-flex items-center gap-0.5 rounded-full bg-secondary/60 px-2 py-0.5 text-[10px] font-mono font-medium ${getRelVolColor(relVol)}`}
-            title="Today's avg volume vs 20-day avg — >1.8× = strong unusual interest"
+            className={`inline-flex items-center gap-0.5 rounded-full bg-secondary/60 px-2 py-0.5 text-[10px] font-mono font-medium ${relVolEstimated ? "text-muted-foreground" : getRelVolColor(relVol)}`}
+            title={relVolEstimated
+              ? "Using 10-day avg as proxy — market closed. Live Rel Vol available during trading hours"
+              : "Today's avg volume vs 20-day avg — >1.8× = strong unusual interest"}
           >
-            {relVol >= 1.1 ? "↑" : "↓"} Rel Vol: {relVol.toFixed(2)}×
+            {relVolEstimated ? "~" : relVol >= 1.1 ? "↑" : "↓"} Rel Vol: {relVolEstimated ? "~" : ""}{relVol.toFixed(2)}×
           </span>
         ) : (
-          <span className="inline-flex items-center rounded-full bg-secondary/60 px-2 py-0.5 text-[10px] font-mono text-muted-foreground">
-            Rel Vol: N/A
+          <span
+            className="inline-flex items-center rounded-full bg-secondary/60 px-2 py-0.5 text-[10px] font-mono text-muted-foreground"
+            title="Need more EOD history for accurate Rel Vol"
+          >
+            Rel Vol: --
           </span>
         )}
 
