@@ -68,23 +68,11 @@ export function useEodSave() {
       const startData = await startRes.json();
       if (!startRes.ok) throw new Error(startData.error || `HTTP ${startRes.status}`);
 
-      const { tickers, date: returnedDate, total } = startData as {
+      const { tickers, date: saveDate, total } = startData as {
         tickers: { symbol: string; theme_name: string }[];
         date: string;
         total: number;
       };
-
-      // For Friday save, override the date to last Friday
-      const saveDate = usePc && status?.fridayDate ? status.fridayDate : returnedDate;
-
-      // Re-upsert session with correct Friday date if needed
-      if (usePc && status?.fridayDate && status.fridayDate !== returnedDate) {
-        await fetch(`${supabaseUrl}/functions/v1/save-eod?action=start&use_pc=true`, {
-          method: "POST",
-          headers,
-          body: JSON.stringify({ overrideDate: status.fridayDate }),
-        }).catch(() => {});
-      }
 
       setProgress({ total, saved: 0, failed: 0, currentTheme: "", saving: true });
 
