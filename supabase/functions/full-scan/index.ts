@@ -175,7 +175,11 @@ Deno.serve(async (req) => {
       if (!dbTickers) throw new Error("Failed to read tickers");
 
       const uniqueSymbols = [...new Set(dbTickers.map(t => t.ticker_symbol))];
-      console.log(`START: populating ${uniqueSymbols.length} unique symbols`);
+      
+      // Always include SPY as benchmark
+      if (!uniqueSymbols.includes("SPY")) uniqueSymbols.push("SPY");
+      
+      console.log(`START: populating ${uniqueSymbols.length} unique symbols (including SPY benchmark)`);
 
       // Clear existing
       await sb.from("ticker_performance").delete().neq("symbol", "");
