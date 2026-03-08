@@ -75,10 +75,15 @@ async function fetchTickerData(symbol: string): Promise<{
       );
       if (res.status === 429) {
         if (attempt < MAX_RETRIES) { await delay(RETRY_DELAY_MS); continue; }
-        // Keep daily data, skip historical
-        return { ...result, error: "rate_limited_candle" };
+        // Keep daily data, skip historical — not a fatal error
+        console.log(`Candle rate-limited for ${symbol}, keeping daily data only`);
+        break;
       }
-      if (!res.ok) return { ...result, error: `candle_http_${res.status}` };
+      if (!res.ok) {
+        // 403 = free tier doesn't support candles — not a fatal error
+        console.log(`Candle ${res.status} for ${symbol}, keeping daily data only`);
+        break;
+      }
       const data = await res.json();
       if (!data || data.s === "no_data" || !data.o || !data.c || data.t?.length === 0) {
         // No candle data — keep daily, historical stays 0
