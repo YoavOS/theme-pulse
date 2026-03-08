@@ -19,6 +19,8 @@ import { Link } from "react-router-dom";
 import HelpButton from "@/components/HelpButton";
 import ThemeSearchBar from "@/components/ThemeSearchBar";
 import { useThemeSearch } from "@/hooks/useThemeSearch";
+import { useThemeNews } from "@/hooks/useThemeNews";
+import NewsPanel from "@/components/NewsPanel";
 
 const TIMEFRAMES = ["Today", "1W", "1M", "3M", "YTD"] as const;
 
