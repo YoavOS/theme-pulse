@@ -256,7 +256,7 @@ export default function BarChartView({
     }
 
     const leftPts = left.map(toPoint);
-    const rightPts = [...right].reverse().map(toPoint);
+    const rightPts = right.map(toPoint); // mild losses at top, severe at bottom
     const all = [...leftPts, ...rightPts];
     const mx = all.length > 0 ? Math.max(...all.map(d => d.absPerf), 1) : 5;
 
