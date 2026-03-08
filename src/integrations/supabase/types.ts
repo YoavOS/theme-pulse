@@ -265,6 +265,30 @@ export type Database = {
         }
         Relationships: []
       }
+      volume_history: {
+        Row: {
+          avg_rel_vol: number | null
+          id: string
+          sustained_vol_pct: number | null
+          theme_name: string
+          week_ending: string
+        }
+        Insert: {
+          avg_rel_vol?: number | null
+          id?: string
+          sustained_vol_pct?: number | null
+          theme_name: string
+          week_ending: string
+        }
+        Update: {
+          avg_rel_vol?: number | null
+          id?: string
+          sustained_vol_pct?: number | null
+          theme_name?: string
+          week_ending?: string
+        }
+        Relationships: []
+      }
       weekly_reports: {
         Row: {
           biggest_reversals: Json | null
