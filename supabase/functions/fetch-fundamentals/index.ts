@@ -38,10 +38,20 @@ function computeValuation(pe: number | null, peg: number | null) {
   return { valuationScore, valuationLabel };
 }
 
-function computeSmartMoney(instPct: number | null, instChange: number | null, avgMSPR: number | null) {
+function computeSmartMoney(instPct: number | null, instChange: number | null, avgMSPR: number | null, buys: number, sells: number) {
+  // Institutional ownership score (0-40)
   const instScore = instPct == null ? 0 : instPct > 70 ? 40 : instPct > 50 ? 30 : instPct > 30 ? 20 : instPct > 10 ? 10 : 0;
+  // Institutional change score (0-30)
   const instChangeScore = instChange == null ? 0 : instChange > 5 ? 30 : instChange > 0 ? 20 : instChange > -5 ? 10 : 0;
-  const insiderScore = avgMSPR == null ? 0 : avgMSPR > 0.5 ? 30 : avgMSPR > 0 ? 20 : avgMSPR > -0.5 ? 10 : 0;
+
+  // Insider score (0-30) — use MSPR if available, otherwise derive from buy/sell ratio
+  let insiderScore = 0;
+  if (avgMSPR != null) {
+    insiderScore = avgMSPR > 0.5 ? 30 : avgMSPR > 0 ? 20 : avgMSPR > -0.5 ? 10 : 0;
+  } else if (buys + sells > 0) {
+    const buyRatio = buys / (buys + sells);
+    insiderScore = buyRatio > 0.6 ? 30 : buyRatio > 0.4 ? 20 : buyRatio > 0.2 ? 10 : 0;
+  }
 
   const smartMoneyScore = instScore + instChangeScore + insiderScore;
   const smartMoneyLabel =
@@ -51,11 +61,16 @@ function computeSmartMoney(instPct: number | null, instChange: number | null, av
     "Low institutional backing";
 
   const insiderSentimentLabel =
-    avgMSPR == null ? "No data" :
-    avgMSPR > 0.5 ? "Strong net buying" :
-    avgMSPR > 0 ? "Mild net buying" :
-    avgMSPR > -0.5 ? "Mild net selling" :
-    "Heavy net selling";
+    avgMSPR != null ? (
+      avgMSPR > 0.5 ? "Strong net buying" :
+      avgMSPR > 0 ? "Mild net buying" :
+      avgMSPR > -0.5 ? "Mild net selling" :
+      "Heavy net selling"
+    ) : buys + sells > 0 ? (
+      buys > sells ? "Net buying" :
+      buys === sells ? "Neutral" :
+      "Net selling"
+    ) : "No data";
 
   return { smartMoneyScore, smartMoneyLabel, insiderSentimentLabel };
 }
@@ -131,34 +146,30 @@ async function fetchSmartMoney(symbol: string, apiKey: string): Promise<{
     recent_insider_sells: 0,
   };
 
-  // 1. Institutional ownership
+  // 1. Mutual fund ownership (free tier alternative to institutional-ownership)
   try {
-    const resp = await fetch(`https://finnhub.io/api/v1/stock/institutional-ownership?symbol=${symbol}&token=${apiKey}`);
+    const resp = await fetch(`https://finnhub.io/api/v1/mutual-fund/ownership?symbol=${symbol}&token=${apiKey}`);
     if (resp.ok) {
       const data = await resp.json();
-      if (data?.ownership && data.ownership.length > 0) {
-        const latest = data.ownership[0];
-        result.institutional_ownership_pct = latest.ownership != null ? Math.round(latest.ownership * 10000) / 100 : null;
-        // Change vs prior quarter
-        if (data.ownership.length > 1) {
-          const prev = data.ownership[1];
-          if (latest.ownership != null && prev.ownership != null && prev.ownership > 0) {
-            result.institutional_change = Math.round(((latest.ownership - prev.ownership) / prev.ownership) * 10000) / 100;
-          }
-        }
-        // Top 3 institutions
-        if (latest.ownership_list && Array.isArray(latest.ownership_list)) {
-          const sorted = [...latest.ownership_list].sort((a: any, b: any) => (b.share || 0) - (a.share || 0));
-          result.top_institutions = sorted.slice(0, 3).map((inst: any) => ({
-            name: inst.investorName || inst.name || "Unknown",
-            pct: inst.ownership != null ? Math.round(inst.ownership * 10000) / 100 : null,
-            shares: inst.share || null,
-          }));
-        }
+      if (data?.ownership && Array.isArray(data.ownership) && data.ownership.length > 0) {
+        // Sum up percentage held by all mutual funds as proxy for institutional ownership
+        const totalPct = data.ownership.reduce((sum: number, fund: any) => sum + (fund.percentage || 0), 0);
+        result.institutional_ownership_pct = Math.round(totalPct * 100) / 100;
+
+        // Top 3 holders
+        const sorted = [...data.ownership].sort((a: any, b: any) => (b.percentage || 0) - (a.percentage || 0));
+        result.top_institutions = sorted.slice(0, 3).map((fund: any) => ({
+          name: fund.name || "Unknown Fund",
+          pct: fund.percentage != null ? Math.round(fund.percentage * 100) / 100 : null,
+          shares: fund.share || null,
+        }));
+
+        // Change vs prior period — check if there's a portfolioDate we can compare
+        // For now, just mark change as null (would need historical calls)
       }
     }
   } catch (e) {
-    console.warn(`Institutional ownership error for ${symbol}:`, e);
+    console.warn(`Mutual fund ownership error for ${symbol}:`, e);
   }
   await sleep(CALL_DELAY_MS);
 
@@ -245,6 +256,10 @@ serve(async (req) => {
     const cachedSymbols = new Set<string>();
     if (cached) {
       for (const row of cached) {
+        // Skip cache if smart money data is missing (needs re-fetch with new endpoints)
+        if (row.pe_ratio == null && row.smart_money_score == null && row.recent_insider_buys == null) {
+          continue; // treat as uncached — will be re-fetched
+        }
         cachedMap[row.symbol] = row;
         cachedSymbols.add(row.symbol);
       }
@@ -352,7 +367,7 @@ serve(async (req) => {
         row.valuation_label = scores.valuationLabel;
 
         // Smart money scores
-        const sm = computeSmartMoney(smartData.institutional_ownership_pct, smartData.institutional_change, smartData.insider_sentiment_score);
+        const sm = computeSmartMoney(smartData.institutional_ownership_pct, smartData.institutional_change, smartData.insider_sentiment_score, smartData.recent_insider_buys, smartData.recent_insider_sells);
         row.smart_money_score = sm.smartMoneyScore;
         row.smart_money_label = sm.smartMoneyLabel;
         row.insider_sentiment_label = sm.insiderSentimentLabel;
