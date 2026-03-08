@@ -4,7 +4,7 @@ import { FundamentalsData, getScoreLabel, getStockTypeInfo, getScoreBadgeColor, 
 import { supabase } from "@/integrations/supabase/client";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Progress } from "@/components/ui/progress";
-import { ArrowUpDown, ChevronDown, ChevronRight, Loader2 } from "lucide-react";
+import { ArrowUpDown, ChevronDown, ChevronRight, Loader2, RefreshCw } from "lucide-react";
 
 const DM_MONO = "'DM Mono', monospace";
 
