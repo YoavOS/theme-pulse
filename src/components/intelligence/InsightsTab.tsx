@@ -107,7 +107,7 @@ export default function InsightsTab({
 }) {
   const { dryUpThemes } = useVolumeDryUp();
   const { spy } = useSpyBenchmark();
-  const { fetchMarketNews, marketNews, getAiSummary } = useThemeNews();
+  const { fetchMarketNews, marketNews, getAiSummary, getThemeSentiment, aiSummaries } = useThemeNews();
   const [marketSummary, setMarketSummary] = useState<string | null>(null);
   const [marketSummaryLoading, setMarketSummaryLoading] = useState(false);
   const [narrative, setNarrative] = useState<NarrativeState | null>(null);
