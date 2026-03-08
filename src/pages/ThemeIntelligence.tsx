@@ -85,10 +85,14 @@ export default function ThemeIntelligence() {
             <MomentumTab accelerating={accelerating} fading={fading} isLoading={isLoading} />
           )}
           {activeTab === "trends" && (
-            <PlaceholderTab label="Trends" description="Theme flow chart & correlation matrix — coming soon" />
+            <ErrorBoundary label="Trends">
+              <TrendsTab />
+            </ErrorBoundary>
           )}
           {activeTab === "heatmap" && (
-            <PlaceholderTab label="Heatmap" description="Calendar heatmap view — coming soon" />
+            <ErrorBoundary label="Heatmap">
+              <HeatmapTab />
+            </ErrorBoundary>
           )}
           {activeTab === "insights" && (
             <InsightsTab themes={themes} accelerating={accelerating} fading={fading} isLoading={isLoading} />
