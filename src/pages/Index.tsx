@@ -364,6 +364,13 @@ export default function Index() {
               <RefreshCw size={16} className={isLoading ? "animate-spin" : ""} />
             </button>
             <Link
+              to="/intelligence"
+              className="rounded-md border border-[#00f5c4]/30 bg-[#00f5c4]/10 p-1.5 text-[#00f5c4] transition-colors hover:bg-[#00f5c4]/20"
+              title="Theme Intelligence"
+            >
+              <Brain size={16} />
+            </Link>
+            <Link
               to="/eod-history"
               className="rounded-md border border-border p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
               title="EOD History"
