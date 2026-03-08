@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import { getProcessedThemes, ThemeData } from "@/data/themeData";
 import { useLiveThemeData } from "@/hooks/useLiveThemeData";
 import ThemeCard from "@/components/ThemeCard";
@@ -33,7 +33,19 @@ export default function Index() {
     fetchLiveData,
     resetToDemo,
     mergeScanResults,
-  } = useLiveThemeData();
+  } = useLiveThemeData(activeTimeframe);
+
+  // Auto-fetch when timeframe changes and no cached data exists
+  const prevTimeframe = useRef(activeTimeframe);
+  useEffect(() => {
+    if (prevTimeframe.current !== activeTimeframe) {
+      prevTimeframe.current = activeTimeframe;
+      // If not live (no cache for this timeframe), auto-fetch
+      if (!isLive && !isLoading) {
+        fetchLiveData();
+      }
+    }
+  }, [activeTimeframe, isLive, isLoading, fetchLiveData]);
 
   const {
     isRunning: isFullScanning,

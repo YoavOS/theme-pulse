@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect, useRef } from "react";
 import { ThemeData, demoThemes, getProcessedThemes } from "@/data/themeData";
 import { useToast } from "@/hooks/use-toast";
 
-const CACHE_KEY = "theme_live_data_cache";
+const CACHE_KEY_PREFIX = "theme_live_data_cache";
 const CACHE_MAX_AGE_MS = 4 * 60 * 60 * 1000; // 4 hours
 
 interface CachedData {
@@ -12,22 +12,25 @@ interface CachedData {
   rateLimited: boolean;
 }
 
-function saveCache(data: CachedData) {
+function cacheKey(timeframe: string) {
+  return `${CACHE_KEY_PREFIX}_${timeframe}`;
+}
+
+function saveCache(timeframe: string, data: CachedData) {
   try {
-    localStorage.setItem(CACHE_KEY, JSON.stringify(data));
-    console.log(`Cache saved: ${data.themes.length} themes, ${data.symbolsFetched} symbols`);
+    localStorage.setItem(cacheKey(timeframe), JSON.stringify(data));
+    console.log(`Cache saved [${timeframe}]: ${data.themes.length} themes, ${data.symbolsFetched} symbols`);
   } catch { /* quota exceeded */ }
 }
 
-function loadCache(): CachedData | null {
+function loadCache(timeframe: string): CachedData | null {
   try {
-    const raw = localStorage.getItem(CACHE_KEY);
+    const raw = localStorage.getItem(cacheKey(timeframe));
     if (!raw) return null;
     const parsed = JSON.parse(raw) as CachedData;
     const age = Date.now() - new Date(parsed.fetchedAt).getTime();
     if (age > CACHE_MAX_AGE_MS) {
-      console.log("Cache expired, removing");
-      localStorage.removeItem(CACHE_KEY);
+      localStorage.removeItem(cacheKey(timeframe));
       return null;
     }
     return parsed;
@@ -45,11 +48,9 @@ interface LiveDataState {
   symbolsFetched: number;
 }
 
-function buildInitialState(): LiveDataState {
-  const cached = loadCache();
+function buildInitialState(timeframe: string): LiveDataState {
+  const cached = loadCache(timeframe);
   if (cached) {
-    const realThemes = cached.themes.filter(t => t.dataSource === "real");
-    console.log(`Loaded from cache: ${cached.themes.length} themes (${realThemes.length} real), age: ${Math.round((Date.now() - new Date(cached.fetchedAt).getTime()) / 60000)} min`);
     return {
       themes: getProcessedThemes(cached.themes),
       isLoading: false,
@@ -59,7 +60,6 @@ function buildInitialState(): LiveDataState {
       symbolsFetched: cached.symbolsFetched,
     };
   }
-  console.log("No cache – starting with demo data");
   return {
     themes: getProcessedThemes(demoThemes),
     isLoading: false,
@@ -70,25 +70,49 @@ function buildInitialState(): LiveDataState {
   };
 }
 
-export function useLiveThemeData() {
+export function useLiveThemeData(timeframe: string = "Today") {
   const { toast } = useToast();
-  const [state, setState] = useState<LiveDataState>(buildInitialState);
+  const [state, setState] = useState<LiveDataState>(() => buildInitialState(timeframe));
   const mountedRef = useRef(true);
   const themesRef = useRef(state.themes);
+  const timeframeRef = useRef(timeframe);
+
   useEffect(() => { themesRef.current = state.themes; }, [state.themes]);
+  useEffect(() => { timeframeRef.current = timeframe; }, [timeframe]);
 
   useEffect(() => {
     mountedRef.current = true;
     return () => { mountedRef.current = false; };
   }, []);
 
-  // Restore from cache on tab focus — NEVER fall back to demo
+  // When timeframe changes, load from cache or show demo
+  useEffect(() => {
+    const cached = loadCache(timeframe);
+    if (cached) {
+      setState({
+        themes: getProcessedThemes(cached.themes),
+        isLoading: false,
+        isLive: true,
+        lastFetched: new Date(cached.fetchedAt),
+        rateLimited: cached.rateLimited,
+        symbolsFetched: cached.symbolsFetched,
+      });
+    } else {
+      // No cache for this timeframe — show demo and auto-fetch
+      setState(prev => ({
+        ...prev,
+        themes: getProcessedThemes(demoThemes),
+        isLive: false,
+      }));
+    }
+  }, [timeframe]);
+
+  // Restore from cache on tab focus
   useEffect(() => {
     function handleVisibility() {
       if (document.visibilityState !== "visible") return;
-      const cached = loadCache();
+      const cached = loadCache(timeframeRef.current);
       if (cached && mountedRef.current) {
-        console.log("Tab focused – restoring from cache");
         setState({
           themes: getProcessedThemes(cached.themes),
           isLoading: false,
@@ -97,9 +121,6 @@ export function useLiveThemeData() {
           rateLimited: cached.rateLimited,
           symbolsFetched: cached.symbolsFetched,
         });
-        toast({ title: "Data restored", description: "Loaded latest real data from cache." });
-      } else {
-        console.log("Tab focused – no cache available");
       }
     }
     document.addEventListener("visibilitychange", handleVisibility);
@@ -108,46 +129,37 @@ export function useLiveThemeData() {
       document.removeEventListener("visibilitychange", handleVisibility);
       window.removeEventListener("focus", handleVisibility);
     };
-  }, [toast]);
+  }, []);
 
-  // Merge partial scan results into current state + cache
+  // Merge partial scan results (always "Today" timeframe for full scan)
   const mergeScanResults = useCallback((scanThemes: ThemeData[]) => {
     if (!mountedRef.current) return;
 
+    // Only merge into "Today" cache
+    const tf = "Today";
+
     setState((prev) => {
       const themeMap = new Map<string, ThemeData>();
-      // Start with current real themes
-      for (const t of prev.themes) {
-        themeMap.set(t.theme_name, t);
-      }
-      // Overwrite with new scan results (mark as real)
+      for (const t of prev.themes) themeMap.set(t.theme_name, t);
       for (const t of scanThemes) {
         themeMap.set(t.theme_name, { ...t, dataSource: "real", lastUpdated: new Date().toISOString() });
       }
-      // Only fill demo themes if we have NO real data yet
       const hasAnyReal = Array.from(themeMap.values()).some(t => t.dataSource === "real");
       if (!hasAnyReal) {
         for (const d of demoThemes) {
-          if (!themeMap.has(d.theme_name)) {
-            themeMap.set(d.theme_name, d);
-          }
+          if (!themeMap.has(d.theme_name)) themeMap.set(d.theme_name, d);
         }
       }
 
       const merged = Array.from(themeMap.values());
       const processed = getProcessedThemes(merged);
-
       const now = new Date().toISOString();
       const totalSymbols = merged.reduce((sum, t) => sum + t.tickers.filter(tk => !tk.skipped).length, 0);
-      saveCache({
-        themes: merged,
-        fetchedAt: now,
-        symbolsFetched: totalSymbols,
-        rateLimited: false,
-      });
 
-      const realCount = merged.filter(t => t.dataSource === "real").length;
-      console.log(`Merged scan: ${scanThemes.length} new, ${realCount} total real themes`);
+      saveCache(tf, { themes: merged, fetchedAt: now, symbolsFetched: totalSymbols, rateLimited: false });
+
+      // Only update UI if currently viewing Today
+      if (timeframeRef.current !== "Today") return prev;
 
       return {
         themes: processed,
@@ -162,19 +174,18 @@ export function useLiveThemeData() {
 
   const fetchLiveData = useCallback(async (themeNames?: string[]) => {
     setState((prev) => ({ ...prev, isLoading: true }));
+    const tf = timeframeRef.current;
 
     try {
-      const params: Record<string, string> = {};
-      if (themeNames?.length) {
-        params.themes = themeNames.join(",");
-      }
+      const params: Record<string, string> = { timeframe: tf };
+      if (themeNames?.length) params.themes = themeNames.join(",");
       const queryString = new URLSearchParams(params).toString();
 
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
       const anonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
       if (!supabaseUrl || !anonKey) throw new Error("Config missing");
 
-      const url = `${supabaseUrl}/functions/v1/fetch-themes${queryString ? `?${queryString}` : ""}`;
+      const url = `${supabaseUrl}/functions/v1/fetch-themes?${queryString}`;
       const res = await fetch(url, {
         headers: { apikey: anonKey, Authorization: `Bearer ${anonKey}` },
       });
@@ -205,12 +216,10 @@ export function useLiveThemeData() {
         };
       });
 
-      // Merge with existing
       const currentThemes = themesRef.current;
       const mergedMap = new Map<string, ThemeData>();
       for (const t of currentThemes) mergedMap.set(t.theme_name, t);
       for (const t of liveThemes) mergedMap.set(t.theme_name, t);
-      // Only backfill demo themes if no real data exists
       const hasReal = Array.from(mergedMap.values()).some(t => t.dataSource === "real");
       if (!hasReal) {
         for (const d of demoThemes) {
@@ -222,7 +231,7 @@ export function useLiveThemeData() {
       const processed = getProcessedThemes(merged);
       const fetchedAt = result.fetched_at || new Date().toISOString();
 
-      saveCache({
+      saveCache(tf, {
         themes: merged,
         fetchedAt,
         symbolsFetched: result.symbols_fetched || 0,
@@ -243,7 +252,7 @@ export function useLiveThemeData() {
       if (result.rate_limited) {
         toast({ title: "Rate Limited", description: "Some data may be stale.", variant: "destructive" });
       } else {
-        toast({ title: "Live Data Loaded", description: `${result.symbols_fetched} symbols across ${result.themes.length} themes` });
+        toast({ title: "Live Data Loaded", description: `${result.symbols_fetched} symbols · ${tf}` });
       }
     } catch (err) {
       console.error("Failed to fetch live data:", err);
@@ -254,7 +263,7 @@ export function useLiveThemeData() {
   }, [toast]);
 
   const resetToDemo = useCallback(() => {
-    localStorage.removeItem(CACHE_KEY);
+    localStorage.removeItem(cacheKey(timeframeRef.current));
     setState({
       themes: getProcessedThemes(demoThemes),
       isLoading: false,
