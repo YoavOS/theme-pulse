@@ -157,19 +157,6 @@ export default function FundamentalsIntelTab({
     return { strong, value, momentum, avoid };
   }, [themeFundamentals]);
 
-  const toggleSort = (key: SortKey) => {
-    if (sortKey === key) setSortDir(d => d === "asc" ? "desc" : "asc");
-    else { setSortKey(key); setSortDir("desc"); }
-  };
-
-  if (dataLoading || loading) {
-    return (
-      <div className="space-y-3">
-        {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-8 w-full" />)}
-      </div>
-    );
-  }
-
   const hasData = Object.keys(allFundamentals).length > 0;
 
   // Auto-prefetch top 10 themes when no data exists
@@ -203,6 +190,19 @@ export default function FundamentalsIntelTab({
       prefetchingRef.current = false;
     })();
   }, [loading, dataLoading, hasData, themes, loadFromCache]);
+
+  const toggleSort = (key: SortKey) => {
+    if (sortKey === key) setSortDir(d => d === "asc" ? "desc" : "asc");
+    else { setSortKey(key); setSortDir("desc"); }
+  };
+
+  if (dataLoading || loading) {
+    return (
+      <div className="space-y-3">
+        {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-8 w-full" />)}
+      </div>
+    );
+  }
 
   if (!hasData && !prefetchState.active) {
     return (
