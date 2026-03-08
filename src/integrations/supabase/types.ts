@@ -235,6 +235,39 @@ export type Database = {
         }
         Relationships: []
       }
+      weekly_reports: {
+        Row: {
+          biggest_reversals: Json | null
+          bottom_themes: Json | null
+          generated_at: string | null
+          id: string
+          narrative: string
+          top_themes: Json | null
+          volume_anomalies: Json | null
+          week_ending: string
+        }
+        Insert: {
+          biggest_reversals?: Json | null
+          bottom_themes?: Json | null
+          generated_at?: string | null
+          id?: string
+          narrative: string
+          top_themes?: Json | null
+          volume_anomalies?: Json | null
+          week_ending: string
+        }
+        Update: {
+          biggest_reversals?: Json | null
+          bottom_themes?: Json | null
+          generated_at?: string | null
+          id?: string
+          narrative?: string
+          top_themes?: Json | null
+          volume_anomalies?: Json | null
+          week_ending?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
