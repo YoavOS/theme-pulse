@@ -210,8 +210,12 @@ export function useLiveThemeData() {
       const mergedMap = new Map<string, ThemeData>();
       for (const t of currentThemes) mergedMap.set(t.theme_name, t);
       for (const t of liveThemes) mergedMap.set(t.theme_name, t);
-      for (const d of demoThemes) {
-        if (!mergedMap.has(d.theme_name)) mergedMap.set(d.theme_name, d);
+      // Only backfill demo themes if no real data exists
+      const hasReal = Array.from(mergedMap.values()).some(t => t.dataSource === "real");
+      if (!hasReal) {
+        for (const d of demoThemes) {
+          if (!mergedMap.has(d.theme_name)) mergedMap.set(d.theme_name, d);
+        }
       }
 
       const merged = Array.from(mergedMap.values());
