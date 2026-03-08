@@ -374,9 +374,16 @@ export default function OverviewTab({
                 );
               })
             )}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
+           </tbody>
+         </table>
+       </div>
+
+       <ThemeDrilldownModal 
+         theme={drilldownTheme} 
+         open={drilldownOpen} 
+         onOpenChange={setDrilldownOpen}
+         defaultSortKey="relVol"
+       />
+     </div>
+   );
 }
