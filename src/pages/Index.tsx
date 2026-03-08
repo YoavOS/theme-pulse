@@ -184,6 +184,15 @@ export default function Index() {
               <Download size={16} />
             </button>
             <button
+              onClick={() => setShowValidateDialog(true)}
+              className="rounded-md border border-primary/40 bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary transition-colors hover:bg-primary/20"
+              title="Checks which tickers do not exist on Finnhub — helps clean up bad symbols"
+            >
+              <span className="inline-flex items-center gap-1">
+                <ShieldCheck size={12} /> Validate
+              </span>
+            </button>
+            <button
               onClick={startFullScan}
               disabled={isFullScanning || isLoading}
               className="rounded-md border border-primary/40 bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary transition-colors hover:bg-primary/20 disabled:opacity-50"
