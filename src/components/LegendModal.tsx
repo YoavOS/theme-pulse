@@ -49,42 +49,42 @@ function Section({ title, items, defaultOpen = false }: { title: string; items: 
 const momentumLabels: LegendItem[] = [
   {
     label: "Breaking Out",
-    labelStyle: `<span class="text-[10px] font-semibold uppercase tracking-wide text-[#00f5c4]" style="font-family: ${DM_MONO}">Breaking Out</span>`,
+    labelStyle: `<span class="text-xs font-semibold uppercase tracking-wide text-[#00f5c4]" style="font-family: ${DM_MONO}">Breaking Out</span>`,
     explanation: "Short-term performance is significantly outpacing long-term trend AND volume confirms. Strong rotation signal.",
   },
   {
     label: "Breaking Out (low vol)",
-    labelStyle: `<span class="text-[10px] font-semibold uppercase tracking-wide text-[#facc15]" style="font-family: ${DM_MONO}">Breaking Out (low vol)</span>`,
+    labelStyle: `<span class="text-xs font-semibold uppercase tracking-wide text-[#facc15]" style="font-family: ${DM_MONO}">Breaking Out (low vol)</span>`,
     explanation: "Price is moving higher short-term but volume is below average. Move lacks institutional conviction — watch for confirmation.",
   },
   {
     label: "Accelerating",
-    labelStyle: `<span class="text-[10px] font-semibold uppercase tracking-wide text-[#00f5c4]" style="font-family: ${DM_MONO}">Accelerating</span>`,
+    labelStyle: `<span class="text-xs font-semibold uppercase tracking-wide text-[#00f5c4]" style="font-family: ${DM_MONO}">Accelerating</span>`,
     explanation: "Short-term is moderately outperforming long-term. Emerging strength, not yet a full breakout.",
   },
   {
     label: "Consolidating",
-    labelStyle: `<span class="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground" style="font-family: ${DM_MONO}">Consolidating</span>`,
+    labelStyle: `<span class="text-xs font-semibold uppercase tracking-wide text-muted-foreground" style="font-family: ${DM_MONO}">Consolidating</span>`,
     explanation: "Short-term and long-term performance are roughly equal. Theme is in a holding pattern — no clear direction.",
   },
   {
     label: "Losing Steam",
-    labelStyle: `<span class="text-[10px] font-semibold uppercase tracking-wide text-[#f5a623]" style="font-family: ${DM_MONO}">Losing Steam</span>`,
+    labelStyle: `<span class="text-xs font-semibold uppercase tracking-wide text-[#f5a623]" style="font-family: ${DM_MONO}">Losing Steam</span>`,
     explanation: "Short-term is underperforming long-term. Recent strength is fading but not yet a full reversal.",
   },
   {
     label: "Fading",
-    labelStyle: `<span class="text-[10px] font-semibold uppercase tracking-wide text-[#f5a623]" style="font-family: ${DM_MONO}">Fading</span>`,
+    labelStyle: `<span class="text-xs font-semibold uppercase tracking-wide text-[#f5a623]" style="font-family: ${DM_MONO}">Fading</span>`,
     explanation: "Long-term trend is positive but short-term is negative. The theme is losing momentum.",
   },
   {
     label: "Fading Hard",
-    labelStyle: `<span class="text-[10px] font-semibold uppercase tracking-wide text-[#ef4444]" style="font-family: ${DM_MONO}">Fading Hard</span>`,
+    labelStyle: `<span class="text-xs font-semibold uppercase tracking-wide text-[#ef4444]" style="font-family: ${DM_MONO}">Fading Hard</span>`,
     explanation: "Short-term is significantly underperforming long-term AND volume confirms selling. Strong reversal signal with institutional distribution.",
   },
   {
     label: "Recovering",
-    labelStyle: `<span class="text-[10px] font-semibold uppercase tracking-wide text-[#00f5c4]" style="font-family: ${DM_MONO}">Recovering</span>`,
+    labelStyle: `<span class="text-xs font-semibold uppercase tracking-wide text-[#00f5c4]" style="font-family: ${DM_MONO}">Recovering</span>`,
     explanation: "Short-term is positive while long-term is still negative. Early signs of a turnaround — watch for sustained follow-through.",
   },
 ];
