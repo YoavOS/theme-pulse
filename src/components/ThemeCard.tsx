@@ -7,6 +7,7 @@ import DemandSignals from "@/components/DemandSignals";
 import { ThemeDemandSignals } from "@/hooks/useVolumeData";
 import { hasThemeBreadthEvent } from "@/hooks/useBreadthAlerts";
 import { useVolumeDryUp } from "@/hooks/useVolumeDryUp";
+import { useSpyBenchmark, formatRS } from "@/hooks/useSpyBenchmark";
 
 class DemandSignalsBoundary extends Component<{ children: ReactNode; resetKey?: string }, { hasError: boolean }> {
   state = { hasError: false };
