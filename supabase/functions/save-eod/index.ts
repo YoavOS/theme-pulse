@@ -57,12 +57,33 @@ Deno.serve(async (req) => {
         .eq("date", dateStr)
         .single();
 
+      // Check if Friday close already saved (for weekend button)
+      let fridayDate: string | null = null;
+      let fridayAlreadySaved = false;
+      if (isWeekend) {
+        // Calculate last Friday's date
+        const now = new Date();
+        const etStr = now.toLocaleString("en-US", { timeZone: "America/New_York" });
+        const et = new Date(etStr);
+        const diff = dayOfWeek === 0 ? 2 : 1; // Sun=2 days back, Sat=1 day back
+        et.setDate(et.getDate() - diff);
+        fridayDate = `${et.getFullYear()}-${String(et.getMonth() + 1).padStart(2, "0")}-${String(et.getDate()).padStart(2, "0")}`;
+        const { data: fridaySession } = await sb
+          .from("eod_save_sessions")
+          .select("status")
+          .eq("date", fridayDate)
+          .single();
+        fridayAlreadySaved = fridaySession?.status === "completed";
+      }
+
       return new Response(JSON.stringify({
         date: dateStr,
         isWeekend,
         isAfterClose,
         alreadySaved: existing?.status === "completed",
         session: existing || null,
+        fridayDate,
+        fridayAlreadySaved,
       }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
