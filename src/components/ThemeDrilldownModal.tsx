@@ -355,6 +355,8 @@ export default function ThemeDrilldownModal({
             <tbody>
               {sorted.map(ticker => {
                 const extra = extras[ticker.symbol];
+                const tickerRS = ticker.skipped ? null : getTickerRS(ticker.pct);
+                const rsF = formatRS(tickerRS);
                 const sparkUp = extra?.sparkline.length
                   ? extra.sparkline[extra.sparkline.length - 1] >= extra.sparkline[0]
                   : true;
