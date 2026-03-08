@@ -32,14 +32,16 @@ export default function Watchlist() {
     [themes, pinned]
   );
 
-  // Lazy-load news for pinned themes
+  // Prefetch news for pinned themes (top 5 only)
   useEffect(() => {
-    if (pinnedThemes.length > 0 && !news) {
-      const allSymbols = pinnedThemes.flatMap(t => t.tickers.filter(tk => !tk.skipped).map(tk => tk.symbol));
-      const unique = [...new Set(allSymbols)];
-      if (unique.length > 0) fetchNews(unique);
+    if (pinnedThemes.length > 0) {
+      const top5 = pinnedThemes.slice(0, 5).map(t => ({
+        name: t.theme_name,
+        symbols: t.tickers.filter(tk => !tk.skipped).map(tk => tk.symbol),
+      }));
+      prefetchTopThemes(top5);
     }
-  }, [pinnedThemes, news, fetchNews]);
+  }, [pinnedThemes, prefetchTopThemes]);
 
   const handleNewsBadgeClick = useCallback(async (theme: ThemeData) => {
     setNewsPanelTheme(theme);
