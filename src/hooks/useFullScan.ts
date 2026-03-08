@@ -12,8 +12,9 @@ export interface FullScanProgress {
 export interface FullScanChunkTheme {
   theme_name: string;
   notes: string | null;
-  tickers: { symbol: string; pct: number; price: number }[];
+  tickers: { symbol: string; pct: number; price: number; skipped?: boolean; skipReason?: string }[];
   skipped_tickers: string[];
+  invalid_tickers?: string[];
 }
 
 export function useFullScan(onChunkComplete: (themes: ThemeData[]) => void) {
@@ -22,6 +23,7 @@ export function useFullScan(onChunkComplete: (themes: ThemeData[]) => void) {
   const [progress, setProgress] = useState<FullScanProgress | null>(null);
   const [statusText, setStatusText] = useState("");
   const [totalSkipped, setTotalSkipped] = useState(0);
+  const [totalInvalid, setTotalInvalid] = useState(0);
   const abortRef = useRef(false);
 
   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
@@ -44,19 +46,22 @@ export function useFullScan(onChunkComplete: (themes: ThemeData[]) => void) {
     setStatusText("");
     setIsRunning(false);
     setTotalSkipped(0);
+    setTotalInvalid(0);
     abortRef.current = true;
     toast({ title: "Scan progress cleared" });
   }, [supabaseUrl, anonKey, toast]);
 
-  // Convert chunk results to ThemeData format for merging into cache
   function chunkThemesToThemeData(chunkThemes: FullScanChunkTheme[]): ThemeData[] {
     return chunkThemes.map((t) => {
-      const up_count = t.tickers.filter((tk) => tk.pct > 0).length;
-      const down_count = t.tickers.filter((tk) => tk.pct <= 0).length;
+      const validTickers = t.tickers.filter((tk) => !tk.skipped);
+      const skippedTickers = t.tickers.filter((tk) => tk.skipped);
+      const up_count = validTickers.filter((tk) => tk.pct > 0).length;
+      const down_count = validTickers.filter((tk) => tk.pct <= 0).length;
+      const na_count = skippedTickers.length;
       const performance_pct =
-        t.tickers.length > 0
+        validTickers.length > 0
           ? Math.round(
-              (t.tickers.reduce((sum, tk) => sum + tk.pct, 0) / t.tickers.length) * 100
+              (validTickers.reduce((sum, tk) => sum + tk.pct, 0) / validTickers.length) * 100
             ) / 100
           : 0;
       return {
@@ -64,8 +69,17 @@ export function useFullScan(onChunkComplete: (themes: ThemeData[]) => void) {
         performance_pct,
         up_count,
         down_count,
-        tickers: t.tickers.map((tk) => ({ symbol: tk.symbol, pct: tk.pct })),
+        na_count,
+        valid_count: validTickers.length,
+        tickers: t.tickers.map((tk) => ({
+          symbol: tk.symbol,
+          pct: tk.pct,
+          skipped: tk.skipped,
+          skipReason: tk.skipReason,
+        })),
         notes: t.notes || undefined,
+        dataSource: "real" as const,
+        lastUpdated: new Date().toISOString(),
       };
     });
   }
@@ -74,7 +88,9 @@ export function useFullScan(onChunkComplete: (themes: ThemeData[]) => void) {
     setIsRunning(true);
     abortRef.current = false;
     setTotalSkipped(0);
+    setTotalInvalid(0);
     let skippedCount = 0;
+    let invalidCount = 0;
 
     try {
       // STEP 1: Check progress FIRST to decide start vs resume
@@ -83,7 +99,7 @@ export function useFullScan(onChunkComplete: (themes: ThemeData[]) => void) {
 
       let action: string;
       if (existing && (existing.status === "in_progress" || existing.status === "paused_failed" || existing.status === "rate_limited_waiting") && existing.last_theme_index > 0 && existing.last_theme_index < existing.total_themes) {
-        action = "chunk"; // Resume — edge function will read last_theme_index
+        action = "chunk"; // Resume
         setStatusText(`Resuming scan from theme ${existing.last_theme_index + 1}/${existing.total_themes}...`);
         setProgress(existing);
         console.log(`Resuming from ${existing.last_theme_index + 1}/${existing.total_themes}`);
@@ -94,24 +110,12 @@ export function useFullScan(onChunkComplete: (themes: ThemeData[]) => void) {
       }
 
       let done = false;
+      let totalThemes = existing?.total_themes || 0;
 
       while (!done && !abortRef.current) {
-        // Fetch progress for UI (skip on first iteration, we already have it)
-        if (action === "chunk") {
-          const p = await fetchProgress();
-          if (p) {
-            setProgress(p);
-            if (p.status === "rate_limited_waiting") {
-              setStatusText(`Rate limited — waiting... (${p.last_theme_index}/${p.total_themes})`);
-            } else if (p.status === "in_progress" || p.status === "paused_failed") {
-              setStatusText(`Updating theme ${p.last_theme_index}/${p.total_themes}...`);
-            }
-          }
-        }
-
         const res = await fetch(`${supabaseUrl}/functions/v1/full-scan?action=${action}`, { headers });
 
-        // After first call, always use "chunk" for subsequent calls
+        // After first call, always use "chunk"
         action = "chunk";
 
         if (!res.ok) {
@@ -120,7 +124,7 @@ export function useFullScan(onChunkComplete: (themes: ThemeData[]) => void) {
           const latest = await fetchProgress();
           if (latest) {
             setProgress(latest);
-            setStatusText(`Scan paused at theme ${latest.last_theme_index}/${latest.total_themes} — click to resume`);
+            setStatusText(`Scan paused at theme ${latest.last_theme_index}/${latest.total_themes} — click Full Scan to resume`);
           }
           setIsRunning(false);
           return;
@@ -128,11 +132,12 @@ export function useFullScan(onChunkComplete: (themes: ThemeData[]) => void) {
 
         const result = await res.json();
         console.log("Chunk result:", result);
+        totalThemes = result.total_themes || totalThemes;
 
         if (result.themes?.length > 0) {
           const converted = chunkThemesToThemeData(result.themes);
           onChunkComplete(converted);
-          console.log(`Merged ${converted.length} themes into cache from chunk`);
+          console.log(`Merged ${converted.length} themes into cache`);
         }
 
         if (result.skipped_tickers?.length > 0) {
@@ -141,10 +146,20 @@ export function useFullScan(onChunkComplete: (themes: ThemeData[]) => void) {
           console.warn("Skipped tickers:", result.skipped_tickers);
         }
 
+        if (result.invalid_tickers?.length > 0) {
+          invalidCount += result.invalid_tickers.length;
+          setTotalInvalid(invalidCount);
+          console.warn("Invalid tickers:", result.invalid_tickers);
+        }
+
         done = result.done;
 
+        // Update progress UI
+        const p = await fetchProgress();
+        if (p) setProgress(p);
+
         if (!done) {
-          setStatusText(`Updated ${result.processed_to}/${result.total_themes} themes${skippedCount > 0 ? ` | ${skippedCount} tickers skipped` : ""}...`);
+          setStatusText(`Updated ${result.processed_to}/${totalThemes} themes${skippedCount > 0 ? ` | ${skippedCount} skipped` : ""}${invalidCount > 0 ? ` | ${invalidCount} invalid` : ""}...`);
           await new Promise((r) => setTimeout(r, 1000));
         }
       }
@@ -154,14 +169,16 @@ export function useFullScan(onChunkComplete: (themes: ThemeData[]) => void) {
         return;
       }
 
-      setStatusText(`Complete — all themes refreshed${skippedCount > 0 ? ` (${skippedCount} tickers skipped)` : ""}`);
+      const summaryParts = [`All ${totalThemes} themes updated`];
+      if (skippedCount > 0) summaryParts.push(`${skippedCount} tickers skipped (rate limit)`);
+      if (invalidCount > 0) summaryParts.push(`${invalidCount} invalid tickers skipped`);
+
+      setStatusText(`Complete — ${summaryParts.join(" | ")}`);
       setIsRunning(false);
 
       toast({
         title: "Full Scan Complete",
-        description: skippedCount > 0
-          ? `All themes updated. ${skippedCount} tickers skipped due to rate limits.`
-          : "All themes have been updated with real data.",
+        description: summaryParts.join(". "),
       });
     } catch (err) {
       console.error("Full scan error:", err);
@@ -169,7 +186,7 @@ export function useFullScan(onChunkComplete: (themes: ThemeData[]) => void) {
       const latest = await fetchProgress();
       if (latest) {
         setProgress(latest);
-        setStatusText(`Scan failed at theme ${latest.last_theme_index}/${latest.total_themes} — click to resume`);
+        setStatusText(`Scan failed at theme ${latest.last_theme_index}/${latest.total_themes} — click Full Scan to resume`);
       } else {
         setStatusText("Full scan failed — click to retry");
       }
@@ -184,7 +201,7 @@ export function useFullScan(onChunkComplete: (themes: ThemeData[]) => void) {
   // Check for unfinished progress on mount
   useEffect(() => {
     fetchProgress().then((p) => {
-      if (p && (p.status === "in_progress" || p.status === "paused_failed") && p.last_theme_index < p.total_themes) {
+      if (p && (p.status === "in_progress" || p.status === "paused_failed") && p.last_theme_index > 0 && p.last_theme_index < p.total_themes) {
         setProgress(p);
         setStatusText(`Resumable: theme ${p.last_theme_index}/${p.total_themes} — click Full Scan to resume`);
       }
@@ -196,6 +213,7 @@ export function useFullScan(onChunkComplete: (themes: ThemeData[]) => void) {
     progress,
     statusText,
     totalSkipped,
+    totalInvalid,
     startFullScan,
     clearProgress,
   };

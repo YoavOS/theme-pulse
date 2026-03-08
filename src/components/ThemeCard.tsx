@@ -1,4 +1,5 @@
 import { ThemeData } from "@/data/themeData";
+import { Badge } from "@/components/ui/badge";
 
 function getPctColor(pct: number): string {
   if (pct > 7) return "text-gain-strong";
@@ -10,15 +11,24 @@ function getPctColor(pct: number): string {
 
 function getBarColors(ratio: number): { green: string; red: string; gradient: string } {
   const greenW = Math.round(ratio * 100);
-  const redW = 100 - greenW;
-
   if (ratio >= 0.8) return { green: "hsl(var(--bar-green))", red: "transparent", gradient: `hsl(var(--bar-green)) ${greenW}%, hsl(var(--bar-track)) ${greenW}%` };
   if (ratio >= 0.5) return { green: "hsl(var(--bar-green))", red: "hsl(var(--bar-track))", gradient: `hsl(var(--bar-green)) ${greenW}%, hsl(var(--bar-red) / 0.4) ${greenW}%` };
   if (ratio >= 0.3) return { green: "hsl(var(--bar-green))", red: "hsl(var(--bar-red))", gradient: `hsl(var(--bar-green)) ${greenW}%, hsl(var(--bar-red)) ${greenW}%` };
   return { green: "transparent", red: "hsl(var(--bar-red))", gradient: `hsl(var(--bar-red) / 0.5) ${greenW}%, hsl(var(--bar-red)) ${greenW}%` };
 }
 
-function TickerChip({ symbol, pct }: { symbol: string; pct: number }) {
+function TickerChip({ symbol, pct, skipped, skipReason }: { symbol: string; pct: number; skipped?: boolean; skipReason?: string }) {
+  if (skipped) {
+    return (
+      <span
+        className="inline-flex items-center gap-1 rounded bg-destructive/10 px-2 py-0.5 font-mono text-[0.8rem] text-muted-foreground"
+        title={`Skipped: ${skipReason || "unknown"}`}
+      >
+        <span className="font-semibold">{symbol}</span>
+        <span className="text-destructive/70">N/A</span>
+      </span>
+    );
+  }
   const color = pct >= 0 ? "text-gain-medium" : "text-loss-mild";
   const sign = pct >= 0 ? "+" : "";
   return (
@@ -35,24 +45,49 @@ function TickerChip({ symbol, pct }: { symbol: string; pct: number }) {
 }
 
 export default function ThemeCard({ theme, index }: { theme: ThemeData; index: number }) {
-  const total = theme.up_count + theme.down_count;
-  const ratio = total > 0 ? theme.up_count / total : 0;
+  const validTickers = theme.tickers.filter(t => !t.skipped);
+  const naTickers = theme.tickers.filter(t => t.skipped);
+  const total = validTickers.length;
+  const up = validTickers.filter(t => t.pct > 0).length;
+  const down = validTickers.filter(t => t.pct <= 0).length;
+  const ratio = total > 0 ? up / total : 0;
   const bar = getBarColors(ratio);
   const sign = theme.performance_pct >= 0 ? "+" : "";
-  const sortedTickers = [...theme.tickers].sort((a, b) => b.pct - a.pct).slice(0, 8);
+  const sortedTickers = [...theme.tickers].sort((a, b) => {
+    // Put skipped at end
+    if (a.skipped && !b.skipped) return 1;
+    if (!a.skipped && b.skipped) return -1;
+    return b.pct - a.pct;
+  }).slice(0, 10);
   const isEmpty = total === 0 && theme.tickers.length === 0;
+  const allSkipped = theme.tickers.length > 0 && total === 0;
+
+  // Data source badge
+  const isReal = theme.dataSource === "real";
 
   return (
     <div
       className="group rounded-lg border border-border bg-card p-4 transition-all hover:border-muted-foreground/30 hover:bg-surface-hover"
       style={{ animationDelay: `${index * 40}ms` }}
+      title={isReal && theme.lastUpdated ? `Real data · Updated ${new Date(theme.lastUpdated).toLocaleTimeString()}` : "Demo/fallback data"}
     >
-      {/* Row 1: Name + Percentage */}
+      {/* Row 1: Name + Percentage + Badge */}
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
-          <h3 className="truncate text-[1.15rem] font-bold leading-tight text-foreground">
-            {theme.theme_name}
-          </h3>
+          <div className="flex items-center gap-2">
+            <h3 className="truncate text-[1.15rem] font-bold leading-tight text-foreground">
+              {theme.theme_name}
+            </h3>
+            {isReal ? (
+              <Badge variant="secondary" className="shrink-0 text-[9px] px-1.5 py-0 bg-gain-medium/15 text-gain-medium border-gain-medium/30">
+                {total}/{theme.tickers.length}
+              </Badge>
+            ) : (
+              <Badge variant="secondary" className="shrink-0 text-[9px] px-1.5 py-0 bg-muted text-muted-foreground">
+                Demo
+              </Badge>
+            )}
+          </div>
           {theme.notes && (
             <span className="mt-0.5 inline-block text-xs text-muted-foreground italic">
               {theme.notes}
@@ -64,7 +99,9 @@ export default function ThemeCard({ theme, index }: { theme: ThemeData; index: n
         </span>
       </div>
 
-      {isEmpty ? (
+      {allSkipped ? (
+        <p className="mt-3 text-xs text-destructive">No valid tickers — all {naTickers.length} skipped (invalid or rate-limited). Add real symbols.</p>
+      ) : isEmpty ? (
         <p className="mt-3 text-xs text-muted-foreground">No data — placeholder theme</p>
       ) : (
         <>
@@ -79,10 +116,13 @@ export default function ThemeCard({ theme, index }: { theme: ThemeData; index: n
             />
           </div>
 
-          {/* Row 3: Up/Down counts */}
+          {/* Row 3: Up/Down/NA counts */}
           <div className="mt-1.5 flex items-center gap-4 text-xs font-medium">
-            <span className="text-gain-medium">{theme.up_count} up ↑</span>
-            <span className="text-loss-mild">{theme.down_count} down ↓</span>
+            <span className="text-gain-medium">{up} up ↑</span>
+            <span className="text-loss-mild">{down} down ↓</span>
+            {naTickers.length > 0 && (
+              <span className="text-muted-foreground">{naTickers.length} N/A</span>
+            )}
             <span className="ml-auto text-muted-foreground">{Math.round(ratio * 100)}% advancing</span>
           </div>
 
@@ -90,7 +130,7 @@ export default function ThemeCard({ theme, index }: { theme: ThemeData; index: n
           {sortedTickers.length > 0 && (
             <div className="mt-2.5 flex flex-wrap gap-1.5">
               {sortedTickers.map((t) => (
-                <TickerChip key={t.symbol} symbol={t.symbol} pct={t.pct} />
+                <TickerChip key={t.symbol} symbol={t.symbol} pct={t.pct} skipped={t.skipped} skipReason={t.skipReason} />
               ))}
             </div>
           )}
