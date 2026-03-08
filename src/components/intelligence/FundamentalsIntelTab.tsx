@@ -29,6 +29,17 @@ interface ThemeFundamentals {
 type SortKey = "rank" | "name" | "score" | "growth" | "margin" | "debt" | "type" | "smartMoney" | "instPct";
 type SortDir = "asc" | "desc";
 
+function sanitize(value: number | null, min: number, max: number): number | null {
+  if (value === null || value < min || value > max) return null;
+  return value;
+}
+
+function safeAvg(values: (number | null)[], min: number, max: number): number | null {
+  const clean = values.map(v => sanitize(v, min, max)).filter((v): v is number => v !== null);
+  if (clean.length === 0) return null;
+  return Math.round(clean.reduce((a, b) => a + b, 0) / clean.length * 10) / 10;
+}
+
 function mostCommon(arr: string[]): string {
   const counts: Record<string, number> = {};
   for (const v of arr) counts[v] = (counts[v] || 0) + 1;
