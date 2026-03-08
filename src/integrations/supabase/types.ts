@@ -119,6 +119,30 @@ export type Database = {
         }
         Relationships: []
       }
+      last_scan_cache: {
+        Row: {
+          id: number
+          scanned_at: string
+          symbols_fetched: number | null
+          themes_data: Json
+          timeframe: string
+        }
+        Insert: {
+          id?: number
+          scanned_at?: string
+          symbols_fetched?: number | null
+          themes_data?: Json
+          timeframe?: string
+        }
+        Update: {
+          id?: number
+          scanned_at?: string
+          symbols_fetched?: number | null
+          themes_data?: Json
+          timeframe?: string
+        }
+        Relationships: []
+      }
       theme_breadth_history: {
         Row: {
           advancing: number | null
