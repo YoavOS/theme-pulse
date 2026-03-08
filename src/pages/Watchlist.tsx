@@ -32,6 +32,53 @@ export default function Watchlist() {
     [themes, pinned]
   );
 
+  // Lazy-load news for pinned themes
+  useEffect(() => {
+    if (pinnedThemes.length > 0 && !news) {
+      const allSymbols = pinnedThemes.flatMap(t => t.tickers.filter(tk => !tk.skipped).map(tk => tk.symbol));
+      const unique = [...new Set(allSymbols)];
+      if (unique.length > 0) fetchNews(unique);
+    }
+  }, [pinnedThemes, news, fetchNews]);
+
+  const handleNewsBadgeClick = useCallback(async (theme: ThemeData) => {
+    setNewsPanelTheme(theme);
+    setNewsPanelSummary(null);
+    setNewsPanelSummaryLoading(true);
+    const articles = getThemeArticles(theme.tickers.map(t => t.symbol));
+    const summary = await getAiSummary(theme.theme_name, articles);
+    setNewsPanelSummary(summary || null);
+    setNewsPanelSummaryLoading(false);
+  }, [getThemeArticles, getAiSummary]);
+
+  // Breaking news check for pinned themes
+  useEffect(() => {
+    if (!news || pinnedThemes.length === 0) return;
+    const lastChecked = JSON.parse(localStorage.getItem("news_last_checked") || "{}");
+    const now = Date.now();
+
+    for (const theme of pinnedThemes) {
+      const symbols = theme.tickers.map(t => t.symbol);
+      const articles = getThemeArticles(symbols);
+      const lastCheck = lastChecked[theme.theme_name] || 0;
+
+      const newArticles = articles.filter(a =>
+        a.published_at && new Date(a.published_at).getTime() > lastCheck
+      );
+
+      if (newArticles.length > 0 && now - lastCheck > 30 * 60 * 1000) {
+        toast(`📰 New news for ${theme.theme_name}`, {
+          description: newArticles[0].headline.slice(0, 80),
+          duration: 8000,
+        });
+      }
+
+      lastChecked[theme.theme_name] = now;
+    }
+
+    localStorage.setItem("news_last_checked", JSON.stringify(lastChecked));
+  }, [news, pinnedThemes, getThemeArticles]);
+
   useEffect(() => {
     checkAlerts();
   }, [pinnedThemes]);
