@@ -9,6 +9,7 @@ import ThemeDrilldownModal from "@/components/ThemeDrilldownModal";
 import { useLiveThemeData } from "@/hooks/useLiveThemeData";
 import { useVolumeDryUp } from "@/hooks/useVolumeDryUp";
 import BubbleChartView from "./BubbleChartView";
+import { useSpyBenchmark, formatRS } from "@/hooks/useSpyBenchmark";
 
 const DM_MONO = "'DM Mono', monospace";
 const VIEW_KEY = "overviewView";
