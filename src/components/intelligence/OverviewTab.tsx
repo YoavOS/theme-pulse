@@ -1,11 +1,16 @@
+import { useState, useMemo } from "react";
 import { ThemeIntelData } from "@/hooks/useThemeIntelligence";
 import { Skeleton } from "@/components/ui/skeleton";
-import { TrendingUp, TrendingDown, Minus } from "lucide-react";
+import { TrendingUp, TrendingDown, Minus, Info } from "lucide-react";
 import { LineChart, Line, ResponsiveContainer } from "recharts";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 
 const DM_MONO = "'DM Mono', monospace";
 const EOD_TOOLTIP = "Accumulating EOD history — available after more daily saves";
+const SIGNAL_TOOLTIP =
+  "Divergence between momentum rank and breadth rank. '⚠ Thin' = price move not confirmed by breadth. '👀 Watch' = broad strength not yet in momentum score.";
+
+type SortMode = "momentum" | "breadth";
 
 function PerfCell({ value, hasData }: { value: number; hasData: boolean }) {
   if (!hasData) {
@@ -81,6 +86,45 @@ function TrendArrow({ score }: { score: number }) {
   return <Minus size={14} className="text-muted-foreground" />;
 }
 
+function breadthPctColor(pct: number): string {
+  if (pct >= 80) return "#00f5c4";
+  if (pct >= 60) return "#4ade80";
+  if (pct >= 40) return "#f5a623";
+  return "#ef4444";
+}
+
+function BreadthCell({ up, total }: { up: number; total: number }) {
+  const pct = total > 0 ? Math.round((up / total) * 100) : 0;
+  return (
+    <td className="px-3 py-2.5 text-right">
+      <div style={{ fontFamily: DM_MONO, color: breadthPctColor(pct) }} className="text-sm font-medium">
+        {pct}%
+      </div>
+      <div className="text-[10px] text-muted-foreground" style={{ fontFamily: DM_MONO }}>
+        {up}/{total}
+      </div>
+    </td>
+  );
+}
+
+function SignalCell({ divergence }: { divergence: number }) {
+  if (divergence <= -5) {
+    return (
+      <td className="px-3 py-2.5 text-center">
+        <span className="text-[11px] font-medium text-[#f5a623]" style={{ fontFamily: DM_MONO }}>⚠ Thin</span>
+      </td>
+    );
+  }
+  if (divergence >= 5) {
+    return (
+      <td className="px-3 py-2.5 text-center">
+        <span className="text-[11px] font-medium text-[#00f5c4]" style={{ fontFamily: DM_MONO }}>👀 Watch</span>
+      </td>
+    );
+  }
+  return <td className="px-3 py-2.5" />;
+}
+
 function SkeletonRows() {
   return (
     <>
@@ -92,7 +136,9 @@ function SkeletonRows() {
           <td className="px-3 py-3"><Skeleton className="h-4 w-14" /></td>
           <td className="px-3 py-3"><Skeleton className="h-4 w-14" /></td>
           <td className="px-3 py-3"><Skeleton className="h-4 w-14" /></td>
+          <td className="px-3 py-3"><Skeleton className="h-4 w-12" /></td>
           <td className="px-3 py-3"><Skeleton className="h-4 w-16" /></td>
+          <td className="px-3 py-3"><Skeleton className="h-4 w-12" /></td>
           <td className="px-3 py-3"><Skeleton className="h-4 w-6" /></td>
         </tr>
       ))}
@@ -107,14 +153,69 @@ export default function OverviewTab({
   themes: ThemeIntelData[];
   isLoading: boolean;
 }) {
+  const [sortMode, setSortMode] = useState<SortMode>("momentum");
+
+  // Compute ranks and divergence
+  const enriched = useMemo(() => {
+    if (themes.length === 0) return [];
+
+    // Momentum rank (themes already sorted by momentum desc)
+    const momentumRanked = themes.map((t, i) => ({ ...t, momentumRank: i + 1 }));
+
+    // Breadth rank
+    const byBreadth = [...momentumRanked].sort((a, b) => {
+      const aPct = a.breadthTotal > 0 ? a.breadthUp / a.breadthTotal : 0;
+      const bPct = b.breadthTotal > 0 ? b.breadthUp / b.breadthTotal : 0;
+      return bPct - aPct;
+    });
+    const breadthRankMap = new Map<string, number>();
+    byBreadth.forEach((t, i) => breadthRankMap.set(t.themeId, i + 1));
+
+    return momentumRanked.map(t => ({
+      ...t,
+      breadthRank: breadthRankMap.get(t.themeId) || 0,
+      breadthPct: t.breadthTotal > 0 ? Math.round((t.breadthUp / t.breadthTotal) * 100) : 0,
+      divergence: t.momentumRank - (breadthRankMap.get(t.themeId) || 0),
+    }));
+  }, [themes]);
+
+  const sorted = useMemo(() => {
+    if (sortMode === "breadth") {
+      return [...enriched].sort((a, b) => b.breadthPct - a.breadthPct);
+    }
+    return enriched; // already momentum-sorted
+  }, [enriched, sortMode]);
+
   return (
     <div className="h-full overflow-auto">
-      {/* Summary */}
-      <div className="mb-4 flex items-center gap-4 text-xs text-muted-foreground">
-        <span className="font-['Syne',sans-serif] text-sm font-semibold text-foreground">
-          Momentum Rankings
-        </span>
-        <span>{themes.length} themes ranked</span>
+      {/* Header with sort toggle */}
+      <div className="mb-4 flex items-center justify-between">
+        <div className="flex items-center gap-4 text-xs text-muted-foreground">
+          <span className="font-['Syne',sans-serif] text-sm font-semibold text-foreground">
+            Theme Rankings
+          </span>
+          <span>{themes.length} themes ranked</span>
+        </div>
+
+        {/* Sort pills */}
+        <div className="flex items-center gap-1 rounded-lg bg-[rgba(255,255,255,0.03)] p-1">
+          {(["momentum", "breadth"] as const).map(mode => (
+            <button
+              key={mode}
+              onClick={() => setSortMode(mode)}
+              className={`relative rounded-md px-3 py-1.5 text-xs font-medium transition-all ${
+                sortMode === mode
+                  ? "bg-[rgba(255,255,255,0.08)] text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground hover:bg-[rgba(255,255,255,0.04)]"
+              }`}
+            >
+              {mode === "momentum" ? "Momentum" : "Breadth"}
+              {sortMode === mode && (
+                <span className="absolute bottom-0 left-1/2 -translate-x-1/2 h-0.5 w-6 rounded-full bg-[#00f5c4]" />
+              )}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Table */}
@@ -135,7 +236,20 @@ export default function OverviewTab({
               <th className="px-3 py-2.5 text-right font-medium">1D</th>
               <th className="px-3 py-2.5 text-right font-medium">1W</th>
               <th className="px-3 py-2.5 text-right font-medium">1M</th>
+              <th className="px-3 py-2.5 text-right font-medium">Breadth</th>
               <th className="px-3 py-2.5 text-center font-medium">7D</th>
+              <th className="px-3 py-2.5 text-center font-medium">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="cursor-help inline-flex items-center gap-1">
+                      Signal <Info size={10} className="opacity-50" />
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="max-w-[260px] text-xs">
+                    {SIGNAL_TOOLTIP}
+                  </TooltipContent>
+                </Tooltip>
+              </th>
               <th className="px-3 py-2.5 text-center font-medium w-10">Trend</th>
             </tr>
           </thead>
@@ -143,36 +257,48 @@ export default function OverviewTab({
             {isLoading ? (
               <SkeletonRows />
             ) : (
-              themes.map((t, i) => (
-                <tr
-                  key={t.themeId}
-                  className="border-b border-[rgba(255,255,255,0.04)] transition-colors hover:bg-[rgba(255,255,255,0.03)]"
-                >
-                  <td className="px-3 py-2.5 text-xs text-muted-foreground" style={{ fontFamily: DM_MONO }}>
-                    {i + 1}
-                  </td>
-                  <td className="px-3 py-2.5">
-                    <div className="font-['Syne',sans-serif] font-semibold text-foreground text-[13px] leading-tight">
-                      {t.themeName}
-                    </div>
-                    <div className="text-[10px] text-muted-foreground mt-0.5" style={{ fontFamily: DM_MONO }}>
-                      {t.breadthUp}/{t.breadthTotal} advancing
-                    </div>
-                  </td>
-                  <td className="px-3 py-2.5">
-                    <MomentumBar score={t.momentumScore} />
-                  </td>
-                  <PerfCell value={t.perf_1d} hasData={true} />
-                  <PerfCell value={t.perf_1w} hasData={t.hasEodHistory} />
-                  <PerfCell value={t.perf_1m} hasData={t.hasEodHistory} />
-                  <td className="px-3 py-2.5 text-center">
-                    <MiniSparkline data={t.sparklineData} />
-                  </td>
-                  <td className="px-3 py-2.5 text-center">
-                    <TrendArrow score={t.momentumScore} />
-                  </td>
-                </tr>
-              ))
+              sorted.map((t, i) => {
+                const borderColor =
+                  t.divergence <= -5
+                    ? "2px solid #f5a623"
+                    : t.divergence >= 5
+                    ? "2px solid #00f5c4"
+                    : "2px solid transparent";
+
+                return (
+                  <tr
+                    key={t.themeId}
+                    className="border-b border-[rgba(255,255,255,0.04)] transition-all duration-200 hover:bg-[rgba(255,255,255,0.03)]"
+                    style={{ borderLeft: borderColor }}
+                  >
+                    <td className="px-3 py-2.5 text-xs text-muted-foreground" style={{ fontFamily: DM_MONO }}>
+                      {i + 1}
+                    </td>
+                    <td className="px-3 py-2.5">
+                      <div className="font-['Syne',sans-serif] font-semibold text-foreground text-[13px] leading-tight">
+                        {t.themeName}
+                      </div>
+                      <div className="text-[10px] text-muted-foreground mt-0.5" style={{ fontFamily: DM_MONO }}>
+                        {t.breadthUp}/{t.breadthTotal} advancing
+                      </div>
+                    </td>
+                    <td className="px-3 py-2.5">
+                      <MomentumBar score={t.momentumScore} />
+                    </td>
+                    <PerfCell value={t.perf_1d} hasData={true} />
+                    <PerfCell value={t.perf_1w} hasData={t.hasEodHistory} />
+                    <PerfCell value={t.perf_1m} hasData={t.hasEodHistory} />
+                    <BreadthCell up={t.breadthUp} total={t.breadthTotal} />
+                    <td className="px-3 py-2.5 text-center">
+                      <MiniSparkline data={t.sparklineData} />
+                    </td>
+                    <SignalCell divergence={t.divergence} />
+                    <td className="px-3 py-2.5 text-center">
+                      <TrendArrow score={t.momentumScore} />
+                    </td>
+                  </tr>
+                );
+              })
             )}
           </tbody>
         </table>
