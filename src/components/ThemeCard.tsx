@@ -77,6 +77,8 @@ export default function ThemeCard({ theme, index, onClick, fetchVolume, getTheme
   const { isPinned, togglePin } = useWatchlist();
   const themePinned = isPinned(theme.theme_name);
   const breadthEvent = useMemo(() => hasThemeBreadthEvent(theme.theme_name), [theme.theme_name]);
+  const { isThemeDryingUp } = useVolumeDryUp();
+  const isDryingUp = useMemo(() => isThemeDryingUp(theme.theme_name), [theme.theme_name, isThemeDryingUp]);
   const validTickers = theme.tickers.filter(t => !t.skipped);
   const naTickers = theme.tickers.filter(t => t.skipped);
   const total = validTickers.length;
