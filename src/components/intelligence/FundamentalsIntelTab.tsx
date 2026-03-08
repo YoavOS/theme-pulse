@@ -1,9 +1,10 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { ThemeIntelData } from "@/hooks/useThemeIntelligence";
 import { FundamentalsData, getScoreLabel, getStockTypeInfo, getScoreBadgeColor } from "@/hooks/useFundamentals";
 import { supabase } from "@/integrations/supabase/client";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ArrowUpDown, ChevronDown, ChevronRight } from "lucide-react";
+import { Progress } from "@/components/ui/progress";
+import { ArrowUpDown, ChevronDown, ChevronRight, Loader2 } from "lucide-react";
 
 const DM_MONO = "'DM Mono', monospace";
 
@@ -55,30 +56,37 @@ export default function FundamentalsIntelTab({
   const [sortKey, setSortKey] = useState<SortKey>("score");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [expandedTheme, setExpandedTheme] = useState<string | null>(null);
+  const [prefetchState, setPrefetchState] = useState<{ active: boolean; completed: number; total: number }>({ active: false, completed: 0, total: 0 });
+  const prefetchingRef = useRef(false);
 
   // Fetch all fundamentals from cache
-  useEffect(() => {
-    (async () => {
-      setLoading(true);
-      try {
-        const { data } = await supabase
-          .from("fundamentals_cache")
-          .select("*");
-        
-        if (data) {
-          const map: Record<string, FundamentalsData> = {};
-          for (const row of data) {
-            map[row.symbol] = row as unknown as FundamentalsData;
-          }
-          setAllFundamentals(map);
+  const loadFromCache = useCallback(async () => {
+    setLoading(true);
+    try {
+      const { data } = await supabase
+        .from("fundamentals_cache")
+        .select("*");
+      
+      if (data) {
+        const map: Record<string, FundamentalsData> = {};
+        for (const row of data) {
+          map[row.symbol] = row as unknown as FundamentalsData;
         }
-      } catch (e) {
-        console.error("Failed to load fundamentals:", e);
-      } finally {
-        setLoading(false);
+        setAllFundamentals(map);
+        return Object.keys(map).length;
       }
-    })();
+      return 0;
+    } catch (e) {
+      console.error("Failed to load fundamentals:", e);
+      return 0;
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    loadFromCache();
+  }, [loadFromCache]);
 
   const themeFundamentals = useMemo(() => {
     return themes.map(t => {
@@ -149,6 +157,40 @@ export default function FundamentalsIntelTab({
     return { strong, value, momentum, avoid };
   }, [themeFundamentals]);
 
+  const hasData = Object.keys(allFundamentals).length > 0;
+
+  // Auto-prefetch top 10 themes when no data exists
+  useEffect(() => {
+    if (loading || dataLoading || hasData || prefetchingRef.current || themes.length === 0) return;
+    prefetchingRef.current = true;
+
+    const topThemes = [...themes]
+      .sort((a, b) => b.momentumScore - a.momentumScore)
+      .slice(0, 10);
+
+    const total = topThemes.length;
+    setPrefetchState({ active: true, completed: 0, total });
+
+    (async () => {
+      for (let i = 0; i < topThemes.length; i++) {
+        const theme = topThemes[i];
+        try {
+          await supabase.functions.invoke("fetch-fundamentals", {
+            body: { symbols: theme.symbols },
+          });
+        } catch (e) {
+          console.error(`Prefetch failed for ${theme.themeName}:`, e);
+        }
+        setPrefetchState({ active: true, completed: i + 1, total });
+      }
+
+      // Reload cache after all prefetches
+      await loadFromCache();
+      setPrefetchState({ active: false, completed: total, total });
+      prefetchingRef.current = false;
+    })();
+  }, [loading, dataLoading, hasData, themes, loadFromCache]);
+
   const toggleSort = (key: SortKey) => {
     if (sortKey === key) setSortDir(d => d === "asc" ? "desc" : "asc");
     else { setSortKey(key); setSortDir("desc"); }
@@ -162,14 +204,31 @@ export default function FundamentalsIntelTab({
     );
   }
 
-  const hasData = Object.keys(allFundamentals).length > 0;
-
-  if (!hasData) {
+  if (!hasData && !prefetchState.active) {
     return (
       <div className="flex flex-col items-center justify-center rounded-lg py-16 text-center" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}>
         <h3 className="font-['Syne',sans-serif] text-lg font-semibold text-foreground mb-1">No Fundamental Data Yet</h3>
         <p className="text-sm text-muted-foreground">Open any theme's drill-down modal and click the Fundamentals tab to start fetching data.</p>
         <p className="text-xs text-muted-foreground mt-1">Data will be cached for 24 hours once fetched.</p>
+      </div>
+    );
+  }
+
+  if (!hasData && prefetchState.active) {
+    const pct = prefetchState.total > 0 ? Math.round((prefetchState.completed / prefetchState.total) * 100) : 0;
+    return (
+      <div className="flex flex-col items-center justify-center rounded-lg py-16 text-center gap-4" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}>
+        <Loader2 className="h-6 w-6 animate-spin text-primary" />
+        <h3 className="font-['Syne',sans-serif] text-lg font-semibold text-foreground">
+          Fetching fundamentals for top themes…
+        </h3>
+        <p className="text-sm text-muted-foreground" style={{ fontFamily: "'DM Mono', monospace" }}>
+          {prefetchState.completed}/{prefetchState.total} complete
+        </p>
+        <div className="w-64">
+          <Progress value={pct} className="h-2" />
+        </div>
+        <p className="text-xs text-muted-foreground">This may take a few minutes due to API rate limits</p>
       </div>
     );
   }
