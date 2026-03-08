@@ -254,6 +254,7 @@ export function useFullScan(onComplete: (themes: ThemeData[], timeframe: string)
 
       setStatusText(`✅ ${summaryParts.join(" · ")}`);
       setIsRunning(false);
+      setScanCompletedAt(new Date());
 
       toast({ title: "Full Scan Complete", description: summaryParts.join(". ") });
     } catch (err) {
