@@ -232,7 +232,10 @@ export default function BarChartView({
         breadthTotal: total,
         breadthPct,
         relVol: signals?.relVol ?? null,
+        relVolEstimated: signals?.relVolEstimated ?? false,
+        sustainedVol: signals?.sustainedVol ?? null,
         fScore,
+        stockType: null, // Could be enriched from fundamentals cache
         rs: rsF,
         theme: t,
         isDimmed,
