@@ -68,7 +68,7 @@ function TickerChip({ symbol, pct, skipped, skipReason }: { symbol: string; pct:
   );
 }
 
-export default function ThemeCard({ theme, index, onClick, fetchVolume, getThemeSignals, newsCount, newsNegative, onNewsBadgeClick, fundamentalScore, onFundamentalBadgeClick }: {
+export default function ThemeCard({ theme, index, onClick, fetchVolume, getThemeSignals, newsCount, newsNegative, onNewsBadgeClick, fundamentalScore, onFundamentalBadgeClick, newsSentiment }: {
   theme: ThemeData;
   index: number;
   onClick?: (theme: ThemeData) => void;
@@ -79,6 +79,7 @@ export default function ThemeCard({ theme, index, onClick, fetchVolume, getTheme
   onNewsBadgeClick?: (theme: ThemeData) => void;
   fundamentalScore?: number | null;
   onFundamentalBadgeClick?: (theme: ThemeData) => void;
+  newsSentiment?: "bullish" | "bearish" | "mixed" | "neutral" | null;
 }) {
   const { isPinned, togglePin } = useWatchlist();
   const themePinned = isPinned(theme.theme_name);
