@@ -28,7 +28,7 @@ interface VolumeLeadersProps {
   onDrilldownOpen?: (themeName: string) => void;
 }
 
-export default function VolumeLeaders({ themes, onSelectTheme }: VolumeLeadersProps) {
+export default function VolumeLeaders({ themes, onSelectTheme, onDrilldownOpen }: VolumeLeadersProps) {
   const leaders = useMemo(() => {
     return themes
       .filter(t => t.avgRelVol !== null)
