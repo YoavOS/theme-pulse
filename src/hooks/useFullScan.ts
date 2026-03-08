@@ -47,6 +47,7 @@ export function useFullScan(onComplete: (themes: ThemeData[], timeframe: string)
   const [scanCompletedAt, setScanCompletedAt] = useState<Date | null>(null);
   const abortRef = useRef(false);
   const { calculateFromEod, checkCoverage } = useEodPerformance();
+  const { checkBreadthAfterScan } = useBreadthAlerts();
 
   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
   const anonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
