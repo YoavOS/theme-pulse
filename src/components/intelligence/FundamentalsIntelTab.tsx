@@ -1,0 +1,334 @@
+import { useState, useEffect, useMemo } from "react";
+import { ThemeIntelData } from "@/hooks/useThemeIntelligence";
+import { FundamentalsData, getScoreLabel, getStockTypeInfo, getScoreBadgeColor } from "@/hooks/useFundamentals";
+import { supabase } from "@/integrations/supabase/client";
+import { Skeleton } from "@/components/ui/skeleton";
+import { ArrowUpDown, ChevronDown, ChevronRight } from "lucide-react";
+
+const DM_MONO = "'DM Mono', monospace";
+
+interface ThemeFundamentals {
+  themeName: string;
+  avgScore: number;
+  avgRevenueGrowth: number | null;
+  avgNetMargin: number | null;
+  avgDebtToEquity: number | null;
+  dominantStockType: string;
+  analystConsensus: string;
+  tickerCount: number;
+  dataCount: number;
+  tickers: { symbol: string; score: number | null; stockType: string | null }[];
+  momentumScore: number;
+}
+
+type SortKey = "rank" | "name" | "score" | "growth" | "margin" | "debt" | "type";
+type SortDir = "asc" | "desc";
+
+function mostCommon(arr: string[]): string {
+  const counts: Record<string, number> = {};
+  for (const v of arr) counts[v] = (counts[v] || 0) + 1;
+  let best = "blend", bestCount = 0;
+  for (const [k, c] of Object.entries(counts)) {
+    if (c > bestCount) { best = k; bestCount = c; }
+  }
+  return best;
+}
+
+function avgRating(ratings: (string | null)[]): string {
+  const valid = ratings.filter((r): r is string => r !== null);
+  if (valid.length === 0) return "N/A";
+  const map: Record<string, number> = { "Strong Buy": 1, Buy: 2, Hold: 3, Sell: 4, "Strong Sell": 5 };
+  const reverseMap = ["", "Strong Buy", "Buy", "Hold", "Sell", "Strong Sell"];
+  const avg = valid.reduce((s, r) => s + (map[r] ?? 3), 0) / valid.length;
+  return reverseMap[Math.round(avg)] || "Hold";
+}
+
+export default function FundamentalsIntelTab({
+  themes,
+  isLoading: dataLoading,
+}: {
+  themes: ThemeIntelData[];
+  isLoading: boolean;
+}) {
+  const [allFundamentals, setAllFundamentals] = useState<Record<string, FundamentalsData>>({});
+  const [loading, setLoading] = useState(true);
+  const [sortKey, setSortKey] = useState<SortKey>("score");
+  const [sortDir, setSortDir] = useState<SortDir>("desc");
+  const [expandedTheme, setExpandedTheme] = useState<string | null>(null);
+
+  // Fetch all fundamentals from cache
+  useEffect(() => {
+    (async () => {
+      setLoading(true);
+      try {
+        const { data } = await supabase
+          .from("fundamentals_cache")
+          .select("*");
+        
+        if (data) {
+          const map: Record<string, FundamentalsData> = {};
+          for (const row of data) {
+            map[row.symbol] = row as unknown as FundamentalsData;
+          }
+          setAllFundamentals(map);
+        }
+      } catch (e) {
+        console.error("Failed to load fundamentals:", e);
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, []);
+
+  const themeFundamentals = useMemo(() => {
+    return themes.map(t => {
+      const tickerData = t.symbols.map(s => allFundamentals[s]).filter(Boolean);
+      const scores = tickerData.map(d => d.fundamental_score).filter((s): s is number => s !== null);
+      const avgScore = scores.length > 0 ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : 0;
+
+      const growths = tickerData.map(d => d.revenue_growth_1y).filter((v): v is number => v !== null);
+      const margins = tickerData.map(d => d.net_margin).filter((v): v is number => v !== null);
+      const debts = tickerData.map(d => d.debt_to_equity).filter((v): v is number => v !== null);
+      const types = tickerData.map(d => d.stock_type).filter((v): v is string => v !== null);
+      const ratings = tickerData.map(d => d.analyst_rating);
+
+      return {
+        themeName: t.themeName,
+        avgScore,
+        avgRevenueGrowth: growths.length > 0 ? Math.round(growths.reduce((a, b) => a + b, 0) / growths.length * 10) / 10 : null,
+        avgNetMargin: margins.length > 0 ? Math.round(margins.reduce((a, b) => a + b, 0) / margins.length * 10) / 10 : null,
+        avgDebtToEquity: debts.length > 0 ? Math.round(debts.reduce((a, b) => a + b, 0) / debts.length * 100) / 100 : null,
+        dominantStockType: mostCommon(types),
+        analystConsensus: avgRating(ratings),
+        tickerCount: t.symbols.length,
+        dataCount: tickerData.length,
+        tickers: t.symbols.map(s => ({
+          symbol: s,
+          score: allFundamentals[s]?.fundamental_score ?? null,
+          stockType: allFundamentals[s]?.stock_type ?? null,
+        })),
+        momentumScore: t.momentumScore,
+      } as ThemeFundamentals;
+    });
+  }, [themes, allFundamentals]);
+
+  const sorted = useMemo(() => {
+    const items = [...themeFundamentals];
+    items.sort((a, b) => {
+      let av: number | string, bv: number | string;
+      switch (sortKey) {
+        case "name": return sortDir === "asc" ? a.themeName.localeCompare(b.themeName) : b.themeName.localeCompare(a.themeName);
+        case "score": av = a.avgScore; bv = b.avgScore; break;
+        case "growth": av = a.avgRevenueGrowth ?? -999; bv = b.avgRevenueGrowth ?? -999; break;
+        case "margin": av = a.avgNetMargin ?? -999; bv = b.avgNetMargin ?? -999; break;
+        case "debt": av = a.avgDebtToEquity ?? 999; bv = b.avgDebtToEquity ?? 999; break;
+        case "type": return sortDir === "asc" ? a.dominantStockType.localeCompare(b.dominantStockType) : b.dominantStockType.localeCompare(a.dominantStockType);
+        default: av = a.avgScore; bv = b.avgScore;
+      }
+      return sortDir === "asc" ? (av as number) - (bv as number) : (bv as number) - (av as number);
+    });
+    return items;
+  }, [themeFundamentals, sortKey, sortDir]);
+
+  // Fundamental vs Momentum Matrix
+  const matrix = useMemo(() => {
+    const strong: ThemeFundamentals[] = [];
+    const value: ThemeFundamentals[] = [];
+    const momentum: ThemeFundamentals[] = [];
+    const avoid: ThemeFundamentals[] = [];
+
+    for (const t of themeFundamentals) {
+      const strongFund = t.avgScore >= 55;
+      const strongMom = t.momentumScore >= 55;
+
+      if (strongFund && strongMom) strong.push(t);
+      else if (strongFund && !strongMom) value.push(t);
+      else if (!strongFund && strongMom) momentum.push(t);
+      else avoid.push(t);
+    }
+    return { strong, value, momentum, avoid };
+  }, [themeFundamentals]);
+
+  const toggleSort = (key: SortKey) => {
+    if (sortKey === key) setSortDir(d => d === "asc" ? "desc" : "asc");
+    else { setSortKey(key); setSortDir("desc"); }
+  };
+
+  if (dataLoading || loading) {
+    return (
+      <div className="space-y-3">
+        {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-8 w-full" />)}
+      </div>
+    );
+  }
+
+  const hasData = Object.keys(allFundamentals).length > 0;
+
+  if (!hasData) {
+    return (
+      <div className="flex flex-col items-center justify-center rounded-lg py-16 text-center" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}>
+        <h3 className="font-['Syne',sans-serif] text-lg font-semibold text-foreground mb-1">No Fundamental Data Yet</h3>
+        <p className="text-sm text-muted-foreground">Open any theme's drill-down modal and click the Fundamentals tab to start fetching data.</p>
+        <p className="text-xs text-muted-foreground mt-1">Data will be cached for 24 hours once fetched.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Ranked Table */}
+      <div className="rounded-lg overflow-hidden" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}>
+        <div className="px-4 py-3">
+          <h4 className="font-['Syne',sans-serif] text-xs font-semibold uppercase tracking-widest text-primary">
+            Theme Fundamental Rankings
+          </h4>
+        </div>
+        <div className="max-h-[400px] overflow-auto">
+          <table className="w-full text-xs">
+            <thead className="sticky top-0 z-10" style={{ background: "rgba(15,18,25,0.95)" }}>
+              <tr className="border-b border-border">
+                {([
+                  ["rank", "#"],
+                  ["name", "Theme"],
+                  ["score", "Avg Score"],
+                  ["type", "Type"],
+                  ["growth", "Avg Growth"],
+                  ["margin", "Avg Margin"],
+                  ["debt", "Avg D/E"],
+                ] as [SortKey, string][]).map(([key, label]) => (
+                  <th
+                    key={key}
+                    onClick={() => toggleSort(key)}
+                    className="cursor-pointer select-none px-3 py-2 text-left font-medium text-muted-foreground hover:text-foreground transition-colors whitespace-nowrap"
+                  >
+                    <span className="inline-flex items-center gap-1">
+                      {label}
+                      {sortKey === key && <ArrowUpDown size={10} className="text-primary" />}
+                    </span>
+                  </th>
+                ))}
+                <th className="px-3 py-2 text-left font-medium text-muted-foreground">Consensus</th>
+              </tr>
+            </thead>
+            <tbody>
+              {sorted.map((t, i) => {
+                const typeInfo = getStockTypeInfo(t.dominantStockType);
+                const scoreLabel = getScoreLabel(t.avgScore);
+                const isExpanded = expandedTheme === t.themeName;
+
+                return (
+                  <>
+                    <tr
+                      key={t.themeName}
+                      onClick={() => setExpandedTheme(isExpanded ? null : t.themeName)}
+                      className="border-b border-border/50 hover:bg-accent/30 transition-colors cursor-pointer"
+                    >
+                      <td className="px-3 py-2 text-muted-foreground" style={{ fontFamily: DM_MONO }}>{i + 1}</td>
+                      <td className="px-3 py-2">
+                        <div className="flex items-center gap-1.5">
+                          {isExpanded ? <ChevronDown size={10} /> : <ChevronRight size={10} />}
+                          <span className="font-['Syne',sans-serif] font-medium text-foreground">{t.themeName}</span>
+                          {t.dataCount < t.tickerCount && (
+                            <span className="text-[9px] text-muted-foreground">{t.dataCount}/{t.tickerCount}</span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-3 py-2">
+                        <div className="flex items-center gap-2">
+                          <div className="w-12 h-1.5 rounded-full bg-secondary/60 overflow-hidden">
+                            <div className="h-full rounded-full" style={{
+                              width: `${t.avgScore}%`,
+                              background: t.avgScore >= 70 ? "hsl(var(--primary))" : t.avgScore >= 50 ? "hsl(152,100%,50%)" : t.avgScore >= 30 ? "#facc15" : "hsl(var(--destructive))"
+                            }} />
+                          </div>
+                          <span className={`font-semibold ${scoreLabel.color}`} style={{ fontFamily: DM_MONO }}>{t.avgScore}</span>
+                        </div>
+                      </td>
+                      <td className="px-3 py-2">
+                        <span className={`inline-flex items-center gap-1 rounded-full border px-1.5 py-0 text-[10px] font-semibold ${typeInfo.color}`}>
+                          {typeInfo.emoji} {typeInfo.label}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2">
+                        <span className={`font-mono ${t.avgRevenueGrowth != null ? (t.avgRevenueGrowth >= 0 ? "text-gain-medium" : "text-loss-mild") : "text-muted-foreground"}`} style={{ fontFamily: DM_MONO }}>
+                          {t.avgRevenueGrowth != null ? `${t.avgRevenueGrowth >= 0 ? "+" : ""}${t.avgRevenueGrowth.toFixed(1)}%` : "—"}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2">
+                        <span className={`font-mono ${t.avgNetMargin != null ? (t.avgNetMargin >= 0 ? "text-gain-medium" : "text-loss-mild") : "text-muted-foreground"}`} style={{ fontFamily: DM_MONO }}>
+                          {t.avgNetMargin != null ? `${t.avgNetMargin.toFixed(1)}%` : "—"}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2">
+                        <span className="font-mono text-muted-foreground" style={{ fontFamily: DM_MONO }}>
+                          {t.avgDebtToEquity != null ? t.avgDebtToEquity.toFixed(2) : "—"}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2 text-muted-foreground">{t.analystConsensus}</td>
+                    </tr>
+                    {isExpanded && (
+                      <tr key={`${t.themeName}-expand`}>
+                        <td colSpan={8} className="px-8 py-2" style={{ background: "rgba(255,255,255,0.02)" }}>
+                          <div className="flex flex-wrap gap-2">
+                            {t.tickers.map(tk => {
+                              const ti = getStockTypeInfo(tk.stockType);
+                              return (
+                                <div key={tk.symbol} className="inline-flex items-center gap-1.5 rounded-md bg-secondary/40 px-2 py-1 text-[10px]">
+                                  <span className="font-bold text-foreground" style={{ fontFamily: DM_MONO }}>{tk.symbol}</span>
+                                  {tk.score != null && (
+                                    <span className={`font-semibold ${getScoreLabel(tk.score).color}`} style={{ fontFamily: DM_MONO }}>F:{tk.score}</span>
+                                  )}
+                                  {tk.stockType && (
+                                    <span className="text-muted-foreground">{ti.emoji}</span>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Fundamental vs Momentum Matrix */}
+      <div className="rounded-lg p-4" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}>
+        <h4 className="font-['Syne',sans-serif] text-xs font-semibold uppercase tracking-widest text-primary mb-4">
+          Fundamental vs Momentum Matrix
+        </h4>
+        <div className="grid grid-cols-2 gap-3">
+          {([
+            { key: "strong", title: "🏆 Strong Fund + Strong Mom", subtitle: "High conviction — fundamentals and price agree", themes: matrix.strong, color: "#00f5c4" },
+            { key: "momentum", title: "⚠️ Weak Fund + Strong Mom", subtitle: "Momentum trade only — fundamentals don't support the move", themes: matrix.momentum, color: "#f5a623" },
+            { key: "value", title: "💎 Strong Fund + Weak Mom", subtitle: "Potential value opportunity — good company, bad price action", themes: matrix.value, color: "#60a5fa" },
+            { key: "avoid", title: "🚫 Weak Fund + Weak Mom", subtitle: "Avoid — both price and fundamentals are weak", themes: matrix.avoid, color: "#ef4444" },
+          ] as const).map(q => (
+            <div key={q.key} className="rounded-lg p-3" style={{ background: "rgba(255,255,255,0.02)", border: `1px solid ${q.color}20` }}>
+              <h5 className="text-[11px] font-semibold text-foreground mb-0.5">{q.title}</h5>
+              <p className="text-[10px] text-muted-foreground mb-2">{q.subtitle}</p>
+              <div className="flex flex-wrap gap-1">
+                {q.themes.slice(0, 8).map(t => (
+                  <span key={t.themeName} className="rounded bg-secondary/50 px-1.5 py-0.5 text-[10px] text-foreground" style={{ fontFamily: DM_MONO }}>
+                    {t.themeName}
+                    <span className="ml-1 text-muted-foreground">F:{t.avgScore}</span>
+                  </span>
+                ))}
+                {q.themes.length > 8 && (
+                  <span className="text-[10px] text-muted-foreground">+{q.themes.length - 8} more</span>
+                )}
+                {q.themes.length === 0 && (
+                  <span className="text-[10px] text-muted-foreground italic">None</span>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}

@@ -20,6 +20,7 @@ import HelpButton from "@/components/HelpButton";
 import ThemeSearchBar from "@/components/ThemeSearchBar";
 import { useThemeSearch } from "@/hooks/useThemeSearch";
 import { useThemeNews } from "@/hooks/useThemeNews";
+import { useFundamentals } from "@/hooks/useFundamentals";
 import NewsPanel from "@/components/NewsPanel";
 
 const TIMEFRAMES = ["Today", "1W", "1M", "3M", "YTD"] as const;
@@ -46,6 +47,8 @@ export default function Index() {
   const [newsPanelTheme, setNewsPanelTheme] = useState<ThemeData | null>(null);
   const [newsPanelSummary, setNewsPanelSummary] = useState<string | null>(null);
   const [newsPanelSummaryLoading, setNewsPanelSummaryLoading] = useState(false);
+  const { fetchFundamentals, getCachedFundamentals, getThemeFundamentalScore, isLoading: isFundLoading, prefetchTopThemes: prefetchFundamentals } = useFundamentals();
+  const [drilldownDefaultTab, setDrilldownDefaultTab] = useState<"tickers" | "news" | "fundamentals">("tickers");
 
   const {
     themes: allThemes,
@@ -643,6 +646,8 @@ export default function Index() {
           getNewsCount={getThemeNewsCount}
           hasNegativeNews={hasNegativeNews}
           onNewsBadgeClick={handleNewsBadgeClick}
+          getThemeFundamentalScore={getThemeFundamentalScore}
+          onFundamentalBadgeClick={(t) => { setDrilldownTheme(t); setDrilldownDefaultTab("fundamentals"); }}
         />
 
         {/* ─── NEUTRAL ───────────────────────────────── */}
@@ -659,6 +664,8 @@ export default function Index() {
             getNewsCount={getThemeNewsCount}
             hasNegativeNews={hasNegativeNews}
             onNewsBadgeClick={handleNewsBadgeClick}
+            getThemeFundamentalScore={getThemeFundamentalScore}
+            onFundamentalBadgeClick={(t) => { setDrilldownTheme(t); setDrilldownDefaultTab("fundamentals"); }}
           />
         )}
 
@@ -676,6 +683,8 @@ export default function Index() {
             getNewsCount={getThemeNewsCount}
             hasNegativeNews={hasNegativeNews}
             onNewsBadgeClick={handleNewsBadgeClick}
+            getThemeFundamentalScore={getThemeFundamentalScore}
+            onFundamentalBadgeClick={(t) => { setDrilldownTheme(t); setDrilldownDefaultTab("fundamentals"); }}
           />
         )}
       </main>
@@ -689,7 +698,7 @@ export default function Index() {
       </footer>
 
       <ValidateTickersDialog open={showValidateDialog} onOpenChange={setShowValidateDialog} />
-      <ThemeDrilldownModal theme={drilldownTheme} open={!!drilldownTheme} onOpenChange={(o) => { if (!o) setDrilldownTheme(null); }} newsArticles={drilldownTheme ? getThemeArticles(drilldownTheme.tickers.map(t => t.symbol)) : []} fetchNewsForTheme={fetchThemeNews} />
+      <ThemeDrilldownModal theme={drilldownTheme} open={!!drilldownTheme} onOpenChange={(o) => { if (!o) { setDrilldownTheme(null); setDrilldownDefaultTab("tickers"); } }} newsArticles={drilldownTheme ? getThemeArticles(drilldownTheme.tickers.map(t => t.symbol)) : []} fetchNewsForTheme={fetchThemeNews} fundamentals={drilldownTheme ? getCachedFundamentals(drilldownTheme.tickers.filter(t => !t.skipped).map(t => t.symbol)) : null} fetchFundamentals={fetchFundamentals} isFundamentalsLoading={drilldownTheme ? isFundLoading(drilldownTheme.tickers.filter(t => !t.skipped).map(t => t.symbol)) : false} defaultTab={drilldownDefaultTab} />
 
       {/* News Panel (slide-in) */}
       {newsPanelTheme && (
@@ -717,6 +726,8 @@ function Section({
   getNewsCount,
   hasNegativeNews,
   onNewsBadgeClick,
+  getThemeFundamentalScore,
+  onFundamentalBadgeClick,
 }: {
   icon: React.ReactNode;
   title: string;
@@ -729,6 +740,8 @@ function Section({
   getNewsCount?: (symbols: string[]) => number;
   hasNegativeNews?: (symbols: string[]) => boolean;
   onNewsBadgeClick?: (theme: ThemeData) => void;
+  getThemeFundamentalScore?: (symbols: string[]) => number | null;
+  onFundamentalBadgeClick?: (theme: ThemeData) => void;
 }) {
   const accentColor =
     accent === "primary"
@@ -776,6 +789,7 @@ function Section({
           const symbols = t.tickers.map(tk => tk.symbol);
           const nc = getNewsCount ? getNewsCount(symbols) : 0;
           const neg = hasNegativeNews ? hasNegativeNews(symbols) : false;
+          const fScore = getThemeFundamentalScore ? getThemeFundamentalScore(t.tickers.filter(tk => !tk.skipped).map(tk => tk.symbol)) : null;
           return (
             <div
               key={t.theme_name}
@@ -791,6 +805,8 @@ function Section({
                 newsCount={nc}
                 newsNegative={neg}
                 onNewsBadgeClick={onNewsBadgeClick}
+                fundamentalScore={fScore}
+                onFundamentalBadgeClick={onFundamentalBadgeClick}
               />
             </div>
           );

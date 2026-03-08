@@ -37,6 +37,12 @@ RELATIVE STRENGTH RULES:
 - A theme up 1% when SPY is down 0.5% is showing real strength — highlight this
 - Use relative strength language when it adds meaningful context, don't force it on every theme
 
+FUNDAMENTAL RULES:
+- When a theme has strong momentum AND strong fundamentals (score >70), call it a "high conviction move"
+- When a theme has strong momentum BUT weak fundamentals (score <40), flag it as "technically driven — fundamentals don't confirm"
+- When a theme has weak momentum BUT strong fundamentals, mention it as a potential value opportunity
+- Always contextualize price moves with fundamental quality when relevant
+
 NEWS CONTEXT RULES:
 - When recent headlines are provided for top themes, use them to explain WHY themes are moving, not just that they are moving
 - If a headline directly explains a theme's performance (e.g. a defense contract announcement for the Defense theme), reference it specifically
@@ -71,7 +77,7 @@ serve(async (req) => {
       return jsonResponse({ error: "bad_request", message: "Invalid JSON in request body" }, 400);
     }
 
-    const { topThemes, bottomThemes, outlierThemes, date, totalThemes, requestTimestamp, dispersionScore, dispersionLabel, spyPerf1d, spyPerf1w, spyPerf1m, topThemeHeadlines } = payload;
+    const { topThemes, bottomThemes, outlierThemes, date, totalThemes, requestTimestamp, dispersionScore, dispersionLabel, spyPerf1d, spyPerf1w, spyPerf1m, topThemeHeadlines, themeFundamentals } = payload;
 
     console.log(`Payload: top=${(topThemes||[]).length}, bottom=${(bottomThemes||[]).length}, outliers=${(outlierThemes||[]).length}, date=${date}, total=${totalThemes}, ts=${requestTimestamp}`);
 
@@ -111,6 +117,11 @@ serve(async (req) => {
       ? `\n\nRECENT HEADLINES FOR TOP THEMES:\n${(topThemeHeadlines as any[]).map((h: any) => `- [${h.theme}] ${h.headline} (${h.source || "Unknown"})`).join("\n")}`
       : "";
 
+    // Fundamentals context
+    const fundamentalsSection = themeFundamentals && (themeFundamentals as any[]).length > 0
+      ? `\n\nFUNDAMENTAL CONTEXT:\n${(themeFundamentals as any[]).map((f: any) => `- ${f.name}: F-Score ${f.fundamentalScore}/100 (${f.stockType}) | Rev Growth: ${f.avgRevenueGrowth != null ? f.avgRevenueGrowth + "%" : "N/A"} | Net Margin: ${f.avgNetMargin != null ? f.avgNetMargin + "%" : "N/A"} | Analyst: ${f.analystConsensus || "N/A"}`).join("\n")}`
+      : "";
+
     const userMessage = `Date: ${date} | Themes analyzed: ${totalThemes} | Request ID: ${requestTimestamp}
 ${dispersionLine}${spyLine}
 TOP 8 THEMES (strongest momentum):
@@ -121,7 +132,7 @@ ${bottomLines}
 
 SINGLE-STOCK OUTLIER THEMES (one ticker >5% while theme avg <1%):
 ${outlierLines}
-${headlinesSection}
+${headlinesSection}${fundamentalsSection}
 
 Write a complete market analysis following your instructions.`;
 

@@ -26,3 +26,6 @@ verify_jwt = false
 
 [functions.summarize-theme-news]
 verify_jwt = false
+
+[functions.fetch-fundamentals]
+verify_jwt = false

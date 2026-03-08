@@ -122,6 +122,84 @@ export type Database = {
         }
         Relationships: []
       }
+      fundamentals_cache: {
+        Row: {
+          ai_summary: string | null
+          analyst_rating: string | null
+          cash_per_share: number | null
+          current_ratio: number | null
+          debt_to_equity: number | null
+          eps_growth_1y: number | null
+          eps_growth_3y: number | null
+          free_cash_flow: number | null
+          fundamental_score: number | null
+          gross_margin: number | null
+          last_updated: string | null
+          market_cap: number | null
+          net_margin: number | null
+          revenue_growth_1y: number | null
+          revenue_growth_3y: number | null
+          roa: number | null
+          roe: number | null
+          sector: string | null
+          stock_type: string | null
+          symbol: string
+          target_high: number | null
+          target_low: number | null
+          target_mean: number | null
+        }
+        Insert: {
+          ai_summary?: string | null
+          analyst_rating?: string | null
+          cash_per_share?: number | null
+          current_ratio?: number | null
+          debt_to_equity?: number | null
+          eps_growth_1y?: number | null
+          eps_growth_3y?: number | null
+          free_cash_flow?: number | null
+          fundamental_score?: number | null
+          gross_margin?: number | null
+          last_updated?: string | null
+          market_cap?: number | null
+          net_margin?: number | null
+          revenue_growth_1y?: number | null
+          revenue_growth_3y?: number | null
+          roa?: number | null
+          roe?: number | null
+          sector?: string | null
+          stock_type?: string | null
+          symbol: string
+          target_high?: number | null
+          target_low?: number | null
+          target_mean?: number | null
+        }
+        Update: {
+          ai_summary?: string | null
+          analyst_rating?: string | null
+          cash_per_share?: number | null
+          current_ratio?: number | null
+          debt_to_equity?: number | null
+          eps_growth_1y?: number | null
+          eps_growth_3y?: number | null
+          free_cash_flow?: number | null
+          fundamental_score?: number | null
+          gross_margin?: number | null
+          last_updated?: string | null
+          market_cap?: number | null
+          net_margin?: number | null
+          revenue_growth_1y?: number | null
+          revenue_growth_3y?: number | null
+          roa?: number | null
+          roe?: number | null
+          sector?: string | null
+          stock_type?: string | null
+          symbol?: string
+          target_high?: number | null
+          target_low?: number | null
+          target_mean?: number | null
+        }
+        Relationships: []
+      }
       last_scan_cache: {
         Row: {
           id: number

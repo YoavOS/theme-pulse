@@ -2,11 +2,13 @@ import { useState, useMemo, useEffect } from "react";
 import { ThemeData } from "@/data/themeData";
 import { useWatchlist } from "@/hooks/useWatchlistContext";
 import { supabase } from "@/integrations/supabase/client";
-import { Pin, X, ExternalLink, ArrowUpDown, Newspaper } from "lucide-react";
+import { Pin, X, ExternalLink, ArrowUpDown, Newspaper, BarChart3 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useSpyBenchmark, formatRS } from "@/hooks/useSpyBenchmark";
 import { NewsArticle } from "@/hooks/useThemeNews";
 import { NewsTabContent } from "@/components/NewsPanel";
+import { FundamentalsData } from "@/hooks/useFundamentals";
+import FundamentalsTab from "@/components/FundamentalsTab";
 import {
   Dialog,
   DialogContent,
@@ -89,6 +91,10 @@ export default function ThemeDrilldownModal({
   defaultSortKey,
   newsArticles,
   fetchNewsForTheme,
+  fundamentals,
+  fetchFundamentals,
+  isFundamentalsLoading,
+  defaultTab,
 }: {
   theme: ThemeData | null;
   open: boolean;
@@ -96,6 +102,10 @@ export default function ThemeDrilldownModal({
   defaultSortKey?: SortKey;
   newsArticles?: NewsArticle[];
   fetchNewsForTheme?: (symbols: string[]) => Promise<NewsArticle[]>;
+  fundamentals?: Record<string, FundamentalsData> | null;
+  fetchFundamentals?: (symbols: string[]) => Promise<Record<string, FundamentalsData>>;
+  isFundamentalsLoading?: boolean;
+  defaultTab?: "tickers" | "news" | "fundamentals";
 }) {
    const { isPinned, togglePin } = useWatchlist();
    const navigate = useNavigate();
@@ -103,9 +113,11 @@ export default function ThemeDrilldownModal({
    const [sortDir, setSortDir] = useState<SortDir>("desc");
    const [extras, setExtras] = useState<Record<string, TickerExtra>>({});
    const { spy, getTickerRS } = useSpyBenchmark();
-   const [activeTab, setActiveTab] = useState<"tickers" | "news">("tickers");
-   const [localNews, setLocalNews] = useState<NewsArticle[]>([]);
-   const [newsLoading, setNewsLoading] = useState(false);
+   const [activeTab, setActiveTab] = useState<"tickers" | "news" | "fundamentals">(defaultTab || "tickers");
+    const [localNews, setLocalNews] = useState<NewsArticle[]>([]);
+    const [newsLoading, setNewsLoading] = useState(false);
+    const [localFundamentals, setLocalFundamentals] = useState<Record<string, FundamentalsData> | null>(null);
+    const [fundLoading, setFundLoading] = useState(false);
 
   useEffect(() => {
     if (!theme || !open) return;
@@ -331,7 +343,6 @@ export default function ThemeDrilldownModal({
           <button
             onClick={async () => {
               setActiveTab("news");
-              // Fetch on-demand if no articles cached
               if ((!newsArticles || newsArticles.length === 0) && fetchNewsForTheme && theme && !newsLoading) {
                 setNewsLoading(true);
                 const fetched = await fetchNewsForTheme(theme.tickers.map(t => t.symbol));
@@ -349,6 +360,22 @@ export default function ThemeDrilldownModal({
                 {newsArticles!.length}
               </span>
             )}
+          </button>
+          <button
+            onClick={async () => {
+              setActiveTab("fundamentals");
+              if (!fundamentals && !localFundamentals && fetchFundamentals && theme && !fundLoading) {
+                setFundLoading(true);
+                const data = await fetchFundamentals(theme.tickers.filter(t => !t.skipped).map(t => t.symbol));
+                setLocalFundamentals(data);
+                setFundLoading(false);
+              }
+            }}
+            className={`px-3 py-2 text-xs font-semibold transition-colors inline-flex items-center gap-1.5 ${
+              activeTab === "fundamentals" ? "text-foreground border-b-2 border-primary" : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            <BarChart3 size={12} /> Fundamentals
           </button>
         </div>
 
@@ -492,7 +519,7 @@ export default function ThemeDrilldownModal({
             </tbody>
           </table>
         </div>
-        ) : (
+        ) : activeTab === "news" ? (
           <div className="max-h-[400px] overflow-auto px-6 pb-2 pt-2">
             {newsLoading ? (
               <div className="space-y-2 py-4">
@@ -504,6 +531,15 @@ export default function ThemeDrilldownModal({
               <NewsTabContent articles={(newsArticles && newsArticles.length > 0) ? newsArticles : localNews} />
             )}
           </div>
+        ) : (
+          <FundamentalsTab
+            theme={theme}
+            fundamentals={fundamentals || localFundamentals}
+            isLoading={fundLoading || (isFundamentalsLoading ?? false)}
+            tickerPrices={Object.fromEntries(
+              theme.tickers.filter(t => !t.skipped).map(t => [t.symbol, extras[t.symbol]?.price || 0])
+            )}
+          />
         )}
 
         {/* Footer */}

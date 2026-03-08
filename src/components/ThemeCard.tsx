@@ -68,7 +68,7 @@ function TickerChip({ symbol, pct, skipped, skipReason }: { symbol: string; pct:
   );
 }
 
-export default function ThemeCard({ theme, index, onClick, fetchVolume, getThemeSignals, newsCount, newsNegative, onNewsBadgeClick }: {
+export default function ThemeCard({ theme, index, onClick, fetchVolume, getThemeSignals, newsCount, newsNegative, onNewsBadgeClick, fundamentalScore, onFundamentalBadgeClick }: {
   theme: ThemeData;
   index: number;
   onClick?: (theme: ThemeData) => void;
@@ -77,6 +77,8 @@ export default function ThemeCard({ theme, index, onClick, fetchVolume, getTheme
   newsCount?: number;
   newsNegative?: boolean;
   onNewsBadgeClick?: (theme: ThemeData) => void;
+  fundamentalScore?: number | null;
+  onFundamentalBadgeClick?: (theme: ThemeData) => void;
 }) {
   const { isPinned, togglePin } = useWatchlist();
   const themePinned = isPinned(theme.theme_name);
@@ -183,6 +185,25 @@ export default function ThemeCard({ theme, index, onClick, fetchVolume, getTheme
             <span className="mt-0.5 inline-block text-[11px] text-muted-foreground italic leading-tight">
               {theme.notes}
             </span>
+          )}
+          {fundamentalScore != null && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onFundamentalBadgeClick?.(theme); }}
+              className={`mt-0.5 inline-flex items-center gap-0.5 rounded border px-1.5 py-0 text-[10px] font-semibold transition-colors cursor-pointer ${
+                fundamentalScore >= 70 ? "text-primary bg-primary/10 border-primary/20 hover:bg-primary/15" :
+                fundamentalScore >= 50 ? "text-gain-medium bg-gain-medium/10 border-gain-medium/20 hover:bg-gain-medium/15" :
+                fundamentalScore >= 30 ? "text-[#f5a623] bg-[#f5a623]/10 border-[#f5a623]/20 hover:bg-[#f5a623]/15" :
+                "text-destructive bg-destructive/10 border-destructive/20 hover:bg-destructive/15"
+              }`}
+              style={{ fontFamily: "'DM Mono', monospace" }}
+              title={`Fundamental Score: ${fundamentalScore}/100 — ${
+                fundamentalScore >= 70 ? "Good fundamentals" :
+                fundamentalScore >= 50 ? "Mixed fundamentals" :
+                "Weak fundamentals"
+              }. Click to see details.`}
+            >
+              F:{fundamentalScore}
+            </button>
           )}
         </div>
         <span className={`shrink-0 font-mono text-[1.85rem] font-bold leading-none tracking-tight ${getPctColor(theme.performance_pct)}`}>
