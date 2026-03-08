@@ -151,6 +151,23 @@ export default function ThemeCard({ theme, index, onClick, fetchVolume, getTheme
                 Demo
               </Badge>
             )}
+            {breadthEvent && (
+              <Badge
+                variant="secondary"
+                className={`shrink-0 text-[9px] px-1.5 py-0 ${
+                  breadthEvent.type === "surge"
+                    ? "bg-[#00f5c4]/15 text-[#00f5c4] border-[#00f5c4]/30"
+                    : "bg-[#f5a623]/15 text-[#f5a623] border-[#f5a623]/30"
+                }`}
+                title={
+                  breadthEvent.type === "surge"
+                    ? `Breadth surged from ${breadthEvent.yesterdayBreadth}% → ${breadthEvent.todayBreadth}%`
+                    : `Breadth collapsed from ${breadthEvent.yesterdayBreadth}% → ${breadthEvent.todayBreadth}%`
+                }
+              >
+                {breadthEvent.type === "surge" ? "🔥 Surge" : "❄️ Collapse"}
+              </Badge>
+            )}
           </div>
           {theme.notes && (
             <span className="mt-0.5 inline-block text-[11px] text-muted-foreground italic leading-tight">
