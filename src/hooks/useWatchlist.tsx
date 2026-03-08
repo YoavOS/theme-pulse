@@ -73,10 +73,20 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
   );
 }
 
+const fallback: WatchlistContextType = {
+  pinned: [],
+  togglePin: () => {},
+  isPinned: () => false,
+  alerts: {},
+  setAlert: () => {},
+  getAlert: () => ({ up: null, down: null }),
+};
+
 export function useWatchlist(): WatchlistContextType {
   const ctx = useContext(WatchlistContext);
   if (!ctx) {
-    throw new Error("useWatchlist must be used within a WatchlistProvider");
+    console.error("useWatchlist used outside WatchlistProvider");
+    return fallback;
   }
   return ctx;
 }
