@@ -1,4 +1,3 @@
-import { useEffect } from "react";
 import { ThemeDemandSignals } from "@/hooks/useVolumeData";
 import { Zap } from "lucide-react";
 import { useState } from "react";
@@ -32,24 +31,13 @@ function Skeleton() {
 
 interface Props {
   signals: ThemeDemandSignals;
-  tickerSymbols: string[];
-  fetchVolume: (symbols: string[]) => void;
 }
 
-export default function DemandSignals({ signals, tickerSymbols, fetchVolume }: Props) {
+export default function DemandSignals({ signals }: Props) {
   const [collapsed, setCollapsed] = useState(false);
-
-  useEffect(() => {
-    if (tickerSymbols.length > 0) {
-      fetchVolume(tickerSymbols);
-    }
-  }, [tickerSymbols.join(",")]);
 
   const { relVol, sustainedVol, spikingUp, spikingDown, totalTickers, loading } = signals;
   const hasSpike = spikingUp > 0 || spikingDown > 0;
-  const noData = relVol === null && sustainedVol === null && !loading;
-
-  if (noData) return null;
 
   // Mobile collapse
   if (collapsed) {

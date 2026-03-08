@@ -1,4 +1,4 @@
-import { useMemo, Component, type ReactNode } from "react";
+import { useMemo, useEffect, Component, type ReactNode } from "react";
 import { ThemeData } from "@/data/themeData";
 import { Badge } from "@/components/ui/badge";
 import { Pin } from "lucide-react";
@@ -75,6 +75,13 @@ export default function ThemeCard({ theme, index, onClick, fetchVolume, getTheme
 
   const tickerSymbols = useMemo(() => theme.tickers.map(t => t.symbol), [theme.tickers]);
   const signals = getThemeSignals ? getThemeSignals(tickerSymbols) : null;
+
+  // Trigger volume fetch from ThemeCard so data loads regardless of DemandSignals render state
+  useEffect(() => {
+    if (fetchVolume && tickerSymbols.length > 0) {
+      fetchVolume(tickerSymbols);
+    }
+  }, [tickerSymbols.join(","), fetchVolume]);
 
   // Sort tickers: non-skipped by absolute % desc, skipped at end. Show top 5.
   const sorted = [...theme.tickers].sort((a, b) => {
@@ -184,9 +191,9 @@ export default function ThemeCard({ theme, index, onClick, fetchVolume, getTheme
           )}
 
           {/* Row 5: Demand Signals */}
-          {signals && fetchVolume && (
+          {signals && (
             <DemandSignalsBoundary>
-              <DemandSignals signals={signals} tickerSymbols={tickerSymbols} fetchVolume={fetchVolume} />
+              <DemandSignals signals={signals} />
             </DemandSignalsBoundary>
           )}
         </>
