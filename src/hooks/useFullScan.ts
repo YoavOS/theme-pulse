@@ -90,8 +90,34 @@ export function useFullScan(onComplete: (themes: ThemeData[], timeframe: string)
 
     if (Object.keys(perfMap).length === 0) return [];
 
+    // For non-1D timeframes, try to use EOD historical data if available
+    const isHistorical = timeframe !== "Today";
+    let eodPerfMap: Record<string, { perf_1w: number | null; perf_1m: number | null; perf_3m: number | null; perf_ytd: number | null }> = {};
+
+    if (isHistorical) {
+      try {
+        const coverage = await checkCoverage();
+        const tfReady = timeframe === "1W" ? coverage.ready1w
+          : timeframe === "1M" ? coverage.ready1m
+          : timeframe === "3M" ? coverage.ready3m
+          : coverage.readyYtd;
+
+        if (tfReady) {
+          const allSymbols = Object.keys(perfMap);
+          const todayPrices: Record<string, number> = {};
+          for (const [s, p] of Object.entries(perfMap)) {
+            todayPrices[s] = p.price;
+          }
+          eodPerfMap = await calculateFromEod(allSymbols, todayPrices);
+        }
+      } catch (e) {
+        console.error("EOD perf calculation failed, falling back to scan data:", e);
+      }
+    }
+
     // Map timeframe to perf field
     const perfField = timeframe === "1W" ? "perf_1w" : timeframe === "1M" ? "perf_1m" : timeframe === "3M" ? "perf_3m" : timeframe === "YTD" ? "perf_ytd" : "perf_1d";
+    const eodField = timeframe === "1W" ? "perf_1w" : timeframe === "1M" ? "perf_1m" : timeframe === "3M" ? "perf_3m" : "perf_ytd";
 
     // Build theme map
     const themeTickerMap = new Map<string, { name: string; description: string | null; symbols: string[] }>();
@@ -110,6 +136,15 @@ export function useFullScan(onComplete: (themes: ThemeData[], timeframe: string)
       const tickers = entry.symbols.map(s => {
         const perf = perfMap[s];
         if (!perf) return { symbol: s, pct: 0, skipped: true, skipReason: "no_data" };
+
+        // Prefer EOD-based performance for historical timeframes
+        if (isHistorical && eodPerfMap[s]) {
+          const eodVal = eodPerfMap[s][eodField];
+          if (eodVal !== null && eodVal !== undefined) {
+            return { symbol: s, pct: eodVal };
+          }
+        }
+
         return { symbol: s, pct: perf[perfField] || 0 };
       });
 
@@ -136,7 +171,7 @@ export function useFullScan(onComplete: (themes: ThemeData[], timeframe: string)
     }
 
     return themes;
-  }, [supabaseUrl, anonKey]);
+  }, [supabaseUrl, anonKey, calculateFromEod, checkCoverage]);
 
   const clearProgress = useCallback(async () => {
     await fetch(`${supabaseUrl}/functions/v1/full-scan?action=reset`, { headers });
