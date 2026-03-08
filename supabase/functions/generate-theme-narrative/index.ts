@@ -92,10 +92,11 @@ serve(async (req) => {
       ? (outlierThemes || []).map(formatTheme).join("\n\n")
       : "None identified";
 
-    const dispersionLine = dispersionScore != null ? `\nDISPERSION: ${dispersionScore.toFixed(2)}σ — ${dispersionLabel || "N/A"}\n` : "";
+    const dispersionLine = dispersionScore != null ? `\nDISPERSION: ${dispersionScore.toFixed(2)}σ — ${dispersionLabel || "N/A"}` : "";
+    const spyLine = spyPerf1d != null ? `\nSPY BENCHMARK: 1D: ${spyPerf1d >= 0 ? "+" : ""}${spyPerf1d}% | 1W: ${spyPerf1w != null ? (spyPerf1w >= 0 ? "+" : "") + spyPerf1w + "%" : "N/A"} | 1M: ${spyPerf1m != null ? (spyPerf1m >= 0 ? "+" : "") + spyPerf1m + "%" : "N/A"}` : "";
 
     const userMessage = `Date: ${date} | Themes analyzed: ${totalThemes} | Request ID: ${requestTimestamp}
-${dispersionLine}
+${dispersionLine}${spyLine}
 TOP 8 THEMES (strongest momentum):
 ${topLines}
 
