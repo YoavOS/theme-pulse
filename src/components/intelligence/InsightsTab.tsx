@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { ThemeIntelData } from "@/hooks/useThemeIntelligence";
 import { Skeleton } from "@/components/ui/skeleton";
-import { RefreshCw, AlertTriangle } from "lucide-react";
+import { RefreshCw, AlertTriangle, Newspaper, ExternalLink } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import WeeklyReportsSection from "./WeeklyReportsSection";
@@ -9,6 +9,7 @@ import VolumeDryUpSection from "./VolumeDryUpSection";
 import { useVolumeDryUp } from "@/hooks/useVolumeDryUp";
 import { calculateDispersion, getDispersionLabel, getDispersionShortLabel } from "@/hooks/useDispersion";
 import { useSpyBenchmark } from "@/hooks/useSpyBenchmark";
+import { useThemeNews, NewsArticle } from "@/hooks/useThemeNews";
 
 const DM_MONO = "'DM Mono', monospace";
 const COOLDOWN_MS = 30_000;
