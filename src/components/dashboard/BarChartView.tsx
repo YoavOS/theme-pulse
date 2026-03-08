@@ -91,13 +91,13 @@ function BarRow({
           <div className="flex-1 relative h-[18px] flex items-center justify-end">
             <div className="mr-1.5 flex items-baseline gap-1 shrink-0">
               <span
-                className="text-[9px]"
+                className="text-[12px]"
                 style={{ fontFamily: DM_MONO, color: "rgba(255,255,255,0.3)" }}
               >
                 {d.breadthUp}/{d.breadthTotal}
               </span>
               <span
-                className="text-xs font-medium"
+                className="text-[15px] font-bold"
                 style={{ fontFamily: DM_MONO, color: barColor }}
               >
                 {sign}{d.perf.toFixed(2)}%
