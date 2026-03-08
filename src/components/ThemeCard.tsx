@@ -6,6 +6,7 @@ import { useWatchlist } from "@/hooks/useWatchlistContext";
 import DemandSignals from "@/components/DemandSignals";
 import { ThemeDemandSignals } from "@/hooks/useVolumeData";
 import { hasThemeBreadthEvent } from "@/hooks/useBreadthAlerts";
+import { useVolumeDryUp } from "@/hooks/useVolumeDryUp";
 
 class DemandSignalsBoundary extends Component<{ children: ReactNode; resetKey?: string }, { hasError: boolean }> {
   state = { hasError: false };
