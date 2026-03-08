@@ -161,6 +161,11 @@ export default function Index() {
                   ⚠ {scanProgress.failed} tickers unavailable
                 </span>
               )}
+              {eodStatus?.alreadySaved && (
+                <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground">
+                  · EOD: {eodStatus.date}
+                </span>
+              )}
             </p>
           </div>
           <div className="flex items-center gap-2">
