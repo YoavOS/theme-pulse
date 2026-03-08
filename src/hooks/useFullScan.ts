@@ -43,6 +43,7 @@ export function useFullScan(onComplete: (themes: ThemeData[], timeframe: string)
   const [isRunning, setIsRunning] = useState(false);
   const [progress, setProgress] = useState<ScanProgress | null>(null);
   const [statusText, setStatusText] = useState("");
+  const [scanCompletedAt, setScanCompletedAt] = useState<Date | null>(null);
   const abortRef = useRef(false);
   const { calculateFromEod, checkCoverage } = useEodPerformance();
 
@@ -253,6 +254,7 @@ export function useFullScan(onComplete: (themes: ThemeData[], timeframe: string)
 
       setStatusText(`✅ ${summaryParts.join(" · ")}`);
       setIsRunning(false);
+      setScanCompletedAt(new Date());
 
       toast({ title: "Full Scan Complete", description: summaryParts.join(". ") });
     } catch (err) {
@@ -292,6 +294,7 @@ export function useFullScan(onComplete: (themes: ThemeData[], timeframe: string)
     isRunning,
     progress,
     statusText,
+    scanCompletedAt,
     startFullScan,
     clearProgress,
     loadTimeframe,

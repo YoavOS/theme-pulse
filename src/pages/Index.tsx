@@ -6,6 +6,7 @@ import ValidateTickersDialog from "@/components/ValidateTickersDialog";
 import { RefreshCw, Download, TrendingUp, TrendingDown, Wifi, WifiOff, Loader2, Settings, ScanLine, X, ShieldCheck, Save, Zap, Calendar } from "lucide-react";
 import { useFullScan } from "@/hooks/useFullScan";
 import { useEodSave } from "@/hooks/useEodSave";
+import { useSaveEodFromScan } from "@/hooks/useSaveEodFromScan";
 import { Link } from "react-router-dom";
 
 const TIMEFRAMES = ["Today", "1W", "1M", "3M", "YTD"] as const;
@@ -46,10 +47,20 @@ export default function Index() {
     isRunning: isFullScanning,
     statusText: fullScanStatus,
     progress: scanProgress,
+    scanCompletedAt,
     startFullScan,
     clearProgress,
     loadTimeframe,
   } = useFullScan(handleScanComplete);
+
+  const {
+    showButton: showSaveEodFromScan,
+    isSaving: isSavingEodFromScan,
+    isAfterClose: scanAfterClose,
+    alreadySavedToday: eodAlreadySavedFromScan,
+    tooltip: saveEodFromScanTooltip,
+    saveEodFromScan,
+  } = useSaveEodFromScan(scanCompletedAt);
 
   const {
     status: eodStatus,
@@ -268,6 +279,43 @@ export default function Index() {
                   </button>
                 )}
               </span>
+            )}
+
+            {/* Save as EOD from scan */}
+            {showSaveEodFromScan && !isFullScanning && (
+              <div className="flex flex-col items-start gap-0.5">
+                <button
+                  onClick={saveEodFromScan}
+                  disabled={eodAlreadySavedFromScan || isSavingEodFromScan}
+                  className={`rounded-md border px-3 py-1.5 text-xs font-semibold transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
+                    eodAlreadySavedFromScan
+                      ? "border-border bg-secondary/50 text-muted-foreground"
+                      : scanAfterClose
+                      ? "border-gain-medium/40 bg-gain-medium/10 text-gain-medium hover:bg-gain-medium/20"
+                      : "border-[hsl(40,80%,50%)]/40 bg-[hsl(40,80%,50%)]/10 text-[hsl(40,80%,50%)] hover:bg-[hsl(40,80%,50%)]/20"
+                  }`}
+                  title={saveEodFromScanTooltip}
+                >
+                  <span className="inline-flex items-center gap-1">
+                    <Save size={12} />
+                    {isSavingEodFromScan ? "Saving..." : "Save as EOD"}
+                  </span>
+                </button>
+                <span className={`text-[9px] leading-tight ${
+                  eodAlreadySavedFromScan
+                    ? "text-muted-foreground"
+                    : scanAfterClose
+                    ? "text-gain-medium/70"
+                    : "text-[hsl(40,80%,50%)]/70"
+                }`}>
+                  {eodAlreadySavedFromScan
+                    ? "✓ EOD already saved"
+                    : scanAfterClose
+                    ? "✓ Market closed — valid EOD"
+                    : "⚠ Before market close"
+                  }
+                </span>
+              </div>
             )}
 
             {/* Save EOD button */}
