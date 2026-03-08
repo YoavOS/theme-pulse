@@ -513,6 +513,7 @@ export default function Index() {
             title="Neutral / Mixed"
             accent="muted"
             themes={neutral}
+            onCardClick={setDrilldownTheme}
           />
         )}
 
