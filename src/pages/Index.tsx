@@ -524,6 +524,7 @@ export default function Index() {
             title="Weaker / Lagging"
             accent="destructive"
             themes={weak}
+            onCardClick={setDrilldownTheme}
           />
         )}
       </main>
