@@ -371,6 +371,13 @@ export default function Index() {
               <Brain size={16} />
             </Link>
             <Link
+              to="/watchlist"
+              className="rounded-md border border-border p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+              title="Watchlist"
+            >
+              <Eye size={16} />
+            </Link>
+            <Link
               to="/eod-history"
               className="rounded-md border border-border p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
               title="EOD History"
