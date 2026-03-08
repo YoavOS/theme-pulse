@@ -188,18 +188,18 @@ export default function HeatmapTab() {
 
           {/* Grid */}
           <div className="flex">
-            {/* Day labels */}
-            <div className="flex flex-col mr-1" style={{ gap: GAP }}>
-              {DAY_LABELS.map((l, i) => (
-                <div
-                  key={i}
-                  style={{ height: CELL, width: 16, fontSize: 9, lineHeight: `${CELL}px` }}
-                  className="text-muted-foreground text-right"
-                >
-                  {l}
-                </div>
-              ))}
-            </div>
+             {/* Day labels */}
+             <div className="flex flex-col mr-1" style={{ gap: GAP }}>
+               {DAY_LABELS.map((l, i) => (
+                 <div
+                   key={i}
+                   style={{ height: CELL, width: 16, fontSize: 10, lineHeight: `${CELL}px` }}
+                   className="text-muted-foreground text-right"
+                 >
+                   {l}
+                 </div>
+               ))}
+             </div>
 
             {/* Weeks */}
             <div className="flex" style={{ gap: GAP }}>
