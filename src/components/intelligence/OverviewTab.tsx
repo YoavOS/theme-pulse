@@ -283,26 +283,52 @@ export default function OverviewTab({
             Theme Rankings
           </span>
           <span>{themes.length} themes ranked</span>
-        </div>
 
-        <div className="flex items-center gap-1 rounded-lg bg-[rgba(255,255,255,0.03)] p-1">
-          {(["momentum", "breadth"] as const).map(mode => (
+          {/* View toggle */}
+          <div className="flex items-center gap-1 rounded-lg bg-[rgba(255,255,255,0.03)] p-0.5 ml-2">
             <button
-              key={mode}
-              onClick={() => setSortMode(mode)}
-              className={`relative rounded-md px-3 py-1.5 text-xs font-medium transition-all ${
-                sortMode === mode
-                  ? "bg-[rgba(255,255,255,0.08)] text-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground hover:bg-[rgba(255,255,255,0.04)]"
+              onClick={() => handleViewChange("table")}
+              className={`rounded-md px-2.5 py-1 text-[10px] font-medium transition-all ${
+                viewMode === "table"
+                  ? "bg-[rgba(255,255,255,0.08)] text-foreground"
+                  : "text-muted-foreground hover:text-foreground"
               }`}
             >
-              {mode === "momentum" ? "Momentum" : "Breadth"}
-              {sortMode === mode && (
-                <span className="absolute bottom-0 left-1/2 -translate-x-1/2 h-0.5 w-6 rounded-full bg-[#00f5c4]" />
-              )}
+              📋 Table
             </button>
-          ))}
+            <button
+              onClick={() => handleViewChange("bubble")}
+              className={`rounded-md px-2.5 py-1 text-[10px] font-medium transition-all ${
+                viewMode === "bubble"
+                  ? "bg-[rgba(255,255,255,0.08)] text-foreground"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              ⚬ Bubble Chart
+            </button>
+          </div>
         </div>
+
+        {viewMode === "table" && (
+          <div className="flex items-center gap-1 rounded-lg bg-[rgba(255,255,255,0.03)] p-1">
+            {(["momentum", "breadth"] as const).map(mode => (
+              <button
+                key={mode}
+                onClick={() => setSortMode(mode)}
+                className={`relative rounded-md px-3 py-1.5 text-xs font-medium transition-all ${
+                  sortMode === mode
+                    ? "bg-[rgba(255,255,255,0.08)] text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground hover:bg-[rgba(255,255,255,0.04)]"
+                }`}
+              >
+                {mode === "momentum" ? "Momentum" : "Breadth"}
+                {sortMode === mode && (
+                  <span className="absolute bottom-0 left-1/2 -translate-x-1/2 h-0.5 w-6 rounded-full bg-[#00f5c4]" />
+                )}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       <div
