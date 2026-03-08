@@ -19,7 +19,7 @@ function Section({ title, items, defaultOpen = false }: { title: string; items: 
         onClick={() => setOpen(!open)}
         className="flex w-full items-center justify-between px-5 py-3 text-left transition-colors hover:bg-[rgba(255,255,255,0.03)]"
       >
-        <span className="text-xs font-semibold uppercase tracking-widest text-foreground" style={{ fontFamily: SYNE }}>
+        <span className="text-sm font-semibold uppercase tracking-widest text-foreground" style={{ fontFamily: SYNE }}>
           {title}
         </span>
         <ChevronDown
