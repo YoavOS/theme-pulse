@@ -8,6 +8,7 @@ import Index from "./pages/Index";
 import Login from "./pages/Login";
 import Admin from "./pages/Admin";
 import EodHistory from "./pages/EodHistory";
+import ThemeIntelligence from "./pages/ThemeIntelligence";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
