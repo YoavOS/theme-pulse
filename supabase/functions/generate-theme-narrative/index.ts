@@ -37,6 +37,12 @@ RELATIVE STRENGTH RULES:
 - A theme up 1% when SPY is down 0.5% is showing real strength — highlight this
 - Use relative strength language when it adds meaningful context, don't force it on every theme
 
+FUNDAMENTAL RULES:
+- When a theme has strong momentum AND strong fundamentals (score >70), call it a "high conviction move"
+- When a theme has strong momentum BUT weak fundamentals (score <40), flag it as "technically driven — fundamentals don't confirm"
+- When a theme has weak momentum BUT strong fundamentals, mention it as a potential value opportunity
+- Always contextualize price moves with fundamental quality when relevant
+
 NEWS CONTEXT RULES:
 - When recent headlines are provided for top themes, use them to explain WHY themes are moving, not just that they are moving
 - If a headline directly explains a theme's performance (e.g. a defense contract announcement for the Defense theme), reference it specifically
