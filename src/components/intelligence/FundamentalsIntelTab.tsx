@@ -269,7 +269,7 @@ export default function FundamentalsIntelTab({
       }, 2000);
     })();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loading, dataLoading, themes.length]);
+  }, [loading, dataLoading, themes.length, smartMoneyMissing]);
 
   const toggleSort = (key: SortKey) => {
     if (sortKey === key) setSortDir(d => d === "asc" ? "desc" : "asc");
