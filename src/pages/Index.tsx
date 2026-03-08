@@ -333,7 +333,7 @@ export default function Index() {
               </span>
             ) : (
               <button
-                onClick={startEodSave}
+                onClick={() => startEodSave(false)}
                 disabled={!canSaveEod}
                 className="relative rounded-md border border-gain-medium/40 bg-gain-medium/10 px-3 py-1.5 text-xs font-semibold text-gain-medium transition-colors hover:bg-gain-medium/20 disabled:opacity-40 disabled:cursor-not-allowed"
                 title={eodTooltip}
@@ -344,6 +344,20 @@ export default function Index() {
                 {eodAutoSave && (
                   <span className="absolute -right-1 -top-1 h-2 w-2 rounded-full bg-primary animate-pulse" title="Auto-save enabled" />
                 )}
+              </button>
+            )}
+
+            {/* Save Friday Close button — weekend only */}
+            {eodStatus?.isWeekend && !isEodSaving && (
+              <button
+                onClick={() => startEodSave(true)}
+                disabled={!canSaveFriday}
+                className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-1.5 text-xs font-semibold text-amber-400 transition-colors hover:bg-amber-500/20 disabled:opacity-40 disabled:cursor-not-allowed"
+                title={fridayTooltip}
+              >
+                <span className="inline-flex items-center gap-1">
+                  <Calendar size={12} /> Save Friday Close
+                </span>
               </button>
             )}
             <button
