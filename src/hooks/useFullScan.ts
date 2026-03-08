@@ -264,6 +264,9 @@ export function useFullScan(onComplete: (themes: ThemeData[], timeframe: string)
       setIsRunning(false);
       setScanCompletedAt(new Date());
 
+      // Run breadth alert check after scan completes
+      checkBreadthAfterScan();
+
       toast({ title: "Full Scan Complete", description: summaryParts.join(". ") });
     } catch (err) {
       console.error("Full scan error:", err);
