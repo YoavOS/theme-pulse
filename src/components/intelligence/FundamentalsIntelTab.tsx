@@ -365,7 +365,7 @@ export default function FundamentalsIntelTab({
             <tbody>
               {sorted.map((t, i) => {
                 const typeInfo = getStockTypeInfo(t.dominantStockType);
-                const scoreLabel = getScoreLabel(t.avgScore);
+                const scoreLabel = t.avgScore !== null ? getScoreLabel(t.avgScore) : null;
                 const isExpanded = expandedTheme === t.themeName;
                 const smColor = getSmartMoneyColor(t.avgSmartMoneyScore);
 
@@ -387,12 +387,19 @@ export default function FundamentalsIntelTab({
                         </div>
                       </td>
                       <td className="px-3 py-2">
-                        <div className="flex items-center gap-2">
-                          <div className="w-12 h-1.5 rounded-full bg-secondary/60 overflow-hidden">
-                            <div className="h-full rounded-full" style={{
-                              width: `${t.avgScore}%`,
-                              background: t.avgScore >= 70 ? "hsl(var(--primary))" : t.avgScore >= 50 ? "hsl(152,100%,50%)" : t.avgScore >= 30 ? "#facc15" : "hsl(var(--destructive))"
-                            }} />
+                        {t.avgScore !== null ? (
+                          <div className="flex items-center gap-2">
+                            <div className="w-12 h-1.5 rounded-full bg-secondary/60 overflow-hidden">
+                              <div className="h-full rounded-full" style={{
+                                width: `${t.avgScore}%`,
+                                background: t.avgScore >= 70 ? "hsl(var(--primary))" : t.avgScore >= 50 ? "hsl(152,100%,50%)" : t.avgScore >= 30 ? "#facc15" : "hsl(var(--destructive))"
+                              }} />
+                            </div>
+                            <span className={`font-semibold ${scoreLabel!.color}`} style={{ fontFamily: DM_MONO }}>{t.avgScore}</span>
+                          </div>
+                        ) : (
+                          <span className="text-muted-foreground" style={{ fontFamily: DM_MONO }}>—</span>
+                        )}
                           </div>
                           <span className={`font-semibold ${scoreLabel.color}`} style={{ fontFamily: DM_MONO }}>{t.avgScore}</span>
                         </div>
