@@ -107,11 +107,8 @@ export default function FundamentalsIntelTab({
     return themes.map(t => {
       const tickerData = t.symbols.map(s => allFundamentals[s]).filter(Boolean);
       const scores = tickerData.map(d => d.fundamental_score).filter((s): s is number => s !== null);
-      const avgScore = scores.length > 0 ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : 0;
+      const avgScore = scores.length > 0 ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : null;
 
-      const growths = tickerData.map(d => d.revenue_growth_1y).filter((v): v is number => v !== null);
-      const margins = tickerData.map(d => d.net_margin).filter((v): v is number => v !== null);
-      const debts = tickerData.map(d => d.debt_to_equity).filter((v): v is number => v !== null);
       const types = tickerData.map(d => d.stock_type).filter((v): v is string => v !== null);
       const ratings = tickerData.map(d => d.analyst_rating);
 
@@ -132,9 +129,12 @@ export default function FundamentalsIntelTab({
       return {
         themeName: t.themeName,
         avgScore,
-        avgRevenueGrowth: growths.length > 0 ? Math.round(growths.reduce((a, b) => a + b, 0) / growths.length * 10) / 10 : null,
-        avgNetMargin: margins.length > 0 ? Math.round(margins.reduce((a, b) => a + b, 0) / margins.length * 10) / 10 : null,
-        avgDebtToEquity: debts.length > 0 ? Math.round(debts.reduce((a, b) => a + b, 0) / debts.length * 100) / 100 : null,
+        avgRevenueGrowth: safeAvg(tickerData.map(d => d.revenue_growth_1y), -100, 500),
+        avgNetMargin: safeAvg(tickerData.map(d => d.net_margin), -200, 100),
+        avgDebtToEquity: (() => {
+          const clean = tickerData.map(d => sanitize(d.debt_to_equity, 0, 20)).filter((v): v is number => v !== null);
+          return clean.length > 0 ? Math.round(clean.reduce((a, b) => a + b, 0) / clean.length * 100) / 100 : null;
+        })(),
         dominantStockType: mostCommon(types),
         analystConsensus: avgRating(ratings),
         tickerCount: t.symbols.length,
