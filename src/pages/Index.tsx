@@ -521,6 +521,8 @@ export default function Index() {
             accent="muted"
             themes={neutral}
             onCardClick={setDrilldownTheme}
+            fetchVolume={fetchVolume}
+            getThemeSignals={getThemeSignals}
           />
         )}
 
