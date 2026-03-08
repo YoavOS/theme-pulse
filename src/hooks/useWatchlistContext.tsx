@@ -1,3 +1,4 @@
+/* Watchlist global state — React Context */
 import { useState, useCallback, useEffect, useContext, createContext, type ReactNode } from "react";
 
 const PINNED_KEY = "pinnedThemes";
