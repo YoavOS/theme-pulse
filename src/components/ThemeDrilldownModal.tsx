@@ -93,11 +93,13 @@ export default function ThemeDrilldownModal({
   open,
   onOpenChange,
   defaultSortKey,
+  newsArticles,
 }: {
   theme: ThemeData | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   defaultSortKey?: SortKey;
+  newsArticles?: NewsArticle[];
 }) {
    const { isPinned, togglePin } = useWatchlist();
    const navigate = useNavigate();
