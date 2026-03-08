@@ -170,14 +170,34 @@ Deno.serve(async (req) => {
               if (attempt < MAX_RETRIES) { await delay(RETRY_DELAY_MS); continue; }
               break;
             }
-            if (!res.ok) break;
+            if (!res.ok) {
+              if (attempt < MAX_RETRIES) { await delay(5000); continue; }
+              break;
+            }
 
             const data = await res.json();
-            if (!data || (data.c === 0 && data.pc === 0)) break;
-
+            
             const usePc = url.searchParams.get("use_pc") === "true";
-            const closePrice = usePc ? data.pc : data.c;
-            if (!closePrice && closePrice !== 0) break;
+            
+            // Determine close price with fallback logic
+            let closePrice: number | null = null;
+            if (usePc) {
+              // Primary: pc (previous close). Fallback: c (current price, which on weekends = Friday close)
+              if (data.pc && data.pc !== 0) {
+                closePrice = data.pc;
+              } else if (data.c && data.c !== 0) {
+                closePrice = data.c;
+                console.log(`${symbol}: pc was ${data.pc}, falling back to c=${data.c}`);
+              }
+            } else {
+              closePrice = data.c;
+            }
+
+            if (closePrice === null || closePrice === 0) {
+              console.log(`${symbol}: both pc=${data.pc} and c=${data.c} are zero/null — marking failed`);
+              if (attempt < MAX_RETRIES) { await delay(2000); continue; }
+              break;
+            }
 
             // Upsert into eod_prices
             const { error: upsertErr } = await sb.from("eod_prices").upsert({
@@ -195,16 +215,17 @@ Deno.serve(async (req) => {
 
             if (upsertErr) {
               console.error(`Upsert error for ${symbol}:`, upsertErr);
+              if (attempt < MAX_RETRIES) { await delay(2000); continue; }
               break;
             }
 
             success = true;
             savedCount++;
-            console.log(`EOD OK ${symbol}: close=${data.c} open=${data.o}`);
             break;
           } catch (e) {
-            if (attempt >= MAX_RETRIES) break;
-            await delay(5000);
+            console.error(`Network error for ${symbol} attempt ${attempt}:`, e);
+            if (attempt < MAX_RETRIES) { await delay(2000); continue; }
+            break;
           }
         }
 

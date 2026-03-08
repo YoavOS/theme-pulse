@@ -80,6 +80,7 @@ export function useEodSave() {
       const CHUNK_SIZE = 12;
       let totalSaved = 0;
       let totalFailed = 0;
+      let allFailedSymbols: string[] = [];
 
       for (let i = 0; i < tickers.length; i += CHUNK_SIZE) {
         if (abortRef.current) break;
@@ -103,12 +104,15 @@ export function useEodSave() {
 
         if (!res.ok) {
           console.error("EOD chunk failed:", await res.text());
+          totalFailed += chunk.length;
+          allFailedSymbols.push(...chunk.map(t => t.symbol));
           continue;
         }
 
         const result = await res.json();
         totalSaved += result.saved || 0;
         totalFailed += result.failed || 0;
+        if (result.failedSymbols?.length) allFailedSymbols.push(...result.failedSymbols);
 
         setProgress({
           total,
@@ -117,6 +121,54 @@ export function useEodSave() {
           currentTheme,
           saving: true,
         });
+      }
+
+      // 2b. Retry pass: re-attempt all failed tickers once more
+      if (allFailedSymbols.length > 0 && !abortRef.current) {
+        console.log(`Retry pass: ${allFailedSymbols.length} failed tickers`);
+        const retryTickers = tickers.filter(t => allFailedSymbols.includes(t.symbol));
+        
+        // Subtract failed counts — they'll be re-counted
+        totalFailed = totalFailed - allFailedSymbols.length;
+        allFailedSymbols = [];
+
+        for (let i = 0; i < retryTickers.length; i += CHUNK_SIZE) {
+          if (abortRef.current) break;
+          const chunk = retryTickers.slice(i, i + CHUNK_SIZE);
+
+          setProgress({
+            total,
+            saved: totalSaved,
+            failed: totalFailed,
+            currentTheme: `Retry: ${chunk[0]?.symbol || ""}`,
+            saving: true,
+          });
+
+          const res = await fetch(`${supabaseUrl}/functions/v1/save-eod?action=chunk${usePc ? "&use_pc=true" : ""}`, {
+            method: "POST",
+            headers,
+            body: JSON.stringify({ tickers: chunk, date: saveDate }),
+          });
+
+          if (!res.ok) {
+            totalFailed += chunk.length;
+            allFailedSymbols.push(...chunk.map(t => t.symbol));
+            continue;
+          }
+
+          const result = await res.json();
+          totalSaved += result.saved || 0;
+          totalFailed += result.failed || 0;
+          if (result.failedSymbols?.length) allFailedSymbols.push(...result.failedSymbols);
+
+          setProgress({
+            total,
+            saved: totalSaved,
+            failed: totalFailed,
+            currentTheme: `Retry: ${chunk[0]?.symbol || ""}`,
+            saving: true,
+          });
+        }
       }
 
       // 3. Mark session complete
@@ -133,9 +185,10 @@ export function useEodSave() {
       await checkStatus();
 
       const label = usePc ? "Friday Close Save" : "EOD Save";
+      const failedList = allFailedSymbols.length > 0 ? ` · Failed: ${allFailedSymbols.slice(0, 15).join(", ")}${allFailedSymbols.length > 15 ? ` +${allFailedSymbols.length - 15} more` : ""}` : "";
       toast({
         title: totalFailed > 0 ? `${label} Complete (with warnings)` : `${label} Complete`,
-        description: `${saveDate} · ${totalSaved} tickers saved${totalFailed > 0 ? ` · ${totalFailed} failed` : ""}`,
+        description: `${saveDate} · ${totalSaved}/${total} tickers saved${totalFailed > 0 ? ` · ${totalFailed} failed` : ""}${failedList}`,
         variant: totalFailed > 0 ? "destructive" : "default",
       });
     } catch (err) {
