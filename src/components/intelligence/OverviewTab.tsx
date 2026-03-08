@@ -293,7 +293,18 @@ export default function OverviewTab({
             <tr className="border-b border-[rgba(255,255,255,0.08)] text-xs text-muted-foreground">
               <th className="px-3 py-2.5 text-left font-medium w-10">#</th>
               <th className="px-3 py-2.5 text-left font-medium">Theme</th>
-              <th className="px-3 py-2.5 text-left font-medium">Momentum</th>
+              <th className="px-3 py-2.5 text-left font-medium">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="cursor-help inline-flex items-center gap-1">
+                      Momentum <Info size={10} className="opacity-50" />
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="max-w-[280px] text-xs">
+                    {MOMENTUM_TOOLTIP}
+                  </TooltipContent>
+                </Tooltip>
+              </th>
               <th className="px-3 py-2.5 text-right font-medium">1D</th>
               <th className="px-3 py-2.5 text-right font-medium">1W</th>
               <th className="px-3 py-2.5 text-right font-medium">1M</th>
