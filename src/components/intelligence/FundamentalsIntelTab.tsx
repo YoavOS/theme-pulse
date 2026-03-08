@@ -104,6 +104,20 @@ export default function FundamentalsIntelTab({
       const types = tickerData.map(d => d.stock_type).filter((v): v is string => v !== null);
       const ratings = tickerData.map(d => d.analyst_rating);
 
+      // Smart money aggregation
+      const instPcts = tickerData.map(d => d.institutional_ownership_pct).filter((v): v is number => v !== null);
+      const smScores = tickerData.map(d => d.smart_money_score).filter((v): v is number => v !== null);
+      let insiderNetBuying = 0;
+      let insiderNetBuyingTotal = 0;
+      for (const d of tickerData) {
+        const buys = d.recent_insider_buys ?? 0;
+        const sells = d.recent_insider_sells ?? 0;
+        if (buys > 0 || sells > 0) {
+          insiderNetBuyingTotal++;
+          if (buys > sells) insiderNetBuying++;
+        }
+      }
+
       return {
         themeName: t.themeName,
         avgScore,
@@ -120,6 +134,10 @@ export default function FundamentalsIntelTab({
           stockType: allFundamentals[s]?.stock_type ?? null,
         })),
         momentumScore: t.momentumScore,
+        avgInstitutionalPct: instPcts.length > 0 ? Math.round(instPcts.reduce((a, b) => a + b, 0) / instPcts.length * 10) / 10 : null,
+        avgSmartMoneyScore: smScores.length > 0 ? Math.round(smScores.reduce((a, b) => a + b, 0) / smScores.length) : null,
+        insiderNetBuying,
+        insiderNetBuyingTotal,
       } as ThemeFundamentals;
     });
   }, [themes, allFundamentals]);
