@@ -56,8 +56,8 @@ export default function FundamentalsIntelTab({
   const [sortKey, setSortKey] = useState<SortKey>("score");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [expandedTheme, setExpandedTheme] = useState<string | null>(null);
-  const [prefetchState, setPrefetchState] = useState<{ active: boolean; completed: number; total: number }>({ active: false, completed: 0, total: 0 });
-  const prefetchingRef = useRef(false);
+  const [prefetchState, setPrefetchState] = useState<{ active: boolean; completed: number; total: number; done: boolean }>({ active: false, completed: 0, total: 0, done: false });
+  const prefetchCompletedRef = useRef(false);
 
   // Fetch all fundamentals from cache
   const loadFromCache = useCallback(async () => {
@@ -159,17 +159,36 @@ export default function FundamentalsIntelTab({
 
   const hasData = Object.keys(allFundamentals).length > 0;
 
-  // Auto-prefetch top 10 themes when no data exists
+  // Check localStorage for today's prefetch
+  const alreadyPrefetchedToday = useMemo(() => {
+    try {
+      const stored = localStorage.getItem("fundamentalsPrefetched");
+      if (!stored) return false;
+      const today = new Date().toISOString().slice(0, 10);
+      return stored === today;
+    } catch { return false; }
+  }, []);
+
+  // Auto-prefetch top 10 themes — runs once on mount only
   useEffect(() => {
-    if (loading || dataLoading || hasData || prefetchingRef.current || themes.length === 0) return;
-    prefetchingRef.current = true;
+    if (prefetchCompletedRef.current || alreadyPrefetchedToday) return;
+    if (dataLoading || themes.length === 0) return;
+
+    // Wait for initial cache load to finish
+    if (loading) return;
+    if (hasData) {
+      prefetchCompletedRef.current = true;
+      return;
+    }
+
+    prefetchCompletedRef.current = true; // mark immediately to prevent re-trigger
 
     const topThemes = [...themes]
       .sort((a, b) => b.momentumScore - a.momentumScore)
       .slice(0, 10);
 
     const total = topThemes.length;
-    setPrefetchState({ active: true, completed: 0, total });
+    setPrefetchState({ active: true, completed: 0, total, done: false });
 
     (async () => {
       for (let i = 0; i < topThemes.length; i++) {
@@ -181,15 +200,27 @@ export default function FundamentalsIntelTab({
         } catch (e) {
           console.error(`Prefetch failed for ${theme.themeName}:`, e);
         }
-        setPrefetchState({ active: true, completed: i + 1, total });
+        setPrefetchState({ active: true, completed: i + 1, total, done: false });
       }
 
-      // Reload cache after all prefetches
+      // Mark done in localStorage
+      try {
+        localStorage.setItem("fundamentalsPrefetched", new Date().toISOString().slice(0, 10));
+      } catch {}
+
+      // Show completion message briefly
+      setPrefetchState({ active: false, completed: total, total, done: true });
+
+      // Reload cache
       await loadFromCache();
-      setPrefetchState({ active: false, completed: total, total });
-      prefetchingRef.current = false;
+
+      // After 2 seconds, clear the done state to show the actual data
+      setTimeout(() => {
+        setPrefetchState(prev => ({ ...prev, done: false }));
+      }, 2000);
     })();
-  }, [loading, dataLoading, hasData, themes, loadFromCache]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, dataLoading, themes.length]);
 
   const toggleSort = (key: SortKey) => {
     if (sortKey === key) setSortDir(d => d === "asc" ? "desc" : "asc");
