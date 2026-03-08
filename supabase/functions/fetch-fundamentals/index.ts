@@ -256,6 +256,10 @@ serve(async (req) => {
     const cachedSymbols = new Set<string>();
     if (cached) {
       for (const row of cached) {
+        // Skip cache if smart money data is missing (needs re-fetch with new endpoints)
+        if (row.pe_ratio == null && row.smart_money_score == null && row.recent_insider_buys == null) {
+          continue; // treat as uncached — will be re-fetched
+        }
         cachedMap[row.symbol] = row;
         cachedSymbols.add(row.symbol);
       }
