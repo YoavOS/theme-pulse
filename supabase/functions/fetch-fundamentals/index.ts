@@ -363,7 +363,7 @@ serve(async (req) => {
         row.valuation_label = scores.valuationLabel;
 
         // Smart money scores
-        const sm = computeSmartMoney(smartData.institutional_ownership_pct, smartData.institutional_change, smartData.insider_sentiment_score);
+        const sm = computeSmartMoney(smartData.institutional_ownership_pct, smartData.institutional_change, smartData.insider_sentiment_score, smartData.recent_insider_buys, smartData.recent_insider_sells);
         row.smart_money_score = sm.smartMoneyScore;
         row.smart_money_label = sm.smartMoneyLabel;
         row.insider_sentiment_label = sm.insiderSentimentLabel;
