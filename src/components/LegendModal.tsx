@@ -222,7 +222,7 @@ export default function LegendModal({ open, onOpenChange }: { open: boolean; onO
 
         {/* Footer */}
         <div className="px-5 py-2.5 border-t border-[rgba(255,255,255,0.06)] shrink-0">
-          <p className="text-[10px] text-muted-foreground text-center" style={{ fontFamily: DM_MONO }}>
+          <p className="text-xs text-muted-foreground text-center" style={{ fontFamily: DM_MONO }}>
             All indicators update automatically with each scan · Colors match what you see on cards
           </p>
         </div>
