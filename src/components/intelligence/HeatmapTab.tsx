@@ -170,21 +170,21 @@ export default function HeatmapTab() {
 
       <div className="overflow-x-auto">
         <div className="inline-flex flex-col" style={{ fontFamily: DM_MONO }}>
-          {/* Month labels */}
-          <div className="flex ml-[20px]" style={{ gap: GAP }}>
-            {weeks.map((_, wi) => {
-              const label = monthLabels.find(m => m.weekIndex === wi);
-              return (
-                <div
-                  key={wi}
-                  style={{ width: CELL, fontSize: 9 }}
-                  className="text-muted-foreground text-center shrink-0"
-                >
-                  {label ? label.label : ""}
-                </div>
-              );
-            })}
-          </div>
+           {/* Month labels */}
+           <div className="flex ml-[20px]" style={{ gap: GAP }}>
+             {weeks.map((_, wi) => {
+               const label = monthLabels.find(m => m.weekIndex === wi);
+               return (
+                 <div
+                   key={wi}
+                   style={{ width: CELL, fontSize: 10 }}
+                   className="text-muted-foreground text-center shrink-0"
+                 >
+                   {label ? label.label : ""}
+                 </div>
+               );
+             })}
+           </div>
 
           {/* Grid */}
           <div className="flex">
