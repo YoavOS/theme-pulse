@@ -117,6 +117,11 @@ serve(async (req) => {
       ? `\n\nRECENT HEADLINES FOR TOP THEMES:\n${(topThemeHeadlines as any[]).map((h: any) => `- [${h.theme}] ${h.headline} (${h.source || "Unknown"})`).join("\n")}`
       : "";
 
+    // Fundamentals context
+    const fundamentalsSection = themeFundamentals && (themeFundamentals as any[]).length > 0
+      ? `\n\nFUNDAMENTAL CONTEXT:\n${(themeFundamentals as any[]).map((f: any) => `- ${f.name}: F-Score ${f.fundamentalScore}/100 (${f.stockType}) | Rev Growth: ${f.avgRevenueGrowth != null ? f.avgRevenueGrowth + "%" : "N/A"} | Net Margin: ${f.avgNetMargin != null ? f.avgNetMargin + "%" : "N/A"} | Analyst: ${f.analystConsensus || "N/A"}`).join("\n")}`
+      : "";
+
     const userMessage = `Date: ${date} | Themes analyzed: ${totalThemes} | Request ID: ${requestTimestamp}
 ${dispersionLine}${spyLine}
 TOP 8 THEMES (strongest momentum):
