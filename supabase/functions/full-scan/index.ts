@@ -7,59 +7,85 @@ const corsHeaders = {
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const FINNHUB_KEY = Deno.env.get("FINNHUB_API_KEY") || "";
-const CHUNK_SIZE = 3; // themes per invocation — smaller to avoid timeouts with many tickers
-const MAX_RETRIES_PER_TICKER = 2;
+const CHUNK_SIZE = 2; // themes per invocation
+const SUB_BATCH_SIZE = 8; // tickers per sub-batch
+const SUB_BATCH_DELAY_MS = 3000; // delay between sub-batches
+const MAX_RETRIES = 2;
+const RETRY_DELAY_MS = 30000;
 
 interface QuoteResult {
   symbol: string;
   pct: number;
   price: number;
-  error?: string;
   skipped?: boolean;
+  skipReason?: string;
+}
+
+function delay(ms: number) {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+// Validate ticker exists via Finnhub profile endpoint
+async function isValidTicker(symbol: string): Promise<boolean> {
+  try {
+    const url = `https://finnhub.io/api/v1/stock/profile2?symbol=${encodeURIComponent(symbol)}&token=${FINNHUB_KEY}`;
+    const res = await fetch(url);
+    if (res.status === 429) {
+      // Rate limited on validation — assume valid to not block scan
+      console.log(`Ticker validation rate-limited for ${symbol}, assuming valid`);
+      return true;
+    }
+    if (!res.ok) return false;
+    const data = await res.json();
+    // Empty object = invalid ticker
+    return data && typeof data === "object" && Object.keys(data).length > 0 && !!data.ticker;
+  } catch {
+    return true; // On error, assume valid to not block
+  }
 }
 
 async function fetchQuoteWithRetry(symbol: string, themeName: string): Promise<QuoteResult> {
-  for (let attempt = 0; attempt <= MAX_RETRIES_PER_TICKER; attempt++) {
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     try {
       const url = `https://finnhub.io/api/v1/quote?symbol=${encodeURIComponent(symbol)}&token=${FINNHUB_KEY}`;
       const res = await fetch(url);
 
       if (res.status === 429) {
-        if (attempt < MAX_RETRIES_PER_TICKER) {
-          console.log(`429 on ticker ${symbol} in "${themeName}", retry ${attempt + 1}/${MAX_RETRIES_PER_TICKER}, waiting 30s...`);
-          await delay(30000);
+        if (attempt < MAX_RETRIES) {
+          console.log(`429 on ${symbol} in "${themeName}", retry ${attempt + 1}/${MAX_RETRIES}, waiting 30s...`);
+          await delay(RETRY_DELAY_MS);
           continue;
         }
-        console.log(`Skipped ticker ${symbol} in "${themeName}": rate limit after ${MAX_RETRIES_PER_TICKER} retries`);
-        return { symbol, pct: 0, price: 0, error: "rate_limited", skipped: true };
+        console.log(`Skipped ticker ${symbol} in "${themeName}": rate limit after ${MAX_RETRIES} retries`);
+        return { symbol, pct: 0, price: 0, skipped: true, skipReason: "rate_limited" };
       }
 
       if (!res.ok) {
-        return { symbol, pct: 0, price: 0, error: `http_${res.status}`, skipped: true };
+        console.log(`Skipped ticker ${symbol} in "${themeName}": HTTP ${res.status}`);
+        return { symbol, pct: 0, price: 0, skipped: true, skipReason: `http_${res.status}` };
       }
 
       const data = await res.json();
-      if (!data || data.c === 0) {
-        return { symbol, pct: 0, price: 0, error: "no_data" };
+      
+      // c=0 and pc=0 means no data (likely invalid/delisted)
+      if (!data || (data.c === 0 && data.pc === 0)) {
+        console.log(`Skipped ticker ${symbol} in "${themeName}": no quote data (likely invalid)`);
+        return { symbol, pct: 0, price: 0, skipped: true, skipReason: "no_data" };
       }
 
       const pct = data.dp ?? ((data.c - data.pc) / data.pc) * 100;
       return { symbol, pct: Math.round(pct * 100) / 100, price: data.c };
     } catch (e) {
-      if (attempt < MAX_RETRIES_PER_TICKER) {
-        console.log(`Error on ticker ${symbol} in "${themeName}": ${e}, retry ${attempt + 1}`);
+      if (attempt < MAX_RETRIES) {
+        console.log(`Error on ${symbol} in "${themeName}": ${e}, retry ${attempt + 1}`);
         await delay(5000);
         continue;
       }
       console.log(`Skipped ticker ${symbol} in "${themeName}": ${e} after retries`);
-      return { symbol, pct: 0, price: 0, error: String(e), skipped: true };
+      return { symbol, pct: 0, price: 0, skipped: true, skipReason: String(e) };
     }
   }
-  return { symbol, pct: 0, price: 0, error: "exhausted_retries", skipped: true };
-}
-
-function delay(ms: number) {
-  return new Promise((r) => setTimeout(r, ms));
+  return { symbol, pct: 0, price: 0, skipped: true, skipReason: "exhausted_retries" };
 }
 
 Deno.serve(async (req) => {
@@ -96,7 +122,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    // --- CHUNK: process next N themes and RETURN results ---
+    // --- Load all themes+tickers ---
     const { data: dbThemes } = await sb.from("themes").select("id, name, description");
     const { data: dbTickers } = await sb.from("theme_tickers").select("theme_id, ticker_symbol");
 
@@ -123,11 +149,17 @@ Deno.serve(async (req) => {
     let startIndex = 0;
 
     if (action === "start") {
-      // Fresh scan: always reset to 0
+      // Fresh scan: reset progress row then start from 0
       startIndex = 0;
-      console.log("Action=start: starting fresh from 0");
+      console.log(`Action=start: fresh scan, ${totalThemes} themes`);
+      await sb.from("full_update_progress").update({
+        last_theme_index: 0,
+        total_themes: totalThemes,
+        status: "in_progress",
+        last_updated: new Date().toISOString(),
+      }).neq("id", "00000000-0000-0000-0000-000000000000");
     } else {
-      // action=chunk: resume from where we left off
+      // action=chunk: resume from saved index
       if (progress && progress.last_theme_index > 0 && progress.last_theme_index < totalThemes) {
         startIndex = progress.last_theme_index;
         console.log(`Action=chunk: resuming from index ${startIndex}/${totalThemes}`);
@@ -139,7 +171,7 @@ Deno.serve(async (req) => {
 
     const endIndex = Math.min(startIndex + CHUNK_SIZE, totalThemes);
 
-    // Update progress
+    // Update progress to in_progress
     await sb.from("full_update_progress").update({
       last_theme_index: startIndex,
       total_themes: totalThemes,
@@ -147,62 +179,76 @@ Deno.serve(async (req) => {
       last_updated: new Date().toISOString(),
     }).neq("id", "00000000-0000-0000-0000-000000000000");
 
-    const skipped: string[] = [];
     const skippedTickers: string[] = [];
+    const invalidTickers: string[] = [];
 
-    // Results to return to frontend
     const themeResults: {
       theme_name: string;
       notes: string | null;
-      tickers: { symbol: string; pct: number; price: number }[];
+      tickers: { symbol: string; pct: number; price: number; skipped?: boolean; skipReason?: string }[];
       skipped_tickers: string[];
+      invalid_tickers: string[];
     }[] = [];
 
-    // Process this chunk of themes
+    // Process chunk
     for (let i = startIndex; i < endIndex; i++) {
       const theme = themeList[i];
-      const tickers: QuoteResult[] = [];
       const thisThemeSkipped: string[] = [];
+      const thisThemeInvalid: string[] = [];
+      const tickers: QuoteResult[] = [];
 
       console.log(`Processing theme ${i + 1}/${totalThemes}: "${theme.name}" (${theme.symbols.length} tickers)`);
 
-      // Fetch tickers one-by-one with 1.5s delay to stay safe
-      for (let j = 0; j < theme.symbols.length; j++) {
-        const symbol = theme.symbols[j];
-        const result = await fetchQuoteWithRetry(symbol, theme.name);
+      // Process tickers in sub-batches
+      for (let batchStart = 0; batchStart < theme.symbols.length; batchStart += SUB_BATCH_SIZE) {
+        const subBatch = theme.symbols.slice(batchStart, batchStart + SUB_BATCH_SIZE);
 
-        if (result.skipped) {
-          thisThemeSkipped.push(symbol);
-          skippedTickers.push(`${symbol} (${theme.name})`);
+        for (const symbol of subBatch) {
+          // Validate ticker first
+          const valid = await isValidTicker(symbol);
+          if (!valid) {
+            console.log(`Skipped invalid ticker ${symbol} in theme "${theme.name}": no profile found`);
+            tickers.push({ symbol, pct: 0, price: 0, skipped: true, skipReason: "invalid_ticker" });
+            thisThemeInvalid.push(symbol);
+            invalidTickers.push(`${symbol} (${theme.name})`);
+            continue;
+          }
+
+          // Small delay between individual tickers within sub-batch
+          await delay(1200);
+
+          const result = await fetchQuoteWithRetry(symbol, theme.name);
+          tickers.push(result);
+
+          if (result.skipped) {
+            thisThemeSkipped.push(symbol);
+            skippedTickers.push(`${symbol} (${theme.name})`);
+          }
         }
 
-        tickers.push(result);
-
-        // Delay between individual tickers (1.5s)
-        if (j + 1 < theme.symbols.length) {
-          await delay(1500);
+        // Delay between sub-batches
+        if (batchStart + SUB_BATCH_SIZE < theme.symbols.length) {
+          console.log(`Sub-batch complete, waiting ${SUB_BATCH_DELAY_MS / 1000}s...`);
+          await delay(SUB_BATCH_DELAY_MS);
         }
       }
-
-      // Build result — include ALL tickers (even skipped ones keep pct=0)
-      const validTickers = tickers.map(t => ({
-        symbol: t.symbol,
-        pct: t.pct,
-        price: t.price,
-      }));
 
       themeResults.push({
         theme_name: theme.name,
         notes: theme.description,
-        tickers: validTickers,
+        tickers: tickers.map(t => ({
+          symbol: t.symbol,
+          pct: t.pct,
+          price: t.price,
+          skipped: t.skipped,
+          skipReason: t.skipReason,
+        })),
         skipped_tickers: thisThemeSkipped,
+        invalid_tickers: thisThemeInvalid,
       });
 
-      if (thisThemeSkipped.length > 0) {
-        console.log(`Theme "${theme.name}": ${thisThemeSkipped.length} tickers skipped: ${thisThemeSkipped.join(", ")}`);
-      } else {
-        console.log(`Completed theme ${i + 1}/${totalThemes}: "${theme.name}" — all ${tickers.length} tickers OK`);
-      }
+      const validCount = tickers.filter(t => !t.skipped).length;
+      console.log(`Theme ${i + 1}/${totalThemes} "${theme.name}": ${validCount}/${tickers.length} valid, ${thisThemeSkipped.length} skipped, ${thisThemeInvalid.length} invalid`);
 
       // Save progress after each theme
       await sb.from("full_update_progress").update({
@@ -211,7 +257,7 @@ Deno.serve(async (req) => {
         last_updated: new Date().toISOString(),
       }).neq("id", "00000000-0000-0000-0000-000000000000");
 
-      // Delay between themes (2s)
+      // Delay between themes
       if (i + 1 < endIndex) await delay(2000);
     }
 
@@ -230,9 +276,8 @@ Deno.serve(async (req) => {
         processed_from: startIndex,
         processed_to: endIndex,
         total_themes: totalThemes,
-        skipped,
         skipped_tickers: skippedTickers,
-        // KEY: return actual theme+ticker data so frontend can use it directly
+        invalid_tickers: invalidTickers,
         themes: themeResults,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }

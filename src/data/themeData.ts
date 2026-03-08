@@ -1,12 +1,11 @@
 // ─── DATA MODEL ───────────────────────────────────────────────
-// To make live: use a backend API (e.g. polygon.io, yfinance via edge function)
-// Example: theme_groups = {"Fiber Optics": ["AAOI","LITE","COHR",...], ...}
-// Then compute equal-weight return for each group daily
 
 export interface Ticker {
   symbol: string;
   pct: number;
   name?: string;
+  skipped?: boolean;
+  skipReason?: string;
 }
 
 export interface ThemeData {
@@ -14,10 +13,14 @@ export interface ThemeData {
   performance_pct: number;
   up_count: number;
   down_count: number;
+  na_count?: number;
+  valid_count?: number;
   tickers: Ticker[];
   rank?: number;
   category?: "Strong" | "Neutral" | "Weak";
   notes?: string;
+  dataSource?: "real" | "demo";
+  lastUpdated?: string;
 }
 
 // ─── DEMO DATA ────────────────────────────────────────────────
@@ -38,6 +41,7 @@ export const demoThemes: ThemeData[] = [
       { symbol: "CIEN", pct: 5.64 },
     ],
     notes: "AI capex driving fiber demand",
+    dataSource: "demo",
   },
   {
     theme_name: "AI Infrastructure / Data Centers",
@@ -52,6 +56,7 @@ export const demoThemes: ThemeData[] = [
       { symbol: "PWSC", pct: 5.12 },
     ],
     notes: "Hyperscaler buildout accelerating",
+    dataSource: "demo",
   },
   {
     theme_name: "GPU / AI Chips",
@@ -66,6 +71,7 @@ export const demoThemes: ThemeData[] = [
       { symbol: "QCOM", pct: 3.12 },
     ],
     notes: "Blackwell shipments ramping",
+    dataSource: "demo",
   },
   {
     theme_name: "Uranium & Nuclear Revival",
@@ -80,6 +86,7 @@ export const demoThemes: ThemeData[] = [
       { symbol: "DNN", pct: 5.12 },
     ],
     notes: "SMR contracts signed",
+    dataSource: "demo",
   },
   {
     theme_name: "Quantum Computing",
@@ -92,6 +99,7 @@ export const demoThemes: ThemeData[] = [
       { symbol: "QUBT", pct: 9.34 },
       { symbol: "QBTS", pct: 4.21 },
     ],
+    dataSource: "demo",
   },
   {
     theme_name: "Drone & Autonomous Systems",
@@ -105,6 +113,7 @@ export const demoThemes: ThemeData[] = [
       { symbol: "RKLB", pct: 5.34 },
     ],
     notes: "DoD contracts expanding",
+    dataSource: "demo",
   },
   {
     theme_name: "Defense & Robotics",
@@ -118,6 +127,7 @@ export const demoThemes: ThemeData[] = [
       { symbol: "LHX", pct: 4.56 },
       { symbol: "PLTR", pct: 3.89 },
     ],
+    dataSource: "demo",
   },
   {
     theme_name: "Space Economy",
@@ -130,6 +140,7 @@ export const demoThemes: ThemeData[] = [
       { symbol: "LUNR", pct: 6.12 },
       { symbol: "MNTS", pct: 3.45 },
     ],
+    dataSource: "demo",
   },
   {
     theme_name: "Optics & Photonics",
@@ -142,6 +153,7 @@ export const demoThemes: ThemeData[] = [
       { symbol: "LITE", pct: 5.67 },
       { symbol: "MKSI", pct: 3.45 },
     ],
+    dataSource: "demo",
   },
   {
     theme_name: "Critical Minerals / Rare Earths",
@@ -154,6 +166,7 @@ export const demoThemes: ThemeData[] = [
       { symbol: "LAC", pct: 4.12 },
     ],
     notes: "China export restrictions",
+    dataSource: "demo",
   },
   {
     theme_name: "Cybersecurity",
@@ -167,6 +180,7 @@ export const demoThemes: ThemeData[] = [
       { symbol: "FTNT", pct: 3.45 },
       { symbol: "S", pct: 2.89 },
     ],
+    dataSource: "demo",
   },
   {
     theme_name: "Copper & Base Metals",
@@ -178,6 +192,7 @@ export const demoThemes: ThemeData[] = [
       { symbol: "SCCO", pct: 4.56 },
       { symbol: "TECK", pct: 3.12 },
     ],
+    dataSource: "demo",
   },
   {
     theme_name: "Semiconductors",
@@ -191,6 +206,7 @@ export const demoThemes: ThemeData[] = [
       { symbol: "LRCX", pct: 3.12 },
       { symbol: "AMAT", pct: 2.89 },
     ],
+    dataSource: "demo",
   },
   {
     theme_name: "Neoclouds / Hyperscale Cloud",
@@ -202,6 +218,7 @@ export const demoThemes: ThemeData[] = [
       { symbol: "COREWEAVE", pct: 5.34 },
       { symbol: "SMCI", pct: 2.12 },
     ],
+    dataSource: "demo",
   },
   {
     theme_name: "Thermal Management / Liquid Cooling",
@@ -213,6 +230,7 @@ export const demoThemes: ThemeData[] = [
       { symbol: "GNRC", pct: 3.45 },
       { symbol: "LFUS", pct: 2.12 },
     ],
+    dataSource: "demo",
   },
   {
     theme_name: "Robotics & Industrial Automation",
@@ -224,6 +242,7 @@ export const demoThemes: ThemeData[] = [
       { symbol: "ROK", pct: 3.12 },
       { symbol: "TER", pct: 2.34 },
     ],
+    dataSource: "demo",
   },
   {
     theme_name: "Gold & Precious Metals",
@@ -236,6 +255,7 @@ export const demoThemes: ThemeData[] = [
       { symbol: "AEM", pct: 2.89 },
       { symbol: "GFI", pct: 1.23 },
     ],
+    dataSource: "demo",
   },
   {
     theme_name: "AI Software / Agents",
@@ -248,6 +268,7 @@ export const demoThemes: ThemeData[] = [
       { symbol: "PATH", pct: 1.45 },
       { symbol: "BBAI", pct: 0.89 },
     ],
+    dataSource: "demo",
   },
   {
     theme_name: "Energy Services & Nuclear",
@@ -259,6 +280,7 @@ export const demoThemes: ThemeData[] = [
       { symbol: "SLB", pct: 2.12 },
       { symbol: "BKR", pct: 1.23 },
     ],
+    dataSource: "demo",
   },
   {
     theme_name: "Fintech & Digital Payments",
@@ -271,6 +293,7 @@ export const demoThemes: ThemeData[] = [
       { symbol: "AFRM", pct: 1.23 },
       { symbol: "SOFI", pct: 0.67 },
     ],
+    dataSource: "demo",
   },
   {
     theme_name: "Semiconductor Equipment",
@@ -282,6 +305,7 @@ export const demoThemes: ThemeData[] = [
       { symbol: "KLAC", pct: 1.45 },
       { symbol: "LRCX", pct: 0.87 },
     ],
+    dataSource: "demo",
   },
   {
     theme_name: "SaaS & Cloud Software",
@@ -294,6 +318,7 @@ export const demoThemes: ThemeData[] = [
       { symbol: "SNOW", pct: 0.89 },
       { symbol: "DDOG", pct: 0.45 },
     ],
+    dataSource: "demo",
   },
   {
     theme_name: "Crypto & Blockchain",
@@ -306,6 +331,7 @@ export const demoThemes: ThemeData[] = [
       { symbol: "MARA", pct: -1.23 },
       { symbol: "RIOT", pct: -2.45 },
     ],
+    dataSource: "demo",
   },
   {
     theme_name: "Memory & Storage",
@@ -317,6 +343,7 @@ export const demoThemes: ThemeData[] = [
       { symbol: "WDC", pct: 0.89 },
       { symbol: "STX", pct: -0.45 },
     ],
+    dataSource: "demo",
   },
   {
     theme_name: "Enterprise Software",
@@ -328,6 +355,7 @@ export const demoThemes: ThemeData[] = [
       { symbol: "SAP", pct: 0.67 },
       { symbol: "INTU", pct: -0.34 },
     ],
+    dataSource: "demo",
   },
   // ─── WEAKER / LAGGING THEMES ─────────────────
   {
@@ -340,6 +368,7 @@ export const demoThemes: ThemeData[] = [
       { symbol: "CVX", pct: -0.67 },
       { symbol: "COP", pct: -1.12 },
     ],
+    dataSource: "demo",
   },
   {
     theme_name: "Silver",
@@ -351,6 +380,7 @@ export const demoThemes: ThemeData[] = [
       { symbol: "AG", pct: -0.45 },
       { symbol: "SLV", pct: -1.23 },
     ],
+    dataSource: "demo",
   },
   {
     theme_name: "LNG / Natural Gas",
@@ -362,6 +392,7 @@ export const demoThemes: ThemeData[] = [
       { symbol: "AR", pct: -0.89 },
       { symbol: "EQT", pct: -1.45 },
     ],
+    dataSource: "demo",
   },
   {
     theme_name: "Shipping & Dry Bulk",
@@ -373,6 +404,7 @@ export const demoThemes: ThemeData[] = [
       { symbol: "ZIM", pct: -1.67 },
       { symbol: "DAC", pct: -2.12 },
     ],
+    dataSource: "demo",
   },
   {
     theme_name: "Traditional Retail",
@@ -384,6 +416,7 @@ export const demoThemes: ThemeData[] = [
       { symbol: "TGT", pct: -1.89 },
       { symbol: "KSS", pct: -3.12 },
     ],
+    dataSource: "demo",
   },
   {
     theme_name: "Regional Banks",
@@ -395,6 +428,7 @@ export const demoThemes: ThemeData[] = [
       { symbol: "WAL", pct: -2.34 },
       { symbol: "ZION", pct: -2.89 },
     ],
+    dataSource: "demo",
   },
   {
     theme_name: "Electric Vehicles & Battery",
@@ -408,6 +442,7 @@ export const demoThemes: ThemeData[] = [
       { symbol: "NIO", pct: -3.89 },
     ],
     notes: "Tariff fears weigh on sector",
+    dataSource: "demo",
   },
   {
     theme_name: "Cannabis & Psychedelics",
@@ -419,6 +454,7 @@ export const demoThemes: ThemeData[] = [
       { symbol: "CGC", pct: -3.56 },
       { symbol: "MSOS", pct: -1.89 },
     ],
+    dataSource: "demo",
   },
   {
     theme_name: "Solar Energy",
@@ -432,6 +468,7 @@ export const demoThemes: ThemeData[] = [
       { symbol: "RUN", pct: -2.89 },
     ],
     notes: "Policy uncertainty",
+    dataSource: "demo",
   },
   {
     theme_name: "Commercial Real Estate",
@@ -443,6 +480,7 @@ export const demoThemes: ThemeData[] = [
       { symbol: "SLG", pct: -4.23 },
       { symbol: "BXP", pct: -2.89 },
     ],
+    dataSource: "demo",
   },
   {
     theme_name: "Wind Energy",
@@ -455,39 +493,60 @@ export const demoThemes: ThemeData[] = [
       { symbol: "NEP", pct: -5.12 },
     ],
     notes: "Offshore wind project cancellations",
+    dataSource: "demo",
   },
   // ─── PLACEHOLDER THEMES (0% – fill with real data later) ───
-  { theme_name: "Hypersonic & Missile Defense", performance_pct: 0, up_count: 0, down_count: 0, tickers: [] },
-  { theme_name: "Advanced Air Mobility / eVTOL", performance_pct: 0, up_count: 0, down_count: 0, tickers: [] },
-  { theme_name: "Steel & Iron Ore", performance_pct: 0, up_count: 0, down_count: 0, tickers: [] },
-  { theme_name: "Agriculture Commodities", performance_pct: 0, up_count: 0, down_count: 0, tickers: [] },
-  { theme_name: "Battery Metals / Lithium", performance_pct: 0, up_count: 0, down_count: 0, tickers: [] },
-  { theme_name: "Hydrogen & Clean Energy", performance_pct: 0, up_count: 0, down_count: 0, tickers: [] },
-  { theme_name: "Biotech & Genomics", performance_pct: 0, up_count: 0, down_count: 0, tickers: [] },
-  { theme_name: "GLP-1 / Obesity Drugs", performance_pct: 0, up_count: 0, down_count: 0, tickers: [] },
-  { theme_name: "Telemedicine", performance_pct: 0, up_count: 0, down_count: 0, tickers: [] },
-  { theme_name: "Airlines & Travel", performance_pct: 0, up_count: 0, down_count: 0, tickers: [] },
-  { theme_name: "Cruise Lines", performance_pct: 0, up_count: 0, down_count: 0, tickers: [] },
-  { theme_name: "Casinos & Gaming", performance_pct: 0, up_count: 0, down_count: 0, tickers: [] },
-  { theme_name: "Luxury Goods", performance_pct: 0, up_count: 0, down_count: 0, tickers: [] },
-  { theme_name: "DePIN / Decentralized Physical Infra", performance_pct: 0, up_count: 0, down_count: 0, tickers: [] },
-  { theme_name: "3D Printing / Additive Manufacturing", performance_pct: 0, up_count: 0, down_count: 0, tickers: [] },
-  { theme_name: "Robotics Process Automation (RPA)", performance_pct: 0, up_count: 0, down_count: 0, tickers: [] },
-  { theme_name: "Edge Computing", performance_pct: 0, up_count: 0, down_count: 0, tickers: [] },
-  { theme_name: "5G & Telecom Infrastructure", performance_pct: 0, up_count: 0, down_count: 0, tickers: [] },
-  { theme_name: "Water Infrastructure", performance_pct: 0, up_count: 0, down_count: 0, tickers: [] },
-  { theme_name: "Housing & Construction", performance_pct: 0, up_count: 0, down_count: 0, tickers: [] },
-  { theme_name: "Insurance", performance_pct: 0, up_count: 0, down_count: 0, tickers: [] },
-  { theme_name: "Traditional Media", performance_pct: 0, up_count: 0, down_count: 0, tickers: [] },
-  { theme_name: "Advertising & Marketing Tech", performance_pct: 0, up_count: 0, down_count: 0, tickers: [] },
-  { theme_name: "Electric Grid / Utilities", performance_pct: 0, up_count: 0, down_count: 0, tickers: [] },
+  { theme_name: "Hypersonic & Missile Defense", performance_pct: 0, up_count: 0, down_count: 0, tickers: [], dataSource: "demo" },
+  { theme_name: "Advanced Air Mobility / eVTOL", performance_pct: 0, up_count: 0, down_count: 0, tickers: [], dataSource: "demo" },
+  { theme_name: "Steel & Iron Ore", performance_pct: 0, up_count: 0, down_count: 0, tickers: [], dataSource: "demo" },
+  { theme_name: "Agriculture Commodities", performance_pct: 0, up_count: 0, down_count: 0, tickers: [], dataSource: "demo" },
+  { theme_name: "Battery Metals / Lithium", performance_pct: 0, up_count: 0, down_count: 0, tickers: [], dataSource: "demo" },
+  { theme_name: "Hydrogen & Clean Energy", performance_pct: 0, up_count: 0, down_count: 0, tickers: [], dataSource: "demo" },
+  { theme_name: "Biotech & Genomics", performance_pct: 0, up_count: 0, down_count: 0, tickers: [], dataSource: "demo" },
+  { theme_name: "GLP-1 / Obesity Drugs", performance_pct: 0, up_count: 0, down_count: 0, tickers: [], dataSource: "demo" },
+  { theme_name: "Telemedicine", performance_pct: 0, up_count: 0, down_count: 0, tickers: [], dataSource: "demo" },
+  { theme_name: "Airlines & Travel", performance_pct: 0, up_count: 0, down_count: 0, tickers: [], dataSource: "demo" },
+  { theme_name: "Cruise Lines", performance_pct: 0, up_count: 0, down_count: 0, tickers: [], dataSource: "demo" },
+  { theme_name: "Casinos & Gaming", performance_pct: 0, up_count: 0, down_count: 0, tickers: [], dataSource: "demo" },
+  { theme_name: "Luxury Goods", performance_pct: 0, up_count: 0, down_count: 0, tickers: [], dataSource: "demo" },
+  { theme_name: "DePIN / Decentralized Physical Infra", performance_pct: 0, up_count: 0, down_count: 0, tickers: [], dataSource: "demo" },
+  { theme_name: "3D Printing / Additive Manufacturing", performance_pct: 0, up_count: 0, down_count: 0, tickers: [], dataSource: "demo" },
+  { theme_name: "Robotics Process Automation (RPA)", performance_pct: 0, up_count: 0, down_count: 0, tickers: [], dataSource: "demo" },
+  { theme_name: "Edge Computing", performance_pct: 0, up_count: 0, down_count: 0, tickers: [], dataSource: "demo" },
+  { theme_name: "5G & Telecom Infrastructure", performance_pct: 0, up_count: 0, down_count: 0, tickers: [], dataSource: "demo" },
+  { theme_name: "Water Infrastructure", performance_pct: 0, up_count: 0, down_count: 0, tickers: [], dataSource: "demo" },
+  { theme_name: "Housing & Construction", performance_pct: 0, up_count: 0, down_count: 0, tickers: [], dataSource: "demo" },
+  { theme_name: "Insurance", performance_pct: 0, up_count: 0, down_count: 0, tickers: [], dataSource: "demo" },
+  { theme_name: "Traditional Media", performance_pct: 0, up_count: 0, down_count: 0, tickers: [], dataSource: "demo" },
+  { theme_name: "Advertising & Marketing Tech", performance_pct: 0, up_count: 0, down_count: 0, tickers: [], dataSource: "demo" },
+  { theme_name: "Electric Grid / Utilities", performance_pct: 0, up_count: 0, down_count: 0, tickers: [], dataSource: "demo" },
 ];
 
 export function getProcessedThemes(themes: ThemeData[]): ThemeData[] {
   const sorted = [...themes].sort((a, b) => b.performance_pct - a.performance_pct);
-  return sorted.map((t, i) => ({
-    ...t,
-    rank: i + 1,
-    category: t.performance_pct > 2 ? "Strong" : t.performance_pct >= 0 ? "Neutral" : "Weak",
-  }));
+  return sorted.map((t, i) => {
+    // Recalculate up/down/na from tickers
+    const validTickers = t.tickers.filter(tk => !tk.skipped);
+    const naTickers = t.tickers.filter(tk => tk.skipped);
+    const up_count = validTickers.filter(tk => tk.pct > 0).length;
+    const down_count = validTickers.filter(tk => tk.pct <= 0).length;
+    const na_count = naTickers.length;
+    const valid_count = validTickers.length;
+
+    // Recalculate performance from valid tickers only
+    const performance_pct = validTickers.length > 0
+      ? Math.round((validTickers.reduce((sum, tk) => sum + tk.pct, 0) / validTickers.length) * 100) / 100
+      : t.performance_pct;
+
+    return {
+      ...t,
+      rank: i + 1,
+      category: performance_pct > 2 ? "Strong" : performance_pct >= 0 ? "Neutral" : "Weak",
+      performance_pct,
+      up_count: t.dataSource === "real" ? up_count : t.up_count,
+      down_count: t.dataSource === "real" ? down_count : t.down_count,
+      na_count,
+      valid_count,
+    };
+  });
 }

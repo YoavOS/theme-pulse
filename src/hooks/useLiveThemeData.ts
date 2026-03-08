@@ -15,6 +15,7 @@ interface CachedData {
 function saveCache(data: CachedData) {
   try {
     localStorage.setItem(CACHE_KEY, JSON.stringify(data));
+    console.log(`Cache saved: ${data.themes.length} themes, ${data.symbolsFetched} symbols`);
   } catch { /* quota exceeded */ }
 }
 
@@ -25,6 +26,7 @@ function loadCache(): CachedData | null {
     const parsed = JSON.parse(raw) as CachedData;
     const age = Date.now() - new Date(parsed.fetchedAt).getTime();
     if (age > CACHE_MAX_AGE_MS) {
+      console.log("Cache expired, removing");
       localStorage.removeItem(CACHE_KEY);
       return null;
     }
@@ -46,7 +48,8 @@ interface LiveDataState {
 function buildInitialState(): LiveDataState {
   const cached = loadCache();
   if (cached) {
-    console.log("Loaded real data from cache, age:", Math.round((Date.now() - new Date(cached.fetchedAt).getTime()) / 60000), "min");
+    const realThemes = cached.themes.filter(t => t.dataSource === "real");
+    console.log(`Loaded from cache: ${cached.themes.length} themes (${realThemes.length} real), age: ${Math.round((Date.now() - new Date(cached.fetchedAt).getTime()) / 60000)} min`);
     return {
       themes: getProcessedThemes(cached.themes),
       isLoading: false,
@@ -71,7 +74,6 @@ export function useLiveThemeData() {
   const { toast } = useToast();
   const [state, setState] = useState<LiveDataState>(buildInitialState);
   const mountedRef = useRef(true);
-  // Use ref to always have latest themes for merging without stale closures
   const themesRef = useRef(state.themes);
   useEffect(() => { themesRef.current = state.themes; }, [state.themes]);
 
@@ -80,13 +82,13 @@ export function useLiveThemeData() {
     return () => { mountedRef.current = false; };
   }, []);
 
-  // Restore from cache on tab focus
+  // Restore from cache on tab focus — NEVER fall back to demo
   useEffect(() => {
     function handleVisibility() {
       if (document.visibilityState !== "visible") return;
-      console.log("Tab focused – reloading from cache");
       const cached = loadCache();
       if (cached && mountedRef.current) {
+        console.log("Tab focused – restoring from cache");
         setState({
           themes: getProcessedThemes(cached.themes),
           isLoading: false,
@@ -95,27 +97,34 @@ export function useLiveThemeData() {
           rateLimited: cached.rateLimited,
           symbolsFetched: cached.symbolsFetched,
         });
+        toast({ title: "Data restored", description: "Loaded latest real data from cache." });
+      } else {
+        console.log("Tab focused – no cache available");
       }
     }
     document.addEventListener("visibilitychange", handleVisibility);
-    return () => document.removeEventListener("visibilitychange", handleVisibility);
-  }, []);
+    window.addEventListener("focus", handleVisibility);
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibility);
+      window.removeEventListener("focus", handleVisibility);
+    };
+  }, [toast]);
 
   // Merge partial scan results into current state + cache
   const mergeScanResults = useCallback((scanThemes: ThemeData[]) => {
     if (!mountedRef.current) return;
 
     setState((prev) => {
-      // Build map from current themes
       const themeMap = new Map<string, ThemeData>();
+      // Start with current real themes
       for (const t of prev.themes) {
         themeMap.set(t.theme_name, t);
       }
-      // Overwrite with scan results
+      // Overwrite with new scan results (mark as real)
       for (const t of scanThemes) {
-        themeMap.set(t.theme_name, t);
+        themeMap.set(t.theme_name, { ...t, dataSource: "real", lastUpdated: new Date().toISOString() });
       }
-      // Also include any demo themes not yet in map
+      // Fill in any missing demo themes
       for (const d of demoThemes) {
         if (!themeMap.has(d.theme_name)) {
           themeMap.set(d.theme_name, d);
@@ -126,12 +135,16 @@ export function useLiveThemeData() {
       const processed = getProcessedThemes(merged);
 
       const now = new Date().toISOString();
+      const totalSymbols = merged.reduce((sum, t) => sum + t.tickers.filter(tk => !tk.skipped).length, 0);
       saveCache({
         themes: merged,
         fetchedAt: now,
-        symbolsFetched: merged.reduce((sum, t) => sum + t.tickers.length, 0),
+        symbolsFetched: totalSymbols,
         rateLimited: false,
       });
+
+      const realCount = merged.filter(t => t.dataSource === "real").length;
+      console.log(`Merged scan: ${scanThemes.length} new, ${realCount} total real themes`);
 
       return {
         themes: processed,
@@ -139,7 +152,7 @@ export function useLiveThemeData() {
         isLive: true,
         lastFetched: new Date(now),
         rateLimited: false,
-        symbolsFetched: merged.reduce((sum, t) => sum + t.tickers.length, 0),
+        symbolsFetched: totalSymbols,
       };
     });
   }, []);
@@ -168,18 +181,24 @@ export function useLiveThemeData() {
       if (result.error) throw new Error(result.error);
 
       const liveThemes: ThemeData[] = result.themes.map((t: any) => {
-        const up_count = t.tickers.filter((tk: any) => tk.pct > 0).length;
-        const down_count = t.tickers.filter((tk: any) => tk.pct <= 0).length;
-        const performance_pct = t.tickers.length > 0
-          ? Math.round((t.tickers.reduce((sum: number, tk: any) => sum + tk.pct, 0) / t.tickers.length) * 100) / 100
+        const validTickers = t.tickers.filter((tk: any) => !tk.skipped);
+        const up_count = validTickers.filter((tk: any) => tk.pct > 0).length;
+        const down_count = validTickers.filter((tk: any) => tk.pct <= 0).length;
+        const na_count = t.tickers.filter((tk: any) => tk.skipped).length;
+        const performance_pct = validTickers.length > 0
+          ? Math.round((validTickers.reduce((sum: number, tk: any) => sum + tk.pct, 0) / validTickers.length) * 100) / 100
           : 0;
         return {
           theme_name: t.theme_name,
           performance_pct,
           up_count,
           down_count,
+          na_count,
+          valid_count: validTickers.length,
           tickers: t.tickers,
           notes: t.notes || undefined,
+          dataSource: "real" as const,
+          lastUpdated: new Date().toISOString(),
         };
       });
 
