@@ -37,6 +37,7 @@ export default function Index() {
   const [showDemoConfirm, setShowDemoConfirm] = useState(false);
   const { pinned, alerts, getAlert } = useWatchlist();
   const { fetchVolume, getThemeSignals } = useVolumeData();
+  const dispersion = useDispersion(allThemes);
 
   const {
     themes: allThemes,
