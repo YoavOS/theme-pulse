@@ -91,6 +91,21 @@ function BreadthEventLabel({ themeName }: { themeName: string }) {
   );
 }
 
+function VolumeDryUpLabel({ themeName }: { themeName: string }) {
+  const { isThemeDryingUp } = useVolumeDryUp();
+  const isDrying = useMemo(() => isThemeDryingUp(themeName), [themeName, isThemeDryingUp]);
+  if (!isDrying) return null;
+  return (
+    <span
+      className="text-[10px] font-semibold uppercase tracking-wide text-[#f5a623]"
+      style={{ fontFamily: DM_MONO }}
+      title="Volume fading after elevated activity — potential reversal signal"
+    >
+      📉 Volume Fading
+    </span>
+  );
+}
+
 function ThemeCard({ theme, isAccelerating }: { theme: ThemeIntelData; isAccelerating: boolean }) {
   const labelColorMap: Record<string, string> = {
     "Breaking Out": "text-[#00f5c4]",
