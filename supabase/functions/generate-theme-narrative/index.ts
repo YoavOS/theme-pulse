@@ -101,6 +101,11 @@ serve(async (req) => {
     const dispersionLine = dispersionScore != null ? `\nDISPERSION: ${dispersionScore.toFixed(2)}σ — ${dispersionLabel || "N/A"}` : "";
     const spyLine = spyPerf1d != null ? `\nSPY BENCHMARK: 1D: ${spyPerf1d >= 0 ? "+" : ""}${spyPerf1d}% | 1W: ${spyPerf1w != null ? (spyPerf1w >= 0 ? "+" : "") + spyPerf1w + "%" : "N/A"} | 1M: ${spyPerf1m != null ? (spyPerf1m >= 0 ? "+" : "") + spyPerf1m + "%" : "N/A"}` : "";
 
+    // Headlines context
+    const headlinesSection = topThemeHeadlines && (topThemeHeadlines as any[]).length > 0
+      ? `\n\nRECENT HEADLINES FOR TOP THEMES:\n${(topThemeHeadlines as any[]).map((h: any) => `- [${h.theme}] ${h.headline} (${h.source || "Unknown"})`).join("\n")}`
+      : "";
+
     const userMessage = `Date: ${date} | Themes analyzed: ${totalThemes} | Request ID: ${requestTimestamp}
 ${dispersionLine}${spyLine}
 TOP 8 THEMES (strongest momentum):
@@ -111,6 +116,7 @@ ${bottomLines}
 
 SINGLE-STOCK OUTLIER THEMES (one ticker >5% while theme avg <1%):
 ${outlierLines}
+${headlinesSection}
 
 Write a complete market analysis following your instructions.`;
 
