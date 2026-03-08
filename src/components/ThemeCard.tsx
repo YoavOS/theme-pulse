@@ -5,6 +5,7 @@ import { Pin } from "lucide-react";
 import { useWatchlist } from "@/hooks/useWatchlistContext";
 import DemandSignals from "@/components/DemandSignals";
 import { ThemeDemandSignals } from "@/hooks/useVolumeData";
+import { hasThemeBreadthEvent } from "@/hooks/useBreadthAlerts";
 
 class DemandSignalsBoundary extends Component<{ children: ReactNode; resetKey?: string }, { hasError: boolean }> {
   state = { hasError: false };
@@ -74,6 +75,7 @@ export default function ThemeCard({ theme, index, onClick, fetchVolume, getTheme
 }) {
   const { isPinned, togglePin } = useWatchlist();
   const themePinned = isPinned(theme.theme_name);
+  const breadthEvent = useMemo(() => hasThemeBreadthEvent(theme.theme_name), [theme.theme_name]);
   const validTickers = theme.tickers.filter(t => !t.skipped);
   const naTickers = theme.tickers.filter(t => t.skipped);
   const total = validTickers.length;
@@ -147,6 +149,23 @@ export default function ThemeCard({ theme, index, onClick, fetchVolume, getTheme
             ) : (
               <Badge variant="secondary" className="shrink-0 text-[9px] px-1.5 py-0 bg-muted text-muted-foreground">
                 Demo
+              </Badge>
+            )}
+            {breadthEvent && (
+              <Badge
+                variant="secondary"
+                className={`shrink-0 text-[9px] px-1.5 py-0 ${
+                  breadthEvent.type === "surge"
+                    ? "bg-[#00f5c4]/15 text-[#00f5c4] border-[#00f5c4]/30"
+                    : "bg-[#f5a623]/15 text-[#f5a623] border-[#f5a623]/30"
+                }`}
+                title={
+                  breadthEvent.type === "surge"
+                    ? `Breadth surged from ${breadthEvent.yesterdayBreadth}% → ${breadthEvent.todayBreadth}%`
+                    : `Breadth collapsed from ${breadthEvent.yesterdayBreadth}% → ${breadthEvent.todayBreadth}%`
+                }
+              >
+                {breadthEvent.type === "surge" ? "🔥 Surge" : "❄️ Collapse"}
               </Badge>
             )}
           </div>

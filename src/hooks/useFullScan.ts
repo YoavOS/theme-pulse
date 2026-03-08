@@ -3,6 +3,7 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { ThemeData } from "@/data/themeData";
 import { useEodPerformance } from "@/hooks/useEodPerformance";
+import { useBreadthAlerts } from "@/hooks/useBreadthAlerts";
 
 export interface ScanProgress {
   total: number;
@@ -46,6 +47,7 @@ export function useFullScan(onComplete: (themes: ThemeData[], timeframe: string)
   const [scanCompletedAt, setScanCompletedAt] = useState<Date | null>(null);
   const abortRef = useRef(false);
   const { calculateFromEod, checkCoverage } = useEodPerformance();
+  const { checkBreadthAfterScan } = useBreadthAlerts();
 
   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
   const anonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
@@ -261,6 +263,9 @@ export function useFullScan(onComplete: (themes: ThemeData[], timeframe: string)
       setStatusText(`✅ ${summaryParts.join(" · ")}`);
       setIsRunning(false);
       setScanCompletedAt(new Date());
+
+      // Run breadth alert check after scan completes
+      checkBreadthAfterScan();
 
       toast({ title: "Full Scan Complete", description: summaryParts.join(". ") });
     } catch (err) {

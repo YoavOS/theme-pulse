@@ -1,7 +1,9 @@
+import { useMemo } from "react";
 import { ThemeIntelData } from "@/hooks/useThemeIntelligence";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Rocket, TrendingDown } from "lucide-react";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
+import { hasThemeBreadthEvent } from "@/hooks/useBreadthAlerts";
 
 const DM_MONO = "'DM Mono', monospace";
 const EOD_TOOLTIP = "Accumulating EOD history — available after more daily saves";
@@ -68,6 +70,26 @@ function VolumeSignal({ theme, isAccelerating }: { theme: ThemeIntelData; isAcce
   }
 }
 
+function BreadthEventLabel({ themeName }: { themeName: string }) {
+  const event = useMemo(() => hasThemeBreadthEvent(themeName), [themeName]);
+  if (!event) return null;
+  return (
+    <span
+      className={`text-[10px] font-semibold uppercase tracking-wide ${
+        event.type === "surge" ? "text-[#00f5c4]" : "text-[#60a5fa]"
+      }`}
+      style={{ fontFamily: DM_MONO }}
+      title={
+        event.type === "surge"
+          ? `Breadth surged ${event.yesterdayBreadth}% → ${event.todayBreadth}%`
+          : `Breadth collapsed ${event.yesterdayBreadth}% → ${event.todayBreadth}%`
+      }
+    >
+      {event.type === "surge" ? "🔥 Breadth Surge" : "❄️ Breadth Collapse"}
+    </span>
+  );
+}
+
 function ThemeCard({ theme, isAccelerating }: { theme: ThemeIntelData; isAccelerating: boolean }) {
   const labelColorMap: Record<string, string> = {
     "Breaking Out": "text-[#00f5c4]",
@@ -96,9 +118,12 @@ function ThemeCard({ theme, isAccelerating }: { theme: ThemeIntelData; isAcceler
         <h4 className="font-['Syne',sans-serif] font-semibold text-[13px] text-foreground leading-tight">
           {theme.themeName}
         </h4>
-        <span className={`text-[10px] font-semibold uppercase tracking-wide shrink-0 ${labelColor}`}>
-          {theme.label}
-        </span>
+        <div className="flex flex-col items-end gap-0.5">
+          <BreadthEventLabel themeName={theme.themeName} />
+          <span className={`text-[10px] font-semibold uppercase tracking-wide shrink-0 ${labelColor}`}>
+            {theme.label}
+          </span>
+        </div>
       </div>
 
       {/* Mini bars comparing 1D vs 1M */}
