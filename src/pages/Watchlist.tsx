@@ -13,6 +13,7 @@ import { useSpyBenchmark, formatRS } from "@/hooks/useSpyBenchmark";
 export default function Watchlist() {
   const { pinned, togglePin, alerts, setAlert, getAlert } = useWatchlist();
   const { themes } = useLiveThemeData("Today");
+  const { getRelativeStrength } = useSpyBenchmark();
   const [triggeredAlerts, setTriggeredAlerts] = useState<
     { themeName: string; message: string; type: "up" | "down" | "volume" }[]
   >([]);
