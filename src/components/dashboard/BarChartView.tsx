@@ -138,7 +138,7 @@ function BarRow({
           minWidth: 220,
         }}
       >
-        <div className="font-['Syne',sans-serif] text-sm font-semibold text-foreground mb-1.5">{d.name}</div>
+        <div className="font-['Syne',sans-serif] text-[16px] font-semibold text-foreground mb-1.5">{d.name}</div>
         <div className="border-t border-[rgba(255,255,255,0.08)] mb-1.5" />
         <div className="space-y-1 text-muted-foreground whitespace-nowrap" style={{ fontFamily: DM_MONO }}>
           <div className="flex justify-between gap-4">
