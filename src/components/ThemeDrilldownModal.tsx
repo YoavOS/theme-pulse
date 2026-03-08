@@ -519,7 +519,7 @@ export default function ThemeDrilldownModal({
             </tbody>
           </table>
         </div>
-        ) : (
+        ) : activeTab === "news" ? (
           <div className="max-h-[400px] overflow-auto px-6 pb-2 pt-2">
             {newsLoading ? (
               <div className="space-y-2 py-4">
@@ -531,6 +531,15 @@ export default function ThemeDrilldownModal({
               <NewsTabContent articles={(newsArticles && newsArticles.length > 0) ? newsArticles : localNews} />
             )}
           </div>
+        ) : (
+          <FundamentalsTab
+            theme={theme}
+            fundamentals={fundamentals || localFundamentals}
+            isLoading={fundLoading || (isFundamentalsLoading ?? false)}
+            tickerPrices={Object.fromEntries(
+              theme.tickers.filter(t => !t.skipped).map(t => [t.symbol, extras[t.symbol]?.price || 0])
+            )}
+          />
         )}
 
         {/* Footer */}

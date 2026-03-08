@@ -132,7 +132,7 @@ export default function FundamentalsTab({
   const tickers = useMemo(() => {
     return theme.tickers.filter(t => !t.skipped).map(t => {
       const f = fundamentals?.[t.symbol] || null;
-      return { symbol: t.symbol, pct: t.pct, fundamentals: f, price: tickerPrices[t.symbol] || t.price || 0 };
+      return { symbol: t.symbol, pct: t.pct, fundamentals: f, price: tickerPrices[t.symbol] || 0 };
     });
   }, [theme, fundamentals, tickerPrices]);
 
