@@ -199,6 +199,21 @@ export default function Index() {
                   Cached
                 </span>
               )}
+              {dispersion && (
+                <TooltipProvider delayDuration={200}>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span className={`inline-flex items-center gap-1 rounded border ${getDispersionColorClass(dispersion.score).border} ${getDispersionColorClass(dispersion.score).bg} px-1.5 py-0.5 text-[10px] font-semibold ${getDispersionColorClass(dispersion.score).text} cursor-help`}>
+                        Dispersion: {dispersion.score.toFixed(1)}σ
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" className="max-w-[220px] text-xs">
+                      <p className="font-semibold mb-1">{dispersion.label}</p>
+                      <p className="text-muted-foreground">{dispersion.tooltip}</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              )}
               <span className="hidden sm:inline">· {formatTime(lastFetched)}</span>
               <span className="hidden sm:inline">· {themes.length} themes</span>
               {isLive && <span className="hidden sm:inline">· {symbolsFetched} symbols</span>}

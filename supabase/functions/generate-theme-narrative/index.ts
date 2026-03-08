@@ -92,8 +92,10 @@ serve(async (req) => {
       ? (outlierThemes || []).map(formatTheme).join("\n\n")
       : "None identified";
 
-    const userMessage = `Date: ${date} | Themes analyzed: ${totalThemes} | Request ID: ${requestTimestamp}
+    const dispersionLine = dispersionScore != null ? `\nDISPERSION: ${dispersionScore.toFixed(2)}σ — ${dispersionLabel || "N/A"}\n` : "";
 
+    const userMessage = `Date: ${date} | Themes analyzed: ${totalThemes} | Request ID: ${requestTimestamp}
+${dispersionLine}
 TOP 8 THEMES (strongest momentum):
 ${topLines}
 
