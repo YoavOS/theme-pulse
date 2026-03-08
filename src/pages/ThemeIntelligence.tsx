@@ -43,6 +43,7 @@ export default function ThemeIntelligence() {
               {themes.length} themes · {isLoading ? "loading…" : "live"}
             </span>
           </div>
+          <HelpButton />
         </div>
 
         {/* Sub-tab navigation — sticky pills */}
