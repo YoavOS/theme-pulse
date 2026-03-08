@@ -214,6 +214,13 @@ export default function ThemeCard({ theme, index, onClick, fetchVolume, getTheme
             <span className="ml-auto text-muted-foreground">{Math.round(ratio * 100)}% advancing</span>
           </div>
 
+          {/* vs SPY relative strength */}
+          {theme.dataSource === "real" && (
+            <div className={`text-[10px] font-medium mt-0.5 ${rsFormatted.color}`} style={{ fontFamily: "'DM Mono', monospace" }}>
+              {rsFormatted.text}
+            </div>
+          )}
+
           {/* Row 4: Tickers — single row, max 5 visible */}
           {visibleTickers.length > 0 && (
             <div className="mt-2 flex items-center gap-1.5 overflow-hidden">
