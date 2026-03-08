@@ -2,6 +2,7 @@ import { useState, useCallback, useRef, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { ThemeData } from "@/data/themeData";
+import { useEodPerformance } from "@/hooks/useEodPerformance";
 
 export interface ScanProgress {
   total: number;
