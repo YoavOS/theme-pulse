@@ -5,6 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Progress } from "@/components/ui/progress";
 import { ArrowUpDown, ChevronDown, ChevronRight, Loader2, RefreshCw } from "lucide-react";
+import TickerFundamentalsTooltip from "./TickerFundamentalsTooltip";
 
 const DM_MONO = "'DM Mono', monospace";
 
@@ -467,15 +468,28 @@ export default function FundamentalsIntelTab({
                             {t.tickers.map(tk => {
                               const ti = getStockTypeInfo(tk.stockType);
                               return (
-                                <div key={tk.symbol} className="inline-flex items-center gap-1.5 rounded-md bg-secondary/40 px-2 py-1 text-[10px]">
-                                  <span className="font-bold text-foreground" style={{ fontFamily: DM_MONO }}>{tk.symbol}</span>
-                                  {tk.score != null && (
-                                    <span className={`font-semibold ${getScoreLabel(tk.score).color}`} style={{ fontFamily: DM_MONO }}>F:{tk.score}</span>
-                                  )}
-                                  {tk.stockType && (
-                                    <span className="text-muted-foreground">{ti.emoji}</span>
-                                  )}
-                                </div>
+                                <TickerFundamentalsTooltip
+                                  key={tk.symbol}
+                                  symbol={tk.symbol}
+                                  data={allFundamentals[tk.symbol] || null}
+                                  onFetchRequest={async (sym) => {
+                                    try {
+                                      await supabase.functions.invoke("fetch-fundamentals", { body: { symbols: [sym] } });
+                                      const { data: row } = await supabase.from("fundamentals_cache").select("*").eq("symbol", sym).maybeSingle();
+                                      if (row) setAllFundamentals(prev => ({ ...prev, [sym]: row as unknown as FundamentalsData }));
+                                    } catch {}
+                                  }}
+                                >
+                                  <div className="inline-flex items-center gap-1.5 rounded-md bg-secondary/40 px-2 py-1 text-[10px] cursor-default">
+                                    <span className="font-bold text-foreground" style={{ fontFamily: DM_MONO }}>{tk.symbol}</span>
+                                    {tk.score != null && (
+                                      <span className={`font-semibold ${getScoreLabel(tk.score).color}`} style={{ fontFamily: DM_MONO }}>F:{tk.score}</span>
+                                    )}
+                                    {tk.stockType && (
+                                      <span className="text-muted-foreground">{ti.emoji}</span>
+                                    )}
+                                  </div>
+                                </TickerFundamentalsTooltip>
                               );
                             })}
                           </div>
