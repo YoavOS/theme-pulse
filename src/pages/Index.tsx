@@ -738,6 +738,7 @@ function Section({
   onNewsBadgeClick,
   getThemeFundamentalScore,
   onFundamentalBadgeClick,
+  getThemeSentiment,
 }: {
   icon: React.ReactNode;
   title: string;
@@ -752,6 +753,7 @@ function Section({
   onNewsBadgeClick?: (theme: ThemeData) => void;
   getThemeFundamentalScore?: (symbols: string[]) => number | null;
   onFundamentalBadgeClick?: (theme: ThemeData) => void;
+  getThemeSentiment?: (themeName: string) => import("@/hooks/useThemeNews").SentimentData | null;
 }) {
   const accentColor =
     accent === "primary"
