@@ -710,6 +710,9 @@ function Section({
   fetchVolume,
   getThemeSignals,
   dimmedThemes,
+  getNewsCount,
+  hasNegativeNews,
+  onNewsBadgeClick,
 }: {
   icon: React.ReactNode;
   title: string;
@@ -719,6 +722,9 @@ function Section({
   fetchVolume?: (symbols: string[]) => void;
   getThemeSignals?: (symbols: string[]) => import("@/hooks/useVolumeData").ThemeDemandSignals;
   dimmedThemes?: Set<string> | null;
+  getNewsCount?: (symbols: string[]) => number;
+  hasNegativeNews?: (symbols: string[]) => boolean;
+  onNewsBadgeClick?: (theme: ThemeData) => void;
 }) {
   const accentColor =
     accent === "primary"
@@ -740,7 +746,7 @@ function Section({
       if (relVols.length > 0) {
         const avgRel = relVols.reduce((a, b) => a + b, 0) / relVols.length;
         if (avgRel > 1.4) {
-          volBadge = <span className="inline-flex items-center gap-0.5 rounded-full bg-[#00f5c4]/10 px-2 py-0.5 text-[10px] font-semibold text-[#00f5c4]">⚡ elevated volume</span>;
+          volBadge = <span className="inline-flex items-center gap-0.5 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">⚡ elevated volume</span>;
         } else if (avgRel < 0.8) {
           volBadge = <span className="inline-flex items-center rounded-full bg-secondary/60 px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">low volume</span>;
         }
@@ -763,13 +769,25 @@ function Section({
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 min-[1800px]:grid-cols-4">
         {themes.map((t, i) => {
           const isDimmed = dimmedThemes ? !dimmedThemes.has(t.theme_name.toLowerCase()) : false;
+          const symbols = t.tickers.map(tk => tk.symbol);
+          const nc = getNewsCount ? getNewsCount(symbols) : 0;
+          const neg = hasNegativeNews ? hasNegativeNews(symbols) : false;
           return (
             <div
               key={t.theme_name}
               className="transition-all duration-300"
               style={isDimmed ? { opacity: 0.3, filter: "grayscale(60%)" } : {}}
             >
-              <ThemeCard theme={t} index={i} onClick={onCardClick} fetchVolume={fetchVolume} getThemeSignals={getThemeSignals} />
+              <ThemeCard
+                theme={t}
+                index={i}
+                onClick={onCardClick}
+                fetchVolume={fetchVolume}
+                getThemeSignals={getThemeSignals}
+                newsCount={nc}
+                newsNegative={neg}
+                onNewsBadgeClick={onNewsBadgeClick}
+              />
             </div>
           );
         })}
