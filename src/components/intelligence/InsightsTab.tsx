@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import WeeklyReportsSection from "./WeeklyReportsSection";
 import VolumeDryUpSection from "./VolumeDryUpSection";
 import { useVolumeDryUp } from "@/hooks/useVolumeDryUp";
+import { calculateDispersion, getDispersionLabel, getDispersionShortLabel } from "@/hooks/useDispersion";
 
 const DM_MONO = "'DM Mono', monospace";
 const COOLDOWN_MS = 30_000;
