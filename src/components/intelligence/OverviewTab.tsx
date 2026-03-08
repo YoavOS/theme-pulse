@@ -1,9 +1,10 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import { ThemeIntelData } from "@/hooks/useThemeIntelligence";
 import { Skeleton } from "@/components/ui/skeleton";
 import { TrendingUp, TrendingDown, Minus, Info } from "lucide-react";
 import { LineChart, Line, ResponsiveContainer } from "recharts";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
+import VolumeLeaders from "./VolumeLeaders";
 
 const DM_MONO = "'DM Mono', monospace";
 const EOD_TOOLTIP = "Accumulating EOD history — available after more daily saves";
