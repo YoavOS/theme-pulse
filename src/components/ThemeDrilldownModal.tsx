@@ -96,6 +96,7 @@ export default function ThemeDrilldownModal({
    const [sortKey, setSortKey] = useState<SortKey>(defaultSortKey || "pct");
    const [sortDir, setSortDir] = useState<SortDir>("desc");
    const [extras, setExtras] = useState<Record<string, TickerExtra>>({});
+   const { spy, getTickerRS } = useSpyBenchmark();
 
   useEffect(() => {
     if (!theme || !open) return;
