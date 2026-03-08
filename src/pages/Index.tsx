@@ -57,6 +57,12 @@ export default function Index() {
 
   const dispersion = useDispersion(allThemes);
   const { spy, getRelativeStrength } = useSpyBenchmark();
+  const { query: searchQuery, setQuery: setSearchQuery, isSearching, result: searchResult, clearSearch, runSearch, history: searchHistory } = useThemeSearch(allThemes);
+
+  const searchMatchSet = useMemo(() => {
+    if (!searchResult) return null;
+    return new Set(searchResult.matchingThemes.map(n => n.toLowerCase()));
+  }, [searchResult]);
 
   // Full scan handler: receives themes + timeframe from scan
   const handleScanComplete = useCallback((themes: ThemeData[], timeframe: string) => {
