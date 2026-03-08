@@ -5,6 +5,8 @@ import { RefreshCw, AlertTriangle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import WeeklyReportsSection from "./WeeklyReportsSection";
+import VolumeDryUpSection from "./VolumeDryUpSection";
+import { useVolumeDryUp } from "@/hooks/useVolumeDryUp";
 
 const DM_MONO = "'DM Mono', monospace";
 const COOLDOWN_MS = 30_000;
