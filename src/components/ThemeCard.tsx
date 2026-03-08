@@ -46,7 +46,7 @@ function TickerChip({ symbol, pct, skipped, skipReason }: { symbol: string; pct:
   );
 }
 
-export default function ThemeCard({ theme, index }: { theme: ThemeData; index: number }) {
+export default function ThemeCard({ theme, index, onClick }: { theme: ThemeData; index: number; onClick?: (theme: ThemeData) => void }) {
   const { isPinned, togglePin } = useWatchlist();
   const themePinned = isPinned(theme.theme_name);
   const validTickers = theme.tickers.filter(t => !t.skipped);
