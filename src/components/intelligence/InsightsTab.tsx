@@ -118,29 +118,49 @@ export default function InsightsTab({
   const generateNarrative = useCallback(async () => {
     if (themes.length === 0 || isGenerating) return;
 
+    // Clear existing narrative immediately and show skeleton
+    setNarrative(null);
     setIsGenerating(true);
     try {
-      // Build rich payload with ALL themes and ticker-level data
+      const mapTheme = (t: ThemeIntelData) => {
+        const validTickers = t.tickers.filter(tk => tk.status === "done");
+        return {
+          name: t.themeName,
+          score: t.momentumScore,
+          perf_1d: t.perf_1d,
+          perf_1w: t.perf_1w,
+          perf_1m: t.perf_1m,
+          breadth: `${t.breadthUp}/${t.breadthTotal}`,
+          advancing: t.breadthUp,
+          declining: t.breadthTotal - t.breadthUp,
+          tickers: validTickers.map(tk => ({
+            symbol: tk.symbol,
+            perf_1d: tk.perf_1d,
+          })),
+        };
+      };
+
+      // Top 8 and bottom 8 by momentum score (themes already sorted desc)
+      const top8 = themes.slice(0, 8).map(mapTheme);
+      const bottom8 = [...themes].sort((a, b) => a.momentumScore - b.momentumScore).slice(0, 8).map(mapTheme);
+
+      // Single-stock outliers: any ticker >5% while theme avg <1%
+      const outlierThemes = themes
+        .filter(t => {
+          if (t.perf_1d >= 1) return false;
+          const validTickers = t.tickers.filter(tk => tk.status === "done");
+          return validTickers.some(tk => tk.perf_1d > 5);
+        })
+        .slice(0, 5)
+        .map(mapTheme);
+
       const payload = {
         date: new Date().toISOString().split("T")[0],
         totalThemes: themes.length,
-        themes: themes.map(t => {
-          const validTickers = t.tickers.filter(tk => tk.status === "done");
-          return {
-            name: t.themeName,
-            score: t.momentumScore,
-            perf_1d: t.perf_1d,
-            perf_1w: t.perf_1w,
-            perf_1m: t.perf_1m,
-            breadth: `${t.breadthUp}/${t.breadthTotal}`,
-            advancing: t.breadthUp,
-            declining: t.breadthTotal - t.breadthUp,
-            tickers: validTickers.map(tk => ({
-              symbol: tk.symbol,
-              perf_1d: tk.perf_1d,
-            })),
-          };
-        }),
+        requestTimestamp: Date.now(),
+        topThemes: top8,
+        bottomThemes: bottom8,
+        outlierThemes,
       };
 
       const { data, error } = await supabase.functions.invoke("generate-theme-narrative", {
