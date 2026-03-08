@@ -163,17 +163,21 @@ Deno.serve(async (req) => {
             const data = await res.json();
             if (!data || (data.c === 0 && data.pc === 0)) break;
 
+            const usePc = url.searchParams.get("use_pc") === "true";
+            const closePrice = usePc ? data.pc : data.c;
+            if (!closePrice && closePrice !== 0) break;
+
             // Upsert into eod_prices
             const { error: upsertErr } = await sb.from("eod_prices").upsert({
               symbol,
               theme_name,
               date,
-              close_price: data.c,
-              open_price: data.o || null,
-              high_price: data.h || null,
-              low_price: data.l || null,
-              volume: data.v ? Math.round(data.v) : null,
-              source: "finnhub_quote",
+              close_price: closePrice,
+              open_price: usePc ? null : (data.o || null),
+              high_price: usePc ? null : (data.h || null),
+              low_price: usePc ? null : (data.l || null),
+              volume: usePc ? null : (data.v ? Math.round(data.v) : null),
+              source: usePc ? "friday_pc_save" : "finnhub_quote",
               is_backfill: false,
             }, { onConflict: "symbol,date" });
 
