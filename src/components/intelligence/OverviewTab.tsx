@@ -1,9 +1,10 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import { ThemeIntelData } from "@/hooks/useThemeIntelligence";
 import { Skeleton } from "@/components/ui/skeleton";
 import { TrendingUp, TrendingDown, Minus, Info } from "lucide-react";
 import { LineChart, Line, ResponsiveContainer } from "recharts";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
+import VolumeLeaders from "./VolumeLeaders";
 
 const DM_MONO = "'DM Mono', monospace";
 const EOD_TOOLTIP = "Accumulating EOD history — available after more daily saves";
@@ -187,6 +188,22 @@ export default function OverviewTab({
   isLoading: boolean;
 }) {
   const [sortMode, setSortMode] = useState<SortMode>("momentum");
+  const [highlightId, setHighlightId] = useState<string | null>(null);
+  const rowRefs = useRef<Map<string, HTMLTableRowElement>>(new Map());
+
+  const handleSelectTheme = useCallback((themeId: string) => {
+    const el = rowRefs.current.get(themeId);
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+      setHighlightId(themeId);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!highlightId) return;
+    const timer = setTimeout(() => setHighlightId(null), 2000);
+    return () => clearTimeout(timer);
+  }, [highlightId]);
 
   const enriched = useMemo(() => {
     if (themes.length === 0) return [];
@@ -218,6 +235,8 @@ export default function OverviewTab({
 
   return (
     <div className="h-full overflow-auto">
+      <VolumeLeaders themes={themes} onSelectTheme={handleSelectTheme} />
+
       <div className="mb-4 flex items-center justify-between">
         <div className="flex items-center gap-4 text-xs text-muted-foreground">
           <span className="font-['Syne',sans-serif] text-sm font-semibold text-foreground">
@@ -307,7 +326,10 @@ export default function OverviewTab({
                 return (
                   <tr
                     key={t.themeId}
-                    className="border-b border-[rgba(255,255,255,0.04)] transition-all duration-200 hover:bg-[rgba(255,255,255,0.03)]"
+                    ref={el => { if (el) rowRefs.current.set(t.themeId, el); }}
+                    className={`border-b border-[rgba(255,255,255,0.04)] transition-all duration-200 hover:bg-[rgba(255,255,255,0.03)] ${
+                      highlightId === t.themeId ? "bg-[rgba(0,245,196,0.06)]" : ""
+                    }`}
                     style={{ borderLeft: borderColor }}
                   >
                     <td className="px-3 py-2.5 text-xs text-muted-foreground" style={{ fontFamily: DM_MONO }}>
