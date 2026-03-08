@@ -664,6 +664,7 @@ function Section({
   onCardClick,
   fetchVolume,
   getThemeSignals,
+  dimmedThemes,
 }: {
   icon: React.ReactNode;
   title: string;
@@ -672,6 +673,7 @@ function Section({
   onCardClick?: (theme: ThemeData) => void;
   fetchVolume?: (symbols: string[]) => void;
   getThemeSignals?: (symbols: string[]) => import("@/hooks/useVolumeData").ThemeDemandSignals;
+  dimmedThemes?: Set<string> | null;
 }) {
   const accentColor =
     accent === "primary"
@@ -701,12 +703,6 @@ function Section({
     } catch {}
   }
 
-  const sectionTooltips: Record<string, string> = {
-    "Strong / Best Performing": "Themes with positive average daily performance on the selected timeframe. These are the current market leaders showing the strongest price action.",
-    "Neutral / Mixed": "Themes with near-zero performance (between roughly -0.5% and +0.5%). No clear directional bias — could break either way.",
-    "Weaker / Lagging": "Themes with negative average daily performance. These are underperforming the market on the selected timeframe.",
-  };
-
   return (
     <section className="mb-8">
       <div className="mb-4 flex items-center gap-2">
@@ -720,9 +716,18 @@ function Section({
         {volBadge}
       </div>
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 min-[1800px]:grid-cols-4">
-        {themes.map((t, i) => (
-          <ThemeCard key={t.theme_name} theme={t} index={i} onClick={onCardClick} fetchVolume={fetchVolume} getThemeSignals={getThemeSignals} />
-        ))}
+        {themes.map((t, i) => {
+          const isDimmed = dimmedThemes ? !dimmedThemes.has(t.theme_name.toLowerCase()) : false;
+          return (
+            <div
+              key={t.theme_name}
+              className="transition-all duration-300"
+              style={isDimmed ? { opacity: 0.3, filter: "grayscale(60%)" } : {}}
+            >
+              <ThemeCard theme={t} index={i} onClick={onCardClick} fetchVolume={fetchVolume} getThemeSignals={getThemeSignals} />
+            </div>
+          );
+        })}
       </div>
     </section>
   );
