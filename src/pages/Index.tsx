@@ -122,26 +122,10 @@ export default function Index() {
     }
   }, [activeTimeframe, isLive, isLoading, fetchLiveData, loadTimeframe]);
 
-  // Prefetch news for top 5 themes only (not all 56)
-  useEffect(() => {
-    if (isLive && themes.length > 0) {
-      const sorted = [...themes].sort((a, b) => {
-        // Sort by absolute performance desc as proxy for momentum
-        return Math.abs(b.performance_pct) - Math.abs(a.performance_pct);
-      });
-      const top5 = sorted.slice(0, 5).map(t => ({
-        name: t.theme_name,
-        symbols: t.tickers.filter(tk => !tk.skipped).map(tk => tk.symbol),
-      }));
-      prefetchTopThemes(top5);
-    }
-  }, [isLive, themes, prefetchTopThemes]);
-
   const handleNewsBadgeClick = useCallback(async (theme: ThemeData) => {
     setNewsPanelTheme(theme);
     setNewsPanelSummary(null);
     setNewsPanelSummaryLoading(true);
-    // Fetch on demand if not cached
     const symbols = theme.tickers.map(t => t.symbol);
     const articles = await fetchThemeNews(symbols);
     const summary = await getAiSummary(theme.theme_name, articles);
@@ -155,6 +139,18 @@ export default function Index() {
       (t) => t.tickers.length > 0 || t.up_count > 0 || t.down_count > 0
     );
   }, [allThemes, showPlaceholders]);
+
+  // Prefetch news for top 5 themes only (not all 56)
+  useEffect(() => {
+    if (isLive && themes.length > 0) {
+      const sorted = [...themes].sort((a, b) => Math.abs(b.performance_pct) - Math.abs(a.performance_pct));
+      const top5 = sorted.slice(0, 5).map(t => ({
+        name: t.theme_name,
+        symbols: t.tickers.filter(tk => !tk.skipped).map(tk => tk.symbol),
+      }));
+      prefetchTopThemes(top5);
+    }
+  }, [isLive, themes, prefetchTopThemes]);
 
   const strong = themes.filter((t) => t.category === "Strong");
   const neutral = themes.filter((t) => t.category === "Neutral");
