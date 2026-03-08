@@ -2,11 +2,13 @@ import { useState, useMemo, useEffect } from "react";
 import { ThemeData } from "@/data/themeData";
 import { useWatchlist } from "@/hooks/useWatchlistContext";
 import { supabase } from "@/integrations/supabase/client";
-import { Pin, X, ExternalLink, ArrowUpDown, Newspaper } from "lucide-react";
+import { Pin, X, ExternalLink, ArrowUpDown, Newspaper, BarChart3 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useSpyBenchmark, formatRS } from "@/hooks/useSpyBenchmark";
 import { NewsArticle } from "@/hooks/useThemeNews";
 import { NewsTabContent } from "@/components/NewsPanel";
+import { FundamentalsData } from "@/hooks/useFundamentals";
+import FundamentalsTab from "@/components/FundamentalsTab";
 import {
   Dialog,
   DialogContent,
