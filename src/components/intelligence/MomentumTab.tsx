@@ -98,9 +98,12 @@ function ThemeCard({ theme, isAccelerating }: { theme: ThemeIntelData; isAcceler
         <h4 className="font-['Syne',sans-serif] font-semibold text-[13px] text-foreground leading-tight">
           {theme.themeName}
         </h4>
-        <span className={`text-[10px] font-semibold uppercase tracking-wide shrink-0 ${labelColor}`}>
-          {theme.label}
-        </span>
+        <div className="flex flex-col items-end gap-0.5">
+          <BreadthEventLabel themeName={theme.themeName} />
+          <span className={`text-[10px] font-semibold uppercase tracking-wide shrink-0 ${labelColor}`}>
+            {theme.label}
+          </span>
+        </div>
       </div>
 
       {/* Mini bars comparing 1D vs 1M */}
