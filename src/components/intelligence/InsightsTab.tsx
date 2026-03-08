@@ -3,6 +3,7 @@ import { ThemeIntelData } from "@/hooks/useThemeIntelligence";
 import { Skeleton } from "@/components/ui/skeleton";
 import { RefreshCw, AlertTriangle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 
 const DM_MONO = "'DM Mono', monospace";
 const COOLDOWN_MS = 30_000;
@@ -146,7 +147,20 @@ export default function InsightsTab({
         body: payload,
       });
 
-      if (error) throw error;
+      if (error) {
+        // Try to extract error message from the response
+        let errorMsg = "Narrative generation failed";
+        try {
+          const ctx = (error as any)?.context;
+          if (ctx && typeof ctx.json === "function") {
+            const body = await ctx.json();
+            errorMsg = body?.error || errorMsg;
+          }
+        } catch {}
+        console.error("Narrative generation failed:", errorMsg);
+        toast.error(errorMsg);
+        return;
+      }
 
       setNarrative({
         text: data.narrative,
@@ -156,6 +170,7 @@ export default function InsightsTab({
       setCooldownEnd(Date.now() + COOLDOWN_MS);
     } catch (err) {
       console.error("Narrative generation failed:", err);
+      toast.error("Narrative generation failed — check console for details");
     } finally {
       setIsGenerating(false);
     }
