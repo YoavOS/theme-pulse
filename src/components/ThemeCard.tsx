@@ -6,6 +6,7 @@ import { useWatchlist } from "@/hooks/useWatchlistContext";
 import DemandSignals from "@/components/DemandSignals";
 import { ThemeDemandSignals } from "@/hooks/useVolumeData";
 import { hasThemeBreadthEvent } from "@/hooks/useBreadthAlerts";
+import { useVolumeDryUp } from "@/hooks/useVolumeDryUp";
 
 class DemandSignalsBoundary extends Component<{ children: ReactNode; resetKey?: string }, { hasError: boolean }> {
   state = { hasError: false };
@@ -76,6 +77,8 @@ export default function ThemeCard({ theme, index, onClick, fetchVolume, getTheme
   const { isPinned, togglePin } = useWatchlist();
   const themePinned = isPinned(theme.theme_name);
   const breadthEvent = useMemo(() => hasThemeBreadthEvent(theme.theme_name), [theme.theme_name]);
+  const { isThemeDryingUp } = useVolumeDryUp();
+  const isDryingUp = useMemo(() => isThemeDryingUp(theme.theme_name), [theme.theme_name, isThemeDryingUp]);
   const validTickers = theme.tickers.filter(t => !t.skipped);
   const naTickers = theme.tickers.filter(t => t.skipped);
   const total = validTickers.length;
@@ -224,6 +227,23 @@ export default function ThemeCard({ theme, index, onClick, fetchVolume, getTheme
             <DemandSignalsBoundary resetKey={theme.theme_name}>
               <DemandSignals signals={signals} />
             </DemandSignalsBoundary>
+          )}
+
+          {/* Row 6: Volume Dry-Up badge */}
+          {isDryingUp && (
+            <div className="mt-1.5">
+              <span
+                className="inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-medium"
+                style={{
+                  fontFamily: "'DM Mono', monospace",
+                  color: "#f5a623",
+                  background: "rgba(245, 166, 35, 0.08)",
+                  border: "1px solid rgba(245, 166, 35, 0.2)",
+                }}
+              >
+                📉 Vol drying up
+              </span>
+            </div>
           )}
         </>
       )}

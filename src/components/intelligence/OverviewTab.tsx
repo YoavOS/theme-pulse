@@ -7,6 +7,7 @@ import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip
 import VolumeLeaders from "./VolumeLeaders";
 import ThemeDrilldownModal from "@/components/ThemeDrilldownModal";
 import { useLiveThemeData } from "@/hooks/useLiveThemeData";
+import { useVolumeDryUp } from "@/hooks/useVolumeDryUp";
 
 const DM_MONO = "'DM Mono', monospace";
 const EOD_TOOLTIP = "Accumulating EOD history — available after more daily saves. 1W and 1M performance require at least 5 and 20 saved trading days respectively.";
@@ -119,26 +120,38 @@ function BreadthCell({ up, total }: { up: number; total: number }) {
   );
 }
 
-function VolCell({ avgRelVol }: { avgRelVol: number | null }) {
+function VolCell({ avgRelVol, isDryingUp }: { avgRelVol: number | null; isDryingUp: boolean }) {
   return (
     <td className="px-3 py-2.5 text-right">
-      <Tooltip>
-        <TooltipTrigger asChild>
-          {avgRelVol !== null ? (
-            <span
-              className="text-sm font-medium cursor-help"
-              style={{ fontFamily: DM_MONO, color: getRelVolColor(avgRelVol) }}
-            >
-              {avgRelVol.toFixed(1)}×
-            </span>
-          ) : (
-            <span className="text-sm text-muted-foreground cursor-help" style={{ fontFamily: DM_MONO }}>--</span>
-          )}
-        </TooltipTrigger>
-        <TooltipContent side="top" className="max-w-[220px] text-xs">
-          {VOL_TOOLTIP}
-        </TooltipContent>
-      </Tooltip>
+      <div className="flex items-center justify-end gap-1">
+        {isDryingUp && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className="inline-block h-2 w-2 rounded-full bg-[#f5a623] shrink-0 cursor-help" />
+            </TooltipTrigger>
+            <TooltipContent side="top" className="max-w-[200px] text-xs">
+              Volume drying up after elevated activity
+            </TooltipContent>
+          </Tooltip>
+        )}
+        <Tooltip>
+          <TooltipTrigger asChild>
+            {avgRelVol !== null ? (
+              <span
+                className="text-sm font-medium cursor-help"
+                style={{ fontFamily: DM_MONO, color: getRelVolColor(avgRelVol) }}
+              >
+                {avgRelVol.toFixed(1)}×
+              </span>
+            ) : (
+              <span className="text-sm text-muted-foreground cursor-help" style={{ fontFamily: DM_MONO }}>--</span>
+            )}
+          </TooltipTrigger>
+          <TooltipContent side="top" className="max-w-[220px] text-xs">
+            {VOL_TOOLTIP}
+          </TooltipContent>
+        </Tooltip>
+      </div>
     </td>
   );
 }
@@ -197,6 +210,7 @@ export default function OverviewTab({
    const rowRefs = useRef<Map<string, HTMLTableRowElement>>(new Map());
 
    const { themes: liveThemes } = useLiveThemeData("Today");
+   const { isThemeDryingUp } = useVolumeDryUp();
 
    const handleSelectTheme = useCallback((themeId: string) => {
      const el = rowRefs.current.get(themeId);
@@ -375,7 +389,7 @@ export default function OverviewTab({
                     <PerfCell value={t.perf_1d} hasData={true} />
                     <PerfCell value={t.perf_1w} hasData={t.hasEodHistory} />
                     <PerfCell value={t.perf_1m} hasData={t.hasEodHistory} />
-                    <VolCell avgRelVol={t.avgRelVol} />
+                    <VolCell avgRelVol={t.avgRelVol} isDryingUp={isThemeDryingUp(t.themeName)} />
                     <BreadthCell up={t.breadthUp} total={t.breadthTotal} />
                     <td className="px-3 py-2.5 text-center">
                       <MiniSparkline data={t.sparklineData} />

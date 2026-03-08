@@ -4,6 +4,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Rocket, TrendingDown } from "lucide-react";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { hasThemeBreadthEvent } from "@/hooks/useBreadthAlerts";
+import { useVolumeDryUp } from "@/hooks/useVolumeDryUp";
 
 const DM_MONO = "'DM Mono', monospace";
 const EOD_TOOLTIP = "Accumulating EOD history — available after more daily saves";
@@ -90,6 +91,21 @@ function BreadthEventLabel({ themeName }: { themeName: string }) {
   );
 }
 
+function VolumeDryUpLabel({ themeName }: { themeName: string }) {
+  const { isThemeDryingUp } = useVolumeDryUp();
+  const isDrying = useMemo(() => isThemeDryingUp(themeName), [themeName, isThemeDryingUp]);
+  if (!isDrying) return null;
+  return (
+    <span
+      className="text-[10px] font-semibold uppercase tracking-wide text-[#f5a623]"
+      style={{ fontFamily: DM_MONO }}
+      title="Volume fading after elevated activity — potential reversal signal"
+    >
+      📉 Volume Fading
+    </span>
+  );
+}
+
 function ThemeCard({ theme, isAccelerating }: { theme: ThemeIntelData; isAccelerating: boolean }) {
   const labelColorMap: Record<string, string> = {
     "Breaking Out": "text-[#00f5c4]",
@@ -120,6 +136,7 @@ function ThemeCard({ theme, isAccelerating }: { theme: ThemeIntelData; isAcceler
         </h4>
         <div className="flex flex-col items-end gap-0.5">
           <BreadthEventLabel themeName={theme.themeName} />
+          {!isAccelerating && <VolumeDryUpLabel themeName={theme.themeName} />}
           <span className={`text-[10px] font-semibold uppercase tracking-wide shrink-0 ${labelColor}`}>
             {theme.label}
           </span>

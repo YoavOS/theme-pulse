@@ -24,6 +24,7 @@ VOLUME RULES:
 - When a theme shows strong price performance but Rel Vol < 0.8×, flag it as a "low conviction move"
 - Always mention volume when it adds meaningful context to the narrative — don't mention it for every theme, only when it signals something actionable
 - Sustained Vol (10-day vs 3-month average) above +20% indicates multi-day accumulation building
+- If a theme shows volumeDryUp = true, mention it explicitly as a caution signal — fading volume after a run often precedes a price reversal
 
 FORMAT:
 Write 6–8 sentences of flowing prose. No bullet points. No headers. No lists.
@@ -75,8 +76,9 @@ serve(async (req) => {
         volParts.push(`Spike: ${t.volumeSpike}`);
       }
       const volStr = volParts.length > 0 ? ` | Volume: ${volParts.join(", ")}` : "";
+      const dryUpStr = t.volumeDryUp ? " | ⚠ VOLUME DRY-UP (sustained vol change: " + (t.sustainedVolChange ?? "N/A") + ")" : "";
 
-      return `${t.name} | Score: ${t.score} | 1D: ${t.perf_1d >= 0 ? "+" : ""}${t.perf_1d}% | 1W: ${t.perf_1w >= 0 ? "+" : ""}${t.perf_1w}% | 1M: ${t.perf_1m >= 0 ? "+" : ""}${t.perf_1m}% | Breadth: ${t.breadth} (${t.advancing} up, ${t.declining} down)${volStr}\n  Tickers: ${tickerStr}`;
+      return `${t.name} | Score: ${t.score} | 1D: ${t.perf_1d >= 0 ? "+" : ""}${t.perf_1d}% | 1W: ${t.perf_1w >= 0 ? "+" : ""}${t.perf_1w}% | 1M: ${t.perf_1m >= 0 ? "+" : ""}${t.perf_1m}% | Breadth: ${t.breadth} (${t.advancing} up, ${t.declining} down)${volStr}${dryUpStr}\n  Tickers: ${tickerStr}`;
     };
 
     const topLines = (topThemes || []).map(formatTheme).join("\n\n");

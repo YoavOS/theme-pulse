@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { useToast } from "@/hooks/use-toast";
+import { saveWeeklyVolumeHistory } from "@/hooks/useVolumeDryUp";
 
 export interface EodStatus {
   date: string;
@@ -189,7 +190,14 @@ export function useEodSave() {
       const saveDay = new Date().toLocaleString("en-US", { timeZone: "America/New_York" });
       const dayOfWeek = new Date(saveDay).getDay();
       if (dayOfWeek === 5 || usePc) {
-        // Friday or Friday close save (weekend) — trigger weekly report
+        // Friday or Friday close save (weekend) — trigger weekly report + volume history
+        try {
+          console.log("Saving weekly volume history...");
+          await saveWeeklyVolumeHistory();
+        } catch (volErr) {
+          console.warn("Weekly volume history save failed:", volErr);
+        }
+
         try {
           console.log("Triggering weekly report generation after Friday EOD save...");
           const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
