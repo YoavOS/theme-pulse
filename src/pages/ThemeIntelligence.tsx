@@ -88,6 +88,11 @@ export default function ThemeIntelligence() {
           {activeTab === "momentum" && (
             <MomentumTab accelerating={accelerating} fading={fading} isLoading={isLoading} />
           )}
+          {activeTab === "breadth" && (
+            <ErrorBoundary label="Breadth">
+              <BreadthTab themes={themes} isLoading={isLoading} />
+            </ErrorBoundary>
+          )}
           {activeTab === "trends" && (
             <ErrorBoundary label="Trends">
               <TrendsTab />
