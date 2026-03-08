@@ -191,17 +191,20 @@ serve(async (req) => {
         row.fundamental_score = scores.fundamentalScore;
         row.stock_type = scores.stockType;
 
+        // Remove price before upsert — not a column in fundamentals_cache
+        const upsertRow = { ...row };
+        delete upsertRow.price;
+
         // Upsert
         const { error: upsertErr } = await sb
           .from("fundamentals_cache")
-          .upsert(row, { onConflict: "symbol" });
+          .upsert(upsertRow, { onConflict: "symbol" });
 
         if (upsertErr) {
           console.error(`Upsert error for ${symbol}:`, upsertErr);
         }
 
-        delete row.price; // not in table
-        results[symbol] = row;
+        results[symbol] = upsertRow;
       } catch (err) {
         console.error(`Error fetching fundamentals for ${symbol}:`, err);
       }
