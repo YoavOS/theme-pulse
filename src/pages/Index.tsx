@@ -389,23 +389,23 @@ export default function Index() {
           {/* Row 3: Tab Navigation */}
           <div className="mt-3 flex items-center gap-1 border-t border-border/50 pt-2.5">
             {([
-              { to: "/", label: "Dashboard", icon: <LayoutDashboard size={14} />, active: true },
-              { to: "/intelligence", label: "Intelligence", icon: <Brain size={14} />, color: "text-primary" },
-              { to: "/watchlist", label: "Watchlist", icon: <Bookmark size={14} />, color: "text-[hsl(40,80%,50%)]",
-                badge: pinned.length > 0 ? pinned.length : null },
-              { to: "/eod-history", label: "EOD History", icon: <Calendar size={14} />, color: "text-gain-medium",
-                pulse: eodStatus && !eodStatus.alreadySaved && !eodStatus.isWeekend },
-            ] as const).map((tab) => (
+              { to: "/", label: "Dashboard", icon: <LayoutDashboard size={14} />, active: true, color: "", badge: null as number | null, pulse: false },
+              { to: "/intelligence", label: "Intelligence", icon: <Brain size={14} />, active: false, color: "text-primary", badge: null, pulse: false },
+              { to: "/watchlist", label: "Watchlist", icon: <Bookmark size={14} />, active: false, color: "text-[hsl(40,80%,50%)]",
+                badge: pinned.length > 0 ? pinned.length : null, pulse: false },
+              { to: "/eod-history", label: "EOD History", icon: <Calendar size={14} />, active: false, color: "text-gain-medium",
+                badge: null, pulse: !!(eodStatus && !eodStatus.alreadySaved && !eodStatus.isWeekend) },
+            ]).map((tab) => (
               <Link
                 key={tab.to}
                 to={tab.to}
                 className={`relative inline-flex items-center gap-1.5 rounded-md px-4 py-2 text-sm font-medium transition-colors ${
                   tab.active
                     ? "bg-primary/10 text-primary border-b-2 border-primary"
-                    : `text-muted-foreground hover:bg-accent hover:text-foreground ${tab.color || ""}`
+                    : `text-muted-foreground hover:bg-accent hover:text-foreground ${tab.color}`
                 }`}
               >
-                <span className={tab.active ? "text-primary" : tab.color || ""}>{tab.icon}</span>
+                <span className={tab.active ? "text-primary" : tab.color}>{tab.icon}</span>
                 {tab.label}
                 {tab.badge && (
                   <span className="inline-flex items-center gap-0.5 rounded-full bg-primary/20 px-1.5 py-0 text-[9px] font-bold text-primary">
