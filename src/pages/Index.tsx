@@ -4,10 +4,11 @@ import { useLiveThemeData } from "@/hooks/useLiveThemeData";
 import ThemeCard from "@/components/ThemeCard";
 import ThemeDrilldownModal from "@/components/ThemeDrilldownModal";
 import ValidateTickersDialog from "@/components/ValidateTickersDialog";
-import { RefreshCw, Download, TrendingUp, TrendingDown, Wifi, WifiOff, Loader2, Settings, ScanLine, X, ShieldCheck, Save, Zap, Calendar, Brain, Bookmark, Bell, ChevronDown, LayoutDashboard, AlertTriangle, LayoutGrid, List, Flame, Circle } from "lucide-react";
+import { RefreshCw, Download, TrendingUp, TrendingDown, Wifi, WifiOff, Loader2, Settings, ScanLine, X, ShieldCheck, Save, Zap, Calendar, Brain, Bookmark, Bell, ChevronDown, LayoutDashboard, AlertTriangle, LayoutGrid, List, Flame, Circle, BarChart3 } from "lucide-react";
 import RankedListView from "@/components/dashboard/RankedListView";
 import HeatmapGridView from "@/components/dashboard/HeatmapGridView";
 import DashboardBubbleView from "@/components/dashboard/DashboardBubbleView";
+import BarChartView from "@/components/dashboard/BarChartView";
 import DemoDataConfirmDialog from "@/components/DemoDataConfirmDialog";
 import { getCacheAge } from "@/hooks/useScanCache";
 import { useDispersion, getDispersionColorClass } from "@/hooks/useDispersion";
@@ -36,10 +37,10 @@ function formatTime(d: Date) {
 }
 
 export default function Index() {
-  const [dashboardView, setDashboardView] = useState<"cards" | "list" | "heatmap" | "bubble">(() => {
+  const [dashboardView, setDashboardView] = useState<"cards" | "list" | "heatmap" | "bubble" | "bars">(() => {
     return (localStorage.getItem("dashboardView") as any) || "cards";
   });
-  const switchView = useCallback((v: "cards" | "list" | "heatmap" | "bubble") => {
+  const switchView = useCallback((v: "cards" | "list" | "heatmap" | "bubble" | "bars") => {
     setDashboardView(v);
     localStorage.setItem("dashboardView", v);
   }, []);
@@ -343,6 +344,7 @@ export default function Index() {
                     { key: "cards" as const, icon: <LayoutGrid size={14} />, label: "Card Grid" },
                     { key: "list" as const, icon: <List size={14} />, label: "Ranked List" },
                     { key: "heatmap" as const, icon: <Flame size={14} />, label: "Heatmap" },
+                    { key: "bars" as const, icon: <BarChart3 size={14} />, label: "Bar Chart" },
                     { key: "bubble" as const, icon: <Circle size={14} />, label: "Bubble Chart" },
                   ]).map((v) => (
                     <Tooltip key={v.key}>
@@ -761,6 +763,16 @@ export default function Index() {
               themes={themes}
               getThemeSignals={getThemeSignals}
               dimmedThemes={searchMatchSet}
+            />
+          )}
+
+          {dashboardView === "bars" && (
+            <BarChartView
+              themes={themes}
+              onCardClick={setDrilldownTheme}
+              getThemeSignals={getThemeSignals}
+              dimmedThemes={searchMatchSet}
+              getThemeFundamentalScore={getThemeFundamentalScore}
             />
           )}
         </div>
