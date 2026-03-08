@@ -200,6 +200,7 @@ export function useEodSave() {
   }, [autoSave, isSaving, checkStatus, startEodSave, toast]);
 
   const canSave = status ? !status.isWeekend && status.isAfterClose && !status.alreadySaved && !isSaving : false;
+  const canSaveFriday = status ? status.isWeekend && !status.fridayAlreadySaved && !isSaving : false;
 
   const tooltip = !status
     ? "Checking..."
@@ -211,12 +212,20 @@ export function useEodSave() {
     ? `EOD already saved today${status.session?.completed_at ? ` at ${new Date(status.session.completed_at).toLocaleTimeString()}` : ""}`
     : "Save end-of-day prices for all tickers";
 
+  const fridayTooltip = !status
+    ? "Checking..."
+    : status.fridayAlreadySaved
+    ? `Friday close already saved for ${status.fridayDate}`
+    : `Save Friday close prices (${status.fridayDate}) using previous close from Finnhub`;
+
   return {
     status,
     progress,
     isSaving,
     canSave,
+    canSaveFriday,
     tooltip,
+    fridayTooltip,
     autoSave,
     startEodSave,
     toggleAutoSave,
