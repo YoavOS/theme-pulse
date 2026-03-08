@@ -720,6 +720,8 @@ function Section({
   getNewsCount,
   hasNegativeNews,
   onNewsBadgeClick,
+  getThemeFundamentalScore,
+  onFundamentalBadgeClick,
 }: {
   icon: React.ReactNode;
   title: string;
@@ -732,6 +734,8 @@ function Section({
   getNewsCount?: (symbols: string[]) => number;
   hasNegativeNews?: (symbols: string[]) => boolean;
   onNewsBadgeClick?: (theme: ThemeData) => void;
+  getThemeFundamentalScore?: (symbols: string[]) => number | null;
+  onFundamentalBadgeClick?: (theme: ThemeData) => void;
 }) {
   const accentColor =
     accent === "primary"
