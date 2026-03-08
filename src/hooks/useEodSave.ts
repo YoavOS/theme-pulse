@@ -241,7 +241,8 @@ export function useEodSave() {
   }, [autoSave, isSaving, checkStatus, startEodSave, toast]);
 
   const canSave = status ? !status.isWeekend && status.isAfterClose && !status.alreadySaved && !isSaving : false;
-  const canSaveFriday = status ? status.isWeekend && !status.fridayAlreadySaved && !isSaving : false;
+  // Friday close can always be re-run on weekends
+  const canSaveFriday = status ? status.isWeekend && !isSaving : false;
 
   const tooltip = !status
     ? "Checking..."
@@ -255,9 +256,11 @@ export function useEodSave() {
 
   const fridayTooltip = !status
     ? "Checking..."
-    : status.fridayAlreadySaved
-    ? `Friday close already saved for ${status.fridayDate}`
     : `Save Friday close prices (${status.fridayDate}) using previous close from Finnhub`;
+
+  const fridayLastSavedAt = status?.fridayAlreadySaved && status?.fridayCompletedAt
+    ? new Date(status.fridayCompletedAt).toLocaleTimeString()
+    : null;
 
   return {
     status,
