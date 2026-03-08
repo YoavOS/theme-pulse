@@ -56,30 +56,37 @@ export default function FundamentalsIntelTab({
   const [sortKey, setSortKey] = useState<SortKey>("score");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [expandedTheme, setExpandedTheme] = useState<string | null>(null);
+  const [prefetchState, setPrefetchState] = useState<{ active: boolean; completed: number; total: number }>({ active: false, completed: 0, total: 0 });
+  const prefetchingRef = useRef(false);
 
   // Fetch all fundamentals from cache
-  useEffect(() => {
-    (async () => {
-      setLoading(true);
-      try {
-        const { data } = await supabase
-          .from("fundamentals_cache")
-          .select("*");
-        
-        if (data) {
-          const map: Record<string, FundamentalsData> = {};
-          for (const row of data) {
-            map[row.symbol] = row as unknown as FundamentalsData;
-          }
-          setAllFundamentals(map);
+  const loadFromCache = useCallback(async () => {
+    setLoading(true);
+    try {
+      const { data } = await supabase
+        .from("fundamentals_cache")
+        .select("*");
+      
+      if (data) {
+        const map: Record<string, FundamentalsData> = {};
+        for (const row of data) {
+          map[row.symbol] = row as unknown as FundamentalsData;
         }
-      } catch (e) {
-        console.error("Failed to load fundamentals:", e);
-      } finally {
-        setLoading(false);
+        setAllFundamentals(map);
+        return Object.keys(map).length;
       }
-    })();
+      return 0;
+    } catch (e) {
+      console.error("Failed to load fundamentals:", e);
+      return 0;
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    loadFromCache();
+  }, [loadFromCache]);
 
   const themeFundamentals = useMemo(() => {
     return themes.map(t => {
