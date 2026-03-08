@@ -765,6 +765,16 @@ export default function Index() {
               dimmedThemes={searchMatchSet}
             />
           )}
+
+          {dashboardView === "bars" && (
+            <BarChartView
+              themes={themes}
+              onCardClick={setDrilldownTheme}
+              getThemeSignals={getThemeSignals}
+              dimmedThemes={searchMatchSet}
+              getThemeFundamentalScore={getThemeFundamentalScore}
+            />
+          )}
         </div>
       </main>
 
