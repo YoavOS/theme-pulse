@@ -371,6 +371,18 @@ export default function OverviewTab({
                       </Tooltip>
                     </th>
                     <th className="px-3 py-2.5 text-right font-medium">1D</th>
+                    <th className="px-3 py-2.5 text-right font-medium">
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span className="cursor-help inline-flex items-center gap-1">
+                            vs SPY <Info size={10} className="opacity-50" />
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent side="top" className="max-w-[220px] text-xs">
+                          {SPY_TOOLTIP}
+                        </TooltipContent>
+                      </Tooltip>
+                    </th>
                     <th className="px-3 py-2.5 text-right font-medium">1W</th>
                     <th className="px-3 py-2.5 text-right font-medium">1M</th>
                     <th className="px-3 py-2.5 text-right font-medium">
