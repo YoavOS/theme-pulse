@@ -118,9 +118,11 @@ export default function InsightsTab({
   const generateNarrative = useCallback(async () => {
     if (themes.length === 0 || isGenerating) return;
 
-    // Clear existing narrative immediately and show skeleton
+    // Save previous narrative so we can restore on error
+    const previousNarrative = narrative;
     setNarrative(null);
     setIsGenerating(true);
+
     try {
       const mapTheme = (t: ThemeIntelData) => {
         const validTickers = t.tickers.filter(tk => tk.status === "done");
@@ -140,11 +142,9 @@ export default function InsightsTab({
         };
       };
 
-      // Top 8 and bottom 8 by momentum score (themes already sorted desc)
       const top8 = themes.slice(0, 8).map(mapTheme);
       const bottom8 = [...themes].sort((a, b) => a.momentumScore - b.momentumScore).slice(0, 8).map(mapTheme);
 
-      // Single-stock outliers: any ticker >5% while theme avg <1%
       const outlierThemes = themes
         .filter(t => {
           if (t.perf_1d >= 1) return false;
@@ -163,22 +163,39 @@ export default function InsightsTab({
         outlierThemes,
       };
 
-      const { data, error } = await supabase.functions.invoke("generate-theme-narrative", {
-        body: payload,
-      });
+      let data: any = null;
+      let errorMsg: string | null = null;
 
-      if (error) {
-        // Try to extract error message from the response
-        let errorMsg = "Narrative generation failed";
-        try {
-          const ctx = (error as any)?.context;
-          if (ctx && typeof ctx.json === "function") {
-            const body = await ctx.json();
-            errorMsg = body?.error || errorMsg;
+      try {
+        const result = await supabase.functions.invoke("generate-theme-narrative", {
+          body: payload,
+        });
+
+        if (result.error) {
+          // Extract error message from FunctionsHttpError context
+          try {
+            const ctx = (result.error as any)?.context;
+            if (ctx && typeof ctx.json === "function") {
+              const body = await ctx.json();
+              errorMsg = body?.message || body?.error || "Narrative generation failed";
+            } else {
+              errorMsg = result.error.message || "Narrative generation failed";
+            }
+          } catch {
+            errorMsg = result.error.message || "Narrative generation failed";
           }
-        } catch {}
+        } else {
+          data = result.data;
+        }
+      } catch (networkErr) {
+        errorMsg = "Network error — check your connection and try again";
+      }
+
+      if (errorMsg) {
         console.error("Narrative generation failed:", errorMsg);
         toast.error(errorMsg);
+        // Restore previous narrative so the card is never blank
+        setNarrative(previousNarrative);
         return;
       }
 
@@ -191,8 +208,11 @@ export default function InsightsTab({
     } catch (err) {
       console.error("Narrative generation failed:", err);
       toast.error("Narrative generation failed — check console for details");
+      // Restore previous narrative on unexpected errors too
+      setNarrative(previousNarrative);
     } finally {
       setIsGenerating(false);
+    }
     }
   }, [themes, isGenerating]);
 

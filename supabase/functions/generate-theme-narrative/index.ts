@@ -22,44 +22,66 @@ FORMAT:
 Write 6–8 sentences of flowing prose. No bullet points. No headers. No lists.
 Cover: what is genuinely leading with broad confirmation, what is a single-stock story masquerading as a theme move, what is fading and why, what the overall rotation suggests, and one specific actionable thing to watch next session.`;
 
+function jsonResponse(body: Record<string, unknown>, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}
+
 async function callGeminiWithRetry(url: string, body: string, maxRetries = 3): Promise<Response> {
+  let lastResponse: Response | null = null;
   for (let attempt = 0; attempt < maxRetries; attempt++) {
-    const response = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body,
-    });
-    if (response.status === 429 && attempt < maxRetries - 1) {
-      const wait = (attempt + 1) * 15000; // 15s, 30s, 45s
-      console.log(`Gemini 429 rate limit, retrying in ${wait / 1000}s (attempt ${attempt + 1}/${maxRetries})`);
-      await response.text();
-      await new Promise(r => setTimeout(r, wait));
-      continue;
+    try {
+      lastResponse = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body,
+      });
+      if (lastResponse.status === 429 && attempt < maxRetries - 1) {
+        const wait = (attempt + 1) * 15000;
+        console.log(`Gemini 429, retrying in ${wait / 1000}s (attempt ${attempt + 1}/${maxRetries})`);
+        await lastResponse.text(); // consume body to avoid leak
+        await new Promise(r => setTimeout(r, wait));
+        continue;
+      }
+      return lastResponse;
+    } catch (fetchErr) {
+      console.error(`Gemini fetch error attempt ${attempt + 1}:`, fetchErr);
+      if (attempt < maxRetries - 1) {
+        await new Promise(r => setTimeout(r, (attempt + 1) * 15000));
+        continue;
+      }
+      throw fetchErr;
     }
-    return response;
   }
-  throw new Error("Max retries exceeded");
+  return lastResponse!;
 }
 
 serve(async (req) => {
+  // CORS preflight
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
 
+  // Top-level try/catch — every code path returns a Response, never throws
   try {
     const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
     if (!GEMINI_API_KEY) {
-      return new Response(
-        JSON.stringify({ error: "GEMINI_API_KEY is not configured" }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return jsonResponse({ error: "config_error", message: "GEMINI_API_KEY is not configured" }, 500);
     }
 
-    const { topThemes, bottomThemes, outlierThemes, date, totalThemes, requestTimestamp } = await req.json();
+    let payload: any;
+    try {
+      payload = await req.json();
+    } catch {
+      return jsonResponse({ error: "bad_request", message: "Invalid JSON in request body" }, 400);
+    }
 
-    console.log(`Received payload: top=${(topThemes||[]).length}, bottom=${(bottomThemes||[]).length}, outliers=${(outlierThemes||[]).length}, date=${date}, total=${totalThemes}, ts=${requestTimestamp}`);
+    const { topThemes, bottomThemes, outlierThemes, date, totalThemes, requestTimestamp } = payload;
 
-    // Format theme block
+    console.log(`Payload: top=${(topThemes||[]).length}, bottom=${(bottomThemes||[]).length}, outliers=${(outlierThemes||[]).length}, date=${date}, total=${totalThemes}, ts=${requestTimestamp}`);
+
     const formatTheme = (t: any) => {
       const tickerStr = (t.tickers || [])
         .map((tk: any) => `${tk.symbol}: ${tk.perf_1d >= 0 ? "+" : ""}${tk.perf_1d}%`)
@@ -93,35 +115,37 @@ Write a complete market analysis following your instructions.`;
       generationConfig: { maxOutputTokens: 1024 },
     });
 
-    const response = await callGeminiWithRetry(geminiUrl, geminiBody);
+    let response: Response;
+    try {
+      response = await callGeminiWithRetry(geminiUrl, geminiBody);
+    } catch (fetchErr) {
+      console.error("All Gemini retries failed:", fetchErr);
+      return jsonResponse({ error: "network_error", message: "Could not reach AI service — try again later" }, 503);
+    }
 
     if (!response.ok) {
       const errText = await response.text();
       console.error("Gemini API error:", response.status, errText);
-      const userMsg = response.status === 429
-        ? "AI rate limit exceeded — please wait a minute and try again"
-        : `Gemini API error: ${response.status}`;
-      return new Response(
-        JSON.stringify({ error: userMsg }),
-        { status: response.status === 429 ? 429 : 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      if (response.status === 429) {
+        return jsonResponse({ error: "rate_limit", message: "AI rate limit exceeded — please wait a minute and try again" }, 429);
+      }
+      return jsonResponse({ error: "api_error", message: `AI service error (${response.status}) — try again later` }, 502);
     }
 
-    const result = await response.json();
-    const narrative =
-      result.candidates?.[0]?.content?.parts?.[0]?.text || "Unable to generate narrative.";
+    let result: any;
+    try {
+      result = await response.json();
+    } catch {
+      return jsonResponse({ error: "parse_error", message: "Failed to parse AI response" }, 502);
+    }
 
-    console.log("Narrative generated successfully, length:", narrative.length);
+    const narrative = result.candidates?.[0]?.content?.parts?.[0]?.text || "Unable to generate narrative.";
+    console.log("Narrative generated, length:", narrative.length);
 
-    return new Response(
-      JSON.stringify({ narrative, generatedAt: new Date().toISOString() }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    return jsonResponse({ narrative, generatedAt: new Date().toISOString() });
   } catch (e) {
-    console.error("generate-theme-narrative error:", e);
-    return new Response(
-      JSON.stringify({ error: e instanceof Error ? e.message : "Unknown error" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    // Final safety net — should never reach here, but guarantees no unhandled throw
+    console.error("Unhandled error in generate-theme-narrative:", e);
+    return jsonResponse({ error: "internal_error", message: "An unexpected error occurred" }, 500);
   }
 });
