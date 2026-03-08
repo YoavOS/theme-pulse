@@ -348,6 +348,7 @@ export default function ThemeDrilldownModal({
                     </span>
                   </th>
                 ))}
+                <th className="px-2 py-2 text-left font-medium text-muted-foreground">vs SPY</th>
                 <th className="px-2 py-2 text-left font-medium text-muted-foreground">7D</th>
               </tr>
             </thead>
