@@ -36,7 +36,7 @@ interface Props {
 export default function DemandSignals({ signals }: Props) {
   const [collapsed, setCollapsed] = useState(false);
 
-  const { relVol, sustainedVol, spikingUp, spikingDown, totalTickers, loading } = signals;
+  const { relVol, relVolEstimated, sustainedVol, spikingUp, spikingDown, totalTickers, loading } = signals;
   const hasSpike = spikingUp > 0 || spikingDown > 0;
 
   // Mobile collapse
