@@ -267,9 +267,74 @@ Deno.serve(async (req) => {
       const body = await req.json();
       const { date } = body as { date: string };
 
+      // Calculate dispersion score from today's saved prices
+      let dispersionScore: number | null = null;
+      try {
+        const { data: prices } = await sb
+          .from("eod_prices")
+          .select("theme_name, close_price, symbol")
+          .eq("date", date);
+
+        if (prices && prices.length > 0) {
+          // Get previous day's prices for % change calculation
+          // Find the most recent date before `date`
+          const { data: prevDayData } = await sb
+            .from("eod_prices")
+            .select("date")
+            .lt("date", date)
+            .order("date", { ascending: false })
+            .limit(1);
+
+          if (prevDayData && prevDayData.length > 0) {
+            const prevDate = prevDayData[0].date;
+            const { data: prevPrices } = await sb
+              .from("eod_prices")
+              .select("theme_name, close_price, symbol")
+              .eq("date", prevDate);
+
+            if (prevPrices && prevPrices.length > 0) {
+              const prevMap = new Map<string, Map<string, number>>();
+              for (const p of prevPrices) {
+                if (!prevMap.has(p.theme_name)) prevMap.set(p.theme_name, new Map());
+                prevMap.get(p.theme_name)!.set(p.symbol, p.close_price);
+              }
+
+              // Calculate per-theme avg % change
+              const themePerfs: number[] = [];
+              const todayByTheme = new Map<string, { symbol: string; close: number }[]>();
+              for (const p of prices) {
+                if (!todayByTheme.has(p.theme_name)) todayByTheme.set(p.theme_name, []);
+                todayByTheme.get(p.theme_name)!.push({ symbol: p.symbol, close: p.close_price });
+              }
+
+              for (const [theme, tickers] of todayByTheme) {
+                const prevTheme = prevMap.get(theme);
+                if (!prevTheme) continue;
+                const pcts: number[] = [];
+                for (const t of tickers) {
+                  const prev = prevTheme.get(t.symbol);
+                  if (prev && prev > 0) pcts.push(((t.close - prev) / prev) * 100);
+                }
+                if (pcts.length > 0) themePerfs.push(pcts.reduce((a, b) => a + b, 0) / pcts.length);
+              }
+
+              if (themePerfs.length >= 3) {
+                const mean = themePerfs.reduce((a, b) => a + b, 0) / themePerfs.length;
+                const variance = themePerfs.reduce((sum, p) => sum + Math.pow(p - mean, 2), 0) / themePerfs.length;
+                dispersionScore = Math.round(Math.sqrt(variance) * 100) / 100;
+                console.log(`Dispersion score for ${date}: ${dispersionScore}`);
+              }
+            }
+          }
+        }
+      } catch (dispErr) {
+        console.warn("Failed to calculate dispersion:", dispErr);
+      }
+
       await sb.from("eod_save_sessions").update({
         status: "completed",
         completed_at: new Date().toISOString(),
+        dispersion_score: dispersionScore,
       }).eq("date", date);
 
       return new Response(JSON.stringify({ ok: true }), {

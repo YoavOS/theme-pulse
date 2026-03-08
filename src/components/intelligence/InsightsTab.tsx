@@ -177,6 +177,11 @@ export default function InsightsTab({
       const top8Enriched = top8.map((t, i) => enrichWithDryUp(t, themes.slice(0, 8)[i]));
       const bottom8Enriched = bottom8.map((t, i) => enrichWithDryUp(t, [...themes].sort((a, b) => a.momentumScore - b.momentumScore).slice(0, 8)[i]));
 
+      // Calculate dispersion
+      const themePerfs = themes.map(t => t.perf_1d);
+      const dispersionScore = calculateDispersion(themePerfs);
+      const dispersionLabel = getDispersionShortLabel(dispersionScore);
+
       const payload = {
         date: new Date().toISOString().split("T")[0],
         totalThemes: themes.length,
@@ -184,6 +189,8 @@ export default function InsightsTab({
         topThemes: top8Enriched,
         bottomThemes: bottom8Enriched,
         outlierThemes,
+        dispersionScore,
+        dispersionLabel,
       };
 
       let data: any = null;
