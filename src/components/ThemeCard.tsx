@@ -1,10 +1,16 @@
-import { useMemo } from "react";
+import { useMemo, Component, type ReactNode } from "react";
 import { ThemeData } from "@/data/themeData";
 import { Badge } from "@/components/ui/badge";
 import { Pin } from "lucide-react";
 import { useWatchlist } from "@/hooks/useWatchlistContext";
 import DemandSignals from "@/components/DemandSignals";
 import { ThemeDemandSignals } from "@/hooks/useVolumeData";
+
+class DemandSignalsBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
+  state = { hasError: false };
+  static getDerivedStateFromError() { return { hasError: true }; }
+  render() { return this.state.hasError ? null : this.props.children; }
+}
 
 function getPctColor(pct: number): string {
   if (pct > 7) return "text-gain-strong";
@@ -179,7 +185,9 @@ export default function ThemeCard({ theme, index, onClick, fetchVolume, getTheme
 
           {/* Row 5: Demand Signals */}
           {signals && fetchVolume && (
-            <DemandSignals signals={signals} tickerSymbols={tickerSymbols} fetchVolume={fetchVolume} />
+            <DemandSignalsBoundary>
+              <DemandSignals signals={signals} tickerSymbols={tickerSymbols} fetchVolume={fetchVolume} />
+            </DemandSignalsBoundary>
           )}
         </>
       )}
