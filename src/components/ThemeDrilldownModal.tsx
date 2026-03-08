@@ -329,7 +329,16 @@ export default function ThemeDrilldownModal({
             Tickers
           </button>
           <button
-            onClick={() => setActiveTab("news")}
+            onClick={async () => {
+              setActiveTab("news");
+              // Fetch on-demand if no articles cached
+              if ((!newsArticles || newsArticles.length === 0) && fetchNewsForTheme && theme && !newsLoading) {
+                setNewsLoading(true);
+                const fetched = await fetchNewsForTheme(theme.tickers.map(t => t.symbol));
+                setLocalNews(fetched);
+                setNewsLoading(false);
+              }
+            }}
             className={`px-3 py-2 text-xs font-semibold transition-colors inline-flex items-center gap-1.5 ${
               activeTab === "news" ? "text-foreground border-b-2 border-primary" : "text-muted-foreground hover:text-foreground"
             }`}
