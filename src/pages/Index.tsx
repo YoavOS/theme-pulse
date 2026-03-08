@@ -554,12 +554,16 @@ function Section({
   accent,
   themes,
   onCardClick,
+  fetchVolume,
+  getThemeSignals,
 }: {
   icon: React.ReactNode;
   title: string;
   accent: "primary" | "destructive" | "muted";
   themes: ThemeData[];
   onCardClick?: (theme: ThemeData) => void;
+  fetchVolume?: (symbols: string[]) => void;
+  getThemeSignals?: (symbols: string[]) => import("@/hooks/useVolumeData").ThemeDemandSignals;
 }) {
   const accentColor =
     accent === "primary"
