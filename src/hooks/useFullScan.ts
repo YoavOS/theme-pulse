@@ -221,11 +221,17 @@ export function useFullScan(onComplete: (themes: ThemeData[], timeframe: string)
         const result = await res.json();
         done = result.done;
 
+        // Extract last successful symbol from chunk results for display
+        const lastSymbol = result.results
+          ?.filter((r: { status: string }) => r.status === "done")
+          ?.slice(-1)?.[0]?.symbol || "";
+
         // Update progress
         const p = await fetchStatus();
         if (p) {
           setProgress(p);
-          setStatusText(`Scanning: ${p.done}/${p.total} tickers${p.failed > 0 ? ` · ${p.failed} failed` : ""}`);
+          const symbolInfo = lastSymbol ? ` · ${lastSymbol}` : "";
+          setStatusText(`Scanning: ${p.done}/${p.total} tickers${p.failed > 0 ? ` · ${p.failed} failed` : ""}${symbolInfo}`);
         }
 
         if (!done) {
