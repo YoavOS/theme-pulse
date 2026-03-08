@@ -5,6 +5,7 @@ import { Pin } from "lucide-react";
 import { useWatchlist } from "@/hooks/useWatchlistContext";
 import DemandSignals from "@/components/DemandSignals";
 import { ThemeDemandSignals } from "@/hooks/useVolumeData";
+import { hasThemeBreadthEvent } from "@/hooks/useBreadthAlerts";
 
 class DemandSignalsBoundary extends Component<{ children: ReactNode; resetKey?: string }, { hasError: boolean }> {
   state = { hasError: false };
