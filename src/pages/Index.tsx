@@ -685,7 +685,18 @@ export default function Index() {
       </footer>
 
       <ValidateTickersDialog open={showValidateDialog} onOpenChange={setShowValidateDialog} />
-      <ThemeDrilldownModal theme={drilldownTheme} open={!!drilldownTheme} onOpenChange={(o) => { if (!o) setDrilldownTheme(null); }} />
+      <ThemeDrilldownModal theme={drilldownTheme} open={!!drilldownTheme} onOpenChange={(o) => { if (!o) setDrilldownTheme(null); }} newsArticles={drilldownTheme ? getThemeArticles(drilldownTheme.tickers.map(t => t.symbol)) : []} />
+
+      {/* News Panel (slide-in) */}
+      {newsPanelTheme && (
+        <NewsPanel
+          themeName={newsPanelTheme.theme_name}
+          articles={getThemeArticles(newsPanelTheme.tickers.map(t => t.symbol))}
+          onClose={() => setNewsPanelTheme(null)}
+          aiSummary={newsPanelSummary}
+          isLoadingSummary={newsPanelSummaryLoading}
+        />
+      )}
     </div>
   );
 }
