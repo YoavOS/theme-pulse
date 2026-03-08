@@ -50,7 +50,7 @@ function BarRow({
         <>
           {/* Theme name — left side */}
           <div
-            className="shrink-0 truncate text-[11px] text-[rgba(255,255,255,0.85)] pr-2 text-right"
+            className="shrink-0 truncate text-[14px] text-[rgba(255,255,255,0.85)] pr-2 text-right"
             style={{ width: 130 }}
             title={d.name}
           >
@@ -71,13 +71,13 @@ function BarRow({
             {/* Perf + breadth at bar end */}
             <div className="ml-1.5 flex items-baseline gap-1 shrink-0">
               <span
-                className="text-xs font-medium"
+                className="text-[15px] font-bold"
                 style={{ fontFamily: DM_MONO, color: barColor }}
               >
                 {sign}{d.perf.toFixed(2)}%
               </span>
               <span
-                className="text-[9px]"
+                className="text-[12px]"
                 style={{ fontFamily: DM_MONO, color: "rgba(255,255,255,0.3)" }}
               >
                 {d.breadthUp}/{d.breadthTotal}
@@ -91,13 +91,13 @@ function BarRow({
           <div className="flex-1 relative h-[18px] flex items-center justify-end">
             <div className="mr-1.5 flex items-baseline gap-1 shrink-0">
               <span
-                className="text-[9px]"
+                className="text-[12px]"
                 style={{ fontFamily: DM_MONO, color: "rgba(255,255,255,0.3)" }}
               >
                 {d.breadthUp}/{d.breadthTotal}
               </span>
               <span
-                className="text-xs font-medium"
+                className="text-[15px] font-bold"
                 style={{ fontFamily: DM_MONO, color: barColor }}
               >
                 {sign}{d.perf.toFixed(2)}%
@@ -116,7 +116,7 @@ function BarRow({
           </div>
           {/* Theme name — right side */}
           <div
-            className="shrink-0 truncate text-[11px] text-[rgba(255,255,255,0.85)] pl-2 text-left"
+            className="shrink-0 truncate text-[14px] text-[rgba(255,255,255,0.85)] pl-2 text-left"
             style={{ width: 130 }}
             title={d.name}
           >
@@ -138,9 +138,9 @@ function BarRow({
           minWidth: 220,
         }}
       >
-        <div className="font-['Syne',sans-serif] text-sm font-semibold text-foreground mb-1.5">{d.name}</div>
+        <div className="font-['Syne',sans-serif] text-[16px] font-semibold text-foreground mb-1.5">{d.name}</div>
         <div className="border-t border-[rgba(255,255,255,0.08)] mb-1.5" />
-        <div className="space-y-1 text-muted-foreground whitespace-nowrap" style={{ fontFamily: DM_MONO }}>
+        <div className="space-y-1 text-muted-foreground whitespace-nowrap text-[13px]" style={{ fontFamily: DM_MONO }}>
           <div className="flex justify-between gap-4">
             <span>1D:</span>
             <span>
@@ -185,7 +185,7 @@ function BarRow({
           )}
         </div>
         <div className="border-t border-[rgba(255,255,255,0.08)] mt-1.5 pt-1.5">
-          <span className="text-[9px] text-muted-foreground">Click to open full breakdown</span>
+          <span className="text-[11px] text-muted-foreground">Click to open full breakdown</span>
         </div>
       </div>
     </div>
@@ -268,7 +268,7 @@ export default function BarChartView({
       {/* Left panel — Top Performers */}
       <div className="pr-0 md:pr-3 md:border-r md:border-[rgba(255,255,255,0.06)]">
         <h3
-          className="mb-2 text-[10px] font-semibold uppercase tracking-[0.1em]"
+          className="mb-2 text-[13px] font-semibold uppercase tracking-[0.1em]"
           style={{ color: "#00f5c4" }}
         >
           Top Performers
@@ -283,7 +283,7 @@ export default function BarChartView({
       {/* Right panel — Bottom Performers */}
       <div className="pl-0 md:pl-3 mt-4 md:mt-0">
         <h3
-          className="mb-2 text-[10px] font-semibold uppercase tracking-[0.1em] text-destructive"
+          className="mb-2 text-[13px] font-semibold uppercase tracking-[0.1em] text-destructive"
         >
           Bottom Performers
         </h3>
