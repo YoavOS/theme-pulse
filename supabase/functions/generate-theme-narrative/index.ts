@@ -30,15 +30,14 @@ async function callGeminiWithRetry(url: string, body: string, maxRetries = 3): P
       body,
     });
     if (response.status === 429 && attempt < maxRetries - 1) {
-      const wait = (attempt + 1) * 5000; // 5s, 10s, 15s
-      console.log(`Gemini 429 rate limit, retrying in ${wait}ms (attempt ${attempt + 1}/${maxRetries})`);
-      await response.text(); // consume body
+      const wait = (attempt + 1) * 15000; // 15s, 30s, 45s
+      console.log(`Gemini 429 rate limit, retrying in ${wait / 1000}s (attempt ${attempt + 1}/${maxRetries})`);
+      await response.text();
       await new Promise(r => setTimeout(r, wait));
       continue;
     }
     return response;
   }
-  // Should never reach here, but TypeScript needs it
   throw new Error("Max retries exceeded");
 }
 
@@ -56,23 +55,34 @@ serve(async (req) => {
       );
     }
 
-    const { themes, date, totalThemes } = await req.json();
+    const { topThemes, bottomThemes, outlierThemes, date, totalThemes, requestTimestamp } = await req.json();
 
-    console.log(`Received payload: ${(themes || []).length} themes, date=${date}, totalThemes=${totalThemes}`);
+    console.log(`Received payload: top=${(topThemes||[]).length}, bottom=${(bottomThemes||[]).length}, outliers=${(outlierThemes||[]).length}, date=${date}, total=${totalThemes}, ts=${requestTimestamp}`);
 
-    // Build the rich user message with ticker-level detail
-    const themeLines = (themes || []).map((t: any) => {
+    // Format theme block
+    const formatTheme = (t: any) => {
       const tickerStr = (t.tickers || [])
         .map((tk: any) => `${tk.symbol}: ${tk.perf_1d >= 0 ? "+" : ""}${tk.perf_1d}%`)
         .join(", ");
       return `${t.name} | Score: ${t.score} | 1D: ${t.perf_1d >= 0 ? "+" : ""}${t.perf_1d}% | 1W: ${t.perf_1w >= 0 ? "+" : ""}${t.perf_1w}% | 1M: ${t.perf_1m >= 0 ? "+" : ""}${t.perf_1m}% | Breadth: ${t.breadth} (${t.advancing} up, ${t.declining} down)\n  Tickers: ${tickerStr}`;
-    }).join("\n\n");
+    };
 
-    const userMessage = `Date: ${date} | Themes analyzed: ${totalThemes}
+    const topLines = (topThemes || []).map(formatTheme).join("\n\n");
+    const bottomLines = (bottomThemes || []).map(formatTheme).join("\n\n");
+    const outlierLines = (outlierThemes || []).length > 0
+      ? (outlierThemes || []).map(formatTheme).join("\n\n")
+      : "None identified";
 
-Full theme and ticker breakdown (sorted by momentum score, best to worst):
+    const userMessage = `Date: ${date} | Themes analyzed: ${totalThemes} | Request ID: ${requestTimestamp}
 
-${themeLines}
+TOP 8 THEMES (strongest momentum):
+${topLines}
+
+BOTTOM 8 THEMES (weakest momentum):
+${bottomLines}
+
+SINGLE-STOCK OUTLIER THEMES (one ticker >5% while theme avg <1%):
+${outlierLines}
 
 Write a complete market analysis following your instructions.`;
 
