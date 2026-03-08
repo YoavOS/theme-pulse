@@ -8,8 +8,11 @@ import VolumeLeaders from "./VolumeLeaders";
 import ThemeDrilldownModal from "@/components/ThemeDrilldownModal";
 import { useLiveThemeData } from "@/hooks/useLiveThemeData";
 import { useVolumeDryUp } from "@/hooks/useVolumeDryUp";
+import BubbleChartView from "./BubbleChartView";
 
 const DM_MONO = "'DM Mono', monospace";
+const VIEW_KEY = "overviewView";
+type ViewMode = "table" | "bubble";
 const EOD_TOOLTIP = "Accumulating EOD history — available after more daily saves. 1W and 1M performance require at least 5 and 20 saved trading days respectively.";
 const SIGNAL_TOOLTIP =
   "Divergence between momentum rank and breadth rank. '⚠ Thin' = momentum rank is much better than breadth — price move driven by few tickers, not confirmed by broad participation. '👀 Watch' = breadth rank is much better than momentum — broad quiet strength not yet reflected in price. Potential early rotation signal.";
@@ -203,11 +206,19 @@ export default function OverviewTab({
   themes: ThemeIntelData[];
   isLoading: boolean;
 }) {
+   const [viewMode, setViewMode] = useState<ViewMode>(() => {
+     try { return (localStorage.getItem(VIEW_KEY) as ViewMode) || "table"; } catch { return "table"; }
+   });
    const [sortMode, setSortMode] = useState<SortMode>("momentum");
    const [highlightId, setHighlightId] = useState<string | null>(null);
    const [drilldownOpen, setDrilldownOpen] = useState(false);
    const [drilldownTheme, setDrilldownTheme] = useState<ReturnType<typeof useLiveThemeData>["themes"][0] | null>(null);
    const rowRefs = useRef<Map<string, HTMLTableRowElement>>(new Map());
+
+   const handleViewChange = useCallback((mode: ViewMode) => {
+     setViewMode(mode);
+     try { localStorage.setItem(VIEW_KEY, mode); } catch {}
+   }, []);
 
    const { themes: liveThemes } = useLiveThemeData("Today");
    const { isThemeDryingUp } = useVolumeDryUp();
@@ -272,146 +283,180 @@ export default function OverviewTab({
             Theme Rankings
           </span>
           <span>{themes.length} themes ranked</span>
-        </div>
 
-        <div className="flex items-center gap-1 rounded-lg bg-[rgba(255,255,255,0.03)] p-1">
-          {(["momentum", "breadth"] as const).map(mode => (
+          {/* View toggle */}
+          <div className="flex items-center gap-1 rounded-lg bg-[rgba(255,255,255,0.03)] p-0.5 ml-2">
             <button
-              key={mode}
-              onClick={() => setSortMode(mode)}
-              className={`relative rounded-md px-3 py-1.5 text-xs font-medium transition-all ${
-                sortMode === mode
-                  ? "bg-[rgba(255,255,255,0.08)] text-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground hover:bg-[rgba(255,255,255,0.04)]"
+              onClick={() => handleViewChange("table")}
+              className={`rounded-md px-2.5 py-1 text-[10px] font-medium transition-all ${
+                viewMode === "table"
+                  ? "bg-[rgba(255,255,255,0.08)] text-foreground"
+                  : "text-muted-foreground hover:text-foreground"
               }`}
             >
-              {mode === "momentum" ? "Momentum" : "Breadth"}
-              {sortMode === mode && (
-                <span className="absolute bottom-0 left-1/2 -translate-x-1/2 h-0.5 w-6 rounded-full bg-[#00f5c4]" />
-              )}
+              📋 Table
             </button>
-          ))}
+            <button
+              onClick={() => handleViewChange("bubble")}
+              className={`rounded-md px-2.5 py-1 text-[10px] font-medium transition-all ${
+                viewMode === "bubble"
+                  ? "bg-[rgba(255,255,255,0.08)] text-foreground"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              ⚬ Bubble Chart
+            </button>
+          </div>
         </div>
+
+        {viewMode === "table" && (
+          <div className="flex items-center gap-1 rounded-lg bg-[rgba(255,255,255,0.03)] p-1">
+            {(["momentum", "breadth"] as const).map(mode => (
+              <button
+                key={mode}
+                onClick={() => setSortMode(mode)}
+                className={`relative rounded-md px-3 py-1.5 text-xs font-medium transition-all ${
+                  sortMode === mode
+                    ? "bg-[rgba(255,255,255,0.08)] text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground hover:bg-[rgba(255,255,255,0.04)]"
+                }`}
+              >
+                {mode === "momentum" ? "Momentum" : "Breadth"}
+                {sortMode === mode && (
+                  <span className="absolute bottom-0 left-1/2 -translate-x-1/2 h-0.5 w-6 rounded-full bg-[#00f5c4]" />
+                )}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
-      <div
-        className="overflow-hidden rounded-lg"
-        style={{
-          background: "rgba(255,255,255,0.04)",
-          border: "1px solid rgba(255,255,255,0.08)",
-          backdropFilter: "blur(12px)",
-        }}
-      >
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-[rgba(255,255,255,0.08)] text-xs text-muted-foreground">
-              <th className="px-3 py-2.5 text-left font-medium w-10">#</th>
-              <th className="px-3 py-2.5 text-left font-medium">Theme</th>
-              <th className="px-3 py-2.5 text-left font-medium">
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <span className="cursor-help inline-flex items-center gap-1">
-                      Momentum <Info size={10} className="opacity-50" />
-                    </span>
-                  </TooltipTrigger>
-                  <TooltipContent side="top" className="max-w-[280px] text-xs">
-                    {MOMENTUM_TOOLTIP}
-                  </TooltipContent>
-                </Tooltip>
-              </th>
-              <th className="px-3 py-2.5 text-right font-medium">1D</th>
-              <th className="px-3 py-2.5 text-right font-medium">1W</th>
-              <th className="px-3 py-2.5 text-right font-medium">1M</th>
-              <th className="px-3 py-2.5 text-right font-medium">
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <span className="cursor-help inline-flex items-center gap-1">
-                      Vol <Info size={10} className="opacity-50" />
-                    </span>
-                  </TooltipTrigger>
-                  <TooltipContent side="top" className="max-w-[220px] text-xs">
-                    {VOL_TOOLTIP}
-                  </TooltipContent>
-                </Tooltip>
-              </th>
-              <th className="px-3 py-2.5 text-right font-medium">Breadth</th>
-              <th className="px-3 py-2.5 text-center font-medium">7D</th>
-              <th className="px-3 py-2.5 text-center font-medium">
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <span className="cursor-help inline-flex items-center gap-1">
-                      Signal <Info size={10} className="opacity-50" />
-                    </span>
-                  </TooltipTrigger>
-                  <TooltipContent side="top" className="max-w-[260px] text-xs">
-                    {SIGNAL_TOOLTIP}
-                  </TooltipContent>
-                </Tooltip>
-              </th>
-              <th className="px-3 py-2.5 text-center font-medium w-10">Trend</th>
-            </tr>
-          </thead>
-          <tbody>
-            {isLoading ? (
-              <SkeletonRows />
-            ) : (
-              sorted.map((t, i) => {
-                const borderColor =
-                  t.divergence <= -5
-                    ? "2px solid #f5a623"
-                    : t.divergence >= 5
-                    ? "2px solid #00f5c4"
-                    : "2px solid transparent";
-
-                return (
-                  <tr
-                    key={t.themeId}
-                    ref={el => { if (el) rowRefs.current.set(t.themeId, el); }}
-                    className={`border-b border-[rgba(255,255,255,0.04)] transition-all duration-200 hover:bg-[rgba(255,255,255,0.03)] ${
-                      highlightId === t.themeId ? "bg-[rgba(0,245,196,0.06)]" : ""
-                    }`}
-                    style={{ borderLeft: borderColor }}
-                  >
-                    <td className="px-3 py-2.5 text-xs text-muted-foreground" style={{ fontFamily: DM_MONO }}>
-                      {i + 1}
-                    </td>
-                    <td className="px-3 py-2.5">
-                      <div className="font-['Syne',sans-serif] font-semibold text-foreground text-[13px] leading-tight">
-                        {t.themeName}
-                      </div>
-                      <div className="text-[10px] text-muted-foreground mt-0.5" style={{ fontFamily: DM_MONO }}>
-                        {t.breadthUp}/{t.breadthTotal} advancing
-                      </div>
-                    </td>
-                    <td className="px-3 py-2.5">
-                      <MomentumBar score={t.momentumScore} />
-                    </td>
-                    <PerfCell value={t.perf_1d} hasData={true} />
-                    <PerfCell value={t.perf_1w} hasData={t.hasEodHistory} />
-                    <PerfCell value={t.perf_1m} hasData={t.hasEodHistory} />
-                    <VolCell avgRelVol={t.avgRelVol} isDryingUp={isThemeDryingUp(t.themeName)} />
-                    <BreadthCell up={t.breadthUp} total={t.breadthTotal} />
-                    <td className="px-3 py-2.5 text-center">
-                      <MiniSparkline data={t.sparklineData} />
-                    </td>
-                    <SignalCell divergence={t.divergence} />
-                    <td className="px-3 py-2.5 text-center">
-                      <TrendArrow score={t.momentumScore} />
-                    </td>
+      <div key={viewMode} className="animate-in fade-in duration-200">
+        {viewMode === "bubble" ? (
+          <BubbleChartView themes={themes} isLoading={isLoading} />
+        ) : (
+          <>
+            <div
+              className="overflow-hidden rounded-lg"
+              style={{
+                background: "rgba(255,255,255,0.04)",
+                border: "1px solid rgba(255,255,255,0.08)",
+                backdropFilter: "blur(12px)",
+              }}
+            >
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-[rgba(255,255,255,0.08)] text-xs text-muted-foreground">
+                    <th className="px-3 py-2.5 text-left font-medium w-10">#</th>
+                    <th className="px-3 py-2.5 text-left font-medium">Theme</th>
+                    <th className="px-3 py-2.5 text-left font-medium">
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span className="cursor-help inline-flex items-center gap-1">
+                            Momentum <Info size={10} className="opacity-50" />
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent side="top" className="max-w-[280px] text-xs">
+                          {MOMENTUM_TOOLTIP}
+                        </TooltipContent>
+                      </Tooltip>
+                    </th>
+                    <th className="px-3 py-2.5 text-right font-medium">1D</th>
+                    <th className="px-3 py-2.5 text-right font-medium">1W</th>
+                    <th className="px-3 py-2.5 text-right font-medium">1M</th>
+                    <th className="px-3 py-2.5 text-right font-medium">
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span className="cursor-help inline-flex items-center gap-1">
+                            Vol <Info size={10} className="opacity-50" />
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent side="top" className="max-w-[220px] text-xs">
+                          {VOL_TOOLTIP}
+                        </TooltipContent>
+                      </Tooltip>
+                    </th>
+                    <th className="px-3 py-2.5 text-right font-medium">Breadth</th>
+                    <th className="px-3 py-2.5 text-center font-medium">7D</th>
+                    <th className="px-3 py-2.5 text-center font-medium">
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span className="cursor-help inline-flex items-center gap-1">
+                            Signal <Info size={10} className="opacity-50" />
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent side="top" className="max-w-[260px] text-xs">
+                          {SIGNAL_TOOLTIP}
+                        </TooltipContent>
+                      </Tooltip>
+                    </th>
+                    <th className="px-3 py-2.5 text-center font-medium w-10">Trend</th>
                   </tr>
-                );
-              })
-            )}
-           </tbody>
-         </table>
-       </div>
+                </thead>
+                <tbody>
+                  {isLoading ? (
+                    <SkeletonRows />
+                  ) : (
+                    sorted.map((t, i) => {
+                      const borderColor =
+                        t.divergence <= -5
+                          ? "2px solid #f5a623"
+                          : t.divergence >= 5
+                          ? "2px solid #00f5c4"
+                          : "2px solid transparent";
 
-       <ThemeDrilldownModal 
-         theme={drilldownTheme} 
-         open={drilldownOpen} 
-         onOpenChange={setDrilldownOpen}
-         defaultSortKey="relVol"
-       />
+                      return (
+                        <tr
+                          key={t.themeId}
+                          ref={el => { if (el) rowRefs.current.set(t.themeId, el); }}
+                          className={`border-b border-[rgba(255,255,255,0.04)] transition-all duration-200 hover:bg-[rgba(255,255,255,0.03)] ${
+                            highlightId === t.themeId ? "bg-[rgba(0,245,196,0.06)]" : ""
+                          }`}
+                          style={{ borderLeft: borderColor }}
+                        >
+                          <td className="px-3 py-2.5 text-xs text-muted-foreground" style={{ fontFamily: DM_MONO }}>
+                            {i + 1}
+                          </td>
+                          <td className="px-3 py-2.5">
+                            <div className="font-['Syne',sans-serif] font-semibold text-foreground text-[13px] leading-tight">
+                              {t.themeName}
+                            </div>
+                            <div className="text-[10px] text-muted-foreground mt-0.5" style={{ fontFamily: DM_MONO }}>
+                              {t.breadthUp}/{t.breadthTotal} advancing
+                            </div>
+                          </td>
+                          <td className="px-3 py-2.5">
+                            <MomentumBar score={t.momentumScore} />
+                          </td>
+                          <PerfCell value={t.perf_1d} hasData={true} />
+                          <PerfCell value={t.perf_1w} hasData={t.hasEodHistory} />
+                          <PerfCell value={t.perf_1m} hasData={t.hasEodHistory} />
+                          <VolCell avgRelVol={t.avgRelVol} isDryingUp={isThemeDryingUp(t.themeName)} />
+                          <BreadthCell up={t.breadthUp} total={t.breadthTotal} />
+                          <td className="px-3 py-2.5 text-center">
+                            <MiniSparkline data={t.sparklineData} />
+                          </td>
+                          <SignalCell divergence={t.divergence} />
+                          <td className="px-3 py-2.5 text-center">
+                            <TrendArrow score={t.momentumScore} />
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            <ThemeDrilldownModal
+              theme={drilldownTheme}
+              open={drilldownOpen}
+              onOpenChange={setDrilldownOpen}
+              defaultSortKey="relVol"
+            />
+          </>
+        )}
+      </div>
      </div>
    );
 }
