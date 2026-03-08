@@ -162,12 +162,26 @@ export default function InsightsTab({
         .slice(0, 5)
         .map(mapTheme);
 
+      // Enrich with volume dry-up data
+      const dryUpSet = new Set(dryUpThemes.map(d => d.themeName));
+      const enrichWithDryUp = (t: any, original: ThemeIntelData) => {
+        const dryUp = dryUpThemes.find(d => d.themeName === original.themeName);
+        return {
+          ...t,
+          volumeDryUp: dryUpSet.has(original.themeName),
+          sustainedVolChange: dryUp ? dryUp.change : null,
+        };
+      };
+
+      const top8Enriched = top8.map((t, i) => enrichWithDryUp(t, themes.slice(0, 8)[i]));
+      const bottom8Enriched = bottom8.map((t, i) => enrichWithDryUp(t, [...themes].sort((a, b) => a.momentumScore - b.momentumScore).slice(0, 8)[i]));
+
       const payload = {
         date: new Date().toISOString().split("T")[0],
         totalThemes: themes.length,
         requestTimestamp: Date.now(),
-        topThemes: top8,
-        bottomThemes: bottom8,
+        topThemes: top8Enriched,
+        bottomThemes: bottom8Enriched,
         outlierThemes,
       };
 
