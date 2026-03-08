@@ -89,7 +89,19 @@ Deno.serve(async (req) => {
 
     // --- START: Initialize EOD save session ---
     if (action === "start") {
-      const { dateStr } = todayET();
+      const { dateStr, dayOfWeek } = todayET();
+      const usePc = url.searchParams.get("use_pc") === "true";
+      
+      // For Friday save on weekends, use last Friday's date
+      let saveDate = dateStr;
+      if (usePc && (dayOfWeek === 0 || dayOfWeek === 6)) {
+        const now = new Date();
+        const etStr = now.toLocaleString("en-US", { timeZone: "America/New_York" });
+        const et = new Date(etStr);
+        const diff = dayOfWeek === 0 ? 2 : 1;
+        et.setDate(et.getDate() - diff);
+        saveDate = `${et.getFullYear()}-${String(et.getMonth() + 1).padStart(2, "0")}-${String(et.getDate()).padStart(2, "0")}`;
+      }
 
       // Get all tickers with their theme names
       const { data: themes } = await sb.from("themes").select("id, name");
