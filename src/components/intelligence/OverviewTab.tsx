@@ -210,6 +210,7 @@ export default function OverviewTab({
    const rowRefs = useRef<Map<string, HTMLTableRowElement>>(new Map());
 
    const { themes: liveThemes } = useLiveThemeData("Today");
+   const { isThemeDryingUp } = useVolumeDryUp();
 
    const handleSelectTheme = useCallback((themeId: string) => {
      const el = rowRefs.current.get(themeId);
