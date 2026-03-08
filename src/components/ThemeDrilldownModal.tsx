@@ -343,7 +343,6 @@ export default function ThemeDrilldownModal({
           <button
             onClick={async () => {
               setActiveTab("news");
-              // Fetch on-demand if no articles cached
               if ((!newsArticles || newsArticles.length === 0) && fetchNewsForTheme && theme && !newsLoading) {
                 setNewsLoading(true);
                 const fetched = await fetchNewsForTheme(theme.tickers.map(t => t.symbol));
@@ -361,6 +360,22 @@ export default function ThemeDrilldownModal({
                 {newsArticles!.length}
               </span>
             )}
+          </button>
+          <button
+            onClick={async () => {
+              setActiveTab("fundamentals");
+              if (!fundamentals && !localFundamentals && fetchFundamentals && theme && !fundLoading) {
+                setFundLoading(true);
+                const data = await fetchFundamentals(theme.tickers.filter(t => !t.skipped).map(t => t.symbol));
+                setLocalFundamentals(data);
+                setFundLoading(false);
+              }
+            }}
+            className={`px-3 py-2 text-xs font-semibold transition-colors inline-flex items-center gap-1.5 ${
+              activeTab === "fundamentals" ? "text-foreground border-b-2 border-primary" : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            <BarChart3 size={12} /> Fundamentals
           </button>
         </div>
 
