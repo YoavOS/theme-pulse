@@ -24,6 +24,7 @@ VOLUME RULES:
 - When a theme shows strong price performance but Rel Vol < 0.8×, flag it as a "low conviction move"
 - Always mention volume when it adds meaningful context to the narrative — don't mention it for every theme, only when it signals something actionable
 - Sustained Vol (10-day vs 3-month average) above +20% indicates multi-day accumulation building
+- If a theme shows volumeDryUp = true, mention it explicitly as a caution signal — fading volume after a run often precedes a price reversal
 
 FORMAT:
 Write 6–8 sentences of flowing prose. No bullet points. No headers. No lists.
