@@ -51,6 +51,17 @@ export default function Index() {
     loadTimeframe,
   } = useFullScan(handleScanComplete);
 
+  const {
+    status: eodStatus,
+    progress: eodProgress,
+    isSaving: isEodSaving,
+    canSave: canSaveEod,
+    tooltip: eodTooltip,
+    autoSave: eodAutoSave,
+    startEodSave,
+    toggleAutoSave: toggleEodAutoSave,
+  } = useEodSave();
+
   // When timeframe changes, try to load from scan cache
   const prevTimeframe = useRef(activeTimeframe);
   useEffect(() => {
