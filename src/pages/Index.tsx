@@ -26,6 +26,8 @@ export default function Index() {
   const [selectedThemes, setSelectedThemes] = useState<Set<string>>(new Set());
   const [showSelector, setShowSelector] = useState(false);
   const [showValidateDialog, setShowValidateDialog] = useState(false);
+  const [drilldownTheme, setDrilldownTheme] = useState<ThemeData | null>(null);
+  const { pinned, alerts, getAlert } = useWatchlist();
 
   const {
     themes: allThemes,
