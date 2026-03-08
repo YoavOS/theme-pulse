@@ -116,7 +116,7 @@ function BarRow({
           </div>
           {/* Theme name — right side */}
           <div
-            className="shrink-0 truncate text-[11px] text-[rgba(255,255,255,0.85)] pl-2 text-left"
+            className="shrink-0 truncate text-[14px] text-[rgba(255,255,255,0.85)] pl-2 text-left"
             style={{ width: 130 }}
             title={d.name}
           >
