@@ -4,7 +4,7 @@ import { useLiveThemeData } from "@/hooks/useLiveThemeData";
 import ThemeCard from "@/components/ThemeCard";
 import ThemeDrilldownModal from "@/components/ThemeDrilldownModal";
 import ValidateTickersDialog from "@/components/ValidateTickersDialog";
-import { RefreshCw, Download, TrendingUp, TrendingDown, Wifi, WifiOff, Loader2, Settings, ScanLine, X, ShieldCheck, Save, Zap, Calendar, Brain, Eye, Bookmark, Bell } from "lucide-react";
+import { RefreshCw, Download, TrendingUp, TrendingDown, Wifi, WifiOff, Loader2, Settings, ScanLine, X, ShieldCheck, Save, Zap, Calendar, Brain, Bookmark, Bell, ChevronDown, LayoutDashboard } from "lucide-react";
 import { useFullScan } from "@/hooks/useFullScan";
 import { useEodSave } from "@/hooks/useEodSave";
 import { useSaveEodFromScan } from "@/hooks/useSaveEodFromScan";
