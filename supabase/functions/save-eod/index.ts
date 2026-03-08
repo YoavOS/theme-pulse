@@ -57,18 +57,51 @@ Deno.serve(async (req) => {
         .eq("date", dateStr)
         .single();
 
+      // Check if Friday close already saved (for weekend button)
+      let fridayDate: string | null = null;
+      let fridayAlreadySaved = false;
+      if (isWeekend) {
+        // Calculate last Friday's date
+        const now = new Date();
+        const etStr = now.toLocaleString("en-US", { timeZone: "America/New_York" });
+        const et = new Date(etStr);
+        const diff = dayOfWeek === 0 ? 2 : 1; // Sun=2 days back, Sat=1 day back
+        et.setDate(et.getDate() - diff);
+        fridayDate = `${et.getFullYear()}-${String(et.getMonth() + 1).padStart(2, "0")}-${String(et.getDate()).padStart(2, "0")}`;
+        const { data: fridaySession } = await sb
+          .from("eod_save_sessions")
+          .select("status")
+          .eq("date", fridayDate)
+          .single();
+        fridayAlreadySaved = fridaySession?.status === "completed";
+      }
+
       return new Response(JSON.stringify({
         date: dateStr,
         isWeekend,
         isAfterClose,
         alreadySaved: existing?.status === "completed",
         session: existing || null,
+        fridayDate,
+        fridayAlreadySaved,
       }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
     // --- START: Initialize EOD save session ---
     if (action === "start") {
-      const { dateStr } = todayET();
+      const { dateStr, dayOfWeek } = todayET();
+      const usePc = url.searchParams.get("use_pc") === "true";
+      
+      // For Friday save on weekends, use last Friday's date
+      let saveDate = dateStr;
+      if (usePc && (dayOfWeek === 0 || dayOfWeek === 6)) {
+        const now = new Date();
+        const etStr = now.toLocaleString("en-US", { timeZone: "America/New_York" });
+        const et = new Date(etStr);
+        const diff = dayOfWeek === 0 ? 2 : 1;
+        et.setDate(et.getDate() - diff);
+        saveDate = `${et.getFullYear()}-${String(et.getMonth() + 1).padStart(2, "0")}-${String(et.getDate()).padStart(2, "0")}`;
+      }
 
       // Get all tickers with their theme names
       const { data: themes } = await sb.from("themes").select("id, name");
@@ -91,7 +124,7 @@ Deno.serve(async (req) => {
 
       // Upsert session
       await sb.from("eod_save_sessions").upsert({
-        date: dateStr,
+        date: saveDate,
         status: "in_progress",
         total_tickers: unique.length,
         saved_count: 0,
@@ -103,9 +136,9 @@ Deno.serve(async (req) => {
 
       return new Response(JSON.stringify({
         ok: true,
-        date: dateStr,
+        date: saveDate,
         total: unique.length,
-        tickers: unique, // client needs this to know what to send in chunks
+        tickers: unique,
       }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
@@ -142,17 +175,21 @@ Deno.serve(async (req) => {
             const data = await res.json();
             if (!data || (data.c === 0 && data.pc === 0)) break;
 
+            const usePc = url.searchParams.get("use_pc") === "true";
+            const closePrice = usePc ? data.pc : data.c;
+            if (!closePrice && closePrice !== 0) break;
+
             // Upsert into eod_prices
             const { error: upsertErr } = await sb.from("eod_prices").upsert({
               symbol,
               theme_name,
               date,
-              close_price: data.c,
-              open_price: data.o || null,
-              high_price: data.h || null,
-              low_price: data.l || null,
-              volume: data.v ? Math.round(data.v) : null,
-              source: "finnhub_quote",
+              close_price: closePrice,
+              open_price: usePc ? null : (data.o || null),
+              high_price: usePc ? null : (data.h || null),
+              low_price: usePc ? null : (data.l || null),
+              volume: usePc ? null : (data.v ? Math.round(data.v) : null),
+              source: usePc ? "friday_pc_save" : "finnhub_quote",
               is_backfill: false,
             }, { onConflict: "symbol,date" });
 
