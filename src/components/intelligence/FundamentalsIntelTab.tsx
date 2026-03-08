@@ -195,6 +195,16 @@ export default function FundamentalsIntelTab({
 
   const hasData = Object.keys(allFundamentals).length > 0;
 
+  // Check if smart money data is missing from cached fundamentals
+  const smartMoneyMissing = useMemo(() => {
+    if (!hasData) return false;
+    const entries = Object.values(allFundamentals);
+    if (entries.length === 0) return false;
+    // If >80% of entries have null smart_money_score, consider it missing
+    const nullCount = entries.filter(e => e.smart_money_score === null).length;
+    return nullCount / entries.length > 0.8;
+  }, [allFundamentals, hasData]);
+
   // Check localStorage for today's prefetch
   const alreadyPrefetchedToday = useMemo(() => {
     try {
@@ -207,12 +217,15 @@ export default function FundamentalsIntelTab({
 
   // Auto-prefetch top 10 themes — runs once on mount only
   useEffect(() => {
-    if (prefetchCompletedRef.current || alreadyPrefetchedToday) return;
+    if (prefetchCompletedRef.current) return;
+    // Skip if already prefetched today AND smart money data exists
+    if (alreadyPrefetchedToday && !smartMoneyMissing) return;
     if (dataLoading || themes.length === 0) return;
 
     // Wait for initial cache load to finish
     if (loading) return;
-    if (hasData) {
+    // If data exists and smart money is present, skip
+    if (hasData && !smartMoneyMissing) {
       prefetchCompletedRef.current = true;
       return;
     }
