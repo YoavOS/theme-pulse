@@ -53,7 +53,7 @@ export default function DemandSignals({ signals }: Props) {
     );
   }
 
-  if (loading) return <Skeleton />;
+  if (loading) return <DemandSkeleton />;
 
   return (
     <div className="mt-2 border-t border-border/40 pt-1.5" onClick={(e) => e.stopPropagation()}>

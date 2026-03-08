@@ -14,7 +14,12 @@ class DemandSignalsBoundary extends Component<{ children: ReactNode; resetKey?: 
       this.setState({ hasError: false });
     }
   }
-  render() { return this.state.hasError ? null : this.props.children; }
+  render() {
+    if (this.state.hasError) {
+      return <span className="mt-2 block text-[10px] text-muted-foreground">Volume data unavailable</span>;
+    }
+    return this.props.children;
+  }
 }
 
 function getPctColor(pct: number): string {
