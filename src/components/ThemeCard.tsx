@@ -1,5 +1,7 @@
 import { ThemeData } from "@/data/themeData";
 import { Badge } from "@/components/ui/badge";
+import { Pin } from "lucide-react";
+import { useWatchlist } from "@/hooks/useWatchlist";
 
 function getPctColor(pct: number): string {
   if (pct > 7) return "text-gain-strong";
