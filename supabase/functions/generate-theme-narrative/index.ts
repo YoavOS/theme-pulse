@@ -26,6 +26,11 @@ VOLUME RULES:
 - Sustained Vol (10-day vs 3-month average) above +20% indicates multi-day accumulation building
 - If a theme shows volumeDryUp = true, mention it explicitly as a caution signal — fading volume after a run often precedes a price reversal
 
+DISPERSION RULES:
+- If dispersion is >2.5, mention it's a high-conviction rotation day with clear winners and losers — a stock picker's market
+- If dispersion is <0.5, mention themes are moving in lockstep suggesting macro-driven action rather than stock-specific rotation
+- Only mention dispersion if the data includes it and it adds meaningful context
+
 FORMAT:
 Write 6–8 sentences of flowing prose. No bullet points. No headers. No lists.
 Cover: what is genuinely leading with broad confirmation, what is a single-stock story masquerading as a theme move, what is fading and why, what the overall rotation suggests, and one specific actionable thing to watch next session.`;
