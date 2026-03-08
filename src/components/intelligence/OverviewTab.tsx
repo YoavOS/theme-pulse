@@ -20,7 +20,7 @@ const SIGNAL_TOOLTIP =
 const VOL_TOOLTIP = "Average relative volume across all theme tickers vs their 20-day average. >1.8× = unusual institutional interest. >1.4× = elevated. <0.8× = quiet. Factors into momentum score as a conviction multiplier.";
 const MOMENTUM_TOOLTIP = "Weighted score: 20% today + 35% this week + 45% this month, adjusted for volume. Higher = stronger sustained momentum. Normalized 0-100 across all themes. Note: uses absolute performance. Use 'vs SPY' column for relative strength.";
 const SPY_TOOLTIP = "Theme performance minus SPY performance. Positive = outperforming the S&P 500. Negative = underperforming even if nominally positive.";
-type SortMode = "momentum" | "breadth";
+type SortMode = "momentum" | "breadth" | "spy";
 
 function getRelVolColor(val: number): string {
   if (val > 1.8) return "#00f5c4";
