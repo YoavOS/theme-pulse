@@ -101,6 +101,7 @@ export default function ThemeDrilldownModal({
    const [sortDir, setSortDir] = useState<SortDir>("desc");
    const [extras, setExtras] = useState<Record<string, TickerExtra>>({});
    const { spy, getTickerRS } = useSpyBenchmark();
+   const [activeTab, setActiveTab] = useState<"tickers" | "news">("tickers");
 
   useEffect(() => {
     if (!theme || !open) return;
