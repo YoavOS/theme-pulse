@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useContext, createContext, ReactNode } from "react";
 
 const PINNED_KEY = "pinnedThemes";
 const ALERTS_KEY = "watchlistAlerts";
@@ -8,7 +8,18 @@ export interface AlertConfig {
   down: number | null;
 }
 
-export function useWatchlist() {
+interface WatchlistContextType {
+  pinned: string[];
+  togglePin: (themeName: string) => void;
+  isPinned: (themeName: string) => boolean;
+  alerts: Record<string, AlertConfig>;
+  setAlert: (themeName: string, config: AlertConfig) => void;
+  getAlert: (themeName: string) => AlertConfig;
+}
+
+const WatchlistContext = createContext<WatchlistContextType | null>(null);
+
+export function WatchlistProvider({ children }: { children: ReactNode }) {
   const [pinned, setPinned] = useState<string[]>(() => {
     try {
       return JSON.parse(localStorage.getItem(PINNED_KEY) || "[]");
@@ -55,5 +66,17 @@ export function useWatchlist() {
     [alerts]
   );
 
-  return { pinned, togglePin, isPinned, alerts, setAlert, getAlert };
+  return (
+    <WatchlistContext.Provider value={{ pinned, togglePin, isPinned, alerts, setAlert, getAlert }}>
+      {children}
+    </WatchlistContext.Provider>
+  );
+}
+
+export function useWatchlist(): WatchlistContextType {
+  const ctx = useContext(WatchlistContext);
+  if (!ctx) {
+    throw new Error("useWatchlist must be used within a WatchlistProvider");
+  }
+  return ctx;
 }
