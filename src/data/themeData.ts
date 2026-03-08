@@ -523,7 +523,13 @@ export const demoThemes: ThemeData[] = [
 ];
 
 export function getProcessedThemes(themes: ThemeData[]): ThemeData[] {
-  const sorted = [...themes].sort((a, b) => b.performance_pct - a.performance_pct);
+  // Sort real data above demo, then by performance within each group
+  const sorted = [...themes].sort((a, b) => {
+    const aReal = a.dataSource === "real" ? 0 : 1;
+    const bReal = b.dataSource === "real" ? 0 : 1;
+    if (aReal !== bReal) return aReal - bReal;
+    return b.performance_pct - a.performance_pct;
+  });
   return sorted.map((t, i) => {
     // Recalculate up/down/na from tickers
     const validTickers = t.tickers.filter(tk => !tk.skipped);

@@ -173,7 +173,8 @@ export function useFullScan(onChunkComplete: (themes: ThemeData[]) => void) {
       if (skippedCount > 0) summaryParts.push(`${skippedCount} tickers skipped (rate limit)`);
       if (invalidCount > 0) summaryParts.push(`${invalidCount} invalid tickers skipped`);
 
-      setStatusText(`Complete — ${summaryParts.join(" | ")}`);
+      console.log(`Full scan complete: ${summaryParts.join(" | ")}`);
+      setStatusText(`✅ ${summaryParts.join(" | ")}`);
       setIsRunning(false);
 
       toast({
