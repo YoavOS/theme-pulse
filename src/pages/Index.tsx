@@ -578,6 +578,27 @@ function Section({
       ? "text-destructive"
       : "text-muted-foreground";
 
+  // Compute aggregate volume badge for section
+  let volBadge: React.ReactNode = null;
+  if (getThemeSignals && themes.length > 0) {
+    try {
+      const relVols = themes
+        .map(t => {
+          const s = getThemeSignals(t.tickers.map(tk => tk.symbol));
+          return s.relVol;
+        })
+        .filter((v): v is number => v !== null);
+      if (relVols.length > 0) {
+        const avgRel = relVols.reduce((a, b) => a + b, 0) / relVols.length;
+        if (avgRel > 1.4) {
+          volBadge = <span className="inline-flex items-center gap-0.5 rounded-full bg-[#00f5c4]/10 px-2 py-0.5 text-[10px] font-semibold text-[#00f5c4]">⚡ elevated volume</span>;
+        } else if (avgRel < 0.8) {
+          volBadge = <span className="inline-flex items-center rounded-full bg-secondary/60 px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">low volume</span>;
+        }
+      }
+    } catch {}
+  }
+
   return (
     <section className="mb-8">
       <div className="mb-4 flex items-center gap-2">
@@ -588,6 +609,7 @@ function Section({
         <span className="rounded-full bg-secondary px-2 py-0.5 text-xs text-muted-foreground">
           {themes.length}
         </span>
+        {volBadge}
       </div>
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 min-[1800px]:grid-cols-4">
         {themes.map((t, i) => (

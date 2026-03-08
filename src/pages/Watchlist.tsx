@@ -1,18 +1,19 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { Link } from "react-router-dom";
-import { ArrowLeft, Pin, Bell, Check, X, Plus } from "lucide-react";
+import { ArrowLeft, Pin, Bell, Check, X, Plus, Zap } from "lucide-react";
 import { useWatchlist, AlertConfig } from "@/hooks/useWatchlistContext";
 import { useLiveThemeData } from "@/hooks/useLiveThemeData";
 import ThemeCard from "@/components/ThemeCard";
 import AddThemeModal from "@/components/AddThemeModal";
 import { ThemeData } from "@/data/themeData";
 import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 
 export default function Watchlist() {
   const { pinned, togglePin, alerts, setAlert, getAlert } = useWatchlist();
   const { themes } = useLiveThemeData("Today");
   const [triggeredAlerts, setTriggeredAlerts] = useState<
-    { themeName: string; message: string; type: "up" | "down" }[]
+    { themeName: string; message: string; type: "up" | "down" | "volume" }[]
   >([]);
   const [showAddModal, setShowAddModal] = useState(false);
   const [removingTheme, setRemovingTheme] = useState<string | null>(null);
@@ -55,31 +56,66 @@ export default function Watchlist() {
       themeMap.set(name, arr);
     }
 
+    // Fetch volume cache for Rel Vol alerts
+    const allSymbols = [...new Set([...themeMap.values()].flat())];
+    const { data: volData } = await supabase
+      .from("ticker_volume_cache")
+      .select("symbol, today_vol, avg_20d")
+      .in("symbol", allSymbols.slice(0, 500));
+
+    const volMap = new Map<string, { today_vol: number; avg_20d: number }>();
+    if (volData) {
+      for (const v of volData) {
+        if (v.today_vol && v.avg_20d && v.avg_20d > 0) {
+          volMap.set(v.symbol, { today_vol: v.today_vol, avg_20d: v.avg_20d });
+        }
+      }
+    }
+
     for (const themeName of pinned) {
       const config = getAlert(themeName);
-      if (!config.up && !config.down) continue;
-
       const symbols = themeMap.get(themeName) || [];
       if (symbols.length === 0) continue;
 
-      const perfs = symbols.map(s => perfMap.get(s) || 0).filter(Boolean);
-      if (perfs.length === 0) continue;
-
-      const avg1w = perfs.reduce((a, b) => a + b, 0) / perfs.length;
-
-      if (config.up !== null && avg1w >= config.up) {
-        triggered.push({
-          themeName,
-          message: `🔔 ${themeName} crossed +${config.up}% this week — currently ${avg1w >= 0 ? "+" : ""}${avg1w.toFixed(1)}%`,
-          type: "up",
-        });
+      // 1W performance alerts
+      if (config.up || config.down) {
+        const perfs = symbols.map(s => perfMap.get(s) || 0).filter(Boolean);
+        if (perfs.length > 0) {
+          const avg1w = perfs.reduce((a, b) => a + b, 0) / perfs.length;
+          if (config.up !== null && avg1w >= config.up) {
+            triggered.push({
+              themeName,
+              message: `🔔 ${themeName} crossed +${config.up}% this week — currently ${avg1w >= 0 ? "+" : ""}${avg1w.toFixed(1)}%`,
+              type: "up",
+            });
+          }
+          if (config.down !== null && avg1w <= config.down) {
+            triggered.push({
+              themeName,
+              message: `🔔 ${themeName} crossed ${config.down}% this week — currently ${avg1w >= 0 ? "+" : ""}${avg1w.toFixed(1)}%`,
+              type: "down",
+            });
+          }
+        }
       }
-      if (config.down !== null && avg1w <= config.down) {
-        triggered.push({
-          themeName,
-          message: `🔔 ${themeName} crossed ${config.down}% this week — currently ${avg1w >= 0 ? "+" : ""}${avg1w.toFixed(1)}%`,
-          type: "down",
-        });
+
+      // Rel Vol alerts
+      if (config.relVol !== null) {
+        const relVols = symbols
+          .map(s => volMap.get(s))
+          .filter((v): v is { today_vol: number; avg_20d: number } => !!v)
+          .map(v => v.today_vol / v.avg_20d);
+
+        if (relVols.length > 0) {
+          const avgRelVol = relVols.reduce((a, b) => a + b, 0) / relVols.length;
+          if (avgRelVol >= config.relVol) {
+            triggered.push({
+              themeName,
+              message: `⚡ ${themeName} showing unusual volume — Rel Vol: ${avgRelVol.toFixed(1)}×`,
+              type: "volume",
+            });
+          }
+        }
       }
     }
 
@@ -143,7 +179,9 @@ export default function Watchlist() {
             <div
               key={i}
               className={`flex items-start gap-2 rounded-lg border p-3 text-xs shadow-lg backdrop-blur-md ${
-                alert.type === "up"
+                alert.type === "volume"
+                  ? "border-[#00f5c4]/30 bg-[#00f5c4]/10 text-[#00f5c4]"
+                  : alert.type === "up"
                   ? "border-primary/30 bg-primary/10 text-primary"
                   : "border-[hsl(40,80%,50%)]/30 bg-[hsl(40,80%,50%)]/10 text-[hsl(40,80%,50%)]"
               }`}
@@ -254,12 +292,14 @@ function AlertRow({
 }) {
   const [up, setUp] = useState(config.up?.toString() || "");
   const [down, setDown] = useState(config.down ? Math.abs(config.down).toString() : "");
+  const [relVol, setRelVol] = useState(config.relVol?.toString() || "");
   const [saved, setSaved] = useState(false);
 
   const handleSave = () => {
     onSave({
       up: up ? parseFloat(up) : null,
       down: down ? -Math.abs(parseFloat(down)) : null,
+      relVol: relVol ? parseFloat(relVol) : null,
     });
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
@@ -267,38 +307,55 @@ function AlertRow({
 
   return (
     <div
-      className="mt-1 flex items-center gap-2 rounded-b-lg px-3 py-2 text-[11px]"
+      className="mt-1 rounded-b-lg px-3 py-2 text-[11px]"
       style={{
         background: "rgba(255,255,255,0.03)",
         border: "1px solid rgba(255,255,255,0.06)",
         borderTop: "none",
       }}
     >
-      <span className="text-muted-foreground shrink-0">🔔 Alert if 1W &gt; +</span>
-      <input
-        type="number"
-        value={up}
-        onChange={e => setUp(e.target.value)}
-        placeholder="5"
-        className="w-10 rounded border border-border bg-background px-1 py-0.5 text-center text-[11px] text-foreground"
-        style={{ fontFamily: "'DM Mono', monospace" }}
-      />
-      <span className="text-muted-foreground">% · &lt; −</span>
-      <input
-        type="number"
-        value={down}
-        onChange={e => setDown(e.target.value)}
-        placeholder="3"
-        className="w-10 rounded border border-border bg-background px-1 py-0.5 text-center text-[11px] text-foreground"
-        style={{ fontFamily: "'DM Mono', monospace" }}
-      />
-      <span className="text-muted-foreground">%</span>
-      <button
-        onClick={handleSave}
-        className="ml-auto rounded border border-border px-2 py-0.5 text-[10px] text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-      >
-        {saved ? <Check size={10} className="text-primary" /> : "Set"}
-      </button>
+      <div className="flex items-center gap-2">
+        <span className="text-muted-foreground shrink-0">🔔 Alert if 1W &gt; +</span>
+        <input
+          type="number"
+          value={up}
+          onChange={e => setUp(e.target.value)}
+          placeholder="5"
+          className="w-10 rounded border border-border bg-background px-1 py-0.5 text-center text-[11px] text-foreground"
+          style={{ fontFamily: "'DM Mono', monospace" }}
+        />
+        <span className="text-muted-foreground">% · &lt; −</span>
+        <input
+          type="number"
+          value={down}
+          onChange={e => setDown(e.target.value)}
+          placeholder="3"
+          className="w-10 rounded border border-border bg-background px-1 py-0.5 text-center text-[11px] text-foreground"
+          style={{ fontFamily: "'DM Mono', monospace" }}
+        />
+        <span className="text-muted-foreground">%</span>
+        <button
+          onClick={handleSave}
+          className="ml-auto rounded border border-border px-2 py-0.5 text-[10px] text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+        >
+          {saved ? <Check size={10} className="text-primary" /> : "Set"}
+        </button>
+      </div>
+      <div className="flex items-center gap-2 mt-1.5">
+        <span className="text-muted-foreground shrink-0 inline-flex items-center gap-0.5">
+          <Zap size={9} className="text-[#00f5c4]" /> Rel Vol &gt;
+        </span>
+        <input
+          type="number"
+          step="0.1"
+          value={relVol}
+          onChange={e => setRelVol(e.target.value)}
+          placeholder="1.8"
+          className="w-12 rounded border border-border bg-background px-1 py-0.5 text-center text-[11px] text-foreground"
+          style={{ fontFamily: "'DM Mono', monospace" }}
+        />
+        <span className="text-muted-foreground">×</span>
+      </div>
     </div>
   );
 }

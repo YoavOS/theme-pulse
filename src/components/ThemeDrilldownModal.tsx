@@ -50,7 +50,21 @@ function formatVolume(vol: number | undefined | null): string {
   return vol.toString();
 }
 
-type SortKey = "symbol" | "pct" | "perf_1w" | "perf_1m" | "volume";
+function getRelVolColor(val: number): string {
+  if (val > 1.8) return "text-[#00f5c4]";
+  if (val > 1.4) return "text-gain-medium";
+  if (val >= 1.1) return "text-[#facc15]";
+  return "text-muted-foreground";
+}
+
+function getSustainedColor(val: number): string {
+  if (val > 30) return "text-[#00f5c4]";
+  if (val >= 15) return "text-gain-medium";
+  if (val >= 5) return "text-[#facc15]";
+  return "text-muted-foreground";
+}
+
+type SortKey = "symbol" | "pct" | "perf_1w" | "perf_1m" | "volume" | "relVol" | "sustainedVol";
 type SortDir = "asc" | "desc";
 
 interface TickerExtra {
@@ -59,6 +73,10 @@ interface TickerExtra {
   volume: number | null;
   price: number | null;
   sparkline: number[];
+  // Volume signals per ticker
+  relVol: number | null;
+  sustainedVol: number | null;
+  volSpikePct: number | null;
 }
 
 export default function ThemeDrilldownModal({
@@ -76,36 +94,37 @@ export default function ThemeDrilldownModal({
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [extras, setExtras] = useState<Record<string, TickerExtra>>({});
 
-  // Fetch extra data (1W, 1M from ticker_performance + sparklines from eod_prices)
   useEffect(() => {
     if (!theme || !open) return;
     const symbols = theme.tickers.map(t => t.symbol);
     if (symbols.length === 0) return;
 
     (async () => {
-      // Fetch ticker_performance
-      const { data: perfData } = await supabase
-        .from("ticker_performance")
-        .select("symbol, perf_1w, perf_1m, price")
-        .in("symbol", symbols);
-
-      // Fetch last 7 days of eod_prices for sparklines
-      const sevenDaysAgo = new Date();
-      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 10);
-      const { data: eodData } = await supabase
-        .from("eod_prices")
-        .select("symbol, date, close_price")
-        .in("symbol", symbols)
-        .gte("date", sevenDaysAgo.toISOString().split("T")[0])
-        .order("date", { ascending: true });
+      // Fetch ticker_performance, eod sparklines, and volume cache in parallel
+      const [perfResult, eodResult, volResult] = await Promise.all([
+        supabase
+          .from("ticker_performance")
+          .select("symbol, perf_1w, perf_1m, price")
+          .in("symbol", symbols),
+        supabase
+          .from("eod_prices")
+          .select("symbol, date, close_price")
+          .in("symbol", symbols)
+          .gte("date", new Date(Date.now() - 10 * 86400000).toISOString().split("T")[0])
+          .order("date", { ascending: true }),
+        supabase
+          .from("ticker_volume_cache")
+          .select("symbol, today_vol, avg_20d, avg_10d, avg_3m")
+          .in("symbol", symbols),
+      ]);
 
       const map: Record<string, TickerExtra> = {};
       for (const s of symbols) {
-        map[s] = { perf_1w: null, perf_1m: null, volume: null, price: null, sparkline: [] };
+        map[s] = { perf_1w: null, perf_1m: null, volume: null, price: null, sparkline: [], relVol: null, sustainedVol: null, volSpikePct: null };
       }
 
-      if (perfData) {
-        for (const p of perfData) {
+      if (perfResult.data) {
+        for (const p of perfResult.data) {
           if (map[p.symbol]) {
             map[p.symbol].perf_1w = p.perf_1w;
             map[p.symbol].perf_1m = p.perf_1m;
@@ -114,15 +133,39 @@ export default function ThemeDrilldownModal({
         }
       }
 
-      if (eodData) {
+      if (eodResult.data) {
         const bySymbol = new Map<string, number[]>();
-        for (const row of eodData) {
+        for (const row of eodResult.data) {
           const arr = bySymbol.get(row.symbol) || [];
           arr.push(row.close_price);
           bySymbol.set(row.symbol, arr);
         }
         for (const [sym, prices] of bySymbol) {
           if (map[sym]) map[sym].sparkline = prices;
+        }
+      }
+
+      // Volume data
+      if (volResult.data) {
+        for (const v of volResult.data) {
+          if (!map[v.symbol]) continue;
+          const todayVol = v.today_vol || 0;
+          const avg20d = v.avg_20d || 0;
+          const avg10d = v.avg_10d || 0;
+          const avg3m = v.avg_3m || 0;
+
+          map[v.symbol].volume = todayVol;
+
+          if (avg20d > 0 && todayVol > 0) {
+            map[v.symbol].relVol = Math.round((todayVol / avg20d) * 100) / 100;
+            const spikePct = ((todayVol - avg20d) / avg20d) * 100;
+            if (Math.abs(spikePct) > 30) {
+              map[v.symbol].volSpikePct = Math.round(spikePct);
+            }
+          }
+          if (avg3m > 0 && avg10d > 0) {
+            map[v.symbol].sustainedVol = Math.round(((avg10d / avg3m) - 1) * 100);
+          }
         }
       }
 
@@ -157,6 +200,14 @@ export default function ThemeDrilldownModal({
         case "volume":
           av = extras[a.symbol]?.volume ?? -999;
           bv = extras[b.symbol]?.volume ?? -999;
+          break;
+        case "relVol":
+          av = extras[a.symbol]?.relVol ?? -999;
+          bv = extras[b.symbol]?.relVol ?? -999;
+          break;
+        case "sustainedVol":
+          av = extras[a.symbol]?.sustainedVol ?? -999;
+          bv = extras[b.symbol]?.sustainedVol ?? -999;
           break;
         default:
           av = a.pct; bv = b.pct;
@@ -198,7 +249,7 @@ export default function ThemeDrilldownModal({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className="max-w-[700px] border-none p-0 overflow-hidden"
+        className="max-w-[850px] border-none p-0 overflow-hidden"
         style={{
           background: "rgba(255,255,255,0.06)",
           border: "1px solid rgba(255,255,255,0.12)",
@@ -238,7 +289,6 @@ export default function ThemeDrilldownModal({
             </span>
           </div>
 
-          {/* Breadth bar */}
           <div className="mt-4 h-3 w-full overflow-hidden rounded-full bg-bar-track">
             <div
               className="h-full rounded-full transition-all"
@@ -265,7 +315,9 @@ export default function ThemeDrilldownModal({
                   ["pct", "1D %"],
                   ["perf_1w", "1W %"],
                   ["perf_1m", "1M %"],
-                  ["volume", "Volume"],
+                  ["relVol", "Rel Vol"],
+                  ["sustainedVol", "Sust Vol"],
+                  ["volume", "Spike"],
                 ] as [SortKey, string][]).map(([key, label]) => (
                   <th
                     key={key}
@@ -331,10 +383,36 @@ export default function ThemeDrilldownModal({
                         {extra?.perf_1m != null ? `${extra.perf_1m >= 0 ? "+" : ""}${extra.perf_1m.toFixed(2)}%` : "—"}
                       </span>
                     </td>
+                    {/* Rel Vol */}
                     <td className="px-2 py-2">
-                      <span className="font-mono text-muted-foreground" style={{ fontFamily: "'DM Mono', monospace" }}>
-                        {formatVolume(extra?.volume)}
+                      <span
+                        className={`font-mono ${extra?.relVol != null ? getRelVolColor(extra.relVol) : "text-muted-foreground"}`}
+                        style={{ fontFamily: "'DM Mono', monospace" }}
+                      >
+                        {extra?.relVol != null ? `${extra.relVol.toFixed(1)}×` : "—"}
                       </span>
+                    </td>
+                    {/* Sustained Vol */}
+                    <td className="px-2 py-2">
+                      <span
+                        className={`font-mono ${extra?.sustainedVol != null ? getSustainedColor(extra.sustainedVol) : "text-muted-foreground"}`}
+                        style={{ fontFamily: "'DM Mono', monospace" }}
+                      >
+                        {extra?.sustainedVol != null ? `${extra.sustainedVol >= 0 ? "+" : ""}${extra.sustainedVol}%` : "—"}
+                      </span>
+                    </td>
+                    {/* Vol Spike */}
+                    <td className="px-2 py-2">
+                      {extra?.volSpikePct != null ? (
+                        <span
+                          className={`font-mono font-medium ${extra.volSpikePct > 0 ? "text-gain-medium" : "text-loss-mild"}`}
+                          style={{ fontFamily: "'DM Mono', monospace" }}
+                        >
+                          {extra.volSpikePct > 0 ? "↑" : "↓"} {extra.volSpikePct > 0 ? "+" : ""}{extra.volSpikePct}%
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground" style={{ fontFamily: "'DM Mono', monospace" }}>—</span>
+                      )}
                     </td>
                     <td className="px-2 py-2">
                       <MiniSparkline data={extra?.sparkline || []} up={sparkUp} />
