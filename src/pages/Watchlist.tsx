@@ -16,7 +16,7 @@ export default function Watchlist() {
   const { pinned, togglePin, alerts, setAlert, getAlert } = useWatchlist();
   const { themes } = useLiveThemeData("Today");
   const { getRelativeStrength } = useSpyBenchmark();
-  const { news, fetchNews, getThemeNewsCount, getThemeArticles, hasNegativeNews, getAiSummary } = useThemeNews();
+  const { fetchThemeNews, getThemeNewsCount, getThemeArticles, hasNegativeNews, getAiSummary, prefetchTopThemes, news } = useThemeNews();
   const [newsPanelTheme, setNewsPanelTheme] = useState<ThemeData | null>(null);
   const [newsPanelSummary, setNewsPanelSummary] = useState<string | null>(null);
   const [newsPanelSummaryLoading, setNewsPanelSummaryLoading] = useState(false);
