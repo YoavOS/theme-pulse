@@ -268,7 +268,7 @@ export default function BarChartView({
       {/* Left panel — Top Performers */}
       <div className="pr-0 md:pr-3 md:border-r md:border-[rgba(255,255,255,0.06)]">
         <h3
-          className="mb-2 text-[10px] font-semibold uppercase tracking-[0.1em]"
+          className="mb-2 text-[13px] font-semibold uppercase tracking-[0.1em]"
           style={{ color: "#00f5c4" }}
         >
           Top Performers
