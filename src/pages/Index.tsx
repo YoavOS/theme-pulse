@@ -30,6 +30,7 @@ export default function Index() {
   const [drilldownTheme, setDrilldownTheme] = useState<ThemeData | null>(null);
   const [showOptions, setShowOptions] = useState(false);
   const { pinned, alerts, getAlert } = useWatchlist();
+  const { fetchVolume, getThemeSignals } = useVolumeData();
 
   const {
     themes: allThemes,
