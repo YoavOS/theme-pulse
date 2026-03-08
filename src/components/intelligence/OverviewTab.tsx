@@ -6,7 +6,7 @@ import { LineChart, Line, ResponsiveContainer } from "recharts";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import VolumeLeaders from "./VolumeLeaders";
 import ThemeDrilldownModal from "@/components/ThemeDrilldownModal";
-import { demoThemes } from "@/data/themeData";
+import { useLiveThemeData } from "@/hooks/useLiveThemeData";
 
 const DM_MONO = "'DM Mono', monospace";
 const EOD_TOOLTIP = "Accumulating EOD history — available after more daily saves";
