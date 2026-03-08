@@ -29,18 +29,20 @@ interface VolumeLeadersProps {
 }
 
 export default function VolumeLeaders({ themes, onSelectTheme, onDrilldownOpen }: VolumeLeadersProps) {
-  const leaders = useMemo(() => {
-    return themes
+  const sorted = useMemo(() => {
+    const withVol = themes
       .filter(t => t.avgRelVol !== null)
-      .sort((a, b) => (b.avgRelVol ?? 0) - (a.avgRelVol ?? 0))
-      .slice(0, 5);
+      .sort((a, b) => (b.avgRelVol ?? 0) - (a.avgRelVol ?? 0));
+    const withoutVol = themes.filter(t => t.avgRelVol === null);
+    return [...withVol, ...withoutVol];
   }, [themes]);
 
-  if (leaders.length === 0) return null;
+  const hasAnyVolume = sorted.some(t => t.avgRelVol !== null);
+  if (!hasAnyVolume) return null;
 
   return (
     <div className="mb-5">
-      <div className="mb-2.5 flex items-center gap-1.5">
+      <div className="mb-2.5 flex items-center gap-1.5 sticky top-0 z-10">
         <Zap size={12} className="text-[#00f5c4]" />
         <span
           className="text-[11px] font-semibold uppercase tracking-widest text-[#00f5c4]"
@@ -48,11 +50,23 @@ export default function VolumeLeaders({ themes, onSelectTheme, onDrilldownOpen }
         >
           Volume Leaders
         </span>
+        <span className="text-[10px] text-muted-foreground ml-1" style={{ fontFamily: DM_MONO }}>
+          {sorted.length} themes
+        </span>
       </div>
 
-      <div className="grid gap-2.5" style={{ gridTemplateColumns: `repeat(${leaders.length}, 1fr)` }}>
-        {leaders.map(t => {
-          const isHot = (t.avgRelVol ?? 0) > 1.8;
+      <div
+        className="overflow-y-auto rounded-lg vol-leaders-scroll"
+        style={{
+          maxHeight: "400px",
+          background: "rgba(255,255,255,0.02)",
+          border: "1px solid rgba(255,255,255,0.06)",
+        }}
+      >
+        {sorted.map(t => {
+          const hasVol = t.avgRelVol !== null;
+          const isHot = hasVol && (t.avgRelVol ?? 0) > 1.8;
+
           return (
             <button
               key={t.themeId}
@@ -60,75 +74,77 @@ export default function VolumeLeaders({ themes, onSelectTheme, onDrilldownOpen }
                 onSelectTheme(t.themeId);
                 onDrilldownOpen?.(t.themeName);
               }}
-              className="relative overflow-hidden rounded-lg p-3 text-left transition-all duration-200 hover:scale-[1.02] hover:shadow-lg cursor-pointer hover:border-[#00f5c4]"
-              style={{
-                background: "rgba(255,255,255,0.04)",
-                border: "1px solid rgba(255,255,255,0.08)",
-                backdropFilter: "blur(12px)",
-                boxShadow: "inset 0 0 0 1px rgba(0,245,196,0)",
-              }}
+              className="relative flex w-full items-center gap-3 px-3.5 py-2.5 text-left transition-all duration-150 cursor-pointer border-b border-[rgba(255,255,255,0.04)] hover:bg-[rgba(255,255,255,0.04)]"
               onMouseEnter={e => {
-                e.currentTarget.style.boxShadow = "inset 0 0 12px rgba(0,245,196,0.2), 0 0 12px rgba(0,245,196,0.1)";
-                e.currentTarget.style.borderColor = "rgba(0,245,196,0.4)";
+                e.currentTarget.style.boxShadow = "inset 0 0 12px rgba(0,245,196,0.08)";
               }}
               onMouseLeave={e => {
-                e.currentTarget.style.boxShadow = "inset 0 0 0 1px rgba(0,245,196,0)";
-                e.currentTarget.style.borderColor = "rgba(255,255,255,0.08)";
+                e.currentTarget.style.boxShadow = "none";
               }}
             >
-              {/* Hot watermark */}
-              {isHot && (
-                <Zap
-                  size={48}
-                  className="absolute -right-2 -bottom-2 opacity-[0.04] pointer-events-none"
-                  style={{ color: "#00f5c4" }}
-                />
-              )}
-
               {/* Theme name */}
               <div
-                className="font-semibold text-foreground text-[12px] leading-tight truncate mb-2"
-                style={{ fontFamily: "'Syne', sans-serif" }}
+                className={`font-semibold text-[12px] leading-tight truncate min-w-0 flex-1 ${
+                  hasVol ? "text-foreground" : "text-muted-foreground"
+                }`}
+                style={{ fontFamily: "'Syne', sans-serif", maxWidth: "200px" }}
               >
                 {t.themeName}
               </div>
 
-              {/* Rel Vol hero */}
-              <div className="flex items-baseline gap-0.5 mb-1">
-                <span
-                  className="text-xl font-bold leading-none"
-                  style={{ fontFamily: DM_MONO, color: getRelVolColor(t.avgRelVol!) }}
-                >
-                  {t.avgRelVol!.toFixed(1)}×
-                </span>
+              {/* Rel Vol */}
+              <div className="w-14 text-right shrink-0">
+                {hasVol ? (
+                  <span
+                    className="text-base font-bold leading-none"
+                    style={{ fontFamily: DM_MONO, color: getRelVolColor(t.avgRelVol!) }}
+                  >
+                    {t.avgRelVol!.toFixed(1)}×
+                  </span>
+                ) : (
+                  <span className="text-sm text-muted-foreground" style={{ fontFamily: DM_MONO }}>--</span>
+                )}
               </div>
 
               {/* Sustained Vol */}
-              <div className="flex items-center gap-2 mt-1.5">
-                {t.sustainedVol !== null && (
+              <div className="w-16 text-right shrink-0">
+                {hasVol && t.sustainedVol !== null ? (
                   <span
                     className="text-[11px] font-medium"
                     style={{ fontFamily: DM_MONO, color: sustainedColor(t.sustainedVol) }}
                   >
                     {t.sustainedVol > 0 ? "+" : ""}{t.sustainedVol.toFixed(0)}% sus
                   </span>
+                ) : (
+                  <span className="text-[11px] text-muted-foreground" style={{ fontFamily: DM_MONO }}>--</span>
                 )}
               </div>
 
-              {/* Bottom row: 1D perf + breadth */}
-              <div className="flex items-center justify-between mt-2 pt-1.5 border-t border-[rgba(255,255,255,0.06)]">
+              {/* 1D perf */}
+              <div className="w-16 text-right shrink-0">
                 <span
-                  className="text-[11px] font-medium"
-                  style={{ fontFamily: DM_MONO, color: perfColor(t.perf_1d) }}
+                  className={`text-[11px] font-medium ${!hasVol ? "text-muted-foreground" : ""}`}
+                  style={{ fontFamily: DM_MONO, color: hasVol ? perfColor(t.perf_1d) : undefined }}
                 >
                   {t.perf_1d > 0 ? "+" : ""}{t.perf_1d.toFixed(2)}%
                 </span>
+              </div>
+
+              {/* Breadth */}
+              <div className="w-10 text-right shrink-0">
                 <span
                   className="text-[10px] text-muted-foreground"
                   style={{ fontFamily: DM_MONO }}
                 >
                   {t.breadthUp}/{t.breadthTotal}
                 </span>
+              </div>
+
+              {/* Hot icon */}
+              <div className="w-5 shrink-0 flex justify-center">
+                {isHot && (
+                  <Zap size={12} className="text-[#00f5c4] opacity-60" />
+                )}
               </div>
             </button>
           );
