@@ -2,11 +2,13 @@ import { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import { getProcessedThemes, ThemeData } from "@/data/themeData";
 import { useLiveThemeData } from "@/hooks/useLiveThemeData";
 import ThemeCard from "@/components/ThemeCard";
+import ThemeDrilldownModal from "@/components/ThemeDrilldownModal";
 import ValidateTickersDialog from "@/components/ValidateTickersDialog";
-import { RefreshCw, Download, TrendingUp, TrendingDown, Wifi, WifiOff, Loader2, Settings, ScanLine, X, ShieldCheck, Save, Zap, Calendar, Brain, Eye } from "lucide-react";
+import { RefreshCw, Download, TrendingUp, TrendingDown, Wifi, WifiOff, Loader2, Settings, ScanLine, X, ShieldCheck, Save, Zap, Calendar, Brain, Eye, Bookmark, Bell } from "lucide-react";
 import { useFullScan } from "@/hooks/useFullScan";
 import { useEodSave } from "@/hooks/useEodSave";
 import { useSaveEodFromScan } from "@/hooks/useSaveEodFromScan";
+import { useWatchlist } from "@/hooks/useWatchlist";
 import { Link } from "react-router-dom";
 
 const TIMEFRAMES = ["Today", "1W", "1M", "3M", "YTD"] as const;
@@ -24,6 +26,8 @@ export default function Index() {
   const [selectedThemes, setSelectedThemes] = useState<Set<string>>(new Set());
   const [showSelector, setShowSelector] = useState(false);
   const [showValidateDialog, setShowValidateDialog] = useState(false);
+  const [drilldownTheme, setDrilldownTheme] = useState<ThemeData | null>(null);
+  const { pinned, alerts, getAlert } = useWatchlist();
 
   const {
     themes: allThemes,
@@ -381,24 +385,35 @@ export default function Index() {
             </button>
             <Link
               to="/intelligence"
-              className="rounded-md border border-[#00f5c4]/30 bg-[#00f5c4]/10 p-1.5 text-[#00f5c4] transition-colors hover:bg-[#00f5c4]/20"
+              className="inline-flex items-center gap-1.5 rounded-md border border-primary/30 bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary transition-colors hover:bg-primary/20"
               title="Theme Intelligence"
             >
-              <Brain size={16} />
+              <Brain size={14} />
+              <span className="hidden sm:inline">Intelligence</span>
             </Link>
             <Link
               to="/watchlist"
-              className="rounded-md border border-border p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+              className="relative inline-flex items-center gap-1.5 rounded-md border border-[hsl(40,80%,50%)]/30 bg-[hsl(40,80%,50%)]/10 px-3 py-1.5 text-xs font-semibold text-[hsl(40,80%,50%)] transition-colors hover:bg-[hsl(40,80%,50%)]/20"
               title="Watchlist"
             >
-              <Eye size={16} />
+              <Bookmark size={14} />
+              <span className="hidden sm:inline">Watchlist</span>
+              {pinned.length > 0 && (
+                <span className="inline-flex items-center gap-0.5 rounded-full bg-primary/20 px-1.5 py-0 text-[9px] font-bold text-primary">
+                  {pinned.length}
+                </span>
+              )}
             </Link>
             <Link
               to="/eod-history"
-              className="rounded-md border border-border p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+              className="relative inline-flex items-center gap-1.5 rounded-md border border-gain-medium/30 bg-gain-medium/10 px-3 py-1.5 text-xs font-semibold text-gain-medium transition-colors hover:bg-gain-medium/20"
               title="EOD History"
             >
-              <Calendar size={16} />
+              <Calendar size={14} />
+              <span className="hidden sm:inline">EOD</span>
+              {eodStatus && !eodStatus.alreadySaved && !eodStatus.isWeekend && (
+                <span className="h-2 w-2 rounded-full bg-[hsl(40,80%,50%)] animate-pulse" title="EOD not saved today" />
+              )}
             </Link>
             <Link
               to="/admin"
@@ -488,6 +503,7 @@ export default function Index() {
           title="Strong / Best Performing"
           accent="primary"
           themes={strong}
+          onCardClick={setDrilldownTheme}
         />
 
         {/* ─── NEUTRAL ───────────────────────────────── */}
@@ -497,6 +513,7 @@ export default function Index() {
             title="Neutral / Mixed"
             accent="muted"
             themes={neutral}
+            onCardClick={setDrilldownTheme}
           />
         )}
 
@@ -507,6 +524,7 @@ export default function Index() {
             title="Weaker / Lagging"
             accent="destructive"
             themes={weak}
+            onCardClick={setDrilldownTheme}
           />
         )}
       </main>
@@ -520,6 +538,7 @@ export default function Index() {
       </footer>
 
       <ValidateTickersDialog open={showValidateDialog} onOpenChange={setShowValidateDialog} />
+      <ThemeDrilldownModal theme={drilldownTheme} open={!!drilldownTheme} onOpenChange={(o) => { if (!o) setDrilldownTheme(null); }} />
     </div>
   );
 }
@@ -529,11 +548,13 @@ function Section({
   title,
   accent,
   themes,
+  onCardClick,
 }: {
   icon: React.ReactNode;
   title: string;
   accent: "primary" | "destructive" | "muted";
   themes: ThemeData[];
+  onCardClick?: (theme: ThemeData) => void;
 }) {
   const accentColor =
     accent === "primary"
@@ -555,7 +576,7 @@ function Section({
       </div>
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 min-[1800px]:grid-cols-4">
         {themes.map((t, i) => (
-          <ThemeCard key={t.theme_name} theme={t} index={i} />
+          <ThemeCard key={t.theme_name} theme={t} index={i} onClick={onCardClick} />
         ))}
       </div>
     </section>

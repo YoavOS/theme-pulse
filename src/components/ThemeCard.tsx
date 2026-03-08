@@ -46,7 +46,7 @@ function TickerChip({ symbol, pct, skipped, skipReason }: { symbol: string; pct:
   );
 }
 
-export default function ThemeCard({ theme, index }: { theme: ThemeData; index: number }) {
+export default function ThemeCard({ theme, index, onClick }: { theme: ThemeData; index: number; onClick?: (theme: ThemeData) => void }) {
   const { isPinned, togglePin } = useWatchlist();
   const themePinned = isPinned(theme.theme_name);
   const validTickers = theme.tickers.filter(t => !t.skipped);
@@ -76,7 +76,8 @@ export default function ThemeCard({ theme, index }: { theme: ThemeData; index: n
 
   return (
     <div
-      className="group relative rounded-lg border bg-card px-3.5 py-3 transition-all hover:border-muted-foreground/30 hover:bg-surface-hover"
+      onClick={(e) => { if (onClick) onClick(theme); }}
+      className={`group relative rounded-lg border bg-card px-3.5 py-3 transition-all hover:border-muted-foreground/30 hover:bg-surface-hover ${onClick ? "cursor-pointer" : ""}`}
       style={{
         animationDelay: `${index * 40}ms`,
         borderColor: themePinned ? "rgba(0,245,196,0.25)" : undefined,

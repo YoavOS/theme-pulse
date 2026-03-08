@@ -1,12 +1,12 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { Link } from "react-router-dom";
-import { ArrowLeft, Pin, Bell, Check, X } from "lucide-react";
+import { ArrowLeft, Pin, Bell, Check, X, Plus } from "lucide-react";
 import { useWatchlist, AlertConfig } from "@/hooks/useWatchlist";
 import { useLiveThemeData } from "@/hooks/useLiveThemeData";
 import ThemeCard from "@/components/ThemeCard";
+import AddThemeModal from "@/components/AddThemeModal";
 import { ThemeData } from "@/data/themeData";
 import { supabase } from "@/integrations/supabase/client";
-import { toast } from "@/components/ui/sonner";
 
 export default function Watchlist() {
   const { pinned, togglePin, alerts, setAlert, getAlert } = useWatchlist();
@@ -14,13 +14,15 @@ export default function Watchlist() {
   const [triggeredAlerts, setTriggeredAlerts] = useState<
     { themeName: string; message: string; type: "up" | "down" }[]
   >([]);
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [removingTheme, setRemovingTheme] = useState<string | null>(null);
+  const [fadingOut, setFadingOut] = useState<Set<string>>(new Set());
 
   const pinnedThemes = useMemo(
     () => themes.filter(t => pinned.includes(t.theme_name)),
     [themes, pinned]
   );
 
-  // Check alerts on load
   useEffect(() => {
     checkAlerts();
   }, [pinnedThemes]);
@@ -28,7 +30,6 @@ export default function Watchlist() {
   const checkAlerts = useCallback(async () => {
     const triggered: typeof triggeredAlerts = [];
 
-    // Use ticker_performance for 1W data
     const { data: perfData } = await supabase
       .from("ticker_performance")
       .select("symbol, perf_1w");
@@ -36,11 +37,8 @@ export default function Watchlist() {
     if (!perfData) return;
 
     const perfMap = new Map<string, number>();
-    for (const p of perfData) {
-      perfMap.set(p.symbol, p.perf_1w || 0);
-    }
+    for (const p of perfData) perfMap.set(p.symbol, p.perf_1w || 0);
 
-    // Get themes + their tickers
     const { data: themesDb } = await supabase.from("themes").select("id, name");
     const { data: tickers } = await supabase.from("theme_tickers").select("theme_id, ticker_symbol");
 
@@ -92,6 +90,19 @@ export default function Watchlist() {
     setTriggeredAlerts(prev => prev.filter((_, i) => i !== index));
   };
 
+  const handleRemove = (themeName: string) => {
+    setFadingOut(prev => new Set(prev).add(themeName));
+    setTimeout(() => {
+      togglePin(themeName);
+      setFadingOut(prev => {
+        const next = new Set(prev);
+        next.delete(themeName);
+        return next;
+      });
+      setRemovingTheme(null);
+    }, 300);
+  };
+
   return (
     <div className="min-h-screen bg-background">
       <header className="sticky top-0 z-30 border-b border-border bg-background/80 backdrop-blur-md">
@@ -115,6 +126,13 @@ export default function Watchlist() {
               </span>
             )}
           </div>
+          <button
+            onClick={() => setShowAddModal(true)}
+            className="inline-flex items-center gap-1.5 rounded-md border border-primary/40 bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary transition-colors hover:bg-primary/20"
+          >
+            <Plus size={14} />
+            Add Theme
+          </button>
         </div>
       </header>
 
@@ -126,8 +144,8 @@ export default function Watchlist() {
               key={i}
               className={`flex items-start gap-2 rounded-lg border p-3 text-xs shadow-lg backdrop-blur-md ${
                 alert.type === "up"
-                  ? "border-[#00f5c4]/30 bg-[#00f5c4]/10 text-[#00f5c4]"
-                  : "border-[#f5a623]/30 bg-[#f5a623]/10 text-[#f5a623]"
+                  ? "border-primary/30 bg-primary/10 text-primary"
+                  : "border-[hsl(40,80%,50%)]/30 bg-[hsl(40,80%,50%)]/10 text-[hsl(40,80%,50%)]"
               }`}
             >
               <span className="flex-1">{alert.message}</span>
@@ -151,34 +169,76 @@ export default function Watchlist() {
             <p className="text-sm text-muted-foreground text-center">
               No themes pinned yet — click 📌 on any theme card to add it here
             </p>
+            <button
+              onClick={() => setShowAddModal(true)}
+              className="mt-4 inline-flex items-center gap-1.5 rounded-md border border-primary/40 bg-primary/10 px-4 py-2 text-sm font-semibold text-primary transition-colors hover:bg-primary/20"
+            >
+              <Plus size={16} />
+              Browse & Add Themes
+            </button>
           </div>
         ) : (
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 min-[1800px]:grid-cols-4">
             {pinnedThemes.map((theme, i) => (
-              <div key={theme.theme_name}>
+              <div
+                key={theme.theme_name}
+                className="transition-all duration-300"
+                style={{
+                  opacity: fadingOut.has(theme.theme_name) ? 0 : 1,
+                  transform: fadingOut.has(theme.theme_name) ? "scale(0.95)" : "scale(1)",
+                  maxHeight: fadingOut.has(theme.theme_name) ? "0px" : "500px",
+                  overflow: "hidden",
+                }}
+              >
                 <div className="relative">
-                  <div style={{ boxShadow: "0 0 0 1px rgba(0,245,196,0.2), 0 0 12px rgba(0,245,196,0.08)" }} className="rounded-lg">
+                  <div style={{ boxShadow: "0 0 0 1px hsla(152,100%,50%,0.2), 0 0 12px hsla(152,100%,50%,0.08)" }} className="rounded-lg">
                     <ThemeCard theme={theme} index={i} />
                   </div>
-                  {/* Unpin button */}
-                  <button
-                    onClick={() => togglePin(theme.theme_name)}
-                    className="absolute top-2 right-2 z-10 rounded-md p-1 text-[#00f5c4] bg-background/80 hover:bg-accent transition-colors"
-                    title="Unpin"
-                  >
-                    <Pin size={12} className="fill-current" />
-                  </button>
                 </div>
                 <AlertRow
                   themeName={theme.theme_name}
                   config={getAlert(theme.theme_name)}
                   onSave={(c) => setAlert(theme.theme_name, c)}
                 />
+                {/* Remove link */}
+                <div className="px-3 py-1.5 text-center">
+                  {removingTheme === theme.theme_name ? (
+                    <span className="text-[10px] text-muted-foreground">
+                      Remove from watchlist?{" "}
+                      <button
+                        onClick={() => handleRemove(theme.theme_name)}
+                        className="text-destructive font-semibold hover:underline"
+                      >
+                        Yes
+                      </button>
+                      {" / "}
+                      <button
+                        onClick={() => setRemovingTheme(null)}
+                        className="text-muted-foreground hover:underline"
+                      >
+                        No
+                      </button>
+                    </span>
+                  ) : (
+                    <button
+                      onClick={() => setRemovingTheme(theme.theme_name)}
+                      className="inline-flex items-center gap-1 text-[10px] text-muted-foreground hover:text-destructive transition-colors"
+                    >
+                      <X size={10} /> Remove
+                    </button>
+                  )}
+                </div>
               </div>
             ))}
           </div>
         )}
       </main>
+
+      <AddThemeModal
+        open={showAddModal}
+        onOpenChange={setShowAddModal}
+        themes={themes}
+      />
     </div>
   );
 }
@@ -237,7 +297,7 @@ function AlertRow({
         onClick={handleSave}
         className="ml-auto rounded border border-border px-2 py-0.5 text-[10px] text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
       >
-        {saved ? <Check size={10} className="text-[#00f5c4]" /> : "Set"}
+        {saved ? <Check size={10} className="text-primary" /> : "Set"}
       </button>
     </div>
   );
