@@ -223,6 +223,7 @@ export default function OverviewTab({
 
    const { themes: liveThemes } = useLiveThemeData("Today");
    const { isThemeDryingUp } = useVolumeDryUp();
+   const { spy, getRelativeStrength } = useSpyBenchmark();
 
    const handleSelectTheme = useCallback((themeId: string) => {
      const el = rowRefs.current.get(themeId);
