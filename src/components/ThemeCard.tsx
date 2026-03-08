@@ -76,7 +76,8 @@ export default function ThemeCard({ theme, index, onClick }: { theme: ThemeData;
 
   return (
     <div
-      className="group relative rounded-lg border bg-card px-3.5 py-3 transition-all hover:border-muted-foreground/30 hover:bg-surface-hover"
+      onClick={(e) => { if (onClick) onClick(theme); }}
+      className={`group relative rounded-lg border bg-card px-3.5 py-3 transition-all hover:border-muted-foreground/30 hover:bg-surface-hover ${onClick ? "cursor-pointer" : ""}`}
       style={{
         animationDelay: `${index * 40}ms`,
         borderColor: themePinned ? "rgba(0,245,196,0.25)" : undefined,
