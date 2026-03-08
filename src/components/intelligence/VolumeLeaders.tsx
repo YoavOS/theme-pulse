@@ -25,6 +25,7 @@ function sustainedColor(val: number): string {
 interface VolumeLeadersProps {
   themes: ThemeIntelData[];
   onSelectTheme: (themeId: string) => void;
+  onDrilldownOpen?: (themeName: string) => void;
 }
 
 export default function VolumeLeaders({ themes, onSelectTheme }: VolumeLeadersProps) {
