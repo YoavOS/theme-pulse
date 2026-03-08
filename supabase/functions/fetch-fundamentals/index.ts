@@ -38,10 +38,20 @@ function computeValuation(pe: number | null, peg: number | null) {
   return { valuationScore, valuationLabel };
 }
 
-function computeSmartMoney(instPct: number | null, instChange: number | null, avgMSPR: number | null) {
+function computeSmartMoney(instPct: number | null, instChange: number | null, avgMSPR: number | null, buys: number, sells: number) {
+  // Institutional ownership score (0-40)
   const instScore = instPct == null ? 0 : instPct > 70 ? 40 : instPct > 50 ? 30 : instPct > 30 ? 20 : instPct > 10 ? 10 : 0;
+  // Institutional change score (0-30)
   const instChangeScore = instChange == null ? 0 : instChange > 5 ? 30 : instChange > 0 ? 20 : instChange > -5 ? 10 : 0;
-  const insiderScore = avgMSPR == null ? 0 : avgMSPR > 0.5 ? 30 : avgMSPR > 0 ? 20 : avgMSPR > -0.5 ? 10 : 0;
+
+  // Insider score (0-30) — use MSPR if available, otherwise derive from buy/sell ratio
+  let insiderScore = 0;
+  if (avgMSPR != null) {
+    insiderScore = avgMSPR > 0.5 ? 30 : avgMSPR > 0 ? 20 : avgMSPR > -0.5 ? 10 : 0;
+  } else if (buys + sells > 0) {
+    const buyRatio = buys / (buys + sells);
+    insiderScore = buyRatio > 0.6 ? 30 : buyRatio > 0.4 ? 20 : buyRatio > 0.2 ? 10 : 0;
+  }
 
   const smartMoneyScore = instScore + instChangeScore + insiderScore;
   const smartMoneyLabel =
@@ -51,11 +61,16 @@ function computeSmartMoney(instPct: number | null, instChange: number | null, av
     "Low institutional backing";
 
   const insiderSentimentLabel =
-    avgMSPR == null ? "No data" :
-    avgMSPR > 0.5 ? "Strong net buying" :
-    avgMSPR > 0 ? "Mild net buying" :
-    avgMSPR > -0.5 ? "Mild net selling" :
-    "Heavy net selling";
+    avgMSPR != null ? (
+      avgMSPR > 0.5 ? "Strong net buying" :
+      avgMSPR > 0 ? "Mild net buying" :
+      avgMSPR > -0.5 ? "Mild net selling" :
+      "Heavy net selling"
+    ) : buys + sells > 0 ? (
+      buys > sells ? "Net buying" :
+      buys === sells ? "Neutral" :
+      "Net selling"
+    ) : "No data";
 
   return { smartMoneyScore, smartMoneyLabel, insiderSentimentLabel };
 }
