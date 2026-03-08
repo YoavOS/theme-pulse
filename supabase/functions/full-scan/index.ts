@@ -8,7 +8,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const FINNHUB_KEY = Deno.env.get("FINNHUB_API_KEY") || "";
 const TICKERS_PER_CHUNK = 12; // tickers per edge function invocation
-const CALL_DELAY_MS = 200; // 200ms between API calls ≈ 5 calls/sec (safe for 30/sec limit)
+const CALL_DELAY_MS = 1100; // 1100ms between API calls ≈ 1 call/sec (safe for 60/min free tier)
 const MAX_RETRIES = 2;
 const RETRY_DELAY_MS = 30000;
 
