@@ -68,12 +68,15 @@ function TickerChip({ symbol, pct, skipped, skipReason }: { symbol: string; pct:
   );
 }
 
-export default function ThemeCard({ theme, index, onClick, fetchVolume, getThemeSignals }: {
+export default function ThemeCard({ theme, index, onClick, fetchVolume, getThemeSignals, newsCount, newsNegative, onNewsBadgeClick }: {
   theme: ThemeData;
   index: number;
   onClick?: (theme: ThemeData) => void;
   fetchVolume?: (symbols: string[]) => void;
   getThemeSignals?: (symbols: string[]) => ThemeDemandSignals;
+  newsCount?: number;
+  newsNegative?: boolean;
+  onNewsBadgeClick?: (theme: ThemeData) => void;
 }) {
   const { isPinned, togglePin } = useWatchlist();
   const themePinned = isPinned(theme.theme_name);
