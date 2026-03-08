@@ -122,7 +122,7 @@ export function useVolumeData() {
     const vols = tickerSymbols.map(s => volumeMap[s]).filter(Boolean).filter(v => !v.error && (v.avg_10d > 0 || v.avg_3m > 0));
 
     if (vols.length === 0) {
-      return { relVol: null, sustainedVol: null, spikingUp: 0, spikingDown: 0, totalTickers: tickerSymbols.length, loading };
+      return { relVol: null, relVolEstimated: false, sustainedVol: null, spikingUp: 0, spikingDown: 0, totalTickers: tickerSymbols.length, loading };
     }
 
     // A: Relative Volume = avg of (today_vol / avg_20d) across tickers with valid data
@@ -130,6 +130,7 @@ export function useVolumeData() {
     const relVol = relVols.length > 0
       ? Math.round((relVols.reduce((a, b) => a + b, 0) / relVols.length) * 100) / 100
       : null;
+    const relVolEstimated = vols.some(v => v.today_vol_estimated);
 
     // B: Sustained Volume = avg of ((avg_10d / avg_3m - 1) * 100) across tickers
     const susVols = vols.filter(v => v.avg_3m > 0 && v.avg_10d > 0).map(v => ((v.avg_10d / v.avg_3m) - 1) * 100);
@@ -147,7 +148,7 @@ export function useVolumeData() {
       else if (changePct < -30) spikingDown++;
     }
 
-    return { relVol, sustainedVol, spikingUp, spikingDown, totalTickers: tickerSymbols.length, loading };
+    return { relVol, relVolEstimated, sustainedVol, spikingUp, spikingDown, totalTickers: tickerSymbols.length, loading };
   }, [volumeMap, loadingSymbols]);
 
   const clearCache = useCallback(() => {
