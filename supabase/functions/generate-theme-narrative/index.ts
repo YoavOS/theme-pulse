@@ -31,6 +31,12 @@ DISPERSION RULES:
 - If dispersion is <0.5, mention themes are moving in lockstep suggesting macro-driven action rather than stock-specific rotation
 - Only mention dispersion if the data includes it and it adds meaningful context
 
+RELATIVE STRENGTH RULES:
+- Always contextualize theme performance relative to SPY when SPY data is provided
+- A theme up 1% when SPY is up 2% is underperforming — call it out
+- A theme up 1% when SPY is down 0.5% is showing real strength — highlight this
+- Use relative strength language when it adds meaningful context, don't force it on every theme
+
 FORMAT:
 Write 6–8 sentences of flowing prose. No bullet points. No headers. No lists.
 Cover: what is genuinely leading with broad confirmation, what is a single-stock story masquerading as a theme move, what is fading and why, what the overall rotation suggests, and one specific actionable thing to watch next session.`;

@@ -436,6 +436,11 @@ export default function ThemeDrilldownModal({
                       )}
                     </td>
                     <td className="px-2 py-2">
+                      <span className={`font-mono text-[10px] ${rsF.color}`} style={{ fontFamily: "'DM Mono', monospace" }}>
+                        {tickerRS !== null ? `${tickerRS >= 0 ? "+" : ""}${tickerRS.toFixed(2)}%` : "—"}
+                      </span>
+                    </td>
+                    <td className="px-2 py-2">
                       <MiniSparkline data={extra?.sparkline || []} up={sparkUp} />
                     </td>
                   </tr>
