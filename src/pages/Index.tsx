@@ -47,6 +47,8 @@ export default function Index() {
   const [newsPanelTheme, setNewsPanelTheme] = useState<ThemeData | null>(null);
   const [newsPanelSummary, setNewsPanelSummary] = useState<string | null>(null);
   const [newsPanelSummaryLoading, setNewsPanelSummaryLoading] = useState(false);
+  const { fetchFundamentals, getCachedFundamentals, getThemeFundamentalScore, isLoading: isFundLoading, prefetchTopThemes: prefetchFundamentals } = useFundamentals();
+  const [drilldownDefaultTab, setDrilldownDefaultTab] = useState<"tickers" | "news" | "fundamentals">("tickers");
 
   const {
     themes: allThemes,
