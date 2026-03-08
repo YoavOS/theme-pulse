@@ -70,6 +70,26 @@ function VolumeSignal({ theme, isAccelerating }: { theme: ThemeIntelData; isAcce
   }
 }
 
+function BreadthEventLabel({ themeName }: { themeName: string }) {
+  const event = useMemo(() => hasThemeBreadthEvent(themeName), [themeName]);
+  if (!event) return null;
+  return (
+    <span
+      className={`text-[10px] font-semibold uppercase tracking-wide ${
+        event.type === "surge" ? "text-[#00f5c4]" : "text-[#60a5fa]"
+      }`}
+      style={{ fontFamily: DM_MONO }}
+      title={
+        event.type === "surge"
+          ? `Breadth surged ${event.yesterdayBreadth}% → ${event.todayBreadth}%`
+          : `Breadth collapsed ${event.yesterdayBreadth}% → ${event.todayBreadth}%`
+      }
+    >
+      {event.type === "surge" ? "🔥 Breadth Surge" : "❄️ Breadth Collapse"}
+    </span>
+  );
+}
+
 function ThemeCard({ theme, isAccelerating }: { theme: ThemeIntelData; isAccelerating: boolean }) {
   const labelColorMap: Record<string, string> = {
     "Breaking Out": "text-[#00f5c4]",
