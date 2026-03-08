@@ -1,27 +1,37 @@
 import { ThemeIntelData } from "@/hooks/useThemeIntelligence";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Rocket, TrendingDown } from "lucide-react";
+import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 
-function MiniBar({ value1d, value1m }: { value1d: number; value1m: number }) {
-  const max = Math.max(Math.abs(value1d), Math.abs(value1m), 0.1);
-  const w1d = Math.abs(value1d) / max * 100;
-  const w1m = Math.abs(value1m) / max * 100;
+const DM_MONO = "'DM Mono', monospace";
+const EOD_TOOLTIP = "Accumulating EOD history — available after more daily saves";
 
+function MiniBar({ label, value, max, hasData }: { label: string; value: number; max: number; hasData: boolean }) {
+  const w = hasData ? (Math.abs(value) / max) * 100 : 0;
   return (
     <div className="flex items-center gap-1.5 text-[10px]">
-      <span className="font-mono text-muted-foreground w-6 text-right">1D</span>
+      <span className="text-muted-foreground w-6 text-right" style={{ fontFamily: DM_MONO }}>{label}</span>
       <div className="h-1.5 w-16 overflow-hidden rounded-full bg-[rgba(255,255,255,0.06)]">
         <div
           className="h-full rounded-full"
           style={{
-            width: `${w1d}%`,
-            backgroundColor: value1d >= 0 ? "#00f5c4" : "#f5a623",
+            width: `${w}%`,
+            backgroundColor: value >= 0 ? "#00f5c4" : "#f5a623",
           }}
         />
       </div>
-      <span className={`font-mono w-12 ${value1d >= 0 ? "text-[#00f5c4]" : "text-[#f5a623]"}`}>
-        {value1d >= 0 ? "+" : ""}{value1d.toFixed(2)}%
-      </span>
+      {hasData ? (
+        <span className={`w-12 ${value >= 0 ? "text-[#00f5c4]" : "text-[#f5a623]"}`} style={{ fontFamily: DM_MONO }}>
+          {value >= 0 ? "+" : ""}{value.toFixed(2)}%
+        </span>
+      ) : (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span className="w-12 text-muted-foreground cursor-help" style={{ fontFamily: DM_MONO }}>--</span>
+          </TooltipTrigger>
+          <TooltipContent side="top" className="max-w-[200px] text-xs">{EOD_TOOLTIP}</TooltipContent>
+        </Tooltip>
+      )}
     </div>
   );
 }
@@ -35,6 +45,8 @@ function ThemeCard({ theme }: { theme: ThemeIntelData }) {
     "Recovering": "text-[#00f5c4]",
     "Consolidating": "text-muted-foreground",
   }[theme.label];
+
+  const max = Math.max(Math.abs(theme.perf_1d), Math.abs(theme.perf_1m), 0.1);
 
   return (
     <div
@@ -56,22 +68,8 @@ function ThemeCard({ theme }: { theme: ThemeIntelData }) {
 
       {/* Mini bars comparing 1D vs 1M */}
       <div className="space-y-1 mb-2.5">
-        <MiniBar value1d={theme.perf_1d} value1m={theme.perf_1m} />
-        <div className="flex items-center gap-1.5 text-[10px]">
-          <span className="font-mono text-muted-foreground w-6 text-right">1M</span>
-          <div className="h-1.5 w-16 overflow-hidden rounded-full bg-[rgba(255,255,255,0.06)]">
-            <div
-              className="h-full rounded-full"
-              style={{
-                width: `${Math.abs(theme.perf_1m) / Math.max(Math.abs(theme.perf_1d), Math.abs(theme.perf_1m), 0.1) * 100}%`,
-                backgroundColor: theme.perf_1m >= 0 ? "#00f5c4" : "#f5a623",
-              }}
-            />
-          </div>
-          <span className={`font-mono w-12 ${theme.perf_1m >= 0 ? "text-[#00f5c4]" : "text-[#f5a623]"}`}>
-            {theme.perf_1m >= 0 ? "+" : ""}{theme.perf_1m.toFixed(2)}%
-          </span>
-        </div>
+        <MiniBar label="1D" value={theme.perf_1d} max={max} hasData={true} />
+        <MiniBar label="1M" value={theme.perf_1m} max={max} hasData={theme.hasEodHistory} />
       </div>
 
       {/* Breadth */}
@@ -82,7 +80,7 @@ function ThemeCard({ theme }: { theme: ThemeIntelData }) {
             style={{ width: `${theme.breadthTotal > 0 ? (theme.breadthUp / theme.breadthTotal) * 100 : 0}%` }}
           />
         </div>
-        <span className="font-mono shrink-0">
+        <span className="shrink-0" style={{ fontFamily: DM_MONO }}>
           Breadth: {theme.breadthUp}/{theme.breadthTotal} confirm
         </span>
       </div>
@@ -123,7 +121,7 @@ export default function MomentumTab({
           <h3 className="font-['Syne',sans-serif] text-sm font-semibold text-[#00f5c4]">
             Accelerating
           </h3>
-          <span className="rounded-full bg-[#00f5c4]/10 px-2 py-0.5 text-[10px] font-mono text-[#00f5c4]">
+          <span className="rounded-full bg-[#00f5c4]/10 px-2 py-0.5 text-[10px] text-[#00f5c4]" style={{ fontFamily: DM_MONO }}>
             {accelerating.length}
           </span>
         </div>
@@ -133,7 +131,7 @@ export default function MomentumTab({
           ) : accelerating.length === 0 ? (
             <p className="text-xs text-muted-foreground py-4 text-center">No accelerating themes</p>
           ) : (
-            accelerating
+            [...accelerating]
               .sort((a, b) => (b.perf_1d - b.perf_1m) - (a.perf_1d - a.perf_1m))
               .map(t => <ThemeCard key={t.themeId} theme={t} />)
           )}
@@ -147,7 +145,7 @@ export default function MomentumTab({
           <h3 className="font-['Syne',sans-serif] text-sm font-semibold text-[#f5a623]">
             Fading
           </h3>
-          <span className="rounded-full bg-[#f5a623]/10 px-2 py-0.5 text-[10px] font-mono text-[#f5a623]">
+          <span className="rounded-full bg-[#f5a623]/10 px-2 py-0.5 text-[10px] text-[#f5a623]" style={{ fontFamily: DM_MONO }}>
             {fading.length}
           </span>
         </div>
@@ -157,7 +155,7 @@ export default function MomentumTab({
           ) : fading.length === 0 ? (
             <p className="text-xs text-muted-foreground py-4 text-center">No fading themes</p>
           ) : (
-            fading
+            [...fading]
               .sort((a, b) => (a.perf_1d - a.perf_1m) - (b.perf_1d - b.perf_1m))
               .map(t => <ThemeCard key={t.themeId} theme={t} />)
           )}

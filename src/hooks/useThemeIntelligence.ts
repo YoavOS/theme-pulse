@@ -6,6 +6,7 @@ export interface ThemeIntelData {
   themeName: string;
   description: string | null;
   symbols: string[];
+  primaryTicker: string;
   tickers: {
     symbol: string;
     perf_1d: number;
@@ -20,6 +21,8 @@ export interface ThemeIntelData {
   perf_1d: number;
   perf_1w: number;
   perf_1m: number;
+  hasEodHistory: boolean; // true if 1W/1M data is meaningful (not all zeros)
+  sparklineData: number[]; // last 7 daily close prices for primary ticker
   momentumScore: number;
   breadthUp: number;
   breadthTotal: number;
@@ -27,7 +30,6 @@ export interface ThemeIntelData {
 }
 
 function computeMomentumScore(perf1d: number, perf1w: number, perf1m: number): number {
-  // Raw weighted score
   const raw = perf1d * 0.20 + perf1w * 0.35 + perf1m * 0.45;
   return raw;
 }
@@ -81,13 +83,55 @@ export function useThemeIntelligence() {
         themeSymbols.set(tk.theme_id, arr);
       }
 
-      // Build ThemeIntelData
-      const result: ThemeIntelData[] = [];
+      // Determine primary ticker per theme (first symbol with "done" status)
+      // and collect all primary tickers for sparkline query
+      const primaryTickers: string[] = [];
+      const themeEntries: { id: string; name: string; description: string | null; symbols: string[]; primaryTicker: string }[] = [];
+
       for (const t of themesRes.data) {
         const symbols = themeSymbols.get(t.id) || [];
         if (symbols.length === 0) continue;
+        // Pick the first "done" ticker as primary, fallback to first symbol
+        const primary = symbols.find(s => perfMap.get(s)?.status === "done") || symbols[0];
+        primaryTickers.push(primary);
+        themeEntries.push({ id: t.id, name: t.name, description: t.description, symbols, primaryTicker: primary });
+      }
 
-        const tickers = symbols.map(s => {
+      // Fetch sparkline data: last 7 distinct dates of eod_prices for primary tickers
+      const sparklineMap = new Map<string, number[]>();
+      if (primaryTickers.length > 0) {
+        const { data: eodData } = await supabase
+          .from("eod_prices")
+          .select("symbol, date, close_price")
+          .in("symbol", primaryTickers)
+          .order("date", { ascending: false })
+          .limit(primaryTickers.length * 10); // rough upper bound
+
+        if (eodData) {
+          // Group by symbol, take last 7 dates
+          const bySymbol = new Map<string, { date: string; close: number }[]>();
+          for (const row of eodData) {
+            const arr = bySymbol.get(row.symbol) || [];
+            arr.push({ date: row.date, close: row.close_price });
+            bySymbol.set(row.symbol, arr);
+          }
+          for (const [symbol, rows] of bySymbol) {
+            // Already sorted desc, take first 7 then reverse for chronological
+            const last7 = rows.slice(0, 7).reverse();
+            sparklineMap.set(symbol, last7.map(r => r.close));
+          }
+        }
+      }
+
+      // Check if any ticker has non-zero 1W or 1M data
+      const hasAnyHistorical = perfRes.data.some(
+        p => (p.perf_1w !== null && p.perf_1w !== 0) || (p.perf_1m !== null && p.perf_1m !== 0)
+      );
+
+      // Build ThemeIntelData
+      const result: ThemeIntelData[] = [];
+      for (const entry of themeEntries) {
+        const tickers = entry.symbols.map(s => {
           const p = perfMap.get(s);
           return {
             symbol: s,
@@ -112,15 +156,23 @@ export function useThemeIntelligence() {
         const perf_1m = avg("perf_1m");
         const breadthUp = valid.filter(tk => tk.perf_1d > 0).length;
 
+        // Check if this specific theme has non-zero historical data
+        const themeHasHistory = hasAnyHistorical && valid.some(
+          tk => (tk.perf_1w !== 0) || (tk.perf_1m !== 0)
+        );
+
         result.push({
-          themeId: t.id,
-          themeName: t.name,
-          description: t.description,
-          symbols,
+          themeId: entry.id,
+          themeName: entry.name,
+          description: entry.description,
+          symbols: entry.symbols,
+          primaryTicker: entry.primaryTicker,
           tickers,
           perf_1d,
           perf_1w,
           perf_1m,
+          hasEodHistory: themeHasHistory,
+          sparklineData: sparklineMap.get(entry.primaryTicker) || [],
           momentumScore: computeMomentumScore(perf_1d, perf_1w, perf_1m),
           breadthUp,
           breadthTotal: valid.length,
@@ -130,7 +182,6 @@ export function useThemeIntelligence() {
 
       // Normalize momentum scores to 0-100
       const normalized = normalizeMomentumScores(result);
-      // Sort by momentum score desc
       normalized.sort((a, b) => b.momentumScore - a.momentumScore);
 
       setThemes(normalized);
@@ -145,7 +196,6 @@ export function useThemeIntelligence() {
     fetchData();
   }, [fetchData]);
 
-  // Derived data
   const accelerating = themes.filter(t => t.perf_1d > t.perf_1m);
   const fading = themes.filter(t => t.perf_1m > 0 && t.perf_1d < t.perf_1m);
 
