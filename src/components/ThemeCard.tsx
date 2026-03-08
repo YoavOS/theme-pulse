@@ -67,6 +67,9 @@ export default function ThemeCard({ theme, index, onClick, fetchVolume, getTheme
   const bar = getBarColors(ratio);
   const sign = theme.performance_pct >= 0 ? "+" : "";
 
+  const tickerSymbols = useMemo(() => theme.tickers.map(t => t.symbol), [theme.tickers]);
+  const signals = getThemeSignals ? getThemeSignals(tickerSymbols) : null;
+
   // Sort tickers: non-skipped by absolute % desc, skipped at end. Show top 5.
   const sorted = [...theme.tickers].sort((a, b) => {
     if (a.skipped && !b.skipped) return 1;
