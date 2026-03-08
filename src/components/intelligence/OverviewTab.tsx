@@ -326,7 +326,10 @@ export default function OverviewTab({
                 return (
                   <tr
                     key={t.themeId}
-                    className="border-b border-[rgba(255,255,255,0.04)] transition-all duration-200 hover:bg-[rgba(255,255,255,0.03)]"
+                    ref={el => { if (el) rowRefs.current.set(t.themeId, el); }}
+                    className={`border-b border-[rgba(255,255,255,0.04)] transition-all duration-200 hover:bg-[rgba(255,255,255,0.03)] ${
+                      highlightId === t.themeId ? "bg-[rgba(0,245,196,0.06)]" : ""
+                    }`}
                     style={{ borderLeft: borderColor }}
                   >
                     <td className="px-3 py-2.5 text-xs text-muted-foreground" style={{ fontFamily: DM_MONO }}>
