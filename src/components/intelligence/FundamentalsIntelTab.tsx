@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { ThemeIntelData } from "@/hooks/useThemeIntelligence";
-import { FundamentalsData, getScoreLabel, getStockTypeInfo, getScoreBadgeColor } from "@/hooks/useFundamentals";
+import { FundamentalsData, getScoreLabel, getStockTypeInfo, getScoreBadgeColor, getSmartMoneyColor } from "@/hooks/useFundamentals";
 import { supabase } from "@/integrations/supabase/client";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Progress } from "@/components/ui/progress";
@@ -20,9 +20,13 @@ interface ThemeFundamentals {
   dataCount: number;
   tickers: { symbol: string; score: number | null; stockType: string | null }[];
   momentumScore: number;
+  avgInstitutionalPct: number | null;
+  avgSmartMoneyScore: number | null;
+  insiderNetBuying: number;
+  insiderNetBuyingTotal: number;
 }
 
-type SortKey = "rank" | "name" | "score" | "growth" | "margin" | "debt" | "type";
+type SortKey = "rank" | "name" | "score" | "growth" | "margin" | "debt" | "type" | "smartMoney" | "instPct";
 type SortDir = "asc" | "desc";
 
 function mostCommon(arr: string[]): string {
