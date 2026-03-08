@@ -185,6 +185,34 @@ export function useEodSave() {
       // Refresh status
       await checkStatus();
 
+      // Auto-generate weekly report on Friday saves
+      const saveDay = new Date().toLocaleString("en-US", { timeZone: "America/New_York" });
+      const dayOfWeek = new Date(saveDay).getDay();
+      if (dayOfWeek === 5 || usePc) {
+        // Friday or Friday close save (weekend) — trigger weekly report
+        try {
+          console.log("Triggering weekly report generation after Friday EOD save...");
+          const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+          const anonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+          const reportRes = await fetch(`${supabaseUrl}/functions/v1/generate-weekly-report`, {
+            method: "POST",
+            headers: {
+              apikey: anonKey,
+              Authorization: `Bearer ${anonKey}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({}),
+          });
+          if (reportRes.ok) {
+            toast({ title: "📊 Weekly report generated", description: "View it in the Insights tab" });
+          } else {
+            console.warn("Weekly report generation failed:", await reportRes.text());
+          }
+        } catch (reportErr) {
+          console.warn("Weekly report trigger failed:", reportErr);
+        }
+      }
+
       const label = usePc ? "Friday Close Save" : "EOD Save";
       const failedList = allFailedSymbols.length > 0 ? ` · Failed: ${allFailedSymbols.slice(0, 15).join(", ")}${allFailedSymbols.length > 15 ? ` +${allFailedSymbols.length - 15} more` : ""}` : "";
       toast({

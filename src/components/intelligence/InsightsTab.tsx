@@ -4,6 +4,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { RefreshCw, AlertTriangle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import WeeklyReportsSection from "./WeeklyReportsSection";
 
 const DM_MONO = "'DM Mono', monospace";
 const COOLDOWN_MS = 30_000;
