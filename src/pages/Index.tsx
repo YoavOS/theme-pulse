@@ -145,6 +145,20 @@ export default function Index() {
 
   return (
     <div className="min-h-screen bg-background">
+      {/* Stale data banner */}
+      {isStale && isLive && (
+        <div className="border-b border-[hsl(40,80%,50%)]/30 bg-[hsl(40,80%,50%)]/10 px-4 py-2 text-center text-xs text-[hsl(40,80%,50%)]">
+          <AlertTriangle size={12} className="mr-1 inline" />
+          Showing data from {getCacheAge(lastFetched.toISOString())} — run a fresh scan for latest
+        </div>
+      )}
+
+      {/* Demo data confirmation */}
+      <DemoDataConfirmDialog
+        open={showDemoConfirm}
+        onConfirm={() => { resetToDemo(); setShowDemoConfirm(false); }}
+        onCancel={() => setShowDemoConfirm(false)}
+      />
       {/* ─── ROW 1: Title + Status ──────────────────── */}
       <header className="sticky top-0 z-30 border-b border-border bg-background/80 backdrop-blur-md">
         <div className="container py-3">
