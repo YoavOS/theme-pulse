@@ -43,7 +43,7 @@ export default function Index() {
   const [showDemoConfirm, setShowDemoConfirm] = useState(false);
   const { pinned, alerts, getAlert } = useWatchlist();
   const { fetchVolume, getThemeSignals } = useVolumeData();
-  const { fetchThemeNews, prefetchTopThemes, prefetchedThemes, getThemeNewsCount, getThemeArticles, hasNegativeNews, getAiSummary, marketNews } = useThemeNews();
+  const { fetchThemeNews, prefetchTopThemes, prefetchedThemes, getThemeNewsCount, getThemeArticles, hasNegativeNews, getAiSummary, marketNews, getThemeSentiment } = useThemeNews();
   const [newsPanelTheme, setNewsPanelTheme] = useState<ThemeData | null>(null);
   const [newsPanelSummary, setNewsPanelSummary] = useState<string | null>(null);
   const [newsPanelSummaryLoading, setNewsPanelSummaryLoading] = useState(false);
@@ -125,16 +125,22 @@ export default function Index() {
     }
   }, [activeTimeframe, isLive, isLoading, fetchLiveData, loadTimeframe]);
 
+  const [newsPanelSentiment, setNewsPanelSentiment] = useState<import("@/hooks/useThemeNews").SentimentData | null>(null);
+
   const handleNewsBadgeClick = useCallback(async (theme: ThemeData) => {
     setNewsPanelTheme(theme);
     setNewsPanelSummary(null);
     setNewsPanelSummaryLoading(true);
+    setNewsPanelSentiment(null);
     const symbols = theme.tickers.map(t => t.symbol);
     const articles = await fetchThemeNews(symbols);
     const summary = await getAiSummary(theme.theme_name, articles);
     setNewsPanelSummary(summary || null);
     setNewsPanelSummaryLoading(false);
-  }, [fetchThemeNews, getAiSummary]);
+    // Sentiment is now available from the hook after getAiSummary returns
+    const sent = getThemeSentiment(theme.theme_name);
+    setNewsPanelSentiment(sent);
+  }, [fetchThemeNews, getAiSummary, getThemeSentiment]);
 
   const themes = useMemo(() => {
     if (showPlaceholders) return allThemes;
@@ -648,6 +654,7 @@ export default function Index() {
           onNewsBadgeClick={handleNewsBadgeClick}
           getThemeFundamentalScore={getThemeFundamentalScore}
           onFundamentalBadgeClick={(t) => { setDrilldownTheme(t); setDrilldownDefaultTab("fundamentals"); }}
+          getThemeSentiment={getThemeSentiment}
         />
 
         {/* ─── NEUTRAL ───────────────────────────────── */}
@@ -666,6 +673,7 @@ export default function Index() {
             onNewsBadgeClick={handleNewsBadgeClick}
             getThemeFundamentalScore={getThemeFundamentalScore}
             onFundamentalBadgeClick={(t) => { setDrilldownTheme(t); setDrilldownDefaultTab("fundamentals"); }}
+            getThemeSentiment={getThemeSentiment}
           />
         )}
 
@@ -685,6 +693,7 @@ export default function Index() {
             onNewsBadgeClick={handleNewsBadgeClick}
             getThemeFundamentalScore={getThemeFundamentalScore}
             onFundamentalBadgeClick={(t) => { setDrilldownTheme(t); setDrilldownDefaultTab("fundamentals"); }}
+            getThemeSentiment={getThemeSentiment}
           />
         )}
       </main>
@@ -705,9 +714,10 @@ export default function Index() {
         <NewsPanel
           themeName={newsPanelTheme.theme_name}
           articles={getThemeArticles(newsPanelTheme.tickers.map(t => t.symbol))}
-          onClose={() => setNewsPanelTheme(null)}
+          onClose={() => { setNewsPanelTheme(null); setNewsPanelSentiment(null); }}
           aiSummary={newsPanelSummary}
           isLoadingSummary={newsPanelSummaryLoading}
+          sentiment={newsPanelSentiment}
         />
       )}
     </div>
@@ -728,6 +738,7 @@ function Section({
   onNewsBadgeClick,
   getThemeFundamentalScore,
   onFundamentalBadgeClick,
+  getThemeSentiment,
 }: {
   icon: React.ReactNode;
   title: string;
@@ -742,6 +753,7 @@ function Section({
   onNewsBadgeClick?: (theme: ThemeData) => void;
   getThemeFundamentalScore?: (symbols: string[]) => number | null;
   onFundamentalBadgeClick?: (theme: ThemeData) => void;
+  getThemeSentiment?: (themeName: string) => import("@/hooks/useThemeNews").SentimentData | null;
 }) {
   const accentColor =
     accent === "primary"
@@ -790,6 +802,7 @@ function Section({
           const nc = getNewsCount ? getNewsCount(symbols) : 0;
           const neg = hasNegativeNews ? hasNegativeNews(symbols) : false;
           const fScore = getThemeFundamentalScore ? getThemeFundamentalScore(t.tickers.filter(tk => !tk.skipped).map(tk => tk.symbol)) : null;
+          const sentiment = getThemeSentiment ? getThemeSentiment(t.theme_name) : null;
           return (
             <div
               key={t.theme_name}
@@ -807,6 +820,7 @@ function Section({
                 onNewsBadgeClick={onNewsBadgeClick}
                 fundamentalScore={fScore}
                 onFundamentalBadgeClick={onFundamentalBadgeClick}
+                newsSentiment={sentiment?.sentiment || null}
               />
             </div>
           );

@@ -54,6 +54,12 @@ NEWS CONTEXT RULES:
 - If a headline directly explains a theme's performance (e.g. a defense contract announcement for the Defense theme), reference it specifically
 - Do not fabricate or assume news — only reference headlines actually provided in the data
 
+NEWS SENTIMENT RULES:
+- When a theme has bullish news sentiment AND strong price momentum, describe it as "fundamentally and technically aligned — news flow confirms the move"
+- When news is bearish but price is rising, flag it as "price moving against negative news flow — watch for reversal"
+- When news is bullish but price is weak, note the "positive catalyst not yet reflected in price"
+- Only mention news sentiment when it adds context, not for every theme
+
 FORMAT:
 Write 6–8 sentences of flowing prose. No bullet points. No headers. No lists.
 Cover: what is genuinely leading with broad confirmation, what is a single-stock story masquerading as a theme move, what is fading and why, what the overall rotation suggests, and one specific actionable thing to watch next session.`;
@@ -83,7 +89,7 @@ serve(async (req) => {
       return jsonResponse({ error: "bad_request", message: "Invalid JSON in request body" }, 400);
     }
 
-    const { topThemes, bottomThemes, outlierThemes, date, totalThemes, requestTimestamp, dispersionScore, dispersionLabel, spyPerf1d, spyPerf1w, spyPerf1m, topThemeHeadlines, themeFundamentals } = payload;
+    const { topThemes, bottomThemes, outlierThemes, date, totalThemes, requestTimestamp, dispersionScore, dispersionLabel, spyPerf1d, spyPerf1w, spyPerf1m, topThemeHeadlines, themeFundamentals, themeNewsSentiment } = payload;
 
     console.log(`Payload: top=${(topThemes||[]).length}, bottom=${(bottomThemes||[]).length}, outliers=${(outlierThemes||[]).length}, date=${date}, total=${totalThemes}, ts=${requestTimestamp}`);
 
@@ -128,6 +134,11 @@ serve(async (req) => {
       ? `\n\nFUNDAMENTAL CONTEXT:\n${(themeFundamentals as any[]).map((f: any) => `- ${f.name}: F-Score ${f.fundamentalScore}/100 (${f.stockType}) | Rev Growth: ${f.avgRevenueGrowth != null ? f.avgRevenueGrowth + "%" : "N/A"} | Net Margin: ${f.avgNetMargin != null ? f.avgNetMargin + "%" : "N/A"} | Analyst: ${f.analystConsensus || "N/A"} | Smart Money: ${f.smartMoneyScore != null ? f.smartMoneyScore + "/100" : "N/A"} | Inst%: ${f.institutionalPct != null ? f.institutionalPct + "%" : "N/A"} | Insider: ${f.insiderSentiment || "N/A"}`).join("\n")}`
       : "";
 
+    // News sentiment context
+    const sentimentSection = themeNewsSentiment && (themeNewsSentiment as any[]).length > 0
+      ? `\n\nNEWS SENTIMENT:\n${(themeNewsSentiment as any[]).map((s: any) => `- ${s.name}: ${s.newsSentiment} (score: ${s.newsScore}/100)`).join("\n")}`
+      : "";
+
     const userMessage = `Date: ${date} | Themes analyzed: ${totalThemes} | Request ID: ${requestTimestamp}
 ${dispersionLine}${spyLine}
 TOP 8 THEMES (strongest momentum):
@@ -138,7 +149,7 @@ ${bottomLines}
 
 SINGLE-STOCK OUTLIER THEMES (one ticker >5% while theme avg <1%):
 ${outlierLines}
-${headlinesSection}${fundamentalsSection}
+${headlinesSection}${fundamentalsSection}${sentimentSection}
 
 Write a complete market analysis following your instructions.`;
 

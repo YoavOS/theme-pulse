@@ -1,6 +1,6 @@
 import { useState, useEffect, Component, ReactNode } from "react";
 import { X, ExternalLink, Newspaper, Bot } from "lucide-react";
-import { NewsArticle } from "@/hooks/useThemeNews";
+import { NewsArticle, SentimentData, getHeadlineSentimentTag } from "@/hooks/useThemeNews";
 import { Skeleton } from "@/components/ui/skeleton";
 
 class NewsBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
@@ -23,18 +23,143 @@ function timeAgo(dateStr: string | null): string {
   return `${days}d ago`;
 }
 
+function HeadlineSentimentPill({ headline }: { headline: string }) {
+  const tag = getHeadlineSentimentTag(headline);
+  if (tag === "neutral") return null;
+  return (
+    <span className={`shrink-0 inline-flex items-center rounded-full px-1.5 py-0 text-[9px] font-semibold ${
+      tag === "positive"
+        ? "bg-primary/15 text-primary border border-primary/25"
+        : "bg-destructive/15 text-destructive border border-destructive/25"
+    }`}>
+      {tag === "positive" ? "🟢 Positive" : "🔴 Negative"}
+    </span>
+  );
+}
+
+function SentimentBanner({ sentiment, isLoading }: { sentiment: SentimentData | null; isLoading?: boolean }) {
+  if (isLoading) {
+    return (
+      <div className="mx-4 mt-3 rounded-lg p-3" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}>
+        <Skeleton className="h-4 w-48 mb-2" />
+        <Skeleton className="h-2 w-full" />
+      </div>
+    );
+  }
+  if (!sentiment) return null;
+
+  const { sentiment: label, score, reasoning } = sentiment;
+  const config = {
+    bullish: { emoji: "📈", title: "Bullish News Flow", bg: "rgba(0, 245, 196, 0.08)", border: "rgba(0, 245, 196, 0.2)", text: "text-primary" },
+    bearish: { emoji: "📉", title: "Bearish News Flow", bg: "rgba(239, 68, 68, 0.08)", border: "rgba(239, 68, 68, 0.2)", text: "text-destructive" },
+    mixed: { emoji: "⚖️", title: "Mixed Signals", bg: "rgba(245, 166, 35, 0.08)", border: "rgba(245, 166, 35, 0.2)", text: "text-[#f5a623]" },
+    neutral: { emoji: "📋", title: "Neutral Coverage", bg: "rgba(255,255,255,0.04)", border: "rgba(255,255,255,0.1)", text: "text-muted-foreground" },
+  }[label] || { emoji: "📋", title: "Neutral Coverage", bg: "rgba(255,255,255,0.04)", border: "rgba(255,255,255,0.1)", text: "text-muted-foreground" };
+
+  return (
+    <div className="mx-4 mt-3 rounded-lg p-3" style={{ background: config.bg, border: `1px solid ${config.border}` }}>
+      <div className="flex items-center justify-between mb-2">
+        <span className={`text-xs font-semibold ${config.text}`}>
+          {config.emoji} {config.title}
+        </span>
+        <span className="text-[10px] font-bold text-muted-foreground" style={{ fontFamily: "'DM Mono', monospace" }}>
+          {score}
+        </span>
+      </div>
+      {/* Sentiment bar */}
+      <div className="relative h-1.5 rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.06)" }}>
+        <div className="absolute inset-0 rounded-full" style={{
+          background: "linear-gradient(90deg, hsl(var(--destructive)), hsl(var(--destructive)) 35%, #facc15 50%, hsl(var(--primary)) 65%, hsl(var(--primary)))",
+          opacity: 0.3,
+        }} />
+        <div
+          className="absolute top-1/2 -translate-y-1/2 h-3 w-3 rounded-full border-2 border-background shadow-md"
+          style={{
+            left: `${Math.max(2, Math.min(98, score))}%`,
+            transform: "translate(-50%, -50%)",
+            background: score > 65 ? "hsl(var(--primary))" : score < 35 ? "hsl(var(--destructive))" : "#facc15",
+          }}
+        />
+      </div>
+      <div className="flex justify-between mt-1">
+        <span className="text-[8px] text-muted-foreground/60">Bearish</span>
+        <span className="text-[8px] text-muted-foreground/60">Bullish</span>
+      </div>
+      {reasoning && (
+        <p className="text-[10px] text-muted-foreground mt-1.5">{reasoning}</p>
+      )}
+    </div>
+  );
+}
+
+export function SentimentBannerInline({ sentiment, isLoading }: { sentiment: SentimentData | null; isLoading?: boolean }) {
+  if (isLoading) {
+    return (
+      <div className="rounded-lg p-3 mb-3" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}>
+        <Skeleton className="h-4 w-48 mb-2" />
+        <Skeleton className="h-2 w-full" />
+      </div>
+    );
+  }
+  if (!sentiment) return null;
+
+  const { sentiment: label, score, reasoning } = sentiment;
+  const config = {
+    bullish: { emoji: "📈", title: "Bullish News Flow", bg: "rgba(0, 245, 196, 0.08)", border: "rgba(0, 245, 196, 0.2)", text: "text-primary" },
+    bearish: { emoji: "📉", title: "Bearish News Flow", bg: "rgba(239, 68, 68, 0.08)", border: "rgba(239, 68, 68, 0.2)", text: "text-destructive" },
+    mixed: { emoji: "⚖️", title: "Mixed Signals", bg: "rgba(245, 166, 35, 0.08)", border: "rgba(245, 166, 35, 0.2)", text: "text-[#f5a623]" },
+    neutral: { emoji: "📋", title: "Neutral Coverage", bg: "rgba(255,255,255,0.04)", border: "rgba(255,255,255,0.1)", text: "text-muted-foreground" },
+  }[label] || { emoji: "📋", title: "Neutral Coverage", bg: "rgba(255,255,255,0.04)", border: "rgba(255,255,255,0.1)", text: "text-muted-foreground" };
+
+  return (
+    <div className="rounded-lg p-3 mb-3" style={{ background: config.bg, border: `1px solid ${config.border}` }}>
+      <div className="flex items-center justify-between mb-2">
+        <span className={`text-xs font-semibold ${config.text}`}>
+          {config.emoji} {config.title}
+        </span>
+        <span className="text-[10px] font-bold text-muted-foreground" style={{ fontFamily: "'DM Mono', monospace" }}>
+          {score}
+        </span>
+      </div>
+      <div className="relative h-1.5 rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.06)" }}>
+        <div className="absolute inset-0 rounded-full" style={{
+          background: "linear-gradient(90deg, hsl(var(--destructive)), hsl(var(--destructive)) 35%, #facc15 50%, hsl(var(--primary)) 65%, hsl(var(--primary)))",
+          opacity: 0.3,
+        }} />
+        <div
+          className="absolute top-1/2 -translate-y-1/2 h-3 w-3 rounded-full border-2 border-background shadow-md"
+          style={{
+            left: `${Math.max(2, Math.min(98, score))}%`,
+            transform: "translate(-50%, -50%)",
+            background: score > 65 ? "hsl(var(--primary))" : score < 35 ? "hsl(var(--destructive))" : "#facc15",
+          }}
+        />
+      </div>
+      <div className="flex justify-between mt-1">
+        <span className="text-[8px] text-muted-foreground/60">Bearish</span>
+        <span className="text-[8px] text-muted-foreground/60">Bullish</span>
+      </div>
+      {reasoning && (
+        <p className="text-[10px] text-muted-foreground mt-1.5">{reasoning}</p>
+      )}
+    </div>
+  );
+}
+
 export default function NewsPanel({
   themeName,
   articles,
   onClose,
   aiSummary,
   isLoadingSummary,
+  sentiment,
 }: {
   themeName: string;
   articles: NewsArticle[];
   onClose: () => void;
   aiSummary?: string | null;
   isLoadingSummary?: boolean;
+  sentiment?: SentimentData | null;
 }) {
   // Group articles by symbol
   const grouped: Record<string, NewsArticle[]> = {};
@@ -60,6 +185,9 @@ export default function NewsPanel({
             <X size={16} />
           </button>
         </div>
+
+        {/* Sentiment Banner — above AI summary */}
+        <SentimentBanner sentiment={sentiment || null} isLoading={isLoadingSummary && !sentiment} />
 
         {/* AI Summary */}
         {(aiSummary || isLoadingSummary) && (
@@ -106,9 +234,14 @@ export default function NewsPanel({
                       className="group block rounded-md p-2 transition-colors hover:bg-accent/50"
                     >
                       <div className="flex items-start justify-between gap-2">
-                        <p className="text-xs font-medium text-foreground leading-snug line-clamp-2 group-hover:text-primary transition-colors">
-                          {a.headline}
-                        </p>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <p className="text-xs font-medium text-foreground leading-snug line-clamp-2 group-hover:text-primary transition-colors">
+                              {a.headline}
+                            </p>
+                            <HeadlineSentimentPill headline={a.headline} />
+                          </div>
+                        </div>
                         <ExternalLink size={10} className="shrink-0 mt-0.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
                       </div>
                       <div className="mt-1 flex items-center gap-2 text-[10px] text-muted-foreground">
@@ -138,14 +271,19 @@ export function NewsTabContent({
   articles,
   aiSummary,
   isLoadingSummary,
+  sentiment,
 }: {
   articles: NewsArticle[];
   aiSummary?: string | null;
   isLoadingSummary?: boolean;
+  sentiment?: SentimentData | null;
 }) {
   return (
     <NewsBoundary>
       <div className="space-y-3">
+        {/* Sentiment Banner */}
+        <SentimentBannerInline sentiment={sentiment || null} isLoading={isLoadingSummary && !sentiment} />
+
         {/* AI Summary */}
         {(aiSummary || isLoadingSummary) && (
           <div className="rounded-lg p-3" style={{ background: "rgba(0, 245, 196, 0.06)", border: "1px solid rgba(0, 245, 196, 0.15)" }}>
@@ -186,9 +324,12 @@ export function NewsTabContent({
                   </span>
                 )}
                 <div className="flex-1 min-w-0">
-                  <p className="text-xs font-medium text-foreground leading-snug line-clamp-2 group-hover:text-primary transition-colors">
-                    {a.headline}
-                  </p>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <p className="text-xs font-medium text-foreground leading-snug line-clamp-2 group-hover:text-primary transition-colors">
+                      {a.headline}
+                    </p>
+                    <HeadlineSentimentPill headline={a.headline} />
+                  </div>
                   <div className="mt-0.5 flex items-center gap-2 text-[10px] text-muted-foreground">
                     {a.source && <span>{a.source}</span>}
                     {a.published_at && <span>· {timeAgo(a.published_at)}</span>}
@@ -202,15 +343,4 @@ export function NewsTabContent({
       </div>
     </NewsBoundary>
   );
-}
-
-function timeAgo2(dateStr: string | null): string {
-  if (!dateStr) return "";
-  const diff = Date.now() - new Date(dateStr).getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 60) return `${mins}m ago`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-  const days = Math.floor(hrs / 24);
-  return `${days}d ago`;
 }
