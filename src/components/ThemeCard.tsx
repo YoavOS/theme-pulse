@@ -240,7 +240,24 @@ export default function ThemeCard({ theme, index, onClick, fetchVolume, getTheme
             </DemandSignalsBoundary>
           )}
 
-          {/* Row 6: Volume Dry-Up badge */}
+          {/* Row 6: News badge */}
+          {newsCount != null && newsCount > 0 && (
+            <div className="mt-1.5">
+              <button
+                onClick={(e) => { e.stopPropagation(); onNewsBadgeClick?.(theme); }}
+                className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-medium transition-colors ${
+                  newsNegative
+                    ? "text-destructive bg-destructive/10 border border-destructive/20 hover:bg-destructive/15"
+                    : "text-primary bg-primary/10 border border-primary/20 hover:bg-primary/15"
+                }`}
+                style={{ fontFamily: "'DM Mono', monospace" }}
+              >
+                📰 {newsCount}
+              </button>
+            </div>
+          )}
+
+          {/* Row 7: Volume Dry-Up badge */}
           {isDryingUp && (
             <div className="mt-1.5">
               <span
