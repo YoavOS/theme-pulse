@@ -149,7 +149,7 @@ ${bottomLines}
 
 SINGLE-STOCK OUTLIER THEMES (one ticker >5% while theme avg <1%):
 ${outlierLines}
-${headlinesSection}${fundamentalsSection}
+${headlinesSection}${fundamentalsSection}${sentimentSection}
 
 Write a complete market analysis following your instructions.`;
 
