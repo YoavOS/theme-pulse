@@ -320,7 +320,7 @@ export default function OverviewTab({
 
         {viewMode === "table" && (
           <div className="flex items-center gap-1 rounded-lg bg-[rgba(255,255,255,0.03)] p-1">
-            {(["momentum", "breadth"] as const).map(mode => (
+            {(["momentum", "breadth", "spy"] as const).map(mode => (
               <button
                 key={mode}
                 onClick={() => setSortMode(mode)}
@@ -330,7 +330,7 @@ export default function OverviewTab({
                     : "text-muted-foreground hover:text-foreground hover:bg-[rgba(255,255,255,0.04)]"
                 }`}
               >
-                {mode === "momentum" ? "Momentum" : "Breadth"}
+                {mode === "momentum" ? "Momentum" : mode === "breadth" ? "Breadth" : "vs SPY"}
                 {sortMode === mode && (
                   <span className="absolute bottom-0 left-1/2 -translate-x-1/2 h-0.5 w-6 rounded-full bg-[#00f5c4]" />
                 )}
