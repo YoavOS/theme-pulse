@@ -654,6 +654,7 @@ export default function Index() {
           onNewsBadgeClick={handleNewsBadgeClick}
           getThemeFundamentalScore={getThemeFundamentalScore}
           onFundamentalBadgeClick={(t) => { setDrilldownTheme(t); setDrilldownDefaultTab("fundamentals"); }}
+          getThemeSentiment={getThemeSentiment}
         />
 
         {/* ─── NEUTRAL ───────────────────────────────── */}
@@ -672,6 +673,7 @@ export default function Index() {
             onNewsBadgeClick={handleNewsBadgeClick}
             getThemeFundamentalScore={getThemeFundamentalScore}
             onFundamentalBadgeClick={(t) => { setDrilldownTheme(t); setDrilldownDefaultTab("fundamentals"); }}
+            getThemeSentiment={getThemeSentiment}
           />
         )}
 
@@ -691,6 +693,7 @@ export default function Index() {
             onNewsBadgeClick={handleNewsBadgeClick}
             getThemeFundamentalScore={getThemeFundamentalScore}
             onFundamentalBadgeClick={(t) => { setDrilldownTheme(t); setDrilldownDefaultTab("fundamentals"); }}
+            getThemeSentiment={getThemeSentiment}
           />
         )}
       </main>
