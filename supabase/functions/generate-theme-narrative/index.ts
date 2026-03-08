@@ -8,7 +8,7 @@ const corsHeaders = {
 
 const SYSTEM_PROMPT = `You are a professional market analyst specializing in thematic investing and sector rotation.
 You write sharp, honest, institutional-quality market analysis.
-You have access to both theme-level and ticker-level performance data.
+You have access to both theme-level and ticker-level performance data, including volume signals.
 
 CRITICAL RULES:
 - If a theme's move is driven by 1-2 outlier tickers while the majority are flat or down, flag it explicitly as a single-stock move, not a theme rotation
@@ -17,6 +17,13 @@ CRITICAL RULES:
 - Be specific — always name the tickers driving moves and the tickers diverging
 - Never use generic filler language like "investors are showing interest" or "market participants are watching"
 - If the data shows contradictions, say so directly
+
+VOLUME RULES:
+- When a theme shows Rel Vol > 1.8× alongside strong price performance, call it out explicitly as "unusual volume confirming the move"
+- When a theme shows high volume (Rel Vol > 1.4×) but negative performance, flag it as "distribution" or "institutional selling"
+- When a theme shows strong price performance but Rel Vol < 0.8×, flag it as a "low conviction move"
+- Always mention volume when it adds meaningful context to the narrative — don't mention it for every theme, only when it signals something actionable
+- Sustained Vol (10-day vs 3-month average) above +20% indicates multi-day accumulation building
 
 FORMAT:
 Write 6–8 sentences of flowing prose. No bullet points. No headers. No lists.
@@ -55,7 +62,21 @@ serve(async (req) => {
       const tickerStr = (t.tickers || [])
         .map((tk: any) => `${tk.symbol}: ${tk.perf_1d >= 0 ? "+" : ""}${tk.perf_1d}%`)
         .join(", ");
-      return `${t.name} | Score: ${t.score} | 1D: ${t.perf_1d >= 0 ? "+" : ""}${t.perf_1d}% | 1W: ${t.perf_1w >= 0 ? "+" : ""}${t.perf_1w}% | 1M: ${t.perf_1m >= 0 ? "+" : ""}${t.perf_1m}% | Breadth: ${t.breadth} (${t.advancing} up, ${t.declining} down)\n  Tickers: ${tickerStr}`;
+      
+      // Volume info
+      const volParts: string[] = [];
+      if (t.avgRelVol !== null && t.avgRelVol !== undefined) {
+        volParts.push(`Rel Vol: ${t.avgRelVol.toFixed(1)}×`);
+      }
+      if (t.sustainedVol) {
+        volParts.push(`Sustained: ${t.sustainedVol}`);
+      }
+      if (t.volumeSpike) {
+        volParts.push(`Spike: ${t.volumeSpike}`);
+      }
+      const volStr = volParts.length > 0 ? ` | Volume: ${volParts.join(", ")}` : "";
+
+      return `${t.name} | Score: ${t.score} | 1D: ${t.perf_1d >= 0 ? "+" : ""}${t.perf_1d}% | 1W: ${t.perf_1w >= 0 ? "+" : ""}${t.perf_1w}% | 1M: ${t.perf_1m >= 0 ? "+" : ""}${t.perf_1m}% | Breadth: ${t.breadth} (${t.advancing} up, ${t.declining} down)${volStr}\n  Tickers: ${tickerStr}`;
     };
 
     const topLines = (topThemes || []).map(formatTheme).join("\n\n");

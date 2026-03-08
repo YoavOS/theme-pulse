@@ -9,8 +9,16 @@ const DM_MONO = "'DM Mono', monospace";
 const EOD_TOOLTIP = "Accumulating EOD history — available after more daily saves";
 const SIGNAL_TOOLTIP =
   "Divergence between momentum rank and breadth rank. '⚠ Thin' = price move not confirmed by breadth. '👀 Watch' = broad strength not yet in momentum score.";
+const VOL_TOOLTIP = "Average relative volume across theme tickers — affects momentum score";
 
 type SortMode = "momentum" | "breadth";
+
+function getRelVolColor(val: number): string {
+  if (val > 1.8) return "#00f5c4";
+  if (val > 1.4) return "#4ade80";
+  if (val >= 1.1) return "#facc15";
+  return "currentColor";
+}
 
 function PerfCell({ value, hasData }: { value: number; hasData: boolean }) {
   if (!hasData) {
@@ -107,6 +115,30 @@ function BreadthCell({ up, total }: { up: number; total: number }) {
   );
 }
 
+function VolCell({ avgRelVol }: { avgRelVol: number | null }) {
+  return (
+    <td className="px-3 py-2.5 text-right">
+      <Tooltip>
+        <TooltipTrigger asChild>
+          {avgRelVol !== null ? (
+            <span
+              className="text-sm font-medium cursor-help"
+              style={{ fontFamily: DM_MONO, color: getRelVolColor(avgRelVol) }}
+            >
+              {avgRelVol.toFixed(1)}×
+            </span>
+          ) : (
+            <span className="text-sm text-muted-foreground cursor-help" style={{ fontFamily: DM_MONO }}>--</span>
+          )}
+        </TooltipTrigger>
+        <TooltipContent side="top" className="max-w-[220px] text-xs">
+          {VOL_TOOLTIP}
+        </TooltipContent>
+      </Tooltip>
+    </td>
+  );
+}
+
 function SignalCell({ divergence }: { divergence: number }) {
   if (divergence <= -5) {
     return (
@@ -136,6 +168,7 @@ function SkeletonRows() {
           <td className="px-3 py-3"><Skeleton className="h-4 w-14" /></td>
           <td className="px-3 py-3"><Skeleton className="h-4 w-14" /></td>
           <td className="px-3 py-3"><Skeleton className="h-4 w-14" /></td>
+          <td className="px-3 py-3"><Skeleton className="h-4 w-10" /></td>
           <td className="px-3 py-3"><Skeleton className="h-4 w-12" /></td>
           <td className="px-3 py-3"><Skeleton className="h-4 w-16" /></td>
           <td className="px-3 py-3"><Skeleton className="h-4 w-12" /></td>
@@ -155,14 +188,11 @@ export default function OverviewTab({
 }) {
   const [sortMode, setSortMode] = useState<SortMode>("momentum");
 
-  // Compute ranks and divergence
   const enriched = useMemo(() => {
     if (themes.length === 0) return [];
 
-    // Momentum rank (themes already sorted by momentum desc)
     const momentumRanked = themes.map((t, i) => ({ ...t, momentumRank: i + 1 }));
 
-    // Breadth rank
     const byBreadth = [...momentumRanked].sort((a, b) => {
       const aPct = a.breadthTotal > 0 ? a.breadthUp / a.breadthTotal : 0;
       const bPct = b.breadthTotal > 0 ? b.breadthUp / b.breadthTotal : 0;
@@ -183,12 +213,11 @@ export default function OverviewTab({
     if (sortMode === "breadth") {
       return [...enriched].sort((a, b) => b.breadthPct - a.breadthPct);
     }
-    return enriched; // already momentum-sorted
+    return enriched;
   }, [enriched, sortMode]);
 
   return (
     <div className="h-full overflow-auto">
-      {/* Header with sort toggle */}
       <div className="mb-4 flex items-center justify-between">
         <div className="flex items-center gap-4 text-xs text-muted-foreground">
           <span className="font-['Syne',sans-serif] text-sm font-semibold text-foreground">
@@ -197,7 +226,6 @@ export default function OverviewTab({
           <span>{themes.length} themes ranked</span>
         </div>
 
-        {/* Sort pills */}
         <div className="flex items-center gap-1 rounded-lg bg-[rgba(255,255,255,0.03)] p-1">
           {(["momentum", "breadth"] as const).map(mode => (
             <button
@@ -218,7 +246,6 @@ export default function OverviewTab({
         </div>
       </div>
 
-      {/* Table */}
       <div
         className="overflow-hidden rounded-lg"
         style={{
@@ -236,6 +263,18 @@ export default function OverviewTab({
               <th className="px-3 py-2.5 text-right font-medium">1D</th>
               <th className="px-3 py-2.5 text-right font-medium">1W</th>
               <th className="px-3 py-2.5 text-right font-medium">1M</th>
+              <th className="px-3 py-2.5 text-right font-medium">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="cursor-help inline-flex items-center gap-1">
+                      Vol <Info size={10} className="opacity-50" />
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="max-w-[220px] text-xs">
+                    {VOL_TOOLTIP}
+                  </TooltipContent>
+                </Tooltip>
+              </th>
               <th className="px-3 py-2.5 text-right font-medium">Breadth</th>
               <th className="px-3 py-2.5 text-center font-medium">7D</th>
               <th className="px-3 py-2.5 text-center font-medium">
@@ -288,6 +327,7 @@ export default function OverviewTab({
                     <PerfCell value={t.perf_1d} hasData={true} />
                     <PerfCell value={t.perf_1w} hasData={t.hasEodHistory} />
                     <PerfCell value={t.perf_1m} hasData={t.hasEodHistory} />
+                    <VolCell avgRelVol={t.avgRelVol} />
                     <BreadthCell up={t.breadthUp} total={t.breadthTotal} />
                     <td className="px-3 py-2.5 text-center">
                       <MiniSparkline data={t.sparklineData} />

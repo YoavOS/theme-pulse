@@ -36,15 +36,50 @@ function MiniBar({ label, value, max, hasData }: { label: string; value: number;
   );
 }
 
-function ThemeCard({ theme }: { theme: ThemeIntelData }) {
-  const labelColor = {
+function VolumeSignal({ theme, isAccelerating }: { theme: ThemeIntelData; isAccelerating: boolean }) {
+  try {
+    const relVol = theme.avgRelVol;
+    if (relVol === null) return null;
+
+    if (relVol > 1.4 && isAccelerating) {
+      return (
+        <div className="text-[10px] font-medium text-[#00f5c4] mt-1" style={{ fontFamily: DM_MONO }}>
+          ⚡ Volume confirming
+        </div>
+      );
+    }
+    if (relVol > 1.4 && !isAccelerating) {
+      return (
+        <div className="text-[10px] font-medium text-[#ef4444] mt-1" style={{ fontFamily: DM_MONO }}>
+          ⚡ High volume selling
+        </div>
+      );
+    }
+    if (relVol < 0.8 && isAccelerating) {
+      return (
+        <div className="text-[10px] font-medium text-[#facc15] mt-1" style={{ fontFamily: DM_MONO }}>
+          ⚠ Low volume move
+        </div>
+      );
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+function ThemeCard({ theme, isAccelerating }: { theme: ThemeIntelData; isAccelerating: boolean }) {
+  const labelColorMap: Record<string, string> = {
     "Breaking Out": "text-[#00f5c4]",
+    "Breaking Out (low vol)": "text-[#facc15]",
     "Accelerating": "text-[#00f5c4]",
     "Losing Steam": "text-[#f5a623]",
     "Fading": "text-[#f5a623]",
+    "Fading Hard": "text-[#ef4444]",
     "Recovering": "text-[#00f5c4]",
     "Consolidating": "text-muted-foreground",
-  }[theme.label];
+  };
+  const labelColor = labelColorMap[theme.label] || "text-muted-foreground";
 
   const max = Math.max(Math.abs(theme.perf_1d), Math.abs(theme.perf_1m), 0.1);
 
@@ -84,6 +119,9 @@ function ThemeCard({ theme }: { theme: ThemeIntelData }) {
           Breadth: {theme.breadthUp}/{theme.breadthTotal} confirm
         </span>
       </div>
+
+      {/* Volume confirmation signal */}
+      <VolumeSignal theme={theme} isAccelerating={isAccelerating} />
     </div>
   );
 }
@@ -133,7 +171,7 @@ export default function MomentumTab({
           ) : (
             [...accelerating]
               .sort((a, b) => (b.perf_1d - b.perf_1m) - (a.perf_1d - a.perf_1m))
-              .map(t => <ThemeCard key={t.themeId} theme={t} />)
+              .map(t => <ThemeCard key={t.themeId} theme={t} isAccelerating={true} />)
           )}
         </div>
       </div>
@@ -157,7 +195,7 @@ export default function MomentumTab({
           ) : (
             [...fading]
               .sort((a, b) => (a.perf_1d - a.perf_1m) - (b.perf_1d - b.perf_1m))
-              .map(t => <ThemeCard key={t.themeId} theme={t} />)
+              .map(t => <ThemeCard key={t.themeId} theme={t} isAccelerating={false} />)
           )}
         </div>
       </div>
