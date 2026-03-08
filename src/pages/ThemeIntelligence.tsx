@@ -8,6 +8,7 @@ import InsightsTab from "@/components/intelligence/InsightsTab";
 import TrendsTab from "@/components/intelligence/TrendsTab";
 import HeatmapTab from "@/components/intelligence/HeatmapTab";
 import React from "react";
+import HelpButton from "@/components/HelpButton";
 
 const SUB_TABS = [
   { id: "overview", label: "Overview", icon: BarChart3 },
@@ -42,6 +43,7 @@ export default function ThemeIntelligence() {
               {themes.length} themes · {isLoading ? "loading…" : "live"}
             </span>
           </div>
+          <HelpButton />
         </div>
 
         {/* Sub-tab navigation — sticky pills */}

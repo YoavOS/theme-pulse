@@ -9,10 +9,11 @@ import ThemeDrilldownModal from "@/components/ThemeDrilldownModal";
 import { useLiveThemeData } from "@/hooks/useLiveThemeData";
 
 const DM_MONO = "'DM Mono', monospace";
-const EOD_TOOLTIP = "Accumulating EOD history — available after more daily saves";
+const EOD_TOOLTIP = "Accumulating EOD history — available after more daily saves. 1W and 1M performance require at least 5 and 20 saved trading days respectively.";
 const SIGNAL_TOOLTIP =
-  "Divergence between momentum rank and breadth rank. '⚠ Thin' = price move not confirmed by breadth. '👀 Watch' = broad strength not yet in momentum score.";
-const VOL_TOOLTIP = "Average relative volume across theme tickers — affects momentum score";
+  "Divergence between momentum rank and breadth rank. '⚠ Thin' = momentum rank is much better than breadth — price move driven by few tickers, not confirmed by broad participation. '👀 Watch' = breadth rank is much better than momentum — broad quiet strength not yet reflected in price. Potential early rotation signal.";
+const VOL_TOOLTIP = "Average relative volume across all theme tickers vs their 20-day average. >1.8× = unusual institutional interest. >1.4× = elevated. <0.8× = quiet. Factors into momentum score as a conviction multiplier.";
+const MOMENTUM_TOOLTIP = "Weighted score: 20% today + 35% this week + 45% this month, adjusted for volume. Higher = stronger sustained momentum. Normalized 0-100 across all themes.";
 
 type SortMode = "momentum" | "breadth";
 
@@ -292,7 +293,18 @@ export default function OverviewTab({
             <tr className="border-b border-[rgba(255,255,255,0.08)] text-xs text-muted-foreground">
               <th className="px-3 py-2.5 text-left font-medium w-10">#</th>
               <th className="px-3 py-2.5 text-left font-medium">Theme</th>
-              <th className="px-3 py-2.5 text-left font-medium">Momentum</th>
+              <th className="px-3 py-2.5 text-left font-medium">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="cursor-help inline-flex items-center gap-1">
+                      Momentum <Info size={10} className="opacity-50" />
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="max-w-[280px] text-xs">
+                    {MOMENTUM_TOOLTIP}
+                  </TooltipContent>
+                </Tooltip>
+              </th>
               <th className="px-3 py-2.5 text-right font-medium">1D</th>
               <th className="px-3 py-2.5 text-right font-medium">1W</th>
               <th className="px-3 py-2.5 text-right font-medium">1M</th>

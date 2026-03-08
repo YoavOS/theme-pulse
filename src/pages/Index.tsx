@@ -11,6 +11,7 @@ import { useSaveEodFromScan } from "@/hooks/useSaveEodFromScan";
 import { useWatchlist } from "@/hooks/useWatchlistContext";
 import { useVolumeData } from "@/hooks/useVolumeData";
 import { Link } from "react-router-dom";
+import HelpButton from "@/components/HelpButton";
 
 const TIMEFRAMES = ["Today", "1W", "1M", "3M", "YTD"] as const;
 
@@ -320,6 +321,9 @@ export default function Index() {
                 <Zap size={14} />
               </button>
 
+              {/* Help button */}
+              <HelpButton />
+
               {/* Options dropdown */}
               <div className="relative">
                 <button
@@ -598,6 +602,12 @@ function Section({
       }
     } catch {}
   }
+
+  const sectionTooltips: Record<string, string> = {
+    "Strong / Best Performing": "Themes with positive average daily performance on the selected timeframe. These are the current market leaders showing the strongest price action.",
+    "Neutral / Mixed": "Themes with near-zero performance (between roughly -0.5% and +0.5%). No clear directional bias — could break either way.",
+    "Weaker / Lagging": "Themes with negative average daily performance. These are underperforming the market on the selected timeframe.",
+  };
 
   return (
     <section className="mb-8">
