@@ -8,6 +8,7 @@ import AddThemeModal from "@/components/AddThemeModal";
 import { ThemeData } from "@/data/themeData";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { useSpyBenchmark, formatRS } from "@/hooks/useSpyBenchmark";
 
 export default function Watchlist() {
   const { pinned, togglePin, alerts, setAlert, getAlert } = useWatchlist();
