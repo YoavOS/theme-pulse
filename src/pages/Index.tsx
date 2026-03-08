@@ -4,7 +4,10 @@ import { useLiveThemeData } from "@/hooks/useLiveThemeData";
 import ThemeCard from "@/components/ThemeCard";
 import ThemeDrilldownModal from "@/components/ThemeDrilldownModal";
 import ValidateTickersDialog from "@/components/ValidateTickersDialog";
-import { RefreshCw, Download, TrendingUp, TrendingDown, Wifi, WifiOff, Loader2, Settings, ScanLine, X, ShieldCheck, Save, Zap, Calendar, Brain, Bookmark, Bell, ChevronDown, LayoutDashboard, AlertTriangle } from "lucide-react";
+import { RefreshCw, Download, TrendingUp, TrendingDown, Wifi, WifiOff, Loader2, Settings, ScanLine, X, ShieldCheck, Save, Zap, Calendar, Brain, Bookmark, Bell, ChevronDown, LayoutDashboard, AlertTriangle, LayoutGrid, List, Flame, Circle } from "lucide-react";
+import RankedListView from "@/components/dashboard/RankedListView";
+import HeatmapGridView from "@/components/dashboard/HeatmapGridView";
+import DashboardBubbleView from "@/components/dashboard/DashboardBubbleView";
 import DemoDataConfirmDialog from "@/components/DemoDataConfirmDialog";
 import { getCacheAge } from "@/hooks/useScanCache";
 import { useDispersion, getDispersionColorClass } from "@/hooks/useDispersion";
@@ -33,6 +36,13 @@ function formatTime(d: Date) {
 }
 
 export default function Index() {
+  const [dashboardView, setDashboardView] = useState<"cards" | "list" | "heatmap" | "bubble">(() => {
+    return (localStorage.getItem("dashboardView") as any) || "cards";
+  });
+  const switchView = useCallback((v: "cards" | "list" | "heatmap" | "bubble") => {
+    setDashboardView(v);
+    localStorage.setItem("dashboardView", v);
+  }, []);
   const [activeTimeframe, setActiveTimeframe] = useState<string>("Today");
   const [showPlaceholders, setShowPlaceholders] = useState(false);
   const [selectedThemes, setSelectedThemes] = useState<Set<string>>(new Set());
@@ -325,6 +335,34 @@ export default function Index() {
                   </button>
                 ))}
               </div>
+
+              {/* View switcher */}
+              <TooltipProvider delayDuration={200}>
+                <div className="flex items-center rounded-md border border-border bg-secondary/50">
+                  {([
+                    { key: "cards" as const, icon: <LayoutGrid size={14} />, label: "Card Grid" },
+                    { key: "list" as const, icon: <List size={14} />, label: "Ranked List" },
+                    { key: "heatmap" as const, icon: <Flame size={14} />, label: "Heatmap" },
+                    { key: "bubble" as const, icon: <Circle size={14} />, label: "Bubble Chart" },
+                  ]).map((v) => (
+                    <Tooltip key={v.key}>
+                      <TooltipTrigger asChild>
+                        <button
+                          onClick={() => switchView(v.key)}
+                          className={`p-1.5 transition-colors ${
+                            dashboardView === v.key
+                              ? "bg-primary text-primary-foreground"
+                              : "text-muted-foreground hover:text-foreground"
+                          }`}
+                        >
+                          {v.icon}
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent side="bottom" className="text-xs">{v.label}</TooltipContent>
+                    </Tooltip>
+                  ))}
+                </div>
+              </TooltipProvider>
             </div>
 
             {/* Right: Primary actions */}
@@ -639,63 +677,93 @@ export default function Index() {
           </div>
         )}
 
-        {/* ─── STRONG THEMES ─────────────────────────── */}
-        <Section
-          icon={<TrendingUp size={18} />}
-          title="Strong / Best Performing"
-          accent="primary"
-          themes={strong}
-          onCardClick={setDrilldownTheme}
-          fetchVolume={fetchVolume}
-          getThemeSignals={getThemeSignals}
-          dimmedThemes={searchMatchSet}
-          getNewsCount={getThemeNewsCount}
-          hasNegativeNews={hasNegativeNews}
-          onNewsBadgeClick={handleNewsBadgeClick}
-          getThemeFundamentalScore={getThemeFundamentalScore}
-          onFundamentalBadgeClick={(t) => { setDrilldownTheme(t); setDrilldownDefaultTab("fundamentals"); }}
-          getThemeSentiment={getThemeSentiment}
-        />
+        <div className="transition-opacity duration-200" key={dashboardView}>
+          {dashboardView === "cards" && (
+            <>
+              <Section
+                icon={<TrendingUp size={18} />}
+                title="Strong / Best Performing"
+                accent="primary"
+                themes={strong}
+                onCardClick={setDrilldownTheme}
+                fetchVolume={fetchVolume}
+                getThemeSignals={getThemeSignals}
+                dimmedThemes={searchMatchSet}
+                getNewsCount={getThemeNewsCount}
+                hasNegativeNews={hasNegativeNews}
+                onNewsBadgeClick={handleNewsBadgeClick}
+                getThemeFundamentalScore={getThemeFundamentalScore}
+                onFundamentalBadgeClick={(t) => { setDrilldownTheme(t); setDrilldownDefaultTab("fundamentals"); }}
+                getThemeSentiment={getThemeSentiment}
+              />
+              {neutral.length > 0 && (
+                <Section
+                  icon={<TrendingUp size={18} />}
+                  title="Neutral / Mixed"
+                  accent="muted"
+                  themes={neutral}
+                  onCardClick={setDrilldownTheme}
+                  fetchVolume={fetchVolume}
+                  getThemeSignals={getThemeSignals}
+                  dimmedThemes={searchMatchSet}
+                  getNewsCount={getThemeNewsCount}
+                  hasNegativeNews={hasNegativeNews}
+                  onNewsBadgeClick={handleNewsBadgeClick}
+                  getThemeFundamentalScore={getThemeFundamentalScore}
+                  onFundamentalBadgeClick={(t) => { setDrilldownTheme(t); setDrilldownDefaultTab("fundamentals"); }}
+                  getThemeSentiment={getThemeSentiment}
+                />
+              )}
+              {weak.length > 0 && (
+                <Section
+                  icon={<TrendingDown size={18} />}
+                  title="Weaker / Lagging"
+                  accent="destructive"
+                  themes={weak}
+                  onCardClick={setDrilldownTheme}
+                  fetchVolume={fetchVolume}
+                  getThemeSignals={getThemeSignals}
+                  dimmedThemes={searchMatchSet}
+                  getNewsCount={getThemeNewsCount}
+                  hasNegativeNews={hasNegativeNews}
+                  onNewsBadgeClick={handleNewsBadgeClick}
+                  getThemeFundamentalScore={getThemeFundamentalScore}
+                  onFundamentalBadgeClick={(t) => { setDrilldownTheme(t); setDrilldownDefaultTab("fundamentals"); }}
+                  getThemeSentiment={getThemeSentiment}
+                />
+              )}
+            </>
+          )}
 
-        {/* ─── NEUTRAL ───────────────────────────────── */}
-        {neutral.length > 0 && (
-          <Section
-            icon={<TrendingUp size={18} />}
-            title="Neutral / Mixed"
-            accent="muted"
-            themes={neutral}
-            onCardClick={setDrilldownTheme}
-            fetchVolume={fetchVolume}
-            getThemeSignals={getThemeSignals}
-            dimmedThemes={searchMatchSet}
-            getNewsCount={getThemeNewsCount}
-            hasNegativeNews={hasNegativeNews}
-            onNewsBadgeClick={handleNewsBadgeClick}
-            getThemeFundamentalScore={getThemeFundamentalScore}
-            onFundamentalBadgeClick={(t) => { setDrilldownTheme(t); setDrilldownDefaultTab("fundamentals"); }}
-            getThemeSentiment={getThemeSentiment}
-          />
-        )}
+          {dashboardView === "list" && (
+            <RankedListView
+              themes={themes}
+              onCardClick={setDrilldownTheme}
+              getThemeSignals={getThemeSignals}
+              dimmedThemes={searchMatchSet}
+              getNewsCount={getThemeNewsCount}
+              getThemeFundamentalScore={getThemeFundamentalScore}
+              getThemeSentiment={getThemeSentiment}
+            />
+          )}
 
-        {/* ─── WEAK THEMES ───────────────────────────── */}
-        {weak.length > 0 && (
-          <Section
-            icon={<TrendingDown size={18} />}
-            title="Weaker / Lagging"
-            accent="destructive"
-            themes={weak}
-            onCardClick={setDrilldownTheme}
-            fetchVolume={fetchVolume}
-            getThemeSignals={getThemeSignals}
-            dimmedThemes={searchMatchSet}
-            getNewsCount={getThemeNewsCount}
-            hasNegativeNews={hasNegativeNews}
-            onNewsBadgeClick={handleNewsBadgeClick}
-            getThemeFundamentalScore={getThemeFundamentalScore}
-            onFundamentalBadgeClick={(t) => { setDrilldownTheme(t); setDrilldownDefaultTab("fundamentals"); }}
-            getThemeSentiment={getThemeSentiment}
-          />
-        )}
+          {dashboardView === "heatmap" && (
+            <HeatmapGridView
+              themes={themes}
+              onCardClick={setDrilldownTheme}
+              getThemeSignals={getThemeSignals}
+              dimmedThemes={searchMatchSet}
+            />
+          )}
+
+          {dashboardView === "bubble" && (
+            <DashboardBubbleView
+              themes={themes}
+              getThemeSignals={getThemeSignals}
+              dimmedThemes={searchMatchSet}
+            />
+          )}
+        </div>
       </main>
 
       {/* ─── FOOTER ──────────────────────────────────── */}
