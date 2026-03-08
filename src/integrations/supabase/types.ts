@@ -119,6 +119,36 @@ export type Database = {
         }
         Relationships: []
       }
+      theme_breadth_history: {
+        Row: {
+          advancing: number | null
+          breadth_pct: number | null
+          date: string
+          declining: number | null
+          id: string
+          theme_name: string
+          total: number | null
+        }
+        Insert: {
+          advancing?: number | null
+          breadth_pct?: number | null
+          date: string
+          declining?: number | null
+          id?: string
+          theme_name: string
+          total?: number | null
+        }
+        Update: {
+          advancing?: number | null
+          breadth_pct?: number | null
+          date?: string
+          declining?: number | null
+          id?: string
+          theme_name?: string
+          total?: number | null
+        }
+        Relationships: []
+      }
       theme_tickers: {
         Row: {
           added_at: string
