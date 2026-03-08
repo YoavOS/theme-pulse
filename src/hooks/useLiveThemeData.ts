@@ -19,7 +19,6 @@ function cacheKey(timeframe: string) {
 function saveCache(timeframe: string, data: CachedData) {
   try {
     localStorage.setItem(cacheKey(timeframe), JSON.stringify(data));
-    console.log(`Cache saved [${timeframe}]: ${data.themes.length} themes, ${data.symbolsFetched} symbols`);
   } catch { /* quota exceeded */ }
 }
 
@@ -46,6 +45,7 @@ interface LiveDataState {
   lastFetched: Date;
   rateLimited: boolean;
   symbolsFetched: number;
+  usingCache: boolean;
 }
 
 function buildInitialState(timeframe: string): LiveDataState {
@@ -58,6 +58,7 @@ function buildInitialState(timeframe: string): LiveDataState {
       lastFetched: new Date(cached.fetchedAt),
       rateLimited: cached.rateLimited,
       symbolsFetched: cached.symbolsFetched,
+      usingCache: true,
     };
   }
   return {
@@ -67,6 +68,7 @@ function buildInitialState(timeframe: string): LiveDataState {
     lastFetched: new Date(),
     rateLimited: false,
     symbolsFetched: 0,
+    usingCache: false,
   };
 }
 
@@ -96,13 +98,14 @@ export function useLiveThemeData(timeframe: string = "Today") {
         lastFetched: new Date(cached.fetchedAt),
         rateLimited: cached.rateLimited,
         symbolsFetched: cached.symbolsFetched,
+        usingCache: true,
       });
     } else {
-      // No cache for this timeframe — show demo and auto-fetch
       setState(prev => ({
         ...prev,
         themes: getProcessedThemes(demoThemes),
         isLive: false,
+        usingCache: false,
       }));
     }
   }, [timeframe]);
@@ -120,6 +123,7 @@ export function useLiveThemeData(timeframe: string = "Today") {
           lastFetched: new Date(cached.fetchedAt),
           rateLimited: cached.rateLimited,
           symbolsFetched: cached.symbolsFetched,
+          usingCache: true,
         });
       }
     }
@@ -131,44 +135,27 @@ export function useLiveThemeData(timeframe: string = "Today") {
     };
   }, []);
 
-  // Merge partial scan results (always "Today" timeframe for full scan)
-  const mergeScanResults = useCallback((scanThemes: ThemeData[]) => {
+  // Accept scan results for a specific timeframe
+  const setScanResults = useCallback((themes: ThemeData[], tf: string) => {
     if (!mountedRef.current) return;
 
-    // Only merge into "Today" cache
-    const tf = "Today";
+    const processed = getProcessedThemes(themes);
+    const now = new Date().toISOString();
+    const totalSymbols = themes.reduce((sum, t) => sum + t.tickers.filter(tk => !tk.skipped).length, 0);
 
-    setState((prev) => {
-      const themeMap = new Map<string, ThemeData>();
-      for (const t of prev.themes) themeMap.set(t.theme_name, t);
-      for (const t of scanThemes) {
-        themeMap.set(t.theme_name, { ...t, dataSource: "real", lastUpdated: new Date().toISOString() });
-      }
-      const hasAnyReal = Array.from(themeMap.values()).some(t => t.dataSource === "real");
-      if (!hasAnyReal) {
-        for (const d of demoThemes) {
-          if (!themeMap.has(d.theme_name)) themeMap.set(d.theme_name, d);
-        }
-      }
+    saveCache(tf, { themes, fetchedAt: now, symbolsFetched: totalSymbols, rateLimited: false });
 
-      const merged = Array.from(themeMap.values());
-      const processed = getProcessedThemes(merged);
-      const now = new Date().toISOString();
-      const totalSymbols = merged.reduce((sum, t) => sum + t.tickers.filter(tk => !tk.skipped).length, 0);
+    // Only update UI if currently viewing this timeframe
+    if (timeframeRef.current !== tf) return;
 
-      saveCache(tf, { themes: merged, fetchedAt: now, symbolsFetched: totalSymbols, rateLimited: false });
-
-      // Only update UI if currently viewing Today
-      if (timeframeRef.current !== "Today") return prev;
-
-      return {
-        themes: processed,
-        isLoading: false,
-        isLive: true,
-        lastFetched: new Date(now),
-        rateLimited: false,
-        symbolsFetched: totalSymbols,
-      };
+    setState({
+      themes: processed,
+      isLoading: false,
+      isLive: true,
+      lastFetched: new Date(now),
+      rateLimited: false,
+      symbolsFetched: totalSymbols,
+      usingCache: false,
     });
   }, []);
 
@@ -220,12 +207,6 @@ export function useLiveThemeData(timeframe: string = "Today") {
       const mergedMap = new Map<string, ThemeData>();
       for (const t of currentThemes) mergedMap.set(t.theme_name, t);
       for (const t of liveThemes) mergedMap.set(t.theme_name, t);
-      const hasReal = Array.from(mergedMap.values()).some(t => t.dataSource === "real");
-      if (!hasReal) {
-        for (const d of demoThemes) {
-          if (!mergedMap.has(d.theme_name)) mergedMap.set(d.theme_name, d);
-        }
-      }
 
       const merged = Array.from(mergedMap.values());
       const processed = getProcessedThemes(merged);
@@ -247,6 +228,7 @@ export function useLiveThemeData(timeframe: string = "Today") {
         lastFetched: new Date(fetchedAt),
         rateLimited: result.rate_limited || false,
         symbolsFetched: result.symbols_fetched || 0,
+        usingCache: false,
       });
 
       if (result.rate_limited) {
@@ -271,6 +253,7 @@ export function useLiveThemeData(timeframe: string = "Today") {
       lastFetched: new Date(),
       rateLimited: false,
       symbolsFetched: 0,
+      usingCache: false,
     });
   }, []);
 
@@ -278,6 +261,6 @@ export function useLiveThemeData(timeframe: string = "Today") {
     ...state,
     fetchLiveData,
     resetToDemo,
-    mergeScanResults,
+    setScanResults,
   };
 }
