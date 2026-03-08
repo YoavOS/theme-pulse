@@ -5,6 +5,8 @@ import {
   getScoreLabel,
   getStockTypeInfo,
   getMetricDot,
+  getValuationColor,
+  getSmartMoneyColor,
 } from "@/hooks/useFundamentals";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ChevronDown, ChevronRight } from "lucide-react";
@@ -110,6 +112,81 @@ function fmtMoney(v: number | null): string {
   return `$${v.toFixed(2)}`;
 }
 
+function fmtRatio(v: number | null, suffix = "×"): string {
+  if (v === null || v === undefined) return "N/A";
+  return `${v.toFixed(1)}${suffix}`;
+}
+
+function SmartMoneyCard({ f }: { f: FundamentalsData }) {
+  const smScore = f.smart_money_score ?? 0;
+  const smColor = getSmartMoneyColor(f.smart_money_score);
+  const barColor = smScore > 75 ? "hsl(var(--primary))" : smScore > 50 ? "hsl(152, 100%, 50%)" : smScore > 25 ? "#facc15" : "hsl(var(--muted-foreground))";
+
+  const instPct = f.institutional_ownership_pct;
+  const instChange = f.institutional_change;
+  const insiderScore = f.insider_sentiment_score;
+  const buys = f.recent_insider_buys ?? 0;
+  const sells = f.recent_insider_sells ?? 0;
+  const topInst = f.top_institutions;
+
+  return (
+    <div className="rounded-lg p-2.5 mt-2" style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)" }}>
+      <div className="flex items-center justify-between mb-2">
+        <span className="text-[11px] font-semibold text-foreground">🏛️ Smart Money</span>
+        <div className="flex items-center gap-2">
+          <div className="w-10 h-1.5 rounded-full bg-secondary/60 overflow-hidden">
+            <div className="h-full rounded-full" style={{ width: `${smScore}%`, background: barColor }} />
+          </div>
+          <span className={`text-[10px] font-bold ${smColor}`} style={{ fontFamily: DM_MONO }}>{smScore}</span>
+        </div>
+      </div>
+      <p className={`text-[10px] mb-1.5 ${smColor}`}>{f.smart_money_label || "No data"}</p>
+
+      <div className="space-y-1 text-[10px]">
+        <div className="flex items-center gap-1.5">
+          <span>🏛️</span>
+          <span className={instPct != null ? (instPct > 50 ? "text-[#00f5c4]" : instPct > 30 ? "text-gain-medium" : "text-muted-foreground") : "text-muted-foreground"}>
+            Institutions own {instPct != null ? `${instPct.toFixed(1)}%` : "N/A"} of float
+          </span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <span>📈</span>
+          <span className={instChange != null ? (instChange >= 0 ? "text-[#00f5c4]" : "text-destructive") : "text-muted-foreground"}>
+            Institutions {instChange != null ? (instChange >= 0 ? `bought ${instChange.toFixed(1)}% more` : `sold ${Math.abs(instChange).toFixed(1)}% more`) : "N/A"} this quarter
+          </span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <span>👔</span>
+          <span className={insiderScore != null ? (insiderScore > 0 ? "text-[#00f5c4]" : "text-destructive") : "text-muted-foreground"}>
+            Insiders are {f.insider_sentiment_label || "N/A"}
+          </span>
+        </div>
+      </div>
+
+      {topInst && topInst.length > 0 && (
+        <p className="text-[9px] text-muted-foreground mt-1.5" style={{ fontFamily: DM_MONO }}>
+          {topInst.map((inst: any) => inst.name).join(" · ")}
+        </p>
+      )}
+
+      {(buys > 0 || sells > 0) && (
+        <div className="mt-1.5 text-[10px]">
+          <span className="text-muted-foreground">Last 90 days: </span>
+          <span className="text-gain-medium">{buys} buys</span>
+          <span className="text-muted-foreground"> · </span>
+          <span className="text-destructive">{sells} sells</span>
+          {buys > sells && (
+            <p className="text-[9px] text-[#00f5c4] mt-0.5">Executives are buying their own stock — bullish signal</p>
+          )}
+          {sells > buys && (
+            <p className="text-[9px] text-[#f5a623] mt-0.5">More selling than buying by insiders — monitor closely</p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function FundamentalsTab({
   theme,
   fundamentals,
@@ -182,8 +259,9 @@ export default function FundamentalsTab({
 
           const typeInfo = getStockTypeInfo(f.stock_type);
           const scoreLabel = getScoreLabel(f.fundamental_score ?? 0);
+          const valuationColor = getValuationColor(f.valuation_label);
 
-          // Compute category sub-scores from raw metrics
+          // Compute category sub-scores
           const rg1y = f.revenue_growth_1y ?? 0;
           const rg3y = f.revenue_growth_3y ?? 0;
           const eg1y = f.eps_growth_1y ?? 0;
@@ -202,6 +280,11 @@ export default function FundamentalsTab({
           const healthScore = (cr > 2 ? 10 : cr > 1 ? 7 : 0) + (dte === null ? 5 : dte < 0.5 ? 10 : dte < 1 ? 7 : dte < 2 ? 4 : 0) + (fcf > 0 ? 5 : 0);
           const analystScore = (ar === "Strong Buy" ? 20 : ar === "Buy" ? 15 : ar === "Hold" ? 10 : ar === "Sell" ? 3 : 8) + (upside > 20 ? 5 : upside > 10 ? 3 : 0);
 
+          // Valuation display
+          const peDisplay = f.pe_ratio != null
+            ? (f.pe_ratio < 0 ? "Not yet profitable" : `Trading at ${f.pe_ratio.toFixed(0)}× earnings`)
+            : null;
+
           if (viewMode === "simple") {
             return (
               <div key={symbol} className="rounded-lg p-3" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)" }}>
@@ -218,12 +301,26 @@ export default function FundamentalsTab({
                   </div>
                 </div>
 
+                {/* Valuation line */}
+                {peDisplay && (
+                  <p className={`text-[11px] mb-2 ${valuationColor}`} style={{ fontFamily: DM_MONO }}>
+                    💲 {peDisplay}
+                    {f.valuation_label && f.valuation_label !== "Not yet profitable" && (
+                      <span className="text-muted-foreground ml-1">— {f.valuation_label}</span>
+                    )}
+                    {f.valuation_label === "Not yet profitable" && (
+                      <span className="text-muted-foreground ml-1">— common for growth companies</span>
+                    )}
+                  </p>
+                )}
+
                 {/* Category mini-scores */}
                 <div className="space-y-1 mb-2">
                   <CategoryBar emoji="📈" label="Growth" score={growthScore} />
                   <CategoryBar emoji="💰" label="Profitability" score={profitScore} />
                   <CategoryBar emoji="🏦" label="Financial Health" score={healthScore} />
                   <CategoryBar emoji="👨‍💼" label="Analysts" score={analystScore} />
+                  <CategoryBar emoji="💲" label="Valuation" score={f.valuation_score ?? 0} max={20} />
                 </div>
 
                 {/* AI Summary */}
@@ -235,6 +332,9 @@ export default function FundamentalsTab({
                 {f.target_low != null && f.target_high != null && f.target_mean != null && price > 0 && (
                   <PriceTargetBar low={f.target_low} mean={f.target_mean} high={f.target_high} current={price} />
                 )}
+
+                {/* Smart Money card */}
+                <SmartMoneyCard f={f} />
               </div>
             );
           }
@@ -302,6 +402,31 @@ export default function FundamentalsTab({
                 } dot={getMetricDot(f.free_cash_flow, { green: 1, yellow: 0 })} />
               </DetailedSection>
 
+              <DetailedSection title="💲 Valuation" defaultOpen={false}>
+                <MetricRow label="P/E Ratio" value={f.pe_ratio != null ? `${f.pe_ratio.toFixed(1)}×` : "N/A"} explanation={
+                  f.pe_ratio == null ? "Data not available" :
+                  f.pe_ratio < 0 ? "Negative P/E — company is not yet profitable" :
+                  `You pay $${f.pe_ratio.toFixed(0)} for every $1 of annual earnings`
+                } dot={getMetricDot(f.pe_ratio != null && f.pe_ratio > 0 ? f.pe_ratio : null, { green: 15, yellow: 40, reverse: true })} />
+                <MetricRow label="Forward P/E" value={fmtRatio(f.forward_pe)} explanation={
+                  f.forward_pe == null ? "Data not available" : "Based on next year's expected earnings — cheaper usually means growth expected"
+                } dot={getMetricDot(f.forward_pe, { green: 15, yellow: 35, reverse: true })} />
+                <MetricRow label="PEG Ratio" value={f.peg_ratio != null ? f.peg_ratio.toFixed(2) : "N/A"} explanation={
+                  f.peg_ratio == null ? "Data not available" :
+                  f.peg_ratio < 1 ? "P/E divided by growth rate — below 1 = potentially undervalued for its growth" :
+                  f.peg_ratio < 2 ? "Reasonable valuation relative to growth" : "Expensive relative to growth rate"
+                } dot={getMetricDot(f.peg_ratio, { green: 1, yellow: 2, reverse: true })} />
+                <MetricRow label="P/S Ratio" value={fmtRatio(f.ps_ratio)} explanation={
+                  f.ps_ratio == null ? "Data not available" : `Pay $${(f.ps_ratio ?? 0).toFixed(1)} for every $1 of revenue`
+                } dot={getMetricDot(f.ps_ratio, { green: 3, yellow: 8, reverse: true })} />
+                <MetricRow label="P/B Ratio" value={fmtRatio(f.pb_ratio)} explanation={
+                  f.pb_ratio == null ? "Data not available" : `Pay ${(f.pb_ratio ?? 0).toFixed(1)}× the company's book value`
+                } dot={getMetricDot(f.pb_ratio, { green: 2, yellow: 5, reverse: true })} />
+                <MetricRow label="EV/EBITDA" value={fmtRatio(f.ev_ebitda)} explanation={
+                  f.ev_ebitda == null ? "Data not available" : "How the whole company is valued relative to its operating profit"
+                } dot={getMetricDot(f.ev_ebitda, { green: 12, yellow: 25, reverse: true })} />
+              </DetailedSection>
+
               <DetailedSection title="👨‍💼 Analyst Ratings" defaultOpen={false}>
                 <MetricRow label="Consensus Rating" value={f.analyst_rating || "N/A"} explanation={
                   !f.analyst_rating ? "Data not available" :
@@ -319,6 +444,31 @@ export default function FundamentalsTab({
                   f.target_mean == null ? "Data not available" : `Current price has ${Math.abs(upside).toFixed(0)}% ${upside >= 0 ? "upside" : "downside"} to consensus`
                 } dot={getMetricDot(upside, { green: 10, yellow: 0 })} />
                 <MetricRow label="Target Range" value={f.target_low != null && f.target_high != null ? `$${f.target_low.toFixed(0)} – $${f.target_high.toFixed(0)}` : "N/A"} explanation="Bear to bull case range from analysts" dot="bg-muted-foreground/30" />
+              </DetailedSection>
+
+              <DetailedSection title="🏛️ Smart Money" defaultOpen={false}>
+                <MetricRow label="Institutional Ownership" value={f.institutional_ownership_pct != null ? `${f.institutional_ownership_pct.toFixed(1)}%` : "N/A"} explanation={
+                  f.institutional_ownership_pct == null ? "Data not available" :
+                  f.institutional_ownership_pct > 70 ? `${f.institutional_ownership_pct.toFixed(0)}% of shares held by large funds — strong vote of confidence` :
+                  `${f.institutional_ownership_pct.toFixed(0)}% held by institutions`
+                } dot={getMetricDot(f.institutional_ownership_pct, { green: 50, yellow: 20 })} />
+                <MetricRow label="Institutional Change (QoQ)" value={f.institutional_change != null ? `${f.institutional_change >= 0 ? "+" : ""}${f.institutional_change.toFixed(1)}%` : "N/A"} explanation={
+                  f.institutional_change == null ? "Data not available" :
+                  f.institutional_change > 0 ? `Institutions increased holdings by ${f.institutional_change.toFixed(1)}% last quarter — buying pressure` :
+                  `Institutions reduced holdings by ${Math.abs(f.institutional_change).toFixed(1)}%`
+                } dot={getMetricDot(f.institutional_change, { green: 2, yellow: 0 })} />
+                {f.top_institutions && f.top_institutions.length > 0 && (
+                  <MetricRow label="Top Holder" value={f.top_institutions[0]?.name || "N/A"} explanation={
+                    f.top_institutions[0]?.pct != null ? `Largest institutional shareholder (${f.top_institutions[0].pct.toFixed(1)}%)` : "Largest institutional shareholder"
+                  } dot="bg-muted-foreground/30" />
+                )}
+                <MetricRow label="Insider MSPR" value={f.insider_sentiment_score != null ? f.insider_sentiment_score.toFixed(2) : "N/A"} explanation={
+                  f.insider_sentiment_score == null ? "Data not available" :
+                  "Net insider buying score — positive means executives are buying more than selling"
+                } dot={getMetricDot(f.insider_sentiment_score, { green: 0.1, yellow: -0.1 })} />
+                <MetricRow label="Insider Buys (90d)" value={`${f.recent_insider_buys ?? 0} transactions`} explanation="Purchase transactions by company insiders" dot="bg-muted-foreground/30" />
+                <MetricRow label="Insider Sells (90d)" value={`${f.recent_insider_sells ?? 0} transactions`} explanation="Sale transactions by company insiders" dot="bg-muted-foreground/30" />
+                <MetricRow label="Smart Money Score" value={f.smart_money_score != null ? `${f.smart_money_score}/100` : "N/A"} explanation={f.smart_money_label || "No data"} dot={getMetricDot(f.smart_money_score, { green: 60, yellow: 30 })} />
               </DetailedSection>
             </div>
           );
