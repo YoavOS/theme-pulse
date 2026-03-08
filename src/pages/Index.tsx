@@ -137,160 +137,108 @@ export default function Index() {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* ─── HEADER ──────────────────────────────────── */}
+      {/* ─── ROW 1: Title + Status ──────────────────── */}
       <header className="sticky top-0 z-30 border-b border-border bg-background/80 backdrop-blur-md">
-        <div className="container flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h1 className="text-2xl font-extrabold tracking-tight text-foreground sm:text-3xl">
-              Best Performing Themes{" "}
-              <span className="text-primary">{formatDate(lastFetched)}</span>
-            </h1>
-            <p className="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground">
+        <div className="container py-3">
+          {/* Row 1 */}
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-xl font-extrabold tracking-tight text-foreground sm:text-2xl">
+                Best Performing Themes{" "}
+                <span className="text-primary">{formatDate(lastFetched)}</span>
+              </h1>
+            </div>
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
               {isLive ? (
                 <span className="inline-flex items-center gap-1 text-gain-medium">
                   <Wifi size={12} /> Live
                 </span>
               ) : (
                 <span className="inline-flex items-center gap-1">
-                  <WifiOff size={12} /> Demo data
+                  <WifiOff size={12} /> Demo
                 </span>
               )}
               {isLive && (
                 rateLimited ? (
                   <span className="inline-flex items-center gap-1 rounded border border-destructive/30 bg-destructive/10 px-1.5 py-0.5 text-[10px] font-semibold text-destructive">
-                    Finnhub: Rate limit
+                    Rate limited
                   </span>
                 ) : (
                   <span className="inline-flex items-center gap-1 rounded border border-gain-medium/30 bg-gain-medium/10 px-1.5 py-0.5 text-[10px] font-semibold text-gain-medium">
-                    Finnhub: OK
+                    Finnhub OK
                   </span>
                 )
               )}
               {usingCache && (
-                <span className="inline-flex items-center gap-1 rounded border border-border bg-secondary/50 px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground">
-                  Using cached data
+                <span className="rounded border border-border bg-secondary/50 px-1.5 py-0.5 text-[10px] font-semibold">
+                  Cached
                 </span>
               )}
-              · Last updated: {formatTime(lastFetched)}
-              · {themes.length} themes
-              {isLive && ` · ${symbolsFetched} symbols`}
+              <span className="hidden sm:inline">· {formatTime(lastFetched)}</span>
+              <span className="hidden sm:inline">· {themes.length} themes</span>
+              {isLive && <span className="hidden sm:inline">· {symbolsFetched} symbols</span>}
               {scanProgress && scanProgress.failed > 0 && (
-                <span className="inline-flex items-center gap-1 text-[10px] text-destructive">
-                  ⚠ {scanProgress.failed} tickers unavailable
-                </span>
+                <span className="text-[10px] text-destructive">⚠ {scanProgress.failed} unavailable</span>
               )}
               {eodStatus?.alreadySaved && (
-                <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground">
-                  · EOD: {eodStatus.date}
-                </span>
+                <span className="text-[10px]">· EOD ✓</span>
               )}
-            </p>
+            </div>
           </div>
-          <div className="flex items-center gap-2">
-            {/* Timeframe selector */}
-            <div className="flex rounded-md border border-border bg-secondary/50">
-              {TIMEFRAMES.map((tf) => (
-                <button
-                  key={tf}
-                  onClick={() => setActiveTimeframe(tf)}
-                  className={`px-3 py-1.5 text-xs font-semibold transition-colors ${
-                    activeTimeframe === tf
-                      ? "bg-primary text-primary-foreground"
-                      : "text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  {tf}
-                </button>
-              ))}
+
+          {/* Row 2: Timeframes + Actions */}
+          <div className="mt-2.5 flex items-center justify-between gap-3">
+            {/* Left: Timeframe pills */}
+            <div className="flex items-center gap-2">
+              <div className="flex rounded-md border border-border bg-secondary/50">
+                {TIMEFRAMES.map((tf) => (
+                  <button
+                    key={tf}
+                    onClick={() => setActiveTimeframe(tf)}
+                    className={`px-3 py-1.5 text-xs font-semibold transition-colors ${
+                      activeTimeframe === tf
+                        ? "bg-primary text-primary-foreground"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    {tf}
+                  </button>
+                ))}
+              </div>
             </div>
 
-            {/* Live / Demo toggle */}
-            {isLive ? (
+            {/* Right: Primary actions */}
+            <div className="flex items-center gap-2">
+              {/* Full Scan */}
               <button
-                onClick={resetToDemo}
-                className="rounded-md border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                onClick={startFullScan}
+                disabled={isFullScanning || isLoading}
+                className="rounded-md border border-primary/40 bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary transition-colors hover:bg-primary/20 disabled:opacity-50"
+                title="Update all themes sequentially"
               >
-                Demo Data
-              </button>
-            ) : (
-              <button
-                onClick={() => fetchLiveData()}
-                disabled={isLoading}
-                className="rounded-md border border-gain-medium/40 bg-gain-medium/10 px-3 py-1.5 text-xs font-semibold text-gain-medium transition-colors hover:bg-gain-medium/20 disabled:opacity-50"
-              >
-                {isLoading ? (
+                {isFullScanning ? (
                   <span className="inline-flex items-center gap-1">
-                    <Loader2 size={12} className="animate-spin" /> Fetching…
+                    <Loader2 size={12} className="animate-spin" /> Scanning…
                   </span>
                 ) : (
-                  "Go Live (All)"
+                  <span className="inline-flex items-center gap-1">
+                    <ScanLine size={12} /> Full Scan
+                  </span>
                 )}
               </button>
-            )}
-
-            <button
-              onClick={() => setShowSelector(!showSelector)}
-              className="rounded-md border border-primary/40 bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary transition-colors hover:bg-primary/20"
-            >
-              {showSelector ? "Hide Selector" : "Select Themes"}
-            </button>
-
-            <button
-              onClick={() => setShowPlaceholders(!showPlaceholders)}
-              className="rounded-md border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-            >
-              {showPlaceholders ? "Hide" : "Show"} Empty
-            </button>
-            <button
-              onClick={handleExport}
-              className="rounded-md border border-border p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-              title="Export CSV"
-            >
-              <Download size={16} />
-            </button>
-            <button
-              onClick={() => setShowValidateDialog(true)}
-              className="rounded-md border border-primary/40 bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary transition-colors hover:bg-primary/20"
-              title="Checks which tickers do not exist on Finnhub — helps clean up bad symbols"
-            >
-              <span className="inline-flex items-center gap-1">
-                <ShieldCheck size={12} /> Validate
-              </span>
-            </button>
-            <button
-              onClick={startFullScan}
-              disabled={isFullScanning || isLoading}
-              className="rounded-md border border-primary/40 bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary transition-colors hover:bg-primary/20 disabled:opacity-50"
-              title="Update all themes sequentially with rate limit handling"
-            >
-              {isFullScanning ? (
-                <span className="inline-flex items-center gap-1">
-                  <Loader2 size={12} className="animate-spin" /> Scanning…
-                </span>
-              ) : (
-                <span className="inline-flex items-center gap-1">
-                  <ScanLine size={12} /> Full Scan
+              {fullScanStatus && (
+                <span className="hidden sm:inline-flex max-w-[200px] items-center gap-1 truncate text-[10px] text-muted-foreground" title={fullScanStatus}>
+                  {fullScanStatus}
+                  {!isFullScanning && fullScanStatus.includes("ticker") && (
+                    <button onClick={clearProgress} className="ml-1 rounded p-0.5 text-destructive hover:bg-destructive/10" title="Clear">
+                      <X size={10} />
+                    </button>
+                  )}
                 </span>
               )}
-            </button>
-            {fullScanStatus && (
-              <span className="inline-flex max-w-[260px] items-center gap-1 truncate text-[10px] text-muted-foreground" title={fullScanStatus}>
-                {fullScanStatus}
-                {!isFullScanning && fullScanStatus.includes("ticker") && (
-                  <button
-                    onClick={clearProgress}
-                    className="ml-1 rounded p-0.5 text-destructive hover:bg-destructive/10"
-                    title="Clear scan progress"
-                  >
-                    <X size={10} />
-                  </button>
-                )}
-              </span>
-            )}
 
-            {/* Save as EOD from scan */}
-            {showSaveEodFromScan && !isFullScanning && (
-              <div className="flex flex-col items-start gap-0.5">
+              {/* Save as EOD from scan */}
+              {showSaveEodFromScan && !isFullScanning && (
                 <button
                   onClick={saveEodFromScan}
                   disabled={eodAlreadySavedFromScan || isSavingEodFromScan}
@@ -308,124 +256,167 @@ export default function Index() {
                     {isSavingEodFromScan ? "Saving..." : "Save as EOD"}
                   </span>
                 </button>
-                <span className={`text-[9px] leading-tight ${
-                  eodAlreadySavedFromScan
-                    ? "text-muted-foreground"
-                    : scanAfterClose
-                    ? "text-gain-medium/70"
-                    : "text-[hsl(40,80%,50%)]/70"
-                }`}>
-                  {eodAlreadySavedFromScan
-                    ? "✓ EOD already saved"
-                    : scanAfterClose
-                    ? "✓ Market closed — valid EOD"
-                    : "⚠ Before market close"
-                  }
-                </span>
-              </div>
-            )}
+              )}
 
-            {/* Save EOD button */}
-            {isEodSaving && eodProgress ? (
-              <span className="inline-flex items-center gap-1.5 rounded-md border border-primary/30 bg-primary/5 px-3 py-1.5 text-xs font-semibold text-primary">
-                <Loader2 size={12} className="animate-spin" />
-                {eodProgress.currentTheme?.startsWith("Retry") ? "Retrying" : "Saving EOD"}: {eodProgress.saved}/{eodProgress.total}
-                {eodProgress.failed > 0 && (
-                  <span className="text-[10px] text-destructive">· {eodProgress.failed} failed</span>
+              {/* Save EOD */}
+              {isEodSaving && eodProgress ? (
+                <span className="inline-flex items-center gap-1.5 rounded-md border border-primary/30 bg-primary/5 px-3 py-1.5 text-xs font-semibold text-primary">
+                  <Loader2 size={12} className="animate-spin" />
+                  {eodProgress.currentTheme?.startsWith("Retry") ? "Retrying" : "Saving"}: {eodProgress.saved}/{eodProgress.total}
+                  {eodProgress.failed > 0 && (
+                    <span className="text-[10px] text-destructive">· {eodProgress.failed} failed</span>
+                  )}
+                </span>
+              ) : (
+                <button
+                  onClick={() => startEodSave(false)}
+                  disabled={!canSaveEod}
+                  className="relative rounded-md border border-gain-medium/40 bg-gain-medium/10 px-3 py-1.5 text-xs font-semibold text-gain-medium transition-colors hover:bg-gain-medium/20 disabled:opacity-40 disabled:cursor-not-allowed"
+                  title={eodTooltip}
+                >
+                  <span className="inline-flex items-center gap-1">
+                    <Save size={12} /> Save EOD
+                  </span>
+                  {eodAutoSave && (
+                    <span className="absolute -right-1 -top-1 h-2 w-2 rounded-full bg-primary animate-pulse" title="Auto-save enabled" />
+                  )}
+                </button>
+              )}
+
+              {/* Friday Close — weekend only */}
+              {eodStatus?.isWeekend && !isEodSaving && (
+                <button
+                  onClick={() => startEodSave(true)}
+                  disabled={!canSaveFriday}
+                  className="rounded-md border border-[hsl(40,80%,50%)]/40 bg-[hsl(40,80%,50%)]/10 px-3 py-1.5 text-xs font-semibold text-[hsl(40,80%,50%)] transition-colors hover:bg-[hsl(40,80%,50%)]/20 disabled:opacity-40 disabled:cursor-not-allowed"
+                  title={fridayTooltip}
+                >
+                  <span className="inline-flex items-center gap-1">
+                    <Calendar size={12} /> Friday Close
+                  </span>
+                </button>
+              )}
+
+              {/* Auto-save toggle */}
+              <button
+                onClick={toggleEodAutoSave}
+                className={`rounded-md border p-1.5 transition-colors ${
+                  eodAutoSave
+                    ? "border-primary/40 bg-primary/10 text-primary"
+                    : "border-border text-muted-foreground hover:bg-accent hover:text-foreground"
+                }`}
+                title={eodAutoSave ? "Auto-save EOD: ON" : "Auto-save EOD: OFF"}
+              >
+                <Zap size={14} />
+              </button>
+
+              {/* Options dropdown */}
+              <div className="relative">
+                <button
+                  onClick={() => setShowOptions(!showOptions)}
+                  className="inline-flex items-center gap-1 rounded-md border border-border p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                  title="More options"
+                >
+                  <Settings size={14} />
+                  <ChevronDown size={10} className={`transition-transform ${showOptions ? "rotate-180" : ""}`} />
+                </button>
+                {showOptions && (
+                  <>
+                    <div className="fixed inset-0 z-40" onClick={() => setShowOptions(false)} />
+                    <div className="absolute right-0 top-full z-50 mt-1 w-56 rounded-lg border border-border bg-card p-1 shadow-xl">
+                      {isLive ? (
+                        <button
+                          onClick={() => { resetToDemo(); setShowOptions(false); }}
+                          className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-xs text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+                        >
+                          <WifiOff size={13} /> Switch to Demo Data
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => { fetchLiveData(); setShowOptions(false); }}
+                          disabled={isLoading}
+                          className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-xs text-gain-medium hover:bg-accent transition-colors disabled:opacity-50"
+                        >
+                          <Wifi size={13} /> Go Live (All)
+                        </button>
+                      )}
+                      <button
+                        onClick={() => { setShowSelector(!showSelector); setShowOptions(false); }}
+                        className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-xs text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+                      >
+                        <ScanLine size={13} /> {showSelector ? "Hide" : "Select"} Themes
+                      </button>
+                      <button
+                        onClick={() => { setShowPlaceholders(!showPlaceholders); setShowOptions(false); }}
+                        className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-xs text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+                      >
+                        <LayoutDashboard size={13} /> {showPlaceholders ? "Hide" : "Show"} Empty Themes
+                      </button>
+                      <button
+                        onClick={() => { handleExport(); setShowOptions(false); }}
+                        className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-xs text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+                      >
+                        <Download size={13} /> Export CSV
+                      </button>
+                      <button
+                        onClick={() => { setShowValidateDialog(true); setShowOptions(false); }}
+                        className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-xs text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+                      >
+                        <ShieldCheck size={13} /> Validate Tickers
+                      </button>
+                      <button
+                        onClick={() => { isLive && fetchLiveData(); setShowOptions(false); }}
+                        disabled={isLoading || !isLive}
+                        className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-xs text-muted-foreground hover:bg-accent hover:text-foreground transition-colors disabled:opacity-30"
+                      >
+                        <RefreshCw size={13} /> Refresh Data
+                      </button>
+                      <div className="my-1 border-t border-border" />
+                      <Link
+                        to="/admin"
+                        onClick={() => setShowOptions(false)}
+                        className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-xs text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+                      >
+                        <Settings size={13} /> Manage Themes & Tickers
+                      </Link>
+                    </div>
+                  </>
                 )}
-                {eodProgress.currentTheme && (
-                  <span className="max-w-[120px] truncate text-[10px] text-muted-foreground">
-                    · {eodProgress.currentTheme}
+              </div>
+            </div>
+          </div>
+
+          {/* Row 3: Tab Navigation */}
+          <div className="mt-3 flex items-center gap-1 border-t border-border/50 pt-2.5">
+            {([
+              { to: "/", label: "Dashboard", icon: <LayoutDashboard size={14} />, active: true },
+              { to: "/intelligence", label: "Intelligence", icon: <Brain size={14} />, color: "text-primary" },
+              { to: "/watchlist", label: "Watchlist", icon: <Bookmark size={14} />, color: "text-[hsl(40,80%,50%)]",
+                badge: pinned.length > 0 ? pinned.length : null },
+              { to: "/eod-history", label: "EOD History", icon: <Calendar size={14} />, color: "text-gain-medium",
+                pulse: eodStatus && !eodStatus.alreadySaved && !eodStatus.isWeekend },
+            ] as const).map((tab) => (
+              <Link
+                key={tab.to}
+                to={tab.to}
+                className={`relative inline-flex items-center gap-1.5 rounded-md px-4 py-2 text-sm font-medium transition-colors ${
+                  tab.active
+                    ? "bg-primary/10 text-primary border-b-2 border-primary"
+                    : `text-muted-foreground hover:bg-accent hover:text-foreground ${tab.color || ""}`
+                }`}
+              >
+                <span className={tab.active ? "text-primary" : tab.color || ""}>{tab.icon}</span>
+                {tab.label}
+                {tab.badge && (
+                  <span className="inline-flex items-center gap-0.5 rounded-full bg-primary/20 px-1.5 py-0 text-[9px] font-bold text-primary">
+                    {tab.badge}
                   </span>
                 )}
-              </span>
-            ) : (
-              <button
-                onClick={() => startEodSave(false)}
-                disabled={!canSaveEod}
-                className="relative rounded-md border border-gain-medium/40 bg-gain-medium/10 px-3 py-1.5 text-xs font-semibold text-gain-medium transition-colors hover:bg-gain-medium/20 disabled:opacity-40 disabled:cursor-not-allowed"
-                title={eodTooltip}
-              >
-                <span className="inline-flex items-center gap-1">
-                  <Save size={12} /> Save EOD
-                </span>
-                {eodAutoSave && (
-                  <span className="absolute -right-1 -top-1 h-2 w-2 rounded-full bg-primary animate-pulse" title="Auto-save enabled" />
+                {tab.pulse && (
+                  <span className="h-2 w-2 rounded-full bg-[hsl(40,80%,50%)] animate-pulse" title="EOD not saved today" />
                 )}
-              </button>
-            )}
-
-            {/* Save Friday Close button — weekend only */}
-            {eodStatus?.isWeekend && !isEodSaving && (
-              <button
-                onClick={() => startEodSave(true)}
-                disabled={!canSaveFriday}
-                className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-1.5 text-xs font-semibold text-amber-400 transition-colors hover:bg-amber-500/20 disabled:opacity-40 disabled:cursor-not-allowed"
-                title={fridayTooltip}
-              >
-                <span className="inline-flex items-center gap-1">
-                  <Calendar size={12} /> Save Friday Close
-                </span>
-              </button>
-            )}
-            <button
-              onClick={toggleEodAutoSave}
-              className={`rounded-md border p-1.5 transition-colors ${
-                eodAutoSave
-                  ? "border-primary/40 bg-primary/10 text-primary"
-                  : "border-border text-muted-foreground hover:bg-accent hover:text-foreground"
-              }`}
-              title={eodAutoSave ? "Auto-save EOD: ON (triggers at 4:05 PM ET)" : "Auto-save EOD: OFF"}
-            >
-              <Zap size={14} />
-            </button>
-            <button
-              onClick={() => isLive ? fetchLiveData() : undefined}
-              disabled={isLoading || !isLive}
-              className="rounded-md bg-primary/10 p-1.5 text-primary transition-colors hover:bg-primary/20 disabled:opacity-30"
-              title="Refresh"
-            >
-              <RefreshCw size={16} className={isLoading ? "animate-spin" : ""} />
-            </button>
-            <Link
-              to="/intelligence"
-              className="inline-flex items-center gap-1.5 rounded-md border border-primary/30 bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary transition-colors hover:bg-primary/20"
-              title="Theme Intelligence"
-            >
-              <Brain size={14} />
-              <span className="hidden sm:inline">Intelligence</span>
-            </Link>
-            <Link
-              to="/watchlist"
-              className="relative inline-flex items-center gap-1.5 rounded-md border border-[hsl(40,80%,50%)]/30 bg-[hsl(40,80%,50%)]/10 px-3 py-1.5 text-xs font-semibold text-[hsl(40,80%,50%)] transition-colors hover:bg-[hsl(40,80%,50%)]/20"
-              title="Watchlist"
-            >
-              <Bookmark size={14} />
-              <span className="hidden sm:inline">Watchlist</span>
-              {pinned.length > 0 && (
-                <span className="inline-flex items-center gap-0.5 rounded-full bg-primary/20 px-1.5 py-0 text-[9px] font-bold text-primary">
-                  {pinned.length}
-                </span>
-              )}
-            </Link>
-            <Link
-              to="/eod-history"
-              className="relative inline-flex items-center gap-1.5 rounded-md border border-gain-medium/30 bg-gain-medium/10 px-3 py-1.5 text-xs font-semibold text-gain-medium transition-colors hover:bg-gain-medium/20"
-              title="EOD History"
-            >
-              <Calendar size={14} />
-              <span className="hidden sm:inline">EOD</span>
-              {eodStatus && !eodStatus.alreadySaved && !eodStatus.isWeekend && (
-                <span className="h-2 w-2 rounded-full bg-[hsl(40,80%,50%)] animate-pulse" title="EOD not saved today" />
-              )}
-            </Link>
-            <Link
-              to="/admin"
-              className="rounded-md border border-border p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-              title="Manage Themes & Tickers"
-            >
-              <Settings size={16} />
-            </Link>
+              </Link>
+            ))}
           </div>
         </div>
       </header>
