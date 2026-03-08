@@ -19,11 +19,13 @@ interface VolumeResult {
   avg_20d: number;
   avg_10d: number;
   avg_3m: number;
+  today_vol_estimated?: boolean;   // true if today_vol is a proxy, not live
+  vol_data_points?: number;        // how many EOD rows had volume data
   error?: string;
 }
 
-async function fetchVolumeForSymbol(symbol: string): Promise<VolumeResult> {
-  const result: VolumeResult = { symbol, today_vol: 0, avg_20d: 0, avg_10d: 0, avg_3m: 0 };
+async function fetchVolumeForSymbol(symbol: string, sb: any): Promise<VolumeResult> {
+  const result: VolumeResult = { symbol, today_vol: 0, avg_20d: 0, avg_10d: 0, avg_3m: 0, today_vol_estimated: false, vol_data_points: 0 };
 
   // 1. Fetch /quote for today's volume
   try {
@@ -35,9 +37,7 @@ async function fetchVolumeForSymbol(symbol: string): Promise<VolumeResult> {
     }
     if (quoteRes.ok) {
       const q = await quoteRes.json();
-      // Finnhub quote doesn't include volume directly in free tier
-      // but some endpoints do - check if 'v' exists
-      if (q && typeof q.v === 'number') {
+      if (q && typeof q.v === 'number' && q.v > 0) {
         result.today_vol = q.v;
       }
     }
@@ -45,7 +45,7 @@ async function fetchVolumeForSymbol(symbol: string): Promise<VolumeResult> {
     console.log(`Quote error for ${symbol}: ${e}`);
   }
 
-  await delay(280); // rate limit: ~4/sec
+  await delay(280);
 
   // 2. Fetch /stock/metric for volume averages
   try {
@@ -53,7 +53,6 @@ async function fetchVolumeForSymbol(symbol: string): Promise<VolumeResult> {
       `https://finnhub.io/api/v1/stock/metric?symbol=${encodeURIComponent(symbol)}&metric=all&token=${FINNHUB_KEY}`
     );
     if (metricRes.status === 429) {
-      // Keep what we have from quote
       console.log(`Metric rate-limited for ${symbol}`);
       return result;
     }
@@ -61,15 +60,13 @@ async function fetchVolumeForSymbol(symbol: string): Promise<VolumeResult> {
       const data = await metricRes.json();
       const m = data?.metric;
       if (m) {
-        // 10DayAverageTradingVolume is in millions on Finnhub
         if (typeof m["10DayAverageTradingVolume"] === "number") {
           result.avg_10d = Math.round(m["10DayAverageTradingVolume"] * 1_000_000);
         }
         if (typeof m["3MonthAverageTradingVolume"] === "number") {
           result.avg_3m = Math.round(m["3MonthAverageTradingVolume"] * 1_000_000);
         }
-        // Use 3-month as proxy for 20-day if we don't have a specific 20-day metric
-        // Finnhub provides 10-day and 3-month; interpolate 20-day as avg of both
+        // Interpolate 20-day from 10-day and 3-month
         if (result.avg_10d > 0 && result.avg_3m > 0) {
           result.avg_20d = Math.round((result.avg_10d + result.avg_3m) / 2);
         } else if (result.avg_10d > 0) {
@@ -83,9 +80,46 @@ async function fetchVolumeForSymbol(symbol: string): Promise<VolumeResult> {
     console.log(`Metric error for ${symbol}: ${e}`);
   }
 
-  // If we got metric data but no today_vol from quote, estimate from averages
+  // 3. If today_vol is still 0 (weekend/after hours), try eod_prices fallback
+  if (result.today_vol === 0) {
+    try {
+      const { data: recentEod } = await sb
+        .from("eod_prices")
+        .select("volume, date")
+        .eq("symbol", symbol)
+        .not("volume", "is", null)
+        .gt("volume", 0)
+        .order("date", { ascending: false })
+        .limit(1);
+
+      if (recentEod && recentEod.length > 0 && recentEod[0].volume > 0) {
+        result.today_vol = recentEod[0].volume;
+        result.today_vol_estimated = true;
+        console.log(`${symbol}: using eod_prices volume from ${recentEod[0].date} = ${recentEod[0].volume}`);
+      }
+    } catch (e) {
+      console.log(`EOD fallback error for ${symbol}: ${e}`);
+    }
+  }
+
+  // 4. If still no today_vol, use avg_10d as proxy (recent daily average)
   if (result.today_vol === 0 && result.avg_10d > 0) {
-    // Can't estimate today's vol - leave as 0, the frontend handles N/A
+    result.today_vol = result.avg_10d;
+    result.today_vol_estimated = true;
+  }
+
+  // 5. Check how many EOD data points we have with volume for this symbol
+  try {
+    const { count } = await sb
+      .from("eod_prices")
+      .select("*", { count: "exact", head: true })
+      .eq("symbol", symbol)
+      .not("volume", "is", null)
+      .gt("volume", 0);
+
+    result.vol_data_points = count || 0;
+  } catch (e) {
+    // Non-critical, leave as 0
   }
 
   return result;
@@ -136,6 +170,8 @@ Deno.serve(async (req) => {
           avg_20d: c.avg_20d || 0,
           avg_10d: c.avg_10d || 0,
           avg_3m: c.avg_3m || 0,
+          today_vol_estimated: (c as any).today_vol_estimated ?? false,
+          vol_data_points: (c as any).vol_data_points ?? 0,
         });
       }
     }
@@ -145,12 +181,12 @@ Deno.serve(async (req) => {
 
     // Fetch uncached symbols sequentially with rate limiting
     for (let i = 0; i < uncached.length; i++) {
-      const vol = await fetchVolumeForSymbol(uncached[i]);
+      const vol = await fetchVolumeForSymbol(uncached[i], sb);
 
       if (vol.error === "rate_limited") {
         console.log(`Rate limited on ${uncached[i]}, waiting 60s...`);
         await delay(60000);
-        const retry = await fetchVolumeForSymbol(uncached[i]);
+        const retry = await fetchVolumeForSymbol(uncached[i], sb);
         results.push(retry);
         if (!retry.error && (retry.avg_10d > 0 || retry.avg_3m > 0)) {
           await sb.from("ticker_volume_cache").upsert({
@@ -159,7 +195,7 @@ Deno.serve(async (req) => {
             last_updated: new Date().toISOString(),
           }, { onConflict: "symbol" });
         }
-      } else if (vol.avg_10d > 0 || vol.avg_3m > 0) {
+      } else if (vol.avg_10d > 0 || vol.avg_3m > 0 || vol.today_vol > 0) {
         results.push(vol);
         await sb.from("ticker_volume_cache").upsert({
           symbol: vol.symbol, today_vol: vol.today_vol,
@@ -171,7 +207,7 @@ Deno.serve(async (req) => {
       }
 
       if (i < uncached.length - 1) {
-        await delay(280); // ~4/sec between symbols (each symbol makes 2 calls internally)
+        await delay(280);
       }
     }
 
