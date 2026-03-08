@@ -17,6 +17,8 @@ import { useWatchlist } from "@/hooks/useWatchlistContext";
 import { useVolumeData } from "@/hooks/useVolumeData";
 import { Link } from "react-router-dom";
 import HelpButton from "@/components/HelpButton";
+import ThemeSearchBar from "@/components/ThemeSearchBar";
+import { useThemeSearch } from "@/hooks/useThemeSearch";
 
 const TIMEFRAMES = ["Today", "1W", "1M", "3M", "YTD"] as const;
 
