@@ -14,6 +14,87 @@ export type Database = {
   }
   public: {
     Tables: {
+      eod_prices: {
+        Row: {
+          close_price: number
+          created_at: string | null
+          date: string
+          high_price: number | null
+          id: string
+          is_backfill: boolean | null
+          low_price: number | null
+          open_price: number | null
+          source: string | null
+          symbol: string
+          theme_name: string
+          volume: number | null
+        }
+        Insert: {
+          close_price: number
+          created_at?: string | null
+          date: string
+          high_price?: number | null
+          id?: string
+          is_backfill?: boolean | null
+          low_price?: number | null
+          open_price?: number | null
+          source?: string | null
+          symbol: string
+          theme_name: string
+          volume?: number | null
+        }
+        Update: {
+          close_price?: number
+          created_at?: string | null
+          date?: string
+          high_price?: number | null
+          id?: string
+          is_backfill?: boolean | null
+          low_price?: number | null
+          open_price?: number | null
+          source?: string | null
+          symbol?: string
+          theme_name?: string
+          volume?: number | null
+        }
+        Relationships: []
+      }
+      eod_save_sessions: {
+        Row: {
+          completed_at: string | null
+          date: string
+          failed_count: number | null
+          failed_symbols: string[] | null
+          id: string
+          saved_count: number | null
+          started_at: string | null
+          status: string | null
+          total_tickers: number | null
+        }
+        Insert: {
+          completed_at?: string | null
+          date: string
+          failed_count?: number | null
+          failed_symbols?: string[] | null
+          id?: string
+          saved_count?: number | null
+          started_at?: string | null
+          status?: string | null
+          total_tickers?: number | null
+        }
+        Update: {
+          completed_at?: string | null
+          date?: string
+          failed_count?: number | null
+          failed_symbols?: string[] | null
+          id?: string
+          saved_count?: number | null
+          started_at?: string | null
+          status?: string | null
+          total_tickers?: number | null
+        }
+        Relationships: []
+      }
       full_update_progress: {
         Row: {
           id: string
@@ -132,7 +213,21 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      get_eod_baselines: {
+        Args: {
+          p_date_1m: string
+          p_date_1w: string
+          p_date_3m: string
+          p_date_ytd: string
+          p_symbols: string[]
+        }
+        Returns: {
+          baseline_date: string
+          close_price: number
+          symbol: string
+          timeframe: string
+        }[]
+      }
     }
     Enums: {
       [_ in never]: never
