@@ -1,4 +1,4 @@
-import { useMemo, Component, type ReactNode } from "react";
+import { useMemo, useEffect, Component, type ReactNode } from "react";
 import { ThemeData } from "@/data/themeData";
 import { Badge } from "@/components/ui/badge";
 import { Pin } from "lucide-react";
