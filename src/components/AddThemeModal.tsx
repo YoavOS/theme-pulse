@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useWatchlist } from "@/hooks/useWatchlist";
 import { ThemeData } from "@/data/themeData";
 import { Search, Check, X } from "lucide-react";
@@ -8,6 +8,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
 
 export default function AddThemeModal({
   open,
@@ -20,7 +21,15 @@ export default function AddThemeModal({
 }) {
   const { isPinned, togglePin } = useWatchlist();
   const [search, setSearch] = useState("");
-  const [confirmRemove, setConfirmRemove] = useState<string | null>(null);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+
+  // Reset selection every time modal opens
+  useEffect(() => {
+    if (open) {
+      setSelected(new Set());
+      setSearch("");
+    }
+  }, [open]);
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
@@ -29,25 +38,25 @@ export default function AddThemeModal({
       .sort((a, b) => a.theme_name.localeCompare(b.theme_name));
   }, [themes, search]);
 
-  const handleToggle = (name: string) => {
-    if (isPinned(name)) {
-      setConfirmRemove(name);
-    } else {
-      togglePin(name);
-    }
+  const toggleSelect = (name: string) => {
+    if (isPinned(name)) return; // already pinned, can't select
+    setSelected(prev => {
+      const next = new Set(prev);
+      if (next.has(name)) next.delete(name);
+      else next.add(name);
+      return next;
+    });
   };
 
-  const confirmRemoveTheme = () => {
-    if (confirmRemove) {
-      togglePin(confirmRemove);
-      setConfirmRemove(null);
-    }
+  const handleAdd = () => {
+    selected.forEach(name => togglePin(name));
+    onOpenChange(false);
   };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className="max-w-[500px] border-none p-0 overflow-hidden"
+        className="max-w-[500px] border-none p-0 overflow-hidden flex flex-col"
         style={{
           background: "rgba(255,255,255,0.06)",
           border: "1px solid rgba(255,255,255,0.12)",
@@ -57,7 +66,7 @@ export default function AddThemeModal({
       >
         <DialogHeader className="px-5 pt-5 pb-0">
           <DialogTitle style={{ fontFamily: "'Syne', sans-serif" }}>
-            Search and add themes to your watchlist
+            Add themes to your watchlist
           </DialogTitle>
         </DialogHeader>
 
@@ -81,52 +90,46 @@ export default function AddThemeModal({
           </div>
         </div>
 
-        {/* Confirm remove inline */}
-        {confirmRemove && (
-          <div className="mx-5 mb-2 flex items-center justify-between rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs">
-            <span className="text-destructive">Remove <strong>{confirmRemove}</strong> from watchlist?</span>
-            <div className="flex gap-2">
-              <button
-                onClick={confirmRemoveTheme}
-                className="rounded px-2 py-0.5 text-destructive font-semibold hover:bg-destructive/20"
-              >
-                Yes
-              </button>
-              <button
-                onClick={() => setConfirmRemove(null)}
-                className="rounded px-2 py-0.5 text-muted-foreground hover:bg-accent"
-              >
-                No
-              </button>
-            </div>
-          </div>
-        )}
-
         {/* Theme list */}
-        <div className="max-h-[400px] overflow-auto px-5 pb-5">
+        <div className="max-h-[400px] overflow-auto px-5">
           <div className="space-y-1">
             {filtered.map(theme => {
               const pinned = isPinned(theme.theme_name);
+              const checked = selected.has(theme.theme_name);
               const validTickers = theme.tickers.filter(t => !t.skipped);
               const total = validTickers.length;
               const up = validTickers.filter(t => t.pct > 0).length;
-              const ratio = total > 0 ? up / total : 0;
 
               return (
                 <button
                   key={theme.theme_name}
-                  onClick={() => handleToggle(theme.theme_name)}
+                  onClick={() => toggleSelect(theme.theme_name)}
+                  disabled={pinned}
                   className={`w-full flex items-center gap-3 rounded-md px-3 py-2 text-left transition-colors ${
                     pinned
-                      ? "bg-primary/5 text-muted-foreground"
-                      : "hover:bg-accent/50 text-foreground"
+                      ? "opacity-50 cursor-default"
+                      : checked
+                        ? "bg-primary/10"
+                        : "hover:bg-accent/50"
                   }`}
                 >
+                  {/* Checkbox area */}
+                  <div className={`flex items-center justify-center w-4 h-4 rounded-sm border shrink-0 ${
+                    pinned
+                      ? "border-primary bg-primary/20"
+                      : checked
+                        ? "border-primary bg-primary"
+                        : "border-muted-foreground"
+                  }`}>
+                    {(pinned || checked) && <Check size={12} className={pinned ? "text-primary" : "text-primary-foreground"} />}
+                  </div>
+
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
-                      <span className={`text-sm font-medium truncate ${pinned ? "text-muted-foreground" : ""}`}>
+                      <span className={`text-sm font-medium truncate ${pinned ? "text-muted-foreground" : "text-foreground"}`}>
                         {theme.theme_name}
                       </span>
+                      {pinned && <span className="text-[10px] text-muted-foreground">(already added)</span>}
                     </div>
                     <div className="flex items-center gap-3 mt-0.5 text-[10px] text-muted-foreground">
                       <span className={theme.performance_pct >= 0 ? "text-gain-medium" : "text-loss-mild"}>
@@ -135,10 +138,29 @@ export default function AddThemeModal({
                       {total > 0 && <span>{up}/{total} advancing</span>}
                     </div>
                   </div>
-                  {pinned && <Check size={14} className="shrink-0 text-primary" />}
                 </button>
               );
             })}
+          </div>
+        </div>
+
+        {/* Sticky footer */}
+        <div className="sticky bottom-0 flex items-center justify-between px-5 py-3 border-t border-border bg-background/80 backdrop-blur-sm">
+          <span className="text-xs text-muted-foreground">
+            {selected.size} theme{selected.size !== 1 ? "s" : ""} selected
+          </span>
+          <div className="flex gap-2">
+            <Button variant="ghost" size="sm" onClick={() => onOpenChange(false)}>
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              disabled={selected.size === 0}
+              onClick={handleAdd}
+              className="bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-40"
+            >
+              Add Themes
+            </Button>
           </div>
         </div>
       </DialogContent>
