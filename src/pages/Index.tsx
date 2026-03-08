@@ -217,6 +217,25 @@ export default function Index() {
                   </Tooltip>
                 </TooltipProvider>
               )}
+              {spy.perf_1d !== null && (
+                <TooltipProvider delayDuration={200}>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span className={`inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[10px] font-semibold cursor-help ${
+                        spy.perf_1d >= 0
+                          ? "border-gain-medium/30 bg-gain-medium/10 text-gain-medium"
+                          : "border-destructive/30 bg-destructive/10 text-destructive"
+                      }`}>
+                        SPY: {spy.perf_1d >= 0 ? "+" : ""}{spy.perf_1d.toFixed(2)}%
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" className="max-w-[220px] text-xs">
+                      <p className="font-semibold mb-1">S&P 500 Benchmark</p>
+                      <p className="text-muted-foreground">All "vs SPY" values compare theme performance to this index</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              )}
               <span className="hidden sm:inline">· {formatTime(lastFetched)}</span>
               <span className="hidden sm:inline">· {themes.length} themes</span>
               {isLive && <span className="hidden sm:inline">· {symbolsFetched} symbols</span>}
