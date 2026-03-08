@@ -37,7 +37,6 @@ export default function Index() {
   const [showDemoConfirm, setShowDemoConfirm] = useState(false);
   const { pinned, alerts, getAlert } = useWatchlist();
   const { fetchVolume, getThemeSignals } = useVolumeData();
-  const dispersion = useDispersion(allThemes);
 
   const {
     themes: allThemes,
@@ -52,6 +51,8 @@ export default function Index() {
     resetToDemo,
     setScanResults,
   } = useLiveThemeData(activeTimeframe);
+
+  const dispersion = useDispersion(allThemes);
 
   // Full scan handler: receives themes + timeframe from scan
   const handleScanComplete = useCallback((themes: ThemeData[], timeframe: string) => {
