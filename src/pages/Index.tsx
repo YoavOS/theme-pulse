@@ -276,9 +276,6 @@ export default function Index() {
               {scanProgress && scanProgress.failed > 0 && (
                 <span className="text-[10px] text-destructive">⚠ {scanProgress.failed} unavailable</span>
               )}
-              {eodStatus?.alreadySaved && (
-                <span className="text-[10px]">· EOD ✓</span>
-              )}
             </div>
           </div>
 
