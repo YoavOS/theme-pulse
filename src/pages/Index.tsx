@@ -4,7 +4,7 @@ import { useLiveThemeData } from "@/hooks/useLiveThemeData";
 import ThemeCard from "@/components/ThemeCard";
 import ThemeDrilldownModal from "@/components/ThemeDrilldownModal";
 import ValidateTickersDialog from "@/components/ValidateTickersDialog";
-import { RefreshCw, Download, TrendingUp, TrendingDown, Wifi, WifiOff, Loader2, Settings, ScanLine, X, ShieldCheck, Save, Zap, Calendar, Brain, Bookmark, Bell, ChevronDown, LayoutDashboard, AlertTriangle, LayoutGrid, List, Flame, Circle, BarChart3 } from "lucide-react";
+import { RefreshCw, Download, TrendingUp, TrendingDown, Wifi, WifiOff, Loader2, Settings, ScanLine, X, ShieldCheck, Brain, Bookmark, ChevronDown, LayoutDashboard, AlertTriangle, LayoutGrid, List, Flame, Circle, BarChart3, Calendar } from "lucide-react";
 import RankedListView from "@/components/dashboard/RankedListView";
 import HeatmapGridView from "@/components/dashboard/HeatmapGridView";
 import DashboardBubbleView from "@/components/dashboard/DashboardBubbleView";
@@ -15,8 +15,7 @@ import { useDispersion, getDispersionColorClass } from "@/hooks/useDispersion";
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip";
 import { useSpyBenchmark, formatRS } from "@/hooks/useSpyBenchmark";
 import { useFullScan } from "@/hooks/useFullScan";
-import { useEodSave } from "@/hooks/useEodSave";
-import { useSaveEodFromScan } from "@/hooks/useSaveEodFromScan";
+import { EodRoutineButton } from "@/components/EodRoutineButton";
 import { useWatchlist } from "@/hooks/useWatchlistContext";
 import { useVolumeData } from "@/hooks/useVolumeData";
 import { Link } from "react-router-dom";
@@ -99,28 +98,6 @@ export default function Index() {
     loadTimeframe,
   } = useFullScan(handleScanComplete);
 
-  const {
-    showButton: showSaveEodFromScan,
-    isSaving: isSavingEodFromScan,
-    isAfterClose: scanAfterClose,
-    alreadySavedToday: eodAlreadySavedFromScan,
-    tooltip: saveEodFromScanTooltip,
-    saveEodFromScan,
-  } = useSaveEodFromScan(scanCompletedAt);
-
-  const {
-    status: eodStatus,
-    progress: eodProgress,
-    isSaving: isEodSaving,
-    canSave: canSaveEod,
-    canSaveFriday,
-    tooltip: eodTooltip,
-    fridayTooltip,
-    fridayLastSavedAt,
-    autoSave: eodAutoSave,
-    startEodSave,
-    toggleAutoSave: toggleEodAutoSave,
-  } = useEodSave();
 
   // When timeframe changes, try to load from scan cache
   const prevTimeframe = useRef(activeTimeframe);
@@ -299,9 +276,6 @@ export default function Index() {
               {scanProgress && scanProgress.failed > 0 && (
                 <span className="text-[10px] text-destructive">⚠ {scanProgress.failed} unavailable</span>
               )}
-              {eodStatus?.alreadySaved && (
-                <span className="text-[10px]">· EOD ✓</span>
-              )}
             </div>
           </div>
 
@@ -397,85 +371,8 @@ export default function Index() {
                 </span>
               )}
 
-              {/* Save as EOD from scan */}
-              {showSaveEodFromScan && !isFullScanning && (
-                <button
-                  onClick={saveEodFromScan}
-                  disabled={eodAlreadySavedFromScan || isSavingEodFromScan}
-                  className={`rounded-md border px-3 py-1.5 text-xs font-semibold transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
-                    eodAlreadySavedFromScan
-                      ? "border-border bg-secondary/50 text-muted-foreground"
-                      : scanAfterClose
-                      ? "border-gain-medium/40 bg-gain-medium/10 text-gain-medium hover:bg-gain-medium/20"
-                      : "border-[hsl(40,80%,50%)]/40 bg-[hsl(40,80%,50%)]/10 text-[hsl(40,80%,50%)] hover:bg-[hsl(40,80%,50%)]/20"
-                  }`}
-                  title={saveEodFromScanTooltip}
-                >
-                  <span className="inline-flex items-center gap-1">
-                    <Save size={12} />
-                    {isSavingEodFromScan ? "Saving..." : "Save as EOD"}
-                  </span>
-                </button>
-              )}
-
-              {/* Save EOD */}
-              {isEodSaving && eodProgress ? (
-                <span className="inline-flex items-center gap-1.5 rounded-md border border-primary/30 bg-primary/5 px-3 py-1.5 text-xs font-semibold text-primary">
-                  <Loader2 size={12} className="animate-spin" />
-                  {eodProgress.currentTheme?.startsWith("Retry") ? "Retrying" : "Saving"}: {eodProgress.saved}/{eodProgress.total}
-                  {eodProgress.failed > 0 && (
-                    <span className="text-[10px] text-destructive">· {eodProgress.failed} failed</span>
-                  )}
-                </span>
-              ) : (
-                <button
-                  onClick={() => startEodSave(false)}
-                  disabled={!canSaveEod}
-                  className="relative rounded-md border border-gain-medium/40 bg-gain-medium/10 px-3 py-1.5 text-xs font-semibold text-gain-medium transition-colors hover:bg-gain-medium/20 disabled:opacity-40 disabled:cursor-not-allowed"
-                  title={eodTooltip}
-                >
-                  <span className="inline-flex items-center gap-1">
-                    <Save size={12} /> Save EOD
-                  </span>
-                  {eodAutoSave && (
-                    <span className="absolute -right-1 -top-1 h-2 w-2 rounded-full bg-primary animate-pulse" title="Auto-save enabled" />
-                  )}
-                </button>
-              )}
-
-              {/* Friday Close — weekend only */}
-              {eodStatus?.isWeekend && !isEodSaving && (
-                <button
-                  onClick={() => startEodSave(true)}
-                  disabled={!canSaveFriday}
-                  className={`rounded-md border px-3 py-1.5 text-xs font-semibold transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
-                    fridayLastSavedAt
-                      ? "border-primary/40 bg-primary/10 text-primary hover:bg-primary/20"
-                      : "border-green-500/40 bg-green-500/10 text-green-400 hover:bg-green-500/20"
-                  }`}
-                  title={fridayTooltip}
-                >
-                  <span className="inline-flex items-center gap-1">
-                    <Calendar size={12} />
-                    {fridayLastSavedAt
-                      ? `Re-save Friday Close · last saved at ${fridayLastSavedAt}`
-                      : "Save Friday Close"}
-                  </span>
-                </button>
-              )}
-
-              {/* Auto-save toggle */}
-              <button
-                onClick={toggleEodAutoSave}
-                className={`rounded-md border p-1.5 transition-colors ${
-                  eodAutoSave
-                    ? "border-primary/40 bg-primary/10 text-primary"
-                    : "border-border text-muted-foreground hover:bg-accent hover:text-foreground"
-                }`}
-                title={eodAutoSave ? "Auto-save EOD: ON" : "Auto-save EOD: OFF"}
-              >
-                <Zap size={14} />
-              </button>
+              {/* EOD Routine Button */}
+              <EodRoutineButton />
 
               {/* Help button */}
               <HelpButton />
@@ -564,7 +461,7 @@ export default function Index() {
               { to: "/watchlist", label: "Watchlist", icon: <Bookmark size={14} />, active: false, color: "text-[hsl(40,80%,50%)]",
                 badge: pinned.length > 0 ? pinned.length : null, pulse: false },
               { to: "/eod-history", label: "EOD History", icon: <Calendar size={14} />, active: false, color: "text-gain-medium",
-                badge: null, pulse: !!(eodStatus && !eodStatus.alreadySaved && !eodStatus.isWeekend) },
+                badge: null, pulse: false },
             ]).map((tab) => (
               <Link
                 key={tab.to}
