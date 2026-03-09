@@ -490,10 +490,110 @@ export function useEodRoutine() {
         })());
       }
 
-      // Step 8 & 9: Refresh news and fundamentals (background, non-blocking)
-      // These are already handled by prefetch mechanisms in the app
+      // Step 8: Refresh News (top 5 themes by momentum score)
+      backgroundTasks.push((async () => {
+        try {
+          // Get top 5 themes by momentum (1D performance)
+          const perfMap = new Map(scanPerfData.map(p => [p.symbol, p.perf_1d || 0]));
+          const themeSymbols = new Map<string, string[]>();
+          if (tickers) {
+            for (const tk of tickers) {
+              const arr = themeSymbols.get(tk.theme_id) || [];
+              arr.push(tk.ticker_symbol);
+              themeSymbols.set(tk.theme_id, arr);
+            }
+          }
 
-      // Don't wait for background tasks
+          const themePerfs: { name: string; perf: number }[] = [];
+          if (themes) {
+            for (const theme of themes) {
+              const symbols = themeSymbols.get(theme.id) || [];
+              const validPerfs = symbols.map(s => perfMap.get(s)).filter((v): v is number => v !== undefined);
+              if (validPerfs.length > 0) {
+                const avg = validPerfs.reduce((a, b) => a + b, 0) / validPerfs.length;
+                themePerfs.push({ name: theme.name, perf: Math.abs(avg) });
+              }
+            }
+          }
+
+          // Sort by absolute momentum and take top 5
+          const top5 = themePerfs.sort((a, b) => b.perf - a.perf).slice(0, 5);
+          
+          // Fetch news for top 5 themes
+          for (const theme of top5) {
+            await fetch(`${supabaseUrl}/functions/v1/fetch-theme-news`, {
+              method: "POST",
+              headers,
+              body: JSON.stringify({ themeName: theme.name }),
+            }).catch(() => {});
+          }
+          console.log(`News refreshed for top ${top5.length} themes`);
+        } catch (err) {
+          console.warn("News refresh failed:", err);
+        }
+      })());
+
+      // Step 9: Refresh Fundamentals (if cache >23 hours old)
+      backgroundTasks.push((async () => {
+        try {
+          // Check if fundamentals cache is stale (>23 hours)
+          const { data: staleFund } = await supabase
+            .from("fundamentals_cache")
+            .select("symbol, last_updated")
+            .order("last_updated", { ascending: true })
+            .limit(1);
+
+          const staleCutoff = new Date(Date.now() - 23 * 60 * 60 * 1000).toISOString();
+          const needsRefresh = !staleFund || staleFund.length === 0 || 
+            (staleFund[0].last_updated && staleFund[0].last_updated < staleCutoff);
+
+          if (needsRefresh) {
+            // Get top 10 themes by momentum
+            const perfMap = new Map(scanPerfData.map(p => [p.symbol, p.perf_1d || 0]));
+            const themeSymbols = new Map<string, string[]>();
+            if (tickers) {
+              for (const tk of tickers) {
+                const arr = themeSymbols.get(tk.theme_id) || [];
+                arr.push(tk.ticker_symbol);
+                themeSymbols.set(tk.theme_id, arr);
+              }
+            }
+
+            const themePerfs: { name: string; symbols: string[]; perf: number }[] = [];
+            if (themes) {
+              for (const theme of themes) {
+                const symbols = themeSymbols.get(theme.id) || [];
+                const validPerfs = symbols.map(s => perfMap.get(s)).filter((v): v is number => v !== undefined);
+                if (validPerfs.length > 0) {
+                  const avg = validPerfs.reduce((a, b) => a + b, 0) / validPerfs.length;
+                  themePerfs.push({ name: theme.name, symbols, perf: Math.abs(avg) });
+                }
+              }
+            }
+
+            // Sort by momentum and get symbols from top 10 themes
+            const top10Themes = themePerfs.sort((a, b) => b.perf - a.perf).slice(0, 10);
+            const symbolsToFetch = [...new Set(top10Themes.flatMap(t => t.symbols))].slice(0, 50);
+
+            // Fetch fundamentals in batches
+            for (let i = 0; i < symbolsToFetch.length; i += 10) {
+              const batch = symbolsToFetch.slice(i, i + 10);
+              await fetch(`${supabaseUrl}/functions/v1/fetch-fundamentals`, {
+                method: "POST",
+                headers,
+                body: JSON.stringify({ symbols: batch }),
+              }).catch(() => {});
+            }
+            console.log(`Fundamentals refreshed for ${symbolsToFetch.length} symbols from top 10 themes`);
+          } else {
+            console.log("Fundamentals cache is fresh, skipping refresh");
+          }
+        } catch (err) {
+          console.warn("Fundamentals refresh failed:", err);
+        }
+      })());
+
+      // Don't wait for background tasks - they run in parallel
       Promise.all(backgroundTasks).catch(() => {});
 
       // Build summary
