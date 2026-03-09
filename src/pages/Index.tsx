@@ -374,85 +374,8 @@ export default function Index() {
                 </span>
               )}
 
-              {/* Save as EOD from scan */}
-              {showSaveEodFromScan && !isFullScanning && (
-                <button
-                  onClick={saveEodFromScan}
-                  disabled={eodAlreadySavedFromScan || isSavingEodFromScan}
-                  className={`rounded-md border px-3 py-1.5 text-xs font-semibold transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
-                    eodAlreadySavedFromScan
-                      ? "border-border bg-secondary/50 text-muted-foreground"
-                      : scanAfterClose
-                      ? "border-gain-medium/40 bg-gain-medium/10 text-gain-medium hover:bg-gain-medium/20"
-                      : "border-[hsl(40,80%,50%)]/40 bg-[hsl(40,80%,50%)]/10 text-[hsl(40,80%,50%)] hover:bg-[hsl(40,80%,50%)]/20"
-                  }`}
-                  title={saveEodFromScanTooltip}
-                >
-                  <span className="inline-flex items-center gap-1">
-                    <Save size={12} />
-                    {isSavingEodFromScan ? "Saving..." : "Save as EOD"}
-                  </span>
-                </button>
-              )}
-
-              {/* Save EOD */}
-              {isEodSaving && eodProgress ? (
-                <span className="inline-flex items-center gap-1.5 rounded-md border border-primary/30 bg-primary/5 px-3 py-1.5 text-xs font-semibold text-primary">
-                  <Loader2 size={12} className="animate-spin" />
-                  {eodProgress.currentTheme?.startsWith("Retry") ? "Retrying" : "Saving"}: {eodProgress.saved}/{eodProgress.total}
-                  {eodProgress.failed > 0 && (
-                    <span className="text-[10px] text-destructive">· {eodProgress.failed} failed</span>
-                  )}
-                </span>
-              ) : (
-                <button
-                  onClick={() => startEodSave(false)}
-                  disabled={!canSaveEod}
-                  className="relative rounded-md border border-gain-medium/40 bg-gain-medium/10 px-3 py-1.5 text-xs font-semibold text-gain-medium transition-colors hover:bg-gain-medium/20 disabled:opacity-40 disabled:cursor-not-allowed"
-                  title={eodTooltip}
-                >
-                  <span className="inline-flex items-center gap-1">
-                    <Save size={12} /> Save EOD
-                  </span>
-                  {eodAutoSave && (
-                    <span className="absolute -right-1 -top-1 h-2 w-2 rounded-full bg-primary animate-pulse" title="Auto-save enabled" />
-                  )}
-                </button>
-              )}
-
-              {/* Friday Close — weekend only */}
-              {eodStatus?.isWeekend && !isEodSaving && (
-                <button
-                  onClick={() => startEodSave(true)}
-                  disabled={!canSaveFriday}
-                  className={`rounded-md border px-3 py-1.5 text-xs font-semibold transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
-                    fridayLastSavedAt
-                      ? "border-primary/40 bg-primary/10 text-primary hover:bg-primary/20"
-                      : "border-green-500/40 bg-green-500/10 text-green-400 hover:bg-green-500/20"
-                  }`}
-                  title={fridayTooltip}
-                >
-                  <span className="inline-flex items-center gap-1">
-                    <Calendar size={12} />
-                    {fridayLastSavedAt
-                      ? `Re-save Friday Close · last saved at ${fridayLastSavedAt}`
-                      : "Save Friday Close"}
-                  </span>
-                </button>
-              )}
-
-              {/* Auto-save toggle */}
-              <button
-                onClick={toggleEodAutoSave}
-                className={`rounded-md border p-1.5 transition-colors ${
-                  eodAutoSave
-                    ? "border-primary/40 bg-primary/10 text-primary"
-                    : "border-border text-muted-foreground hover:bg-accent hover:text-foreground"
-                }`}
-                title={eodAutoSave ? "Auto-save EOD: ON" : "Auto-save EOD: OFF"}
-              >
-                <Zap size={14} />
-              </button>
+              {/* EOD Routine Button */}
+              <EodRoutineButton />
 
               {/* Help button */}
               <HelpButton />
