@@ -186,10 +186,11 @@ export default function HeatmapGridView({
                   }}
                 >
                   <div className="font-['Syne',sans-serif] font-semibold text-foreground text-sm">{t.theme_name}</div>
-                  <div className="mt-1 space-y-0.5 text-muted-foreground" style={{ fontFamily: DM_MONO }}>
-                    <div>Perf: <span className={t.performance_pct >= 0 ? "text-primary" : "text-destructive"}>{sign}{t.performance_pct.toFixed(2)}%</span></div>
-                    <div>Breadth: {breadthPct}% ({up}/{total})</div>
-                    {signals?.relVol != null && <div>Rel Vol: {signals.relVol.toFixed(1)}×</div>}
+                  <div className="mt-1 space-y-0.5" style={{ fontFamily: DM_MONO }}>
+                    <div className="text-muted-foreground">Perf: <span style={{ color: getPerfColor(t.performance_pct) }}>{sign}{t.performance_pct.toFixed(2)}%</span></div>
+                    <div className="text-muted-foreground">Breadth: <span style={{ color: getBreadthColor(breadthPct) }}>{breadthPct}%</span> ({up}/{total})</div>
+                    <div className="text-muted-foreground">Rel Vol: {signals?.relVol != null ? <span style={{ color: getRelVolColor(signals.relVol) }}>{signals.relVol.toFixed(1)}×</span> : "—"}</div>
+                    <div className="text-muted-foreground">Sustained Vol: {signals?.sustainedVol != null ? <span style={{ color: getSustainedVolColor(signals.sustainedVol) }}>{signals.sustainedVol >= 0 ? "+" : ""}{signals.sustainedVol.toFixed(0)}%</span> : "—"}</div>
                   </div>
                 </div>
               )}
