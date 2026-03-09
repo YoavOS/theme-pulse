@@ -7,6 +7,33 @@ const DM_MONO = "'DM Mono', monospace";
 const TOOLTIP_WIDTH = 280;
 const TOOLTIP_HEIGHT = 200;
 
+function getPerfColor(pct: number) {
+  if (pct > 0.1) return "#00ff88";
+  if (pct < -0.1) return "#ff4466";
+  return "#9ca3af";
+}
+
+function getBreadthColor(pct: number) {
+  if (pct >= 70) return "#00ff88";
+  if (pct >= 40) return "#f59e0b";
+  return "#ff4466";
+}
+
+function getRelVolColor(val: number) {
+  if (val >= 2.0) return "#00ff88";
+  if (val >= 1.2) return "#22c55e";
+  if (val >= 0.8) return "#9ca3af";
+  return "#f59e0b";
+}
+
+function getSustainedVolColor(val: number) {
+  if (val >= 15) return "#00ff88";
+  if (val >= 5) return "#22c55e";
+  if (val >= -5) return "#9ca3af";
+  if (val >= -15) return "#f59e0b";
+  return "#ff4466";
+}
+
 interface BarDataPoint {
   name: string;
   shortName: string;
