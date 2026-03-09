@@ -188,18 +188,18 @@ function BarRow({
             <div className="flex justify-between gap-4">
               <span>1D:</span>
               <span>
-                <span style={{ color: isPositive ? "#00ff88" : "#ef4444" }}>{sign}{d.perf.toFixed(2)}%</span>
+                <span style={{ color: getPerfColor(d.perf) }}>{sign}{d.perf.toFixed(2)}%</span>
                 {d.rs && <span className={`ml-2 ${d.rs.color}`}>vs SPY: {d.rs.text}</span>}
               </span>
             </div>
             <div className="flex justify-between gap-4">
               <span>Breadth:</span>
-              <span>{d.breadthPct}% ({d.breadthUp}/{d.breadthTotal} advancing)</span>
+              <span style={{ color: getBreadthColor(d.breadthPct) }}>{d.breadthPct}% ({d.breadthUp}/{d.breadthTotal} advancing)</span>
             </div>
             {d.relVol != null && (
               <div className="flex justify-between gap-4">
                 <span>Rel Vol:</span>
-                <span style={{ color: d.relVolEstimated ? "rgba(255,255,255,0.4)" : undefined }}>
+                <span style={{ color: getRelVolColor(d.relVol) }}>
                   ~{d.relVol.toFixed(1)}×{d.relVolEstimated ? " (estimated)" : ""}
                 </span>
               </div>
@@ -207,9 +207,7 @@ function BarRow({
             {d.sustainedVol != null && (
               <div className="flex justify-between gap-4">
                 <span>Sustained Vol:</span>
-                <span style={{
-                  color: d.sustainedVol > 15 ? "#00ff88" : d.sustainedVol > 5 ? "#f5a623" : "rgba(255,255,255,0.4)",
-                }}>
+                <span style={{ color: getSustainedVolColor(d.sustainedVol) }}>
                   {d.sustainedVol >= 0 ? "+" : ""}{d.sustainedVol.toFixed(0)}%
                 </span>
               </div>
