@@ -1,8 +1,15 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useCallback } from "react";
 import { ThemeData } from "@/data/themeData";
 import { ThemeDemandSignals } from "@/hooks/useVolumeData";
 
 const DM_MONO = "'DM Mono', monospace";
+const TOOLTIP_WIDTH = 220;
+const TOOLTIP_HEIGHT = 120;
+
+interface TooltipPosition {
+  x: number;
+  y: number;
+}
 
 function getHeatColor(pct: number): string {
   if (pct > 4) return "hsl(170, 90%, 45%)";
@@ -32,10 +39,51 @@ export default function HeatmapGridView({
   dimmedThemes?: Set<string> | null;
 }) {
   const [hoveredTheme, setHoveredTheme] = useState<string | null>(null);
+  const [tooltipPos, setTooltipPos] = useState<TooltipPosition | null>(null);
 
   const sorted = useMemo(() => {
     return [...themes].sort((a, b) => b.performance_pct - a.performance_pct);
   }, [themes]);
+
+  const handleMouseMove = useCallback((e: React.MouseEvent, themeName: string) => {
+    const mouseX = e.clientX;
+    const mouseY = e.clientY;
+
+    // Get header height dynamically (fallback to 120 if not found)
+    const headerHeight = document.querySelector('.dashboard-header')?.getBoundingClientRect().height ?? 120;
+
+    // Smart vertical positioning - check if tooltip would be behind header
+    const spaceAbove = mouseY - headerHeight;
+    const spaceBelow = window.innerHeight - mouseY;
+    
+    let tooltipY: number;
+    if (spaceAbove < TOOLTIP_HEIGHT + 20) {
+      // Not enough space above (would be behind header), show below
+      tooltipY = mouseY + 15;
+    } else if (spaceBelow < TOOLTIP_HEIGHT + 20) {
+      // Not enough space below, show above
+      tooltipY = mouseY - TOOLTIP_HEIGHT - 10;
+    } else {
+      // Prefer above by default
+      tooltipY = mouseY - TOOLTIP_HEIGHT - 10;
+    }
+
+    // Smart horizontal positioning
+    const spaceRight = window.innerWidth - mouseX;
+    const tooltipX = spaceRight < TOOLTIP_WIDTH + 20 ? mouseX - TOOLTIP_WIDTH - 10 : mouseX + 15;
+
+    // Clamp to viewport (but never behind header)
+    const clampedX = Math.max(10, Math.min(tooltipX, window.innerWidth - TOOLTIP_WIDTH - 10));
+    const clampedY = Math.max(headerHeight + 10, Math.min(tooltipY, window.innerHeight - TOOLTIP_HEIGHT - 10));
+
+    setHoveredTheme(themeName);
+    setTooltipPos({ x: clampedX, y: clampedY });
+  }, []);
+
+  const handleMouseLeave = useCallback(() => {
+    setHoveredTheme(null);
+    setTooltipPos(null);
+  }, []);
 
   return (
     <div>
@@ -82,8 +130,8 @@ export default function HeatmapGridView({
                 filter: isDimmed ? "grayscale(60%)" : undefined,
               }}
               onClick={() => onCardClick?.(t)}
-              onMouseEnter={() => setHoveredTheme(t.theme_name)}
-              onMouseLeave={() => setHoveredTheme(null)}
+              onMouseMove={(e) => handleMouseMove(e, t.theme_name)}
+              onMouseLeave={handleMouseLeave}
             >
               <div className="flex flex-col items-center justify-center h-full p-1.5 text-center">
                 <span className="text-[10px] font-medium text-white/70 leading-tight line-clamp-1">
@@ -97,14 +145,17 @@ export default function HeatmapGridView({
                 </span>
               </div>
 
-              {/* Tooltip */}
-              {isHovered && (
+              {/* Fixed position tooltip */}
+              {isHovered && tooltipPos && (
                 <div
-                  className="absolute left-1/2 -translate-x-1/2 bottom-full mb-1.5 z-50 rounded-lg px-3 py-2 text-xs shadow-xl whitespace-nowrap pointer-events-none"
+                  className="fixed z-[100] rounded-lg px-3 py-2 text-xs shadow-xl whitespace-nowrap pointer-events-none"
                   style={{
                     background: "rgba(10,10,15,0.95)",
                     border: "1px solid rgba(255,255,255,0.12)",
                     backdropFilter: "blur(16px)",
+                    left: tooltipPos.x,
+                    top: tooltipPos.y,
+                    minWidth: TOOLTIP_WIDTH,
                   }}
                 >
                   <div className="font-['Syne',sans-serif] font-semibold text-foreground text-sm">{t.theme_name}</div>

@@ -1,9 +1,11 @@
-import { useMemo } from "react";
+import { useMemo, useState, useCallback } from "react";
 import { ThemeData } from "@/data/themeData";
 import { ThemeDemandSignals } from "@/hooks/useVolumeData";
 import { useSpyBenchmark, formatRS } from "@/hooks/useSpyBenchmark";
 
 const DM_MONO = "'DM Mono', monospace";
+const TOOLTIP_WIDTH = 280;
+const TOOLTIP_HEIGHT = 200;
 
 interface BarDataPoint {
   name: string;
@@ -23,16 +25,29 @@ interface BarDataPoint {
   isDimmed: boolean;
 }
 
+interface TooltipPosition {
+  x: number;
+  y: number;
+}
+
 function BarRow({
   d,
   maxAbs,
   side,
   onClick,
+  onMouseMove,
+  onMouseLeave,
+  isHovered,
+  tooltipPos,
 }: {
   d: BarDataPoint;
   maxAbs: number;
   side: "left" | "right";
   onClick?: (theme: ThemeData) => void;
+  onMouseMove: (e: React.MouseEvent, name: string) => void;
+  onMouseLeave: () => void;
+  isHovered: boolean;
+  tooltipPos: TooltipPosition | null;
 }) {
   const widthPct = maxAbs > 0 ? (d.absPerf / maxAbs) * 100 : 0;
   const sign = d.perf >= 0 ? "+" : "";
@@ -45,6 +60,8 @@ function BarRow({
       className="group flex items-center cursor-pointer transition-colors hover:bg-[rgba(255,255,255,0.04)]"
       style={{ height: 25, opacity: d.isDimmed ? 0.3 : 1 }}
       onClick={() => onClick?.(d.theme)}
+      onMouseMove={(e) => onMouseMove(e, d.name)}
+      onMouseLeave={onMouseLeave}
     >
       {isPositive ? (
         <>
@@ -125,69 +142,70 @@ function BarRow({
         </>
       )}
 
-      {/* Tooltip on hover */}
-      <div
-        className="pointer-events-none absolute z-50 rounded-lg px-3.5 py-3 text-xs shadow-xl opacity-0 group-hover:opacity-100 transition-opacity"
-        style={{
-          background: "rgba(10,10,15,0.95)",
-          border: "1px solid rgba(255,255,255,0.08)",
-          backdropFilter: "blur(12px)",
-          [isPositive ? "left" : "right"]: "50%",
-          top: "100%",
-          marginTop: 4,
-          minWidth: 220,
-        }}
-      >
-        <div className="font-['Syne',sans-serif] text-[16px] font-semibold text-foreground mb-1.5">{d.name}</div>
-        <div className="border-t border-[rgba(255,255,255,0.08)] mb-1.5" />
-        <div className="space-y-1 text-muted-foreground whitespace-nowrap text-[13px]" style={{ fontFamily: DM_MONO }}>
-          <div className="flex justify-between gap-4">
-            <span>1D:</span>
-            <span>
-              <span style={{ color: isPositive ? "#00ff88" : "#ef4444" }}>{sign}{d.perf.toFixed(2)}%</span>
-              {d.rs && <span className={`ml-2 ${d.rs.color}`}>vs SPY: {d.rs.text}</span>}
-            </span>
-          </div>
-          <div className="flex justify-between gap-4">
-            <span>Breadth:</span>
-            <span>{d.breadthPct}% ({d.breadthUp}/{d.breadthTotal} advancing)</span>
-          </div>
-          {d.relVol != null && (
+      {/* Fixed position tooltip on hover */}
+      {isHovered && tooltipPos && (
+        <div
+          className="pointer-events-none fixed z-[100] rounded-lg px-3.5 py-3 text-xs shadow-xl"
+          style={{
+            background: "rgba(10,10,15,0.95)",
+            border: "1px solid rgba(255,255,255,0.08)",
+            backdropFilter: "blur(12px)",
+            left: tooltipPos.x,
+            top: tooltipPos.y,
+            minWidth: TOOLTIP_WIDTH,
+          }}
+        >
+          <div className="font-['Syne',sans-serif] text-[16px] font-semibold text-foreground mb-1.5">{d.name}</div>
+          <div className="border-t border-[rgba(255,255,255,0.08)] mb-1.5" />
+          <div className="space-y-1 text-muted-foreground whitespace-nowrap text-[13px]" style={{ fontFamily: DM_MONO }}>
             <div className="flex justify-between gap-4">
-              <span>Rel Vol:</span>
-              <span style={{ color: d.relVolEstimated ? "rgba(255,255,255,0.4)" : undefined }}>
-                ~{d.relVol.toFixed(1)}×{d.relVolEstimated ? " (estimated)" : ""}
-              </span>
-            </div>
-          )}
-          {d.sustainedVol != null && (
-            <div className="flex justify-between gap-4">
-              <span>Sustained Vol:</span>
-              <span style={{
-                color: d.sustainedVol > 15 ? "#00ff88" : d.sustainedVol > 5 ? "#f5a623" : "rgba(255,255,255,0.4)",
-              }}>
-                {d.sustainedVol >= 0 ? "+" : ""}{d.sustainedVol.toFixed(0)}%
-              </span>
-            </div>
-          )}
-          {(d.fScore != null || d.stockType) && (
-            <div className="flex justify-between gap-4">
-              <span>F:</span>
+              <span>1D:</span>
               <span>
-                {d.fScore ?? "—"}
-                {d.stockType && (
-                  <span className="ml-1.5">
-                    {d.stockType === "Growth" ? "🚀" : d.stockType === "Value" ? "💎" : d.stockType === "Blend" ? "⚖️" : "⚠️"} {d.stockType}
-                  </span>
-                )}
+                <span style={{ color: isPositive ? "#00ff88" : "#ef4444" }}>{sign}{d.perf.toFixed(2)}%</span>
+                {d.rs && <span className={`ml-2 ${d.rs.color}`}>vs SPY: {d.rs.text}</span>}
               </span>
             </div>
-          )}
+            <div className="flex justify-between gap-4">
+              <span>Breadth:</span>
+              <span>{d.breadthPct}% ({d.breadthUp}/{d.breadthTotal} advancing)</span>
+            </div>
+            {d.relVol != null && (
+              <div className="flex justify-between gap-4">
+                <span>Rel Vol:</span>
+                <span style={{ color: d.relVolEstimated ? "rgba(255,255,255,0.4)" : undefined }}>
+                  ~{d.relVol.toFixed(1)}×{d.relVolEstimated ? " (estimated)" : ""}
+                </span>
+              </div>
+            )}
+            {d.sustainedVol != null && (
+              <div className="flex justify-between gap-4">
+                <span>Sustained Vol:</span>
+                <span style={{
+                  color: d.sustainedVol > 15 ? "#00ff88" : d.sustainedVol > 5 ? "#f5a623" : "rgba(255,255,255,0.4)",
+                }}>
+                  {d.sustainedVol >= 0 ? "+" : ""}{d.sustainedVol.toFixed(0)}%
+                </span>
+              </div>
+            )}
+            {(d.fScore != null || d.stockType) && (
+              <div className="flex justify-between gap-4">
+                <span>F:</span>
+                <span>
+                  {d.fScore ?? "—"}
+                  {d.stockType && (
+                    <span className="ml-1.5">
+                      {d.stockType === "Growth" ? "🚀" : d.stockType === "Value" ? "💎" : d.stockType === "Blend" ? "⚖️" : "⚠️"} {d.stockType}
+                    </span>
+                  )}
+                </span>
+              </div>
+            )}
+          </div>
+          <div className="border-t border-[rgba(255,255,255,0.08)] mt-1.5 pt-1.5">
+            <span className="text-[11px] text-muted-foreground">Click to open full breakdown</span>
+          </div>
         </div>
-        <div className="border-t border-[rgba(255,255,255,0.08)] mt-1.5 pt-1.5">
-          <span className="text-[11px] text-muted-foreground">Click to open full breakdown</span>
-        </div>
-      </div>
+      )}
     </div>
   );
 }
@@ -206,6 +224,34 @@ export default function BarChartView({
   getThemeFundamentalScore?: (symbols: string[]) => number | null;
 }) {
   const { getRelativeStrength } = useSpyBenchmark();
+  const [hoveredTheme, setHoveredTheme] = useState<string | null>(null);
+  const [tooltipPos, setTooltipPos] = useState<TooltipPosition | null>(null);
+
+  const handleMouseMove = useCallback((e: React.MouseEvent, themeName: string) => {
+    const mouseX = e.clientX;
+    const mouseY = e.clientY;
+
+    // Smart vertical positioning
+    const spaceBelow = window.innerHeight - mouseY;
+    const showAbove = spaceBelow < TOOLTIP_HEIGHT + 20;
+    const tooltipY = showAbove ? mouseY - TOOLTIP_HEIGHT - 10 : mouseY + 10;
+
+    // Smart horizontal positioning
+    const spaceRight = window.innerWidth - mouseX;
+    const tooltipX = spaceRight < TOOLTIP_WIDTH + 20 ? mouseX - TOOLTIP_WIDTH - 10 : mouseX + 15;
+
+    // Clamp to viewport
+    const clampedX = Math.max(10, Math.min(tooltipX, window.innerWidth - TOOLTIP_WIDTH - 10));
+    const clampedY = Math.max(10, Math.min(tooltipY, window.innerHeight - TOOLTIP_HEIGHT - 10));
+
+    setHoveredTheme(themeName);
+    setTooltipPos({ x: clampedX, y: clampedY });
+  }, []);
+
+  const handleMouseLeave = useCallback(() => {
+    setHoveredTheme(null);
+    setTooltipPos(null);
+  }, []);
 
   const { leftData, rightData, maxAbs } = useMemo(() => {
     const sorted = [...themes].sort((a, b) => b.performance_pct - a.performance_pct);
@@ -275,7 +321,17 @@ export default function BarChartView({
         </h3>
         <div className="space-y-[3px]">
           {leftData.map((d) => (
-            <BarRow key={d.name} d={d} maxAbs={maxAbs} side="left" onClick={onCardClick} />
+            <BarRow
+              key={d.name}
+              d={d}
+              maxAbs={maxAbs}
+              side="left"
+              onClick={onCardClick}
+              onMouseMove={handleMouseMove}
+              onMouseLeave={handleMouseLeave}
+              isHovered={hoveredTheme === d.name}
+              tooltipPos={tooltipPos}
+            />
           ))}
         </div>
       </div>
@@ -289,7 +345,17 @@ export default function BarChartView({
         </h3>
         <div className="space-y-[3px]">
           {rightData.map((d) => (
-            <BarRow key={d.name} d={d} maxAbs={maxAbs} side="right" onClick={onCardClick} />
+            <BarRow
+              key={d.name}
+              d={d}
+              maxAbs={maxAbs}
+              side="right"
+              onClick={onCardClick}
+              onMouseMove={handleMouseMove}
+              onMouseLeave={handleMouseLeave}
+              isHovered={hoveredTheme === d.name}
+              tooltipPos={tooltipPos}
+            />
           ))}
         </div>
       </div>
