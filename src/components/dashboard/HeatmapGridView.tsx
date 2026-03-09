@@ -27,6 +27,33 @@ function truncateThemeName(name: string): string {
   return words.slice(0, 2).join(" ");
 }
 
+function getPerfColor(pct: number) {
+  if (pct > 0.1) return "#00ff88";
+  if (pct < -0.1) return "#ff4466";
+  return "#9ca3af";
+}
+
+function getBreadthColor(pct: number) {
+  if (pct >= 70) return "#00ff88";
+  if (pct >= 40) return "#f59e0b";
+  return "#ff4466";
+}
+
+function getRelVolColor(val: number) {
+  if (val >= 2.0) return "#00ff88";
+  if (val >= 1.2) return "#22c55e";
+  if (val >= 0.8) return "#9ca3af";
+  return "#f59e0b";
+}
+
+function getSustainedVolColor(val: number) {
+  if (val >= 15) return "#00ff88";
+  if (val >= 5) return "#22c55e";
+  if (val >= -5) return "#9ca3af";
+  if (val >= -15) return "#f59e0b";
+  return "#ff4466";
+}
+
 export default function HeatmapGridView({
   themes,
   onCardClick,
@@ -159,10 +186,11 @@ export default function HeatmapGridView({
                   }}
                 >
                   <div className="font-['Syne',sans-serif] font-semibold text-foreground text-sm">{t.theme_name}</div>
-                  <div className="mt-1 space-y-0.5 text-muted-foreground" style={{ fontFamily: DM_MONO }}>
-                    <div>Perf: <span className={t.performance_pct >= 0 ? "text-primary" : "text-destructive"}>{sign}{t.performance_pct.toFixed(2)}%</span></div>
-                    <div>Breadth: {breadthPct}% ({up}/{total})</div>
-                    {signals?.relVol != null && <div>Rel Vol: {signals.relVol.toFixed(1)}×</div>}
+                  <div className="mt-1 space-y-0.5" style={{ fontFamily: DM_MONO }}>
+                    <div className="text-muted-foreground">Perf: <span style={{ color: getPerfColor(t.performance_pct) }}>{sign}{t.performance_pct.toFixed(2)}%</span></div>
+                    <div className="text-muted-foreground">Breadth: <span style={{ color: getBreadthColor(breadthPct) }}>{breadthPct}%</span> ({up}/{total})</div>
+                    <div className="text-muted-foreground">Rel Vol: {signals?.relVol != null ? <span style={{ color: getRelVolColor(signals.relVol) }}>{signals.relVol.toFixed(1)}×</span> : "—"}</div>
+                    <div className="text-muted-foreground">Sustained Vol: {signals?.sustainedVol != null ? <span style={{ color: getSustainedVolColor(signals.sustainedVol) }}>{signals.sustainedVol >= 0 ? "+" : ""}{signals.sustainedVol.toFixed(0)}%</span> : "—"}</div>
                   </div>
                 </div>
               )}
