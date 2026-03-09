@@ -461,7 +461,7 @@ export default function Index() {
               { to: "/watchlist", label: "Watchlist", icon: <Bookmark size={14} />, active: false, color: "text-[hsl(40,80%,50%)]",
                 badge: pinned.length > 0 ? pinned.length : null, pulse: false },
               { to: "/eod-history", label: "EOD History", icon: <Calendar size={14} />, active: false, color: "text-gain-medium",
-                badge: null, pulse: !!(eodStatus && !eodStatus.alreadySaved && !eodStatus.isWeekend) },
+                badge: null, pulse: false },
             ]).map((tab) => (
               <Link
                 key={tab.to}
