@@ -178,11 +178,7 @@ export function useEodRoutine() {
     let themeMap = new Map<string, string>();
 
     try {
-      // ═══════════════════════════════════════════════════════════════
-      // PHASE 1: DATA COLLECTION (blocking)
-      // ═══════════════════════════════════════════════════════════════
-
-      // STEP 1: Full Scan
+      // PHASE 1: DATA COLLECTION
       updateStep(1, { status: "running", detail: "Initializing scan..." });
 
       const startRes = await fetch(`${supabaseUrl}/functions/v1/full-scan?action=start`, { headers });
@@ -209,7 +205,7 @@ export function useEodRoutine() {
         if (!scanDone) await new Promise(r => setTimeout(r, 300));
       }
 
-      // *** FIX: Fetch ALL tickers with valid prices, not just status="done" ***
+      // FIX: Fetch ALL tickers with valid prices, not just status="done"
       const { data: perfData, error: perfErr } = await supabase
         .from("ticker_performance")
         .select("symbol, price, perf_1d")
@@ -267,11 +263,7 @@ export function useEodRoutine() {
       updateStep(2, { status: "done", detail: `${eodPricesSaved} rows` });
       setState(s => ({ ...s, currentStep: 3, progress: 33 }));
 
-      // ═══════════════════════════════════════════════════════════════
-      // PHASE 2: ANALYTICS (sequential after Phase 1)
-      // ═══════════════════════════════════════════════════════════════
-
-      // STEP 3: Save Breadth History
+      // PHASE 2: ANALYTICS
       updateStep(3, { status: "running", detail: "Calculating..." });
 
       try {
@@ -458,10 +450,7 @@ export function useEodRoutine() {
 
       setState(s => ({ ...s, progress: 100 }));
 
-      // ═══════════════════════════════════════════════════════════════
       // PHASE 3: INTELLIGENCE (non-blocking background)
-      // ═══════════════════════════════════════════════════════════════
-
       const backgroundTasks: Promise<void>[] = [];
 
       if (shouldSaveVolume) {
