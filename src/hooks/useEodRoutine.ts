@@ -39,7 +39,7 @@ export interface EodRoutineState {
 
 const ROUTINE_STORAGE_KEY = "lastEodRoutine";
 
-function getTodayET(): { dateStr: string; hour: number; dayOfWeek: number; isWeekend: boolean } {
+function getTodayET(): { dateStr: string; hour: number; minute: number; dayOfWeek: number; isWeekend: boolean } {
   const now = new Date();
   const etStr = now.toLocaleString("en-US", { timeZone: "America/New_York" });
   const et = new Date(etStr);
@@ -50,6 +50,7 @@ function getTodayET(): { dateStr: string; hour: number; dayOfWeek: number; isWee
   return {
     dateStr: `${year}-${month}-${day}`,
     hour: et.getHours(),
+    minute: et.getMinutes(),
     dayOfWeek,
     isWeekend: dayOfWeek === 0 || dayOfWeek === 6,
   };
@@ -60,7 +61,6 @@ function getLastFriday(): string {
   const etStr = now.toLocaleString("en-US", { timeZone: "America/New_York" });
   const et = new Date(etStr);
   const dayOfWeek = et.getDay();
-  // Go back to Friday
   const daysBack = dayOfWeek === 0 ? 2 : dayOfWeek === 6 ? 1 : dayOfWeek === 5 ? 0 : dayOfWeek;
   et.setDate(et.getDate() - daysBack);
   return `${et.getFullYear()}-${String(et.getMonth() + 1).padStart(2, "0")}-${String(et.getDate()).padStart(2, "0")}`;
@@ -106,14 +106,14 @@ export function useEodRoutine() {
   const anonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
   const headers = { apikey: anonKey, Authorization: `Bearer ${anonKey}`, "Content-Type": "application/json" };
 
-  const { dateStr, hour, dayOfWeek, isWeekend } = getTodayET();
+  const { dateStr, hour, minute, dayOfWeek, isWeekend } = getTodayET();
   const isAfterClose = hour >= 16;
+  const isBeforeOpen = hour < 9 || (hour === 9 && minute < 30);
+  const isEnabled = isWeekend || isAfterClose || isBeforeOpen;
   const isFriday = dayOfWeek === 5;
   const shouldSaveVolume = isFriday || isWeekend;
   const usePc = isWeekend;
   const targetDate = isWeekend ? getLastFriday() : dateStr;
-
-  const isEnabled = isWeekend || isAfterClose;
 
   const buttonLabel = state.lastCompletedToday
     ? `✓ EOD Complete · last run at ${state.lastCompletedToday.time}`
@@ -122,7 +122,7 @@ export function useEodRoutine() {
     : "📅 EOD Routine";
 
   const tooltip = !isEnabled
-    ? "Available after market close (4:00 PM ET)"
+    ? "Available when market is closed (before 9:30 AM or after 4:00 PM ET)"
     : state.lastCompletedToday
     ? "Routine already completed today. Click to re-run."
     : "Run complete end-of-day workflow";
@@ -147,7 +147,6 @@ export function useEodRoutine() {
     abortRef.current = false;
     const startTime = Date.now();
 
-    // Initialize steps
     const initialSteps: EodRoutineStep[] = [
       { id: 1, label: "Full Scan", emoji: "📡", status: "pending" },
       { id: 2, label: "Save EOD Prices", emoji: "💾", status: "pending" },
@@ -175,7 +174,6 @@ export function useEodRoutine() {
     let weeklyReportGenerated = false;
     const failedSteps: string[] = [];
 
-    // Scan data holders
     let scanPerfData: { symbol: string; price: number; perf_1d: number }[] = [];
     let themeMap = new Map<string, string>();
 
@@ -187,7 +185,6 @@ export function useEodRoutine() {
       // STEP 1: Full Scan
       updateStep(1, { status: "running", detail: "Initializing scan..." });
 
-      // Start fresh scan
       const startRes = await fetch(`${supabaseUrl}/functions/v1/full-scan?action=start`, { headers });
       const startData = await startRes.json();
       if (!startRes.ok) throw new Error(startData.error || "Failed to initialize scan");
@@ -195,7 +192,6 @@ export function useEodRoutine() {
       const totalTickers = startData.total || 0;
       updateStep(1, { detail: `Scanning: 0 / ${totalTickers}` });
 
-      // Process chunks
       let scanDone = false;
       while (!scanDone && !abortRef.current) {
         const chunkRes = await fetch(`${supabaseUrl}/functions/v1/full-scan?action=chunk`, { headers });
@@ -203,22 +199,22 @@ export function useEodRoutine() {
         const chunkData = await chunkRes.json();
         scanDone = chunkData.done;
 
-        // Get progress
         const statusRes = await fetch(`${supabaseUrl}/functions/v1/full-scan?action=status`, { headers });
         const statusData = await statusRes.json();
         const done = statusData.done || 0;
         const total = statusData.total || totalTickers;
         updateStep(1, { detail: `Scanning: ${done} / ${total}` });
-        setState(s => ({ ...s, progress: Math.round((done / total) * 16.67) })); // Step 1 = ~17%
+        setState(s => ({ ...s, progress: Math.round((done / total) * 16.67) }));
 
         if (!scanDone) await new Promise(r => setTimeout(r, 300));
       }
 
-      // Fetch scan results
+      // *** FIX: Fetch ALL tickers with valid prices, not just status="done" ***
       const { data: perfData, error: perfErr } = await supabase
         .from("ticker_performance")
         .select("symbol, price, perf_1d")
-        .eq("status", "done");
+        .not("price", "is", null)
+        .gt("price", 0);
 
       if (perfErr || !perfData || perfData.length === 0) {
         throw new Error("No scan data available");
@@ -232,7 +228,6 @@ export function useEodRoutine() {
       // STEP 2: Save EOD Prices
       updateStep(2, { status: "running", detail: "Preparing..." });
 
-      // Get theme mappings
       const { data: themes } = await supabase.from("themes").select("id, name");
       const { data: tickers } = await supabase.from("theme_tickers").select("theme_id, ticker_symbol");
 
@@ -245,8 +240,7 @@ export function useEodRoutine() {
         }
       }
 
-      // Build EOD rows
-      const priceField = usePc ? "price" : "price"; // Both use current price from scan
+      const BATCH = 50;
       const eodRows = scanPerfData.map(p => ({
         symbol: p.symbol,
         theme_name: themeMap.get(p.symbol) || "Unknown",
@@ -262,8 +256,6 @@ export function useEodRoutine() {
 
       updateStep(2, { detail: `Saving ${eodRows.length} prices...` });
 
-      // Upsert in batches
-      const BATCH = 50;
       for (let i = 0; i < eodRows.length; i += BATCH) {
         const { error } = await supabase
           .from("eod_prices")
@@ -284,12 +276,12 @@ export function useEodRoutine() {
 
       try {
         const perfMap = new Map(scanPerfData.map(p => [p.symbol, p]));
-        const themeSymbols = new Map<string, string[]>();
+        const themeSymbolsMap = new Map<string, string[]>();
         if (tickers) {
           for (const tk of tickers) {
-            const arr = themeSymbols.get(tk.theme_id) || [];
+            const arr = themeSymbolsMap.get(tk.theme_id) || [];
             arr.push(tk.ticker_symbol);
-            themeSymbols.set(tk.theme_id, arr);
+            themeSymbolsMap.set(tk.theme_id, arr);
           }
         }
 
@@ -304,7 +296,7 @@ export function useEodRoutine() {
 
         if (themes) {
           for (const theme of themes) {
-            const symbols = themeSymbols.get(theme.id) || [];
+            const symbols = themeSymbolsMap.get(theme.id) || [];
             if (symbols.length === 0) continue;
 
             const valid = symbols.filter(s => perfMap.has(s));
@@ -346,12 +338,12 @@ export function useEodRoutine() {
 
       try {
         const themePerfs: number[] = [];
-        const themeSymbols = new Map<string, string[]>();
+        const themeSymbolsMap2 = new Map<string, string[]>();
         if (tickers) {
           for (const tk of tickers) {
-            const arr = themeSymbols.get(tk.theme_id) || [];
+            const arr = themeSymbolsMap2.get(tk.theme_id) || [];
             arr.push(tk.ticker_symbol);
-            themeSymbols.set(tk.theme_id, arr);
+            themeSymbolsMap2.set(tk.theme_id, arr);
           }
         }
 
@@ -359,7 +351,7 @@ export function useEodRoutine() {
 
         if (themes) {
           for (const theme of themes) {
-            const symbols = themeSymbols.get(theme.id) || [];
+            const symbols = themeSymbolsMap2.get(theme.id) || [];
             const validPerfs = symbols.map(s => perfMap.get(s)).filter((v): v is number => v !== undefined);
             if (validPerfs.length > 0) {
               const avg = validPerfs.reduce((a, b) => a + b, 0) / validPerfs.length;
@@ -371,7 +363,6 @@ export function useEodRoutine() {
         dispersionScore = calculateDispersion(themePerfs);
         dispersionLabel = getDispersionShortLabel(dispersionScore);
 
-        // Save to eod_save_sessions
         await supabase
           .from("eod_save_sessions")
           .upsert({
@@ -414,7 +405,6 @@ export function useEodRoutine() {
       updateStep(6, { status: "running", detail: "Checking alerts..." });
 
       try {
-        // Check breadth alerts by comparing to yesterday
         const yesterdayDate = (() => {
           const d = new Date(targetDate);
           d.setDate(d.getDate() - 1);
@@ -474,7 +464,6 @@ export function useEodRoutine() {
 
       const backgroundTasks: Promise<void>[] = [];
 
-      // Step 7: Generate Weekly Report (Fridays only)
       if (shouldSaveVolume) {
         backgroundTasks.push((async () => {
           try {
@@ -490,24 +479,22 @@ export function useEodRoutine() {
         })());
       }
 
-      // Step 8: Refresh News (top 5 themes by momentum score)
       backgroundTasks.push((async () => {
         try {
-          // Get top 5 themes by momentum (1D performance)
           const perfMap = new Map(scanPerfData.map(p => [p.symbol, p.perf_1d || 0]));
-          const themeSymbols = new Map<string, string[]>();
+          const themeSymbolsMap = new Map<string, string[]>();
           if (tickers) {
             for (const tk of tickers) {
-              const arr = themeSymbols.get(tk.theme_id) || [];
+              const arr = themeSymbolsMap.get(tk.theme_id) || [];
               arr.push(tk.ticker_symbol);
-              themeSymbols.set(tk.theme_id, arr);
+              themeSymbolsMap.set(tk.theme_id, arr);
             }
           }
 
           const themePerfs: { name: string; perf: number }[] = [];
           if (themes) {
             for (const theme of themes) {
-              const symbols = themeSymbols.get(theme.id) || [];
+              const symbols = themeSymbolsMap.get(theme.id) || [];
               const validPerfs = symbols.map(s => perfMap.get(s)).filter((v): v is number => v !== undefined);
               if (validPerfs.length > 0) {
                 const avg = validPerfs.reduce((a, b) => a + b, 0) / validPerfs.length;
@@ -516,10 +503,7 @@ export function useEodRoutine() {
             }
           }
 
-          // Sort by absolute momentum and take top 5
           const top5 = themePerfs.sort((a, b) => b.perf - a.perf).slice(0, 5);
-          
-          // Fetch news for top 5 themes
           for (const theme of top5) {
             await fetch(`${supabaseUrl}/functions/v1/fetch-theme-news`, {
               method: "POST",
@@ -527,16 +511,13 @@ export function useEodRoutine() {
               body: JSON.stringify({ themeName: theme.name }),
             }).catch(() => {});
           }
-          console.log(`News refreshed for top ${top5.length} themes`);
         } catch (err) {
           console.warn("News refresh failed:", err);
         }
       })());
 
-      // Step 9: Refresh Fundamentals (if cache >23 hours old)
       backgroundTasks.push((async () => {
         try {
-          // Check if fundamentals cache is stale (>23 hours)
           const { data: staleFund } = await supabase
             .from("fundamentals_cache")
             .select("symbol, last_updated")
@@ -544,25 +525,24 @@ export function useEodRoutine() {
             .limit(1);
 
           const staleCutoff = new Date(Date.now() - 23 * 60 * 60 * 1000).toISOString();
-          const needsRefresh = !staleFund || staleFund.length === 0 || 
+          const needsRefresh = !staleFund || staleFund.length === 0 ||
             (staleFund[0].last_updated && staleFund[0].last_updated < staleCutoff);
 
           if (needsRefresh) {
-            // Get top 10 themes by momentum
             const perfMap = new Map(scanPerfData.map(p => [p.symbol, p.perf_1d || 0]));
-            const themeSymbols = new Map<string, string[]>();
+            const themeSymbolsMap = new Map<string, string[]>();
             if (tickers) {
               for (const tk of tickers) {
-                const arr = themeSymbols.get(tk.theme_id) || [];
+                const arr = themeSymbolsMap.get(tk.theme_id) || [];
                 arr.push(tk.ticker_symbol);
-                themeSymbols.set(tk.theme_id, arr);
+                themeSymbolsMap.set(tk.theme_id, arr);
               }
             }
 
             const themePerfs: { name: string; symbols: string[]; perf: number }[] = [];
             if (themes) {
               for (const theme of themes) {
-                const symbols = themeSymbols.get(theme.id) || [];
+                const symbols = themeSymbolsMap.get(theme.id) || [];
                 const validPerfs = symbols.map(s => perfMap.get(s)).filter((v): v is number => v !== undefined);
                 if (validPerfs.length > 0) {
                   const avg = validPerfs.reduce((a, b) => a + b, 0) / validPerfs.length;
@@ -571,11 +551,9 @@ export function useEodRoutine() {
               }
             }
 
-            // Sort by momentum and get symbols from top 10 themes
             const top10Themes = themePerfs.sort((a, b) => b.perf - a.perf).slice(0, 10);
             const symbolsToFetch = [...new Set(top10Themes.flatMap(t => t.symbols))].slice(0, 50);
 
-            // Fetch fundamentals in batches
             for (let i = 0; i < symbolsToFetch.length; i += 10) {
               const batch = symbolsToFetch.slice(i, i + 10);
               await fetch(`${supabaseUrl}/functions/v1/fetch-fundamentals`, {
@@ -584,19 +562,14 @@ export function useEodRoutine() {
                 body: JSON.stringify({ symbols: batch }),
               }).catch(() => {});
             }
-            console.log(`Fundamentals refreshed for ${symbolsToFetch.length} symbols from top 10 themes`);
-          } else {
-            console.log("Fundamentals cache is fresh, skipping refresh");
           }
         } catch (err) {
           console.warn("Fundamentals refresh failed:", err);
         }
       })());
 
-      // Don't wait for background tasks - they run in parallel
       Promise.all(backgroundTasks).catch(() => {});
 
-      // Build summary
       const elapsedMs = Date.now() - startTime;
       const summary: EodRoutineSummary = {
         date: targetDate,
@@ -612,7 +585,6 @@ export function useEodRoutine() {
         failedSteps,
       };
 
-      // Store completion
       const completionTime = new Date().toLocaleTimeString("en-US", {
         hour: "numeric",
         minute: "2-digit",
@@ -670,7 +642,6 @@ export function useEodRoutine() {
     setState(s => ({ ...s, summary: null }));
   }, []);
 
-  // Check for stored completion on mount
   useEffect(() => {
     const stored = getStoredCompletion();
     if (stored) {
