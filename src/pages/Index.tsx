@@ -372,7 +372,10 @@ export default function Index() {
               )}
 
               {/* EOD Routine Button */}
-              <EodRoutineButton />
+              <EodRoutineButton
+                onDashboardUpdate={handleScanComplete}
+                buildThemesFromPerf={buildThemesFromPerf}
+              />
 
               {/* Help button */}
               <HelpButton />
