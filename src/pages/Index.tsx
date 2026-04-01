@@ -96,6 +96,7 @@ export default function Index() {
     startFullScan,
     clearProgress,
     loadTimeframe,
+    buildThemesFromPerf,
   } = useFullScan(handleScanComplete);
 
 
