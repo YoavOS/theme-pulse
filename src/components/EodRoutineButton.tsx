@@ -13,8 +13,14 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useEodRoutine } from "@/hooks/useEodRoutine";
+import { ThemeData } from "@/data/themeData";
 
-export function EodRoutineButton() {
+interface EodRoutineButtonProps {
+  onDashboardUpdate?: (themes: ThemeData[], timeframe: string) => void;
+  buildThemesFromPerf?: (timeframe: string) => Promise<ThemeData[]>;
+}
+
+export function EodRoutineButton({ onDashboardUpdate, buildThemesFromPerf }: EodRoutineButtonProps) {
   const {
     state,
     isEnabled,
@@ -26,11 +32,10 @@ export function EodRoutineButton() {
     closeConfirmDialog,
     runRoutine,
     dismissSummary,
-  } = useEodRoutine();
+  } = useEodRoutine(onDashboardUpdate, buildThemesFromPerf);
 
   const { isRunning, steps, progress, summary, showConfirmDialog, lastCompletedToday, currentStep, totalSteps } = state;
 
-  // Format date for display
   const displayDate = new Date(targetDate + "T12:00:00").toLocaleDateString("en-US", {
     weekday: "short",
     month: "short",
@@ -43,7 +48,7 @@ export function EodRoutineButton() {
     const completedSteps = steps.filter(s => s.status === "done");
 
     return (
-      <div className="flex flex-col gap-1.5 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 min-w-[240px]">
+      <div className="flex flex-col gap-1.5 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 min-w-[260px]">
         <div className="flex items-center justify-between">
           <span className="text-xs font-semibold text-primary">📅 EOD Routine Running</span>
           <span className="text-[10px] text-muted-foreground">Step {currentStep} of {totalSteps}</span>
@@ -63,10 +68,10 @@ export function EodRoutineButton() {
 
         {completedSteps.length > 0 && (
           <div className="flex flex-col gap-0.5 text-[10px] text-muted-foreground">
-            {completedSteps.slice(-2).map(step => (
+            {completedSteps.slice(-3).map(step => (
               <div key={step.id} className="flex items-center gap-1">
                 <Check size={10} className="text-gain-medium" />
-                <span>{step.label}</span>
+                <span>{step.emoji} {step.label}</span>
                 {step.detail && <span className="text-muted-foreground/70">({step.detail})</span>}
               </div>
             ))}
@@ -78,8 +83,10 @@ export function EodRoutineButton() {
 
   // Completed: show summary card
   if (summary) {
+    const totalAlerts = summary.volumeAlerts + summary.momentumAlerts + summary.watchlistAlerts;
+
     return (
-      <div className="relative flex flex-col gap-1.5 rounded-lg border border-[hsl(174,80%,50%)]/30 bg-[hsl(174,80%,50%)]/5 px-3 py-2 min-w-[280px]">
+      <div className="relative flex flex-col gap-1.5 rounded-lg border border-[hsl(174,80%,50%)]/30 bg-[hsl(174,80%,50%)]/5 px-3 py-2 min-w-[300px]">
         <button
           onClick={dismissSummary}
           className="absolute right-1.5 top-1.5 rounded p-0.5 text-muted-foreground hover:bg-accent hover:text-foreground"
@@ -97,7 +104,10 @@ export function EodRoutineButton() {
           <div>💾 {summary.eodPricesSaved} EOD prices saved</div>
           <div>📊 {summary.themesBreadthRecorded} themes breadth recorded</div>
           <div>📈 Dispersion: {summary.dispersionScore.toFixed(1)}σ ({summary.dispersionLabel})</div>
-          <div>🔔 {summary.alertsTriggered} alerts triggered</div>
+          <div>⚡ {summary.volumeAlerts} volume alerts fired</div>
+          <div>🚀 {summary.momentumAlerts} momentum alerts fired</div>
+          <div>🔔 {summary.watchlistAlerts} watchlist alerts fired</div>
+          <div>📰 News refreshed for {summary.newsRefreshed} themes</div>
           {summary.weeklyReportGenerated && <div>🗞 Weekly report generated</div>}
         </div>
 
@@ -122,13 +132,7 @@ export function EodRoutineButton() {
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
-              onClick={() => {
-                if (lastCompletedToday) {
-                  openConfirmDialog();
-                } else {
-                  openConfirmDialog();
-                }
-              }}
+              onClick={openConfirmDialog}
               disabled={!isEnabled}
               variant="outline"
               size="sm"
@@ -150,7 +154,6 @@ export function EodRoutineButton() {
         </Tooltip>
       </TooltipProvider>
 
-      {/* Confirmation Dialog */}
       <AlertDialog open={showConfirmDialog} onOpenChange={(open) => !open && closeConfirmDialog()}>
         <AlertDialogContent className="max-w-md">
           <AlertDialogHeader>
@@ -159,12 +162,14 @@ export function EodRoutineButton() {
               Run EOD Routine for {displayDate}?
             </AlertDialogTitle>
             <AlertDialogDescription className="space-y-2">
-              <p>This will:</p>
+              <p>This will run a 15-step pipeline:</p>
               <ul className="list-disc list-inside text-sm space-y-1 text-muted-foreground">
-                <li>Scan all tickers</li>
+                <li>Full scan all tickers (identical to manual scan)</li>
                 <li>Save EOD prices{isWeekend ? " (Friday close)" : ""}</li>
-                <li>Update all analytics</li>
-                <li>Generate insights</li>
+                <li>Update breadth, dispersion, volume analytics</li>
+                <li>Check breadth, volume, momentum & watchlist alerts</li>
+                <li>Update SPY benchmark & theme intelligence</li>
+                <li>Generate AI narrative & refresh news (background)</li>
               </ul>
               <p className="text-sm text-muted-foreground mt-3">
                 <strong>Estimated time:</strong> ~10 minutes
