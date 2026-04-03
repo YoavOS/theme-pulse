@@ -115,28 +115,45 @@ export default function EodHistory() {
     async function load() {
       setLoading(true);
 
-      // Fetch sessions and distinct dates in parallel
-      const [sessionsRes, datesRes, tickerCountRes] = await Promise.all([
+      const allDateRows: { date: string }[] = [];
+      const PAGE_SIZE = 1000;
+      let from = 0;
+
+      while (true) {
+        const { data, error } = await supabase
+          .from("eod_prices")
+          .select("date")
+          .order("date", { ascending: false })
+          .range(from, from + PAGE_SIZE - 1);
+
+        if (error || !data || data.length === 0) break;
+
+        allDateRows.push(...data);
+
+        if (data.length < PAGE_SIZE) break;
+        from += PAGE_SIZE;
+      }
+
+      const [sessionsRes, tickerRowsRes] = await Promise.all([
         supabase.from("eod_save_sessions").select("date, completed_at, saved_count, failed_count, total_tickers, status").order("date", { ascending: false }),
-        supabase.from("eod_prices").select("date"),
-        supabase.from("theme_tickers").select("id", { count: "exact", head: true }),
+        supabase.from("theme_tickers").select("ticker_symbol"),
       ]);
 
       // Build date -> count map from eod_prices
       const countMap = new Map<string, number>();
-      if (datesRes.data) {
-        for (const row of datesRes.data) {
-          const d = row.date;
-          countMap.set(d, (countMap.get(d) || 0) + 1);
-        }
+      for (const row of allDateRows) {
+        const d = row.date;
+        countMap.set(d, (countMap.get(d) || 0) + 1);
       }
 
       const counts: DateCount[] = [];
       countMap.forEach((count, date) => counts.push({ date, count }));
 
+      const uniqueTickerCount = new Set((tickerRowsRes.data || []).map(row => row.ticker_symbol)).size;
+
       setSessions(sessionsRes.data || []);
       setDateCounts(counts);
-      setTotalTickers(tickerCountRes.count || 0);
+      setTotalTickers(uniqueTickerCount);
       setLoading(false);
     }
 
@@ -164,20 +181,21 @@ export default function EodHistory() {
     for (const s of sessions) sessionMap.set(s.date, s);
 
     // Unique ticker count (use max from any date or total_tickers from session)
-    const maxTickers = totalTickers || Math.max(...dateCounts.map((d) => d.count), 0);
+    const fallbackTotalTickers = totalTickers || Math.max(...dateCounts.map((d) => d.count), 0);
 
     const rows = tradingDays
       .sort((a, b) => b.localeCompare(a)) // descending
       .map((date) => {
         const count = countMap.get(date) || 0;
         const session = sessionMap.get(date);
-        const hasSaved = count > 0;
+        const tickersSaved = session?.saved_count ?? count;
+        const hasSaved = tickersSaved > 0 || (session?.status === "completed" && !!session.completed_at);
 
         return {
           date,
           hasSaved,
-          tickersSaved: count,
-          totalTickers: maxTickers,
+          tickersSaved,
+          totalTickers: session?.total_tickers ?? fallbackTotalTickers,
           savedAt: session?.completed_at || null,
           failedCount: session?.failed_count ?? null,
           sessionStatus: session?.status || null,
@@ -287,7 +305,7 @@ export default function EodHistory() {
                         <td className="px-4 py-2.5 text-center font-mono text-xs">
                           {row.hasSaved ? (
                             <span className={row.tickersSaved >= row.totalTickers ? "text-primary" : "text-foreground"}>
-                              {row.tickersSaved} / {row.totalTickers}
+                              {row.totalTickers > 0 ? `${row.tickersSaved} / ${row.totalTickers}` : row.tickersSaved}
                             </span>
                           ) : (
                             <span className="text-muted-foreground">--</span>
