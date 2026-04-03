@@ -69,7 +69,7 @@ serve(async (req) => {
     }
 
     if (!eodData || eodData.length === 0) {
-      return jsonResponse({ error: "No EOD data found for this week. Run EOD saves first.", insufficient_data: true, days_available: 0 }, 400);
+      return jsonResponse({ error: "No EOD data found for this week. Run EOD saves first.", insufficient_data: true, days_available: 0 });
     }
 
     // Count unique trading days
@@ -81,7 +81,7 @@ serve(async (req) => {
         error: `Not enough data for this week yet — report will generate automatically after Friday EOD save. ${daysAvailable} day${daysAvailable === 1 ? "" : "s"} of data available so far this week.`,
         insufficient_data: true,
         days_available: daysAvailable,
-      }, 400);
+      });
     }
 
     // 2. Get volume data

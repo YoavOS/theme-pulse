@@ -214,7 +214,36 @@ export function useEodRoutine(
     let themeMap = new Map<string, string>(); // symbol -> theme name
     let themeSymbolsMap = new Map<string, string[]>(); // theme_id -> symbols
 
+    const persistSaveSession = async (overrides: {
+      completed_at?: string | null;
+      dispersion_score?: number | null;
+      failed_count?: number;
+      failed_symbols?: string[];
+      saved_count?: number;
+      status?: string;
+      total_tickers?: number;
+    } = {}) => {
+      const { error } = await supabase.from("eod_save_sessions").upsert({
+        date: targetDate,
+        status: "in_progress",
+        total_tickers: tickersScanned,
+        saved_count: eodPricesSaved,
+        failed_count: Math.max(0, tickersScanned - eodPricesSaved),
+        failed_symbols: [],
+        started_at: new Date(startTime).toISOString(),
+        completed_at: null,
+        dispersion_score: null,
+        ...overrides,
+      }, { onConflict: "date" });
+
+      if (error) {
+        console.error("Failed to persist EOD session:", error);
+      }
+    };
+
     try {
+      await persistSaveSession();
+
       // ═══════════════════════════════════════════════════════════════
       // PHASE 1: DATA COLLECTION (blocking — abort on failure)
       // ═══════════════════════════════════════════════════════════════
@@ -231,18 +260,62 @@ export function useEodRoutine(
       updateStep(1, { detail: `Scanning: 0 / ${totalTickers}` });
 
       let scanDone = false;
+      let chunkFailures = 0;
       while (!scanDone && !abortRef.current) {
-        const chunkRes = await fetch(`${supabaseUrl}/functions/v1/full-scan?action=chunk`, { headers });
-        if (!chunkRes.ok) throw new Error("Scan chunk failed");
-        const chunkData = await chunkRes.json();
-        scanDone = chunkData.done;
+        try {
+          const chunkRes = await fetch(`${supabaseUrl}/functions/v1/full-scan?action=chunk`, { headers });
+          if (!chunkRes.ok) {
+            let errorMessage = `HTTP ${chunkRes.status}`;
+            try {
+              const errorBody = await chunkRes.json();
+              errorMessage = errorBody?.error || errorMessage;
+            } catch {
+              // Ignore JSON parse failures on transient chunk errors
+            }
+            throw new Error(errorMessage);
+          }
+
+          const chunkData = await chunkRes.json();
+          scanDone = chunkData.done;
+          chunkFailures = 0;
+        } catch (error) {
+          chunkFailures += 1;
+
+          const statusRes = await fetch(`${supabaseUrl}/functions/v1/full-scan?action=status`, { headers }).catch(() => null);
+          const statusData = statusRes && statusRes.ok ? await statusRes.json() : null;
+          const done = statusData?.done || 0;
+          const total = statusData?.total || totalTickers;
+          const pending = statusData?.pending ?? Math.max(total - done, 0);
+
+          updateStep(1, {
+            detail: chunkFailures < 3
+              ? `Transient scan error — retrying (${done} / ${total})`
+              : `Scan failed at ${done} / ${total}`,
+          });
+          setState(s => ({
+            ...s,
+            progress: Math.round((done / Math.max(total, 1)) * (100 / TOTAL_STEPS)),
+          }));
+
+          if (pending === 0 && done > 0) {
+            scanDone = true;
+            break;
+          }
+
+          if (chunkFailures >= 3) {
+            throw new Error(`Scan chunk failed after ${chunkFailures} attempts: ${error instanceof Error ? error.message : String(error)}`);
+          }
+
+          await new Promise(r => setTimeout(r, 1500));
+          continue;
+        }
 
         const statusRes = await fetch(`${supabaseUrl}/functions/v1/full-scan?action=status`, { headers });
         const statusData = await statusRes.json();
         const done = statusData.done || 0;
         const total = statusData.total || totalTickers;
         updateStep(1, { detail: `Scanning: ${done} / ${total}` });
-        setState(s => ({ ...s, progress: Math.round((done / total) * (100 / TOTAL_STEPS)) }));
+        setState(s => ({ ...s, progress: Math.round((done / Math.max(total, 1)) * (100 / TOTAL_STEPS)) }));
 
         if (!scanDone) await new Promise(r => setTimeout(r, 300));
       }
@@ -328,6 +401,10 @@ export function useEodRoutine(
         });
       }
 
+      if (eodRows.length === 0) {
+        throw new Error("No EOD rows were prepared from the scan results");
+      }
+
       updateStep(2, { detail: `Saving ${eodRows.length} prices...` });
 
       const BATCH = 50;
@@ -335,19 +412,40 @@ export function useEodRoutine(
         const { error } = await supabase
           .from("eod_prices")
           .upsert(eodRows.slice(i, i + BATCH), { onConflict: "symbol,date" });
-        if (error) console.error("EOD upsert batch error:", error);
+        if (error) {
+          throw new Error(`Failed to save EOD prices: ${error.message}`);
+        }
       }
 
-      // Verify save
-      const { count: savedCount } = await supabase
-        .from("eod_prices")
-        .select("*", { count: "exact", head: true })
-        .eq("date", targetDate);
+      // Verify save for exactly the symbols written by this routine.
+      let savedCount = 0;
+      for (let i = 0; i < eodRows.length; i += BATCH) {
+        const symbols = eodRows.slice(i, i + BATCH).map(row => row.symbol);
+        const { count, error } = await supabase
+          .from("eod_prices")
+          .select("symbol", { count: "exact", head: true })
+          .eq("date", targetDate)
+          .in("symbol", symbols);
 
-      eodPricesSaved = savedCount || eodRows.length;
+        if (error) {
+          throw new Error(`Failed to verify saved EOD prices: ${error.message}`);
+        }
+
+        savedCount += count || 0;
+      }
+
+      eodPricesSaved = savedCount;
       if (eodPricesSaved < Math.floor(tickersScanned * 0.75)) {
         console.warn(`EOD save incomplete: ${eodPricesSaved}/${tickersScanned} — continuing anyway`);
       }
+
+      await persistSaveSession({
+        completed_at: new Date().toISOString(),
+        failed_count: Math.max(0, tickersScanned - eodPricesSaved),
+        saved_count: eodPricesSaved,
+        status: "completed",
+        total_tickers: tickersScanned,
+      });
 
       updateStep(2, { status: "done", detail: `${eodPricesSaved} rows` });
 
@@ -407,17 +505,14 @@ export function useEodRoutine(
         dispersionScore = calculateDispersion(themePerfs);
         dispersionLabel = getDispersionShortLabel(dispersionScore);
 
-        await supabase.from("eod_save_sessions").upsert({
-          date: targetDate,
+        await persistSaveSession({
+          completed_at: new Date().toISOString(),
+          dispersion_score: dispersionScore,
+          failed_count: Math.max(0, tickersScanned - eodPricesSaved),
+          saved_count: eodPricesSaved,
           status: "completed",
           total_tickers: tickersScanned,
-          saved_count: eodPricesSaved,
-          failed_count: 0,
-          failed_symbols: [],
-          dispersion_score: dispersionScore,
-          started_at: new Date(startTime).toISOString(),
-          completed_at: new Date().toISOString(),
-        }, { onConflict: "date" });
+        });
 
         updateStep(4, { status: "done", detail: `${dispersionScore.toFixed(1)}σ (${dispersionLabel})` });
       } catch (err) {
@@ -778,12 +873,17 @@ export function useEodRoutine(
               headers,
               body: JSON.stringify({}),
             });
-            if (res.ok) {
+            const body = await res.json().catch(() => null);
+
+            if (body?.insufficient_data) {
+              updateStep(15, { status: "skipped", detail: `Waiting for more data (${body.days_available} days)` });
+              toast({ title: "🗞 Weekly report pending", description: body.error });
+            } else if (res.ok) {
               weeklyReportGenerated = true;
               updateStep(15, { status: "done", detail: "Generated" });
               toast({ title: "📊 Weekly report generated" });
             } else {
-              updateStep(15, { status: "failed", detail: "Failed" });
+              updateStep(15, { status: "failed", detail: body?.error || "Failed" });
               failedSteps.push("Weekly Report");
             }
           } catch {
@@ -847,6 +947,15 @@ export function useEodRoutine(
     } catch (err) {
       console.error("EOD Routine failed:", err);
       const errorMsg = err instanceof Error ? err.message : String(err);
+
+      await persistSaveSession({
+        completed_at: eodPricesSaved > 0 ? new Date().toISOString() : null,
+        dispersion_score: dispersionScore || null,
+        failed_count: Math.max(0, tickersScanned - eodPricesSaved),
+        saved_count: eodPricesSaved,
+        status: eodPricesSaved > 0 ? "completed" : "failed",
+        total_tickers: tickersScanned,
+      });
 
       toast({
         title: "EOD Routine failed",

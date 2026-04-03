@@ -131,22 +131,24 @@ export function EodRoutineButton({ onDashboardUpdate, buildThemesFromPerf }: Eod
       <TooltipProvider delayDuration={200}>
         <Tooltip>
           <TooltipTrigger asChild>
-            <Button
-              onClick={openConfirmDialog}
-              disabled={!isEnabled}
-              variant="outline"
-              size="sm"
-              className={`text-xs font-semibold transition-colors ${
-                lastCompletedToday
-                  ? "border-[hsl(174,80%,50%)]/40 bg-[hsl(174,80%,50%)]/10 text-[hsl(174,80%,50%)] hover:bg-[hsl(174,80%,50%)]/20"
-                  : isEnabled
-                  ? "border-primary/40 bg-primary/10 text-primary hover:bg-primary/20"
-                  : "border-border bg-secondary/50 text-muted-foreground"
-              }`}
-            >
-              <Calendar size={12} className="mr-1" />
-              {buttonLabel}
-            </Button>
+            <span className="inline-flex">
+              <Button
+                onClick={openConfirmDialog}
+                disabled={!isEnabled}
+                variant="outline"
+                size="sm"
+                className={`text-xs font-semibold transition-colors ${
+                  lastCompletedToday
+                    ? "border-[hsl(174,80%,50%)]/40 bg-[hsl(174,80%,50%)]/10 text-[hsl(174,80%,50%)] hover:bg-[hsl(174,80%,50%)]/20"
+                    : isEnabled
+                    ? "border-primary/40 bg-primary/10 text-primary hover:bg-primary/20"
+                    : "border-border bg-secondary/50 text-muted-foreground"
+                }`}
+              >
+                <Calendar size={12} className="mr-1" />
+                {buttonLabel}
+              </Button>
+            </span>
           </TooltipTrigger>
           <TooltipContent side="bottom" className="text-xs max-w-[200px]">
             {tooltip}
