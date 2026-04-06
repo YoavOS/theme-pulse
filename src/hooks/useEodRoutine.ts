@@ -4,6 +4,7 @@ import { useToast } from "@/hooks/use-toast";
 import { calculateDispersion, getDispersionShortLabel } from "@/hooks/useDispersion";
 import { saveWeeklyVolumeHistory } from "@/hooks/useVolumeDryUp";
 import { ThemeData } from "@/data/themeData";
+import { persistAlert, type AlertInsert } from "@/hooks/useAlertHistory";
 
 // ── Types ──
 
