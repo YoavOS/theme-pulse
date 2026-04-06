@@ -462,10 +462,12 @@ export default function Index() {
           {/* Row 3: Tab Navigation */}
           <div className="mt-3 flex items-center gap-1 border-t border-border/50 pt-2.5">
             {([
-              { to: "/", label: "Dashboard", icon: <LayoutDashboard size={14} />, active: true, color: "", badge: null as number | null, pulse: false },
+              { to: "/", label: "Dashboard", icon: <LayoutDashboard size={14} />, active: true, color: "", badge: null as number | string | null, pulse: false },
               { to: "/intelligence", label: "Intelligence", icon: <Brain size={14} />, active: false, color: "text-primary", badge: null, pulse: false },
               { to: "/watchlist", label: "Watchlist", icon: <Bookmark size={14} />, active: false, color: "text-[hsl(40,80%,50%)]",
                 badge: pinned.length > 0 ? pinned.length : null, pulse: false },
+              { to: "/alerts", label: "Alerts", icon: <Bell size={14} />, active: false, color: "text-destructive",
+                badge: unreadAlertCount > 99 ? "99+" : unreadAlertCount > 0 ? unreadAlertCount : null, pulse: false },
               { to: "/eod-history", label: "EOD History", icon: <Calendar size={14} />, active: false, color: "text-gain-medium",
                 badge: null, pulse: false },
             ]).map((tab) => (
