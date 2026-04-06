@@ -483,7 +483,11 @@ export default function Index() {
                 <span className={tab.active ? "text-primary" : tab.color}>{tab.icon}</span>
                 {tab.label}
                 {tab.badge && (
-                  <span className="inline-flex items-center gap-0.5 rounded-full bg-primary/20 px-1.5 py-0 text-[9px] font-bold text-primary">
+                  <span className={`inline-flex items-center gap-0.5 rounded-full px-1.5 py-0 text-[9px] font-bold ${
+                    tab.to === "/alerts"
+                      ? "bg-destructive text-destructive-foreground"
+                      : "bg-primary/20 text-primary"
+                  }`}>
                     {tab.badge}
                   </span>
                 )}
