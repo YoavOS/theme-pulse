@@ -29,6 +29,7 @@ const App = () => (
               <Route path="/login" element={<Login />} />
               <Route path="/admin" element={<Admin />} />
               <Route path="/eod-history" element={<EodHistory />} />
+              <Route path="/alerts" element={<AlertCenter />} />
               <Route path="/intelligence" element={<ThemeIntelligence />} />
               <Route path="/watchlist" element={<Watchlist />} />
               <Route path="*" element={<NotFound />} />
