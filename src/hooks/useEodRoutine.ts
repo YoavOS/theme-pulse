@@ -660,10 +660,12 @@ export function useEodRoutine(
                 if (isNewHigh && avgPerf > 1) {
                   momentumAlerts++;
                   toast({ title: `📈 ${theme.name} new 5-day high`, description: `Avg price at highest in 5 sessions`, duration: 6000 });
+                  persistAlert({ date: targetDate, theme_name: theme.name, alert_type: "new_5day_high", severity: "low", title: `${theme.name} new 5-day high`, description: `Avg price at highest in 5 sessions` });
                 }
                 if (isNewLow && avgPerf < -1) {
                   momentumAlerts++;
                   toast({ title: `📉 ${theme.name} new 5-day low`, description: `Avg price at lowest in 5 sessions`, duration: 6000 });
+                  persistAlert({ date: targetDate, theme_name: theme.name, alert_type: "new_5day_low", severity: "low", title: `${theme.name} new 5-day low`, description: `Avg price at lowest in 5 sessions` });
                 }
               }
             }
