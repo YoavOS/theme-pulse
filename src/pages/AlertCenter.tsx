@@ -226,7 +226,7 @@ export default function AlertCenter() {
       .range(offset, offset + PAGE_SIZE - 1);
 
     const { data } = await dataQ;
-    const rows = (data || []) as AlertRow[];
+    const rows = (data || []) as unknown as AlertRow[];
 
     if (reset) {
       setAlerts(rows);
