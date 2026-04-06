@@ -14,6 +14,54 @@ export type Database = {
   }
   public: {
     Tables: {
+      alert_history: {
+        Row: {
+          alert_type: string
+          date: string
+          description: string
+          id: string
+          metadata: Json | null
+          severity: string
+          theme_name: string
+          threshold: number | null
+          ticker_symbol: string | null
+          title: string
+          triggered_at: string | null
+          value_after: number | null
+          value_before: number | null
+        }
+        Insert: {
+          alert_type: string
+          date: string
+          description: string
+          id?: string
+          metadata?: Json | null
+          severity: string
+          theme_name: string
+          threshold?: number | null
+          ticker_symbol?: string | null
+          title: string
+          triggered_at?: string | null
+          value_after?: number | null
+          value_before?: number | null
+        }
+        Update: {
+          alert_type?: string
+          date?: string
+          description?: string
+          id?: string
+          metadata?: Json | null
+          severity?: string
+          theme_name?: string
+          threshold?: number | null
+          ticker_symbol?: string | null
+          title?: string
+          triggered_at?: string | null
+          value_after?: number | null
+          value_before?: number | null
+        }
+        Relationships: []
+      }
       eod_prices: {
         Row: {
           close_price: number
