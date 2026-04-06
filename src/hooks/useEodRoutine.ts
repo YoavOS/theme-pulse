@@ -561,9 +561,11 @@ export function useEodRoutine(
             if (isSurge || (isLargeJump && change > 0)) {
               breadthAlertCount++;
               toast({ title: `🚀 ${row.theme_name} breadth surged`, description: `${yesterdayVal}% → ${row.breadth_pct}% — potential rotation signal`, duration: 10000 });
+              persistAlert({ date: targetDate, theme_name: row.theme_name, alert_type: "breadth_surge", severity: "medium", title: `${row.theme_name} breadth surged`, description: `${yesterdayVal}% → ${row.breadth_pct}% — potential rotation signal`, value_before: yesterdayVal, value_after: row.breadth_pct ?? 0 });
             } else if (isCollapse || (isLargeJump && change < 0)) {
               breadthAlertCount++;
               toast({ title: `⚠ ${row.theme_name} breadth collapsed`, description: `${yesterdayVal}% → ${row.breadth_pct}% — watch for reversal`, variant: "destructive", duration: 10000 });
+              persistAlert({ date: targetDate, theme_name: row.theme_name, alert_type: "breadth_collapse", severity: "high", title: `${row.theme_name} breadth collapsed`, description: `${yesterdayVal}% → ${row.breadth_pct}% — watch for reversal`, value_before: yesterdayVal, value_after: row.breadth_pct ?? 0 });
             }
           }
         }
