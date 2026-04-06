@@ -703,10 +703,12 @@ export function useEodRoutine(
             if (config.up !== null && avgPerf1w > config.up) {
               watchlistAlerts++;
               toast({ title: `📌 ${themeName} hit upside target`, description: `1W: +${avgPerf1w.toFixed(1)}% (threshold: ${config.up}%)`, duration: 10000 });
+              persistAlert({ date: targetDate, theme_name: themeName, alert_type: "watchlist_perf", severity: "low", title: `${themeName} hit upside target`, description: `1W: +${avgPerf1w.toFixed(1)}% (threshold: ${config.up}%)`, threshold: config.up, value_after: avgPerf1w });
             }
             if (config.down !== null && avgPerf1w < -Math.abs(config.down)) {
               watchlistAlerts++;
               toast({ title: `📌 ${themeName} hit downside target`, description: `1W: ${avgPerf1w.toFixed(1)}% (threshold: -${Math.abs(config.down)}%)`, variant: "destructive", duration: 10000 });
+              persistAlert({ date: targetDate, theme_name: themeName, alert_type: "watchlist_perf", severity: "low", title: `${themeName} hit downside target`, description: `1W: ${avgPerf1w.toFixed(1)}% (threshold: -${Math.abs(config.down)}%)`, threshold: -Math.abs(config.down), value_after: avgPerf1w });
             }
           }
         }
