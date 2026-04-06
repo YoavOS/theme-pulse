@@ -4,7 +4,7 @@ import { useLiveThemeData } from "@/hooks/useLiveThemeData";
 import ThemeCard from "@/components/ThemeCard";
 import ThemeDrilldownModal from "@/components/ThemeDrilldownModal";
 import ValidateTickersDialog from "@/components/ValidateTickersDialog";
-import { RefreshCw, Download, TrendingUp, TrendingDown, Wifi, WifiOff, Loader2, Settings, ScanLine, X, ShieldCheck, Brain, Bookmark, ChevronDown, LayoutDashboard, AlertTriangle, LayoutGrid, List, Flame, Circle, BarChart3, Calendar } from "lucide-react";
+import { RefreshCw, Download, TrendingUp, TrendingDown, Wifi, WifiOff, Loader2, Settings, ScanLine, X, ShieldCheck, Brain, Bookmark, ChevronDown, LayoutDashboard, AlertTriangle, LayoutGrid, List, Flame, Circle, BarChart3, Calendar, Bell } from "lucide-react";
 import RankedListView from "@/components/dashboard/RankedListView";
 import HeatmapGridView from "@/components/dashboard/HeatmapGridView";
 import DashboardBubbleView from "@/components/dashboard/DashboardBubbleView";
