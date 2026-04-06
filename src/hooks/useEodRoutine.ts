@@ -635,6 +635,7 @@ export function useEodRoutine(
           if (avgPerf > 3 && breadth > 75) {
             momentumAlerts++;
             toast({ title: `🚀 ${theme.name} breaking out`, description: `+${avgPerf.toFixed(1)}% with ${breadth}% breadth`, duration: 8000 });
+            persistAlert({ date: targetDate, theme_name: theme.name, alert_type: "momentum_breakout", severity: "medium", title: `${theme.name} breaking out`, description: `+${avgPerf.toFixed(1)}% with ${breadth}% breadth`, value_after: avgPerf, threshold: 3 });
           }
 
           // Check for new 5-day highs/lows using EOD data
