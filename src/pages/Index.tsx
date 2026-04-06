@@ -4,7 +4,7 @@ import { useLiveThemeData } from "@/hooks/useLiveThemeData";
 import ThemeCard from "@/components/ThemeCard";
 import ThemeDrilldownModal from "@/components/ThemeDrilldownModal";
 import ValidateTickersDialog from "@/components/ValidateTickersDialog";
-import { RefreshCw, Download, TrendingUp, TrendingDown, Wifi, WifiOff, Loader2, Settings, ScanLine, X, ShieldCheck, Brain, Bookmark, ChevronDown, LayoutDashboard, AlertTriangle, LayoutGrid, List, Flame, Circle, BarChart3, Calendar } from "lucide-react";
+import { RefreshCw, Download, TrendingUp, TrendingDown, Wifi, WifiOff, Loader2, Settings, ScanLine, X, ShieldCheck, Brain, Bookmark, ChevronDown, LayoutDashboard, AlertTriangle, LayoutGrid, List, Flame, Circle, BarChart3, Calendar, Bell } from "lucide-react";
 import RankedListView from "@/components/dashboard/RankedListView";
 import HeatmapGridView from "@/components/dashboard/HeatmapGridView";
 import DashboardBubbleView from "@/components/dashboard/DashboardBubbleView";
@@ -25,6 +25,7 @@ import { useThemeSearch } from "@/hooks/useThemeSearch";
 import { useThemeNews } from "@/hooks/useThemeNews";
 import { useFundamentals } from "@/hooks/useFundamentals";
 import NewsPanel from "@/components/NewsPanel";
+import { useUnreadAlertCount } from "@/hooks/useUnreadAlertCount";
 
 const TIMEFRAMES = ["Today", "1W", "1M", "3M", "YTD"] as const;
 
@@ -52,6 +53,7 @@ export default function Index() {
   const [showOptions, setShowOptions] = useState(false);
   const [showDemoConfirm, setShowDemoConfirm] = useState(false);
   const { pinned, alerts, getAlert } = useWatchlist();
+  const unreadAlertCount = useUnreadAlertCount();
   const { fetchVolume, getThemeSignals } = useVolumeData();
   const { fetchThemeNews, prefetchTopThemes, prefetchedThemes, getThemeNewsCount, getThemeArticles, hasNegativeNews, getAiSummary, marketNews, getThemeSentiment } = useThemeNews();
   const [newsPanelTheme, setNewsPanelTheme] = useState<ThemeData | null>(null);
@@ -460,10 +462,12 @@ export default function Index() {
           {/* Row 3: Tab Navigation */}
           <div className="mt-3 flex items-center gap-1 border-t border-border/50 pt-2.5">
             {([
-              { to: "/", label: "Dashboard", icon: <LayoutDashboard size={14} />, active: true, color: "", badge: null as number | null, pulse: false },
+              { to: "/", label: "Dashboard", icon: <LayoutDashboard size={14} />, active: true, color: "", badge: null as number | string | null, pulse: false },
               { to: "/intelligence", label: "Intelligence", icon: <Brain size={14} />, active: false, color: "text-primary", badge: null, pulse: false },
               { to: "/watchlist", label: "Watchlist", icon: <Bookmark size={14} />, active: false, color: "text-[hsl(40,80%,50%)]",
                 badge: pinned.length > 0 ? pinned.length : null, pulse: false },
+              { to: "/alerts", label: "Alerts", icon: <Bell size={14} />, active: false, color: "text-destructive",
+                badge: unreadAlertCount > 99 ? "99+" : unreadAlertCount > 0 ? unreadAlertCount : null, pulse: false },
               { to: "/eod-history", label: "EOD History", icon: <Calendar size={14} />, active: false, color: "text-gain-medium",
                 badge: null, pulse: false },
             ]).map((tab) => (
@@ -479,7 +483,11 @@ export default function Index() {
                 <span className={tab.active ? "text-primary" : tab.color}>{tab.icon}</span>
                 {tab.label}
                 {tab.badge && (
-                  <span className="inline-flex items-center gap-0.5 rounded-full bg-primary/20 px-1.5 py-0 text-[9px] font-bold text-primary">
+                  <span className={`inline-flex items-center gap-0.5 rounded-full px-1.5 py-0 text-[9px] font-bold ${
+                    tab.to === "/alerts"
+                      ? "bg-destructive text-destructive-foreground"
+                      : "bg-primary/20 text-primary"
+                  }`}>
                     {tab.badge}
                   </span>
                 )}

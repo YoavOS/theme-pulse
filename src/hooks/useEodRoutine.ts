@@ -4,6 +4,7 @@ import { useToast } from "@/hooks/use-toast";
 import { calculateDispersion, getDispersionShortLabel } from "@/hooks/useDispersion";
 import { saveWeeklyVolumeHistory } from "@/hooks/useVolumeDryUp";
 import { ThemeData } from "@/data/themeData";
+import { persistAlert, type AlertInsert } from "@/hooks/useAlertHistory";
 
 // ── Types ──
 
@@ -560,9 +561,11 @@ export function useEodRoutine(
             if (isSurge || (isLargeJump && change > 0)) {
               breadthAlertCount++;
               toast({ title: `🚀 ${row.theme_name} breadth surged`, description: `${yesterdayVal}% → ${row.breadth_pct}% — potential rotation signal`, duration: 10000 });
+              persistAlert({ date: targetDate, theme_name: row.theme_name, alert_type: "breadth_surge", severity: "medium", title: `${row.theme_name} breadth surged`, description: `${yesterdayVal}% → ${row.breadth_pct}% — potential rotation signal`, value_before: yesterdayVal, value_after: row.breadth_pct ?? 0 });
             } else if (isCollapse || (isLargeJump && change < 0)) {
               breadthAlertCount++;
               toast({ title: `⚠ ${row.theme_name} breadth collapsed`, description: `${yesterdayVal}% → ${row.breadth_pct}% — watch for reversal`, variant: "destructive", duration: 10000 });
+              persistAlert({ date: targetDate, theme_name: row.theme_name, alert_type: "breadth_collapse", severity: "high", title: `${row.theme_name} breadth collapsed`, description: `${yesterdayVal}% → ${row.breadth_pct}% — watch for reversal`, value_before: yesterdayVal, value_after: row.breadth_pct ?? 0 });
             }
           }
         }
@@ -595,6 +598,7 @@ export function useEodRoutine(
             if (avgRelVol > 2.5) {
               volumeAlerts++;
               toast({ title: `⚡ ${theme.name} unusual volume spike`, description: `${avgRelVol.toFixed(1)}× average volume`, duration: 8000 });
+              persistAlert({ date: targetDate, theme_name: theme.name, alert_type: "volume_spike", severity: avgRelVol > 3 ? "high" : "medium", title: `${theme.name} unusual volume spike`, description: `${avgRelVol.toFixed(1)}× average volume`, value_after: avgRelVol, threshold: 2.5 });
             }
           }
         }
@@ -631,6 +635,7 @@ export function useEodRoutine(
           if (avgPerf > 3 && breadth > 75) {
             momentumAlerts++;
             toast({ title: `🚀 ${theme.name} breaking out`, description: `+${avgPerf.toFixed(1)}% with ${breadth}% breadth`, duration: 8000 });
+            persistAlert({ date: targetDate, theme_name: theme.name, alert_type: "momentum_breakout", severity: "medium", title: `${theme.name} breaking out`, description: `+${avgPerf.toFixed(1)}% with ${breadth}% breadth`, value_after: avgPerf, threshold: 3 });
           }
 
           // Check for new 5-day highs/lows using EOD data
@@ -655,10 +660,12 @@ export function useEodRoutine(
                 if (isNewHigh && avgPerf > 1) {
                   momentumAlerts++;
                   toast({ title: `📈 ${theme.name} new 5-day high`, description: `Avg price at highest in 5 sessions`, duration: 6000 });
+                  persistAlert({ date: targetDate, theme_name: theme.name, alert_type: "new_5day_high", severity: "low", title: `${theme.name} new 5-day high`, description: `Avg price at highest in 5 sessions` });
                 }
                 if (isNewLow && avgPerf < -1) {
                   momentumAlerts++;
                   toast({ title: `📉 ${theme.name} new 5-day low`, description: `Avg price at lowest in 5 sessions`, duration: 6000 });
+                  persistAlert({ date: targetDate, theme_name: theme.name, alert_type: "new_5day_low", severity: "low", title: `${theme.name} new 5-day low`, description: `Avg price at lowest in 5 sessions` });
                 }
               }
             }
@@ -696,10 +703,12 @@ export function useEodRoutine(
             if (config.up !== null && avgPerf1w > config.up) {
               watchlistAlerts++;
               toast({ title: `📌 ${themeName} hit upside target`, description: `1W: +${avgPerf1w.toFixed(1)}% (threshold: ${config.up}%)`, duration: 10000 });
+              persistAlert({ date: targetDate, theme_name: themeName, alert_type: "watchlist_perf", severity: "low", title: `${themeName} hit upside target`, description: `1W: +${avgPerf1w.toFixed(1)}% (threshold: ${config.up}%)`, threshold: config.up, value_after: avgPerf1w });
             }
             if (config.down !== null && avgPerf1w < -Math.abs(config.down)) {
               watchlistAlerts++;
               toast({ title: `📌 ${themeName} hit downside target`, description: `1W: ${avgPerf1w.toFixed(1)}% (threshold: -${Math.abs(config.down)}%)`, variant: "destructive", duration: 10000 });
+              persistAlert({ date: targetDate, theme_name: themeName, alert_type: "watchlist_perf", severity: "low", title: `${themeName} hit downside target`, description: `1W: ${avgPerf1w.toFixed(1)}% (threshold: -${Math.abs(config.down)}%)`, threshold: -Math.abs(config.down), value_after: avgPerf1w });
             }
           }
         }

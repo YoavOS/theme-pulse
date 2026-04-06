@@ -1,6 +1,7 @@
 import { useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { persistAlert } from "@/hooks/useAlertHistory";
 
 const BREADTH_ALERTS_KEY = "breadth_alerts";
 
@@ -176,11 +177,13 @@ export function useBreadthAlerts() {
               `🚀 ${alert.themeName} breadth surged from ${alert.yesterdayBreadth}% → ${alert.todayBreadth}% today — potential rotation signal`,
               { duration: 10000 }
             );
+            persistAlert({ date: todayDate, theme_name: alert.themeName, alert_type: "breadth_surge", severity: "medium", title: `${alert.themeName} breadth surged`, description: `${alert.yesterdayBreadth}% → ${alert.todayBreadth}% — potential rotation signal`, value_before: alert.yesterdayBreadth, value_after: alert.todayBreadth });
           } else {
             toast.warning(
               `⚠ ${alert.themeName} breadth collapsed from ${alert.yesterdayBreadth}% → ${alert.todayBreadth}% today — watch for reversal`,
               { duration: 10000 }
             );
+            persistAlert({ date: todayDate, theme_name: alert.themeName, alert_type: "breadth_collapse", severity: "high", title: `${alert.themeName} breadth collapsed`, description: `${alert.yesterdayBreadth}% → ${alert.todayBreadth}% — watch for reversal`, value_before: alert.yesterdayBreadth, value_after: alert.todayBreadth });
           }
         }
       }
