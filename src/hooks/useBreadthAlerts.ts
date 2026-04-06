@@ -1,6 +1,7 @@
 import { useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { persistAlert } from "@/hooks/useAlertHistory";
 
 const BREADTH_ALERTS_KEY = "breadth_alerts";
 
