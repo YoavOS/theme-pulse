@@ -598,6 +598,7 @@ export function useEodRoutine(
             if (avgRelVol > 2.5) {
               volumeAlerts++;
               toast({ title: `⚡ ${theme.name} unusual volume spike`, description: `${avgRelVol.toFixed(1)}× average volume`, duration: 8000 });
+              persistAlert({ date: targetDate, theme_name: theme.name, alert_type: "volume_spike", severity: avgRelVol > 3 ? "high" : "medium", title: `${theme.name} unusual volume spike`, description: `${avgRelVol.toFixed(1)}× average volume`, value_after: avgRelVol, threshold: 2.5 });
             }
           }
         }
