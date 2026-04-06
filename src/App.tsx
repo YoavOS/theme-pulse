@@ -9,6 +9,7 @@ import Index from "./pages/Index";
 import Login from "./pages/Login";
 import Admin from "./pages/Admin";
 import EodHistory from "./pages/EodHistory";
+import AlertCenter from "./pages/AlertCenter";
 import ThemeIntelligence from "./pages/ThemeIntelligence";
 import Watchlist from "./pages/Watchlist";
 import NotFound from "./pages/NotFound";
