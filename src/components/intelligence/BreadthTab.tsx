@@ -559,8 +559,19 @@ function DispersionHistory() {
   );
 }
 
-// Section 4 — Leaders & Laggards
+// Section 4 — Leaders & Laggards with Timeframe Tabs
 function BreadthLeadersLaggards({ themes, isLoading }: { themes: ThemeIntelData[]; isLoading: boolean }) {
+  const { availability } = useTimeframeAvailability();
+  const { breadthData, loading, fetchBreadth } = useTimeframeLeaders();
+  const [tf, setTf] = useState<Timeframe>(() => {
+    try { return (localStorage.getItem("breadthLeaders_tf") as Timeframe) || "today"; } catch { return "today"; }
+  });
+
+  useEffect(() => {
+    try { localStorage.setItem("breadthLeaders_tf", tf); } catch {}
+    if (tf !== "today" && availability[tf]) fetchBreadth(tf);
+  }, [tf, availability, fetchBreadth]);
+
   const { top5, bottom5 } = useMemo(() => {
     const sorted = [...themes]
       .map(t => ({
@@ -571,23 +582,13 @@ function BreadthLeadersLaggards({ themes, isLoading }: { themes: ThemeIntelData[
     return { top5: sorted.slice(0, 5), bottom5: sorted.slice(-5).reverse() };
   }, [themes]);
 
-  if (isLoading) {
-    return (
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <GlassCard><Skeleton className="h-40 w-full" /></GlassCard>
-        <GlassCard><Skeleton className="h-40 w-full" /></GlassCard>
-      </div>
-    );
-  }
+  const isHistorical = tf !== "today";
+  const histData = isHistorical ? (breadthData[tf] || []) : [];
+  const isLoadingHist = isHistorical && (loading[`breadth-${tf}`] ?? false);
 
-  const renderColumn = (items: typeof top5, title: string, accent: string) => (
+  const renderTodayColumn = (items: typeof top5, title: string, accent: string) => (
     <GlassCard>
-      <h4
-        className="font-['Syne',sans-serif] text-xs font-semibold uppercase tracking-widest mb-3"
-        style={{ color: accent }}
-      >
-        {title}
-      </h4>
+      <h4 className="font-['Syne',sans-serif] text-xs font-semibold uppercase tracking-widest mb-3" style={{ color: accent }}>{title}</h4>
       <div className="space-y-2">
         {items.map((t, i) => (
           <div key={t.themeId} className="flex items-center gap-2">
@@ -596,9 +597,7 @@ function BreadthLeadersLaggards({ themes, isLoading }: { themes: ThemeIntelData[
               <div className="flex items-center justify-between gap-2">
                 <span className="font-['Syne',sans-serif] text-[12px] font-medium text-foreground truncate">{t.themeName}</span>
                 <div className="flex items-center gap-2 shrink-0" style={{ fontFamily: DM_MONO }}>
-                  <span className="text-[11px]" style={{ color: breadthColor(t.breadthPct) }}>
-                    {t.breadthPct}%
-                  </span>
+                  <span className="text-[11px]" style={{ color: breadthColor(t.breadthPct) }}>{t.breadthPct}%</span>
                   <span className="text-[10px] text-muted-foreground">{t.breadthUp}/{t.breadthTotal}</span>
                   <span className={`text-[10px] ${t.perf_1d >= 0 ? "text-[#00f5c4]" : "text-[#f5a623]"}`}>
                     {t.perf_1d >= 0 ? "+" : ""}{t.perf_1d.toFixed(2)}%
@@ -609,18 +608,86 @@ function BreadthLeadersLaggards({ themes, isLoading }: { themes: ThemeIntelData[
           </div>
         ))}
         {accent === "#ef4444" && bottom5.some(t => t.avgRelVol !== null && t.avgRelVol > 1.4 && t.breadthPct < 40) && (
-          <p className="text-[10px] text-[#f5a623] mt-2" style={{ fontFamily: DM_MONO }}>
-            ⚡ High vol + low breadth = distribution signal
-          </p>
+          <p className="text-[10px] text-[#f5a623] mt-2" style={{ fontFamily: DM_MONO }}>⚡ High vol + low breadth = distribution signal</p>
         )}
       </div>
     </GlassCard>
   );
 
+  function TrendIcon({ trend }: { trend: string }) {
+    if (trend === "improving") return <TrendingUp size={12} className="text-[#00f5c4]" />;
+    if (trend === "deteriorating") return <TrendingDown size={12} className="text-[#f5a623]" />;
+    return <Minus size={12} className="text-muted-foreground" />;
+  }
+
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-      {renderColumn(top5, "Top 5 — Broadest Participation", "#00f5c4")}
-      {renderColumn(bottom5, "Bottom 5 — Narrowest Participation", "#ef4444")}
+    <div>
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="font-['Syne',sans-serif] text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+          Breadth Leaders & Laggards
+        </h3>
+        <TimeframeTabs selected={tf} onSelect={setTf} availability={availability} />
+      </div>
+
+      {isHistorical ? (
+        isLoadingHist ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <GlassCard><Skeleton className="h-40 w-full" /></GlassCard>
+            <GlassCard><Skeleton className="h-40 w-full" /></GlassCard>
+          </div>
+        ) : histData.length === 0 ? (
+          <GlassCard className="text-center py-8">
+            <p className="text-sm text-muted-foreground">No breadth history data for this period</p>
+          </GlassCard>
+        ) : (
+          <GlassCard>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-[rgba(255,255,255,0.08)] text-[10px] text-muted-foreground" style={{ fontFamily: DM_MONO }}>
+                    <th className="px-3 py-2 text-left font-medium">Theme</th>
+                    <th className="px-3 py-2 text-right font-medium">Avg Breadth</th>
+                    <th className="px-3 py-2 text-right font-medium">Trend</th>
+                    <th className="px-3 py-2 text-right font-medium">Days &gt;50%</th>
+                    <th className="px-3 py-2 text-right font-medium">Peak</th>
+                    <th className="px-3 py-2 text-right font-medium">vs Avg</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {histData.map(row => (
+                    <tr key={row.themeName} className="border-b border-[rgba(255,255,255,0.04)] hover:bg-[rgba(255,255,255,0.03)]">
+                      <td className="px-3 py-2 font-['Syne',sans-serif] text-[12px] font-medium text-foreground">{row.themeName}</td>
+                      <td className="px-3 py-2 text-right" style={{ fontFamily: DM_MONO }}>
+                        <span style={{ color: breadthColor(row.avgBreadth) }}>{row.avgBreadth}%</span>
+                      </td>
+                      <td className="px-3 py-2 text-right"><TrendIcon trend={row.trend} /></td>
+                      <td className="px-3 py-2 text-right text-muted-foreground" style={{ fontFamily: DM_MONO }}>{row.daysAbove50}/{row.totalDays}</td>
+                      <td className="px-3 py-2 text-right" style={{ fontFamily: DM_MONO, color: breadthColor(row.peakBreadth) }}>{row.peakBreadth}%</td>
+                      <td className="px-3 py-2 text-right" style={{ fontFamily: DM_MONO }}>
+                        <span className={row.currentVsAvg >= 0 ? "text-[#00f5c4]" : "text-[#f5a623]"}>
+                          {row.currentVsAvg >= 0 ? "+" : ""}{row.currentVsAvg}%
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </GlassCard>
+        )
+      ) : (
+        isLoading ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <GlassCard><Skeleton className="h-40 w-full" /></GlassCard>
+            <GlassCard><Skeleton className="h-40 w-full" /></GlassCard>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {renderTodayColumn(top5, "Top 5 — Broadest Participation", "#00f5c4")}
+            {renderTodayColumn(bottom5, "Bottom 5 — Narrowest Participation", "#ef4444")}
+          </div>
+        )
+      )}
     </div>
   );
 }
