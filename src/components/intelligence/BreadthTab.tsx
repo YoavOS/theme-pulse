@@ -2,6 +2,10 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 import { ThemeIntelData } from "@/hooks/useThemeIntelligence";
 import { Skeleton } from "@/components/ui/skeleton";
 import { supabase } from "@/integrations/supabase/client";
+import TimeframeTabs from "./TimeframeTabs";
+import { useTimeframeAvailability, type Timeframe } from "@/hooks/useTimeframeAvailability";
+import { useTimeframeLeaders, type BreadthLeaderRow } from "@/hooks/useTimeframeLeaders";
+import { TrendingUp, TrendingDown, Minus } from "lucide-react";
 import {
   RadialBarChart,
   RadialBar,
