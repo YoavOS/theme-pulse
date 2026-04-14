@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
 import { Link } from "react-router-dom";
-import { ArrowLeft, RefreshCw, Loader2, Info, ChevronDown, ChevronUp, ArrowUpDown } from "lucide-react";
-import { useRsAlpha, RsStock } from "@/hooks/useRsAlpha";
+import { ArrowLeft, RefreshCw, Loader2, Info, ChevronDown, ChevronUp, ArrowUpDown, Filter } from "lucide-react";
+import { useRsAlpha, RsStock, RS_FILTER_THRESHOLDS } from "@/hooks/useRsAlpha";
 import { useFullScan } from "@/hooks/useFullScan";
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -32,7 +32,7 @@ function getReturnField(stock: RsStock, tab: TabId): number | null {
     case "1m": return stock.return1m;
     case "3m": return stock.return3m;
     case "6m": return stock.return6m;
-    default: return stock.return1m; // show 1M for overall
+    default: return stock.return1m;
   }
 }
 
@@ -70,14 +70,13 @@ function pctDisplay(val: number | null): string {
 }
 
 export default function RsAlpha() {
-  const { stocks, isCalculating, lastCalculated, error, calculateRs } = useRsAlpha();
+  const { stocks, isCalculating, lastCalculated, error, filterStats, calculateRs } = useRsAlpha();
   const [activeTab, setActiveTab] = useState<TabId>("overall");
   const [showAll, setShowAll] = useState(false);
   const [sortField, setSortField] = useState<SortField>("rs");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [isScanning, setIsScanning] = useState(false);
 
-  // Dummy handler for full scan (we just need startFullScan)
   const handleScanComplete = useCallback(() => {}, []);
   const { startFullScan, isRunning: isFullScanning, statusText: scanStatus } = useFullScan(handleScanComplete);
 
@@ -93,7 +92,6 @@ export default function RsAlpha() {
     try {
       await startFullScan();
     } catch {}
-    // After scan, recalculate RS
     await calculateRs();
     setIsScanning(false);
   }, [startFullScan, calculateRs]);
@@ -208,6 +206,24 @@ export default function RsAlpha() {
           </div>
         </div>
 
+        {/* Filter criteria banner */}
+        <div className="container pb-1.5">
+          <div className="flex items-center gap-2 rounded-md border border-border/50 bg-muted/20 px-3 py-1.5 text-[11px] text-muted-foreground">
+            <Filter size={11} className="shrink-0" />
+            <span>
+              Showing stocks with: Market Cap &gt; ${RS_FILTER_THRESHOLDS.MIN_MARKET_CAP >= 1000 ? `${RS_FILTER_THRESHOLDS.MIN_MARKET_CAP / 1000}B` : `${RS_FILTER_THRESHOLDS.MIN_MARKET_CAP}M`}
+              {" · "}Avg Dollar Volume &gt; ${(RS_FILTER_THRESHOLDS.MIN_DOLLAR_VOLUME / 1_000_000).toFixed(0)}M/day
+              {" · "}Avg Daily Range &gt; {RS_FILTER_THRESHOLDS.MIN_AVG_DAILY_RANGE}%
+              {" · "}Price &gt; ${RS_FILTER_THRESHOLDS.MIN_PRICE}
+            </span>
+            {filterStats && (
+              <span className="ml-auto text-[10px] opacity-70">
+                {filterStats.passedFilter}/{filterStats.totalBeforeFilter} passed
+              </span>
+            )}
+          </div>
+        </div>
+
         {/* Loading status */}
         {(isCalculating || isFullScanning || isScanning) && (
           <div className="container pb-2">
@@ -255,11 +271,11 @@ export default function RsAlpha() {
               <Skeleton key={i} className="h-12 w-full rounded-md" />
             ))}
           </div>
-        ) : stocks.length === 0 ? (
+        ) : stocks.length === 0 && !isCalculating ? (
           <div className="flex flex-col items-center justify-center rounded-lg border border-border bg-card py-20 text-center">
             <h3 className="text-lg font-semibold text-foreground mb-1">No RS Data Yet</h3>
             <p className="text-sm text-muted-foreground mb-4">
-              Run a Full Scan first, then RS scores will be calculated automatically.
+              Run a Full Scan first, then RS scores will be calculated from EOD price history.
             </p>
             <button
               onClick={handleRefresh}
@@ -274,7 +290,7 @@ export default function RsAlpha() {
             {/* Summary stats */}
             <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
               <div className="rounded-lg border border-border bg-card p-3">
-                <div className="text-xs text-muted-foreground">Total Stocks</div>
+                <div className="text-xs text-muted-foreground">Filtered Stocks</div>
                 <div className="text-xl font-bold text-foreground">{sortedStocks.length}</div>
               </div>
               <div className="rounded-lg border border-border bg-card p-3">
