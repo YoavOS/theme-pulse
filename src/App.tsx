@@ -12,6 +12,7 @@ import EodHistory from "./pages/EodHistory";
 import AlertCenter from "./pages/AlertCenter";
 import ThemeIntelligence from "./pages/ThemeIntelligence";
 import Watchlist from "./pages/Watchlist";
+import RsAlpha from "./pages/RsAlpha";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -32,6 +33,7 @@ const App = () => (
               <Route path="/alerts" element={<AlertCenter />} />
               <Route path="/intelligence" element={<ThemeIntelligence />} />
               <Route path="/watchlist" element={<Watchlist />} />
+              <Route path="/rs-alpha" element={<RsAlpha />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </BrowserRouter>
