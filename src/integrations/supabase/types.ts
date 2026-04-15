@@ -368,6 +368,45 @@ export type Database = {
         }
         Relationships: []
       }
+      rs_stock_universe: {
+        Row: {
+          avg_daily_range: number | null
+          avg_dollar_volume: number | null
+          company_name: string | null
+          created_at: string | null
+          current_price: number | null
+          last_scanned: string | null
+          market_cap: number | null
+          qualified: boolean | null
+          sector: string | null
+          symbol: string
+        }
+        Insert: {
+          avg_daily_range?: number | null
+          avg_dollar_volume?: number | null
+          company_name?: string | null
+          created_at?: string | null
+          current_price?: number | null
+          last_scanned?: string | null
+          market_cap?: number | null
+          qualified?: boolean | null
+          sector?: string | null
+          symbol: string
+        }
+        Update: {
+          avg_daily_range?: number | null
+          avg_dollar_volume?: number | null
+          company_name?: string | null
+          created_at?: string | null
+          current_price?: number | null
+          last_scanned?: string | null
+          market_cap?: number | null
+          qualified?: boolean | null
+          sector?: string | null
+          symbol?: string
+        }
+        Relationships: []
+      }
       theme_breadth_history: {
         Row: {
           advancing: number | null
@@ -568,6 +607,39 @@ export type Database = {
           top_themes?: Json | null
           volume_anomalies?: Json | null
           week_ending?: string
+        }
+        Relationships: []
+      }
+      yahoo_history_cache: {
+        Row: {
+          data_points: number | null
+          end_price: number | null
+          fetched_at: string | null
+          id: string
+          period: string
+          return_pct: number | null
+          start_price: number | null
+          symbol: string
+        }
+        Insert: {
+          data_points?: number | null
+          end_price?: number | null
+          fetched_at?: string | null
+          id?: string
+          period: string
+          return_pct?: number | null
+          start_price?: number | null
+          symbol: string
+        }
+        Update: {
+          data_points?: number | null
+          end_price?: number | null
+          fetched_at?: string | null
+          id?: string
+          period?: string
+          return_pct?: number | null
+          start_price?: number | null
+          symbol?: string
         }
         Relationships: []
       }
