@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
 import { Link } from "react-router-dom";
-import { ArrowLeft, RefreshCw, Loader2, Info, ChevronDown, ChevronUp, ArrowUpDown, Filter } from "lucide-react";
+import { ArrowLeft, RefreshCw, Loader2, Info, ChevronDown, ChevronUp, ArrowUpDown, Filter, Globe, Database } from "lucide-react";
 import { useRsAlpha, RsStock, RS_FILTER_THRESHOLDS } from "@/hooks/useRsAlpha";
 import { useFullScan } from "@/hooks/useFullScan";
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip";
@@ -26,7 +26,6 @@ function getRsField(stock: RsStock, tab: TabId): number | null {
     default: return stock.rsOverall;
   }
 }
-
 function getReturnField(stock: RsStock, tab: TabId): number | null {
   switch (tab) {
     case "1m": return stock.return1m;
@@ -35,13 +34,20 @@ function getReturnField(stock: RsStock, tab: TabId): number | null {
     default: return stock.return1m;
   }
 }
-
 function getSpyField(stock: RsStock, tab: TabId): number | null {
   switch (tab) {
     case "1m": return stock.spyReturn1m;
     case "3m": return stock.spyReturn3m;
     case "6m": return stock.spyReturn6m;
     default: return stock.spyReturn1m;
+  }
+}
+function getSourceField(stock: RsStock, tab: TabId): string | undefined {
+  switch (tab) {
+    case "1m": return stock.source1m;
+    case "3m": return stock.source3m;
+    case "6m": return stock.source6m;
+    default: return undefined;
   }
 }
 
@@ -54,7 +60,6 @@ function rsColor(val: number | null): string {
   if (val < 0) return "text-destructive/80";
   return "text-muted-foreground";
 }
-
 function rsBg(val: number | null): string {
   if (val === null) return "";
   if (val >= 10) return "bg-[hsl(160,80%,45%)]/10";
@@ -62,15 +67,16 @@ function rsBg(val: number | null): string {
   if (val < -5) return "bg-destructive/5";
   return "";
 }
-
 function pctDisplay(val: number | null): string {
   if (val === null) return "N/A";
-  const sign = val >= 0 ? "+" : "";
-  return `${sign}${val.toFixed(2)}%`;
+  return `${val >= 0 ? "+" : ""}${val.toFixed(2)}%`;
 }
 
 export default function RsAlpha() {
-  const { stocks, isCalculating, lastCalculated, error, filterStats, calculateRs } = useRsAlpha();
+  const {
+    stocks, isCalculating, lastCalculated, error, filterStats,
+    calculateRs, universeScan, scanUniverse,
+  } = useRsAlpha();
   const [activeTab, setActiveTab] = useState<TabId>("overall");
   const [showAll, setShowAll] = useState(false);
   const [sortField, setSortField] = useState<SortField>("rs");
@@ -80,67 +86,45 @@ export default function RsAlpha() {
   const handleScanComplete = useCallback(() => {}, []);
   const { startFullScan, isRunning: isFullScanning, statusText: scanStatus } = useFullScan(handleScanComplete);
 
-  // Auto-calculate on mount if no data
   useEffect(() => {
-    if (stocks.length === 0 && !isCalculating) {
-      calculateRs();
-    }
+    if (stocks.length === 0 && !isCalculating) calculateRs();
   }, []);
 
   const handleRefresh = useCallback(async () => {
     setIsScanning(true);
-    try {
-      await startFullScan();
-    } catch {}
+    try { await startFullScan(); } catch {}
     await calculateRs();
     setIsScanning(false);
   }, [startFullScan, calculateRs]);
 
   const toggleSort = (field: SortField) => {
-    if (sortField === field) {
-      setSortDir(d => d === "desc" ? "asc" : "desc");
-    } else {
-      setSortField(field);
-      setSortDir("desc");
-    }
+    if (sortField === field) setSortDir(d => d === "desc" ? "asc" : "desc");
+    else { setSortField(field); setSortDir("desc"); }
   };
 
   const sortedStocks = useMemo(() => {
-    const filtered = stocks.filter(s => {
-      const rs = getRsField(s, activeTab);
-      return rs !== null;
-    });
-
+    const filtered = stocks.filter(s => getRsField(s, activeTab) !== null);
     return [...filtered].sort((a, b) => {
       const mul = sortDir === "desc" ? -1 : 1;
       switch (sortField) {
-        case "symbol":
-          return mul * a.symbol.localeCompare(b.symbol);
-        case "themeName":
-          return mul * a.themeName.localeCompare(b.themeName);
-        case "rs": {
-          const aVal = getRsField(a, activeTab) ?? -999;
-          const bVal = getRsField(b, activeTab) ?? -999;
-          return mul * (aVal - bVal);
-        }
-        case "stockReturn": {
-          const aVal = getReturnField(a, activeTab) ?? -999;
-          const bVal = getReturnField(b, activeTab) ?? -999;
-          return mul * (aVal - bVal);
-        }
-        case "price": {
-          const aVal = a.price ?? 0;
-          const bVal = b.price ?? 0;
-          return mul * (aVal - bVal);
-        }
-        default:
-          return 0;
+        case "symbol": return mul * a.symbol.localeCompare(b.symbol);
+        case "themeName": return mul * a.themeName.localeCompare(b.themeName);
+        case "rs": return mul * ((getRsField(a, activeTab) ?? -999) - (getRsField(b, activeTab) ?? -999));
+        case "stockReturn": return mul * ((getReturnField(a, activeTab) ?? -999) - (getReturnField(b, activeTab) ?? -999));
+        case "price": return mul * ((a.price ?? 0) - (b.price ?? 0));
+        default: return 0;
       }
     });
   }, [stocks, activeTab, sortField, sortDir]);
 
   const displayStocks = showAll ? sortedStocks : sortedStocks.slice(0, 25);
   const hasMore = sortedStocks.length > 25;
+
+  // Check if current tab uses Yahoo data
+  const yahooCount = sortedStocks.filter(s => {
+    const src = getSourceField(s, activeTab);
+    return src === "yahoo";
+  }).length;
 
   const SortHeader = ({ field, label, className = "" }: { field: SortField; label: string; className?: string }) => (
     <button
@@ -161,15 +145,10 @@ export default function RsAlpha() {
       <header className="sticky top-0 z-30 border-b border-border bg-background/80 backdrop-blur-md">
         <div className="container flex items-center justify-between py-3">
           <div className="flex items-center gap-3">
-            <Link
-              to="/"
-              className="rounded-md border border-border p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-            >
+            <Link to="/" className="rounded-md border border-border p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground">
               <ArrowLeft size={16} />
             </Link>
-            <h1 className="font-['Syne',sans-serif] text-xl font-bold tracking-tight text-foreground">
-              RS Alpha Watchlist
-            </h1>
+            <h1 className="font-['Syne',sans-serif] text-xl font-bold tracking-tight text-foreground">RS Alpha Watchlist</h1>
             <TooltipProvider delayDuration={200}>
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -179,7 +158,7 @@ export default function RsAlpha() {
                   <p className="font-semibold mb-1">Relative Strength Score</p>
                   <p className="text-muted-foreground">
                     RS = Stock % return − SPY % return over the same period.
-                    Overall score weights: 50% on 1M, 30% on 3M, 20% on 6M — stronger bias toward recent performance.
+                    Overall: 50% 1M + 30% 3M + 20% 6M. Uses Yahoo Finance fallback when local history is insufficient for 3M/6M.
                   </p>
                 </TooltipContent>
               </Tooltip>
@@ -191,6 +170,27 @@ export default function RsAlpha() {
             )}
           </div>
           <div className="flex items-center gap-2">
+            <TooltipProvider delayDuration={200}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    onClick={scanUniverse}
+                    disabled={universeScan.isScanning || isCalculating}
+                    className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-50"
+                  >
+                    {universeScan.isScanning ? (
+                      <><Loader2 size={12} className="animate-spin" /> Scanning…</>
+                    ) : (
+                      <><Globe size={12} /> Expand Universe</>
+                    )}
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="max-w-[280px] text-xs">
+                  Scan broader US market via Finnhub to find stocks beyond your themes. Takes several minutes due to API rate limits.
+                  {universeScan.totalInUniverse > 0 && ` Currently ${universeScan.totalInUniverse} stocks in universe.`}
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
             <button
               onClick={handleRefresh}
               disabled={isCalculating || isFullScanning || isScanning}
@@ -217,19 +217,31 @@ export default function RsAlpha() {
               {" · "}Price &gt; ${RS_FILTER_THRESHOLDS.MIN_PRICE}
             </span>
             {filterStats && (
-              <span className="ml-auto text-[10px] opacity-70">
-                {filterStats.passedFilter}/{filterStats.totalBeforeFilter} passed
+              <span className="ml-auto flex items-center gap-1.5 text-[10px] opacity-70">
+                {filterStats.universeSource === "universe_table" && <Globe size={9} />}
+                {filterStats.universeSource === "themes" && <Database size={9} />}
+                {filterStats.passedFilter}/{filterStats.totalBeforeFilter} qualified
               </span>
             )}
           </div>
         </div>
+
+        {/* Universe scan progress */}
+        {universeScan.isScanning && universeScan.progress && (
+          <div className="container pb-1.5">
+            <div className="rounded-md border border-accent/20 bg-accent/5 px-3 py-1.5 text-xs text-accent-foreground">
+              <Globe size={11} className="mr-1 inline" />
+              {universeScan.progress}
+            </div>
+          </div>
+        )}
 
         {/* Loading status */}
         {(isCalculating || isFullScanning || isScanning) && (
           <div className="container pb-2">
             <div className="rounded-md border border-primary/20 bg-primary/5 px-3 py-2 text-xs text-primary">
               <Loader2 size={12} className="mr-1.5 inline animate-spin" />
-              {isFullScanning ? scanStatus || "Updating historical data for all stocks…" : "Calculating RS scores…"}
+              {isFullScanning ? scanStatus || "Updating historical data for all stocks…" : "Calculating RS scores (using Yahoo Finance for 3M/6M if needed)…"}
               <span className="text-muted-foreground ml-2">(this may take a while)</span>
             </div>
           </div>
@@ -243,15 +255,11 @@ export default function RsAlpha() {
                 key={tab.id}
                 onClick={() => { setActiveTab(tab.id); setShowAll(false); setSortField("rs"); setSortDir("desc"); }}
                 className={`relative rounded-md px-3.5 py-1.5 text-xs font-medium transition-all ${
-                  activeTab === tab.id
-                    ? "bg-background text-foreground shadow-sm"
-                    : "text-muted-foreground hover:text-foreground"
+                  activeTab === tab.id ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
                 }`}
               >
                 {tab.label}
-                {activeTab === tab.id && (
-                  <span className="absolute bottom-0 left-1/2 -translate-x-1/2 h-0.5 w-6 rounded-full bg-primary" />
-                )}
+                {activeTab === tab.id && <span className="absolute bottom-0 left-1/2 -translate-x-1/2 h-0.5 w-6 rounded-full bg-primary" />}
               </button>
             ))}
           </div>
@@ -260,30 +268,35 @@ export default function RsAlpha() {
 
       <main className="container py-5">
         {error && (
-          <div className="mb-4 rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-            {error}
+          <div className="mb-4 rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">{error}</div>
+        )}
+
+        {/* Yahoo fallback note for 3M/6M */}
+        {(activeTab === "3m" || activeTab === "6m") && yahooCount > 0 && (
+          <div className="mb-3 rounded-md border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-xs text-amber-400 flex items-center gap-2">
+            <Info size={12} className="shrink-0" />
+            {yahooCount} stock{yahooCount !== 1 ? "s" : ""} using Yahoo Finance fallback data (local EOD history insufficient for {activeTab === "3m" ? "3-month" : "6-month"} calculations).
           </div>
         )}
 
         {isCalculating && stocks.length === 0 ? (
           <div className="space-y-2">
-            {Array.from({ length: 10 }).map((_, i) => (
-              <Skeleton key={i} className="h-12 w-full rounded-md" />
-            ))}
+            {Array.from({ length: 10 }).map((_, i) => <Skeleton key={i} className="h-12 w-full rounded-md" />)}
           </div>
         ) : stocks.length === 0 && !isCalculating ? (
           <div className="flex flex-col items-center justify-center rounded-lg border border-border bg-card py-20 text-center">
             <h3 className="text-lg font-semibold text-foreground mb-1">No RS Data Yet</h3>
             <p className="text-sm text-muted-foreground mb-4">
-              Run a Full Scan first, then RS scores will be calculated from EOD price history.
+              Run a Full Scan first, or expand the stock universe to scan beyond your themes.
             </p>
-            <button
-              onClick={handleRefresh}
-              disabled={isFullScanning}
-              className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90"
-            >
-              {isFullScanning ? "Scanning…" : "Refresh & Update All Dashboard Data"}
-            </button>
+            <div className="flex gap-3">
+              <button onClick={handleRefresh} disabled={isFullScanning} className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90">
+                {isFullScanning ? "Scanning…" : "Refresh & Update All"}
+              </button>
+              <button onClick={scanUniverse} disabled={universeScan.isScanning} className="rounded-md border border-border px-4 py-2 text-sm font-medium text-muted-foreground hover:bg-accent">
+                {universeScan.isScanning ? "Scanning…" : "Expand Universe"}
+              </button>
+            </div>
           </div>
         ) : (
           <>
@@ -321,7 +334,7 @@ export default function RsAlpha() {
                     <tr className="border-b border-border bg-muted/30">
                       <th className="px-3 py-2.5 text-left text-xs font-medium text-muted-foreground w-12">#</th>
                       <th className="px-3 py-2.5 text-left"><SortHeader field="symbol" label="Ticker" /></th>
-                      <th className="px-3 py-2.5 text-left"><SortHeader field="themeName" label="Theme" /></th>
+                      <th className="px-3 py-2.5 text-left"><SortHeader field="themeName" label="Theme / Sector" /></th>
                       <th className="px-3 py-2.5 text-right"><SortHeader field="rs" label="RS Score" className="justify-end" /></th>
                       <th className="px-3 py-2.5 text-right"><SortHeader field="stockReturn" label="Stock Return" className="justify-end" /></th>
                       <th className="px-3 py-2.5 text-right text-xs font-medium text-muted-foreground">SPY Return</th>
@@ -333,25 +346,22 @@ export default function RsAlpha() {
                       const rs = getRsField(stock, activeTab);
                       const ret = getReturnField(stock, activeTab);
                       const spy = getSpyField(stock, activeTab);
+                      const src = getSourceField(stock, activeTab);
                       return (
-                        <tr
-                          key={stock.symbol}
-                          className={`border-b border-border/50 transition-colors hover:bg-muted/20 ${rsBg(rs)}`}
-                        >
+                        <tr key={stock.symbol} className={`border-b border-border/50 transition-colors hover:bg-muted/20 ${rsBg(rs)}`}>
                           <td className="px-3 py-2 text-xs text-muted-foreground">{idx + 1}</td>
-                          <td className="px-3 py-2 font-mono font-semibold text-foreground">{stock.symbol}</td>
-                          <td className="px-3 py-2 text-muted-foreground max-w-[180px] truncate">{stock.themeName}</td>
-                          <td className={`px-3 py-2 text-right font-mono font-semibold ${rsColor(rs)}`}>
-                            {pctDisplay(rs)}
+                          <td className="px-3 py-2 font-mono font-semibold text-foreground">
+                            {stock.symbol}
+                            {src === "yahoo" && (
+                              <span className="ml-1 text-[9px] text-amber-500/70" title="Yahoo Finance data">Y</span>
+                            )}
                           </td>
-                          <td className={`px-3 py-2 text-right font-mono ${
-                            ret !== null && ret >= 0 ? "text-[hsl(160,60%,55%)]" : "text-destructive/80"
-                          }`}>
+                          <td className="px-3 py-2 text-muted-foreground max-w-[180px] truncate">{stock.themeName}</td>
+                          <td className={`px-3 py-2 text-right font-mono font-semibold ${rsColor(rs)}`}>{pctDisplay(rs)}</td>
+                          <td className={`px-3 py-2 text-right font-mono ${ret !== null && ret >= 0 ? "text-[hsl(160,60%,55%)]" : "text-destructive/80"}`}>
                             {pctDisplay(ret)}
                           </td>
-                          <td className={`px-3 py-2 text-right font-mono text-xs ${
-                            spy !== null && spy >= 0 ? "text-[hsl(160,60%,55%)]" : "text-destructive/80"
-                          }`}>
+                          <td className={`px-3 py-2 text-right font-mono text-xs ${spy !== null && spy >= 0 ? "text-[hsl(160,60%,55%)]" : "text-destructive/80"}`}>
                             {pctDisplay(spy)}
                           </td>
                           <td className="px-3 py-2 text-right font-mono text-muted-foreground">
@@ -364,23 +374,16 @@ export default function RsAlpha() {
                 </table>
               </div>
 
-              {/* Load more */}
               {hasMore && !showAll && (
                 <div className="border-t border-border p-3 text-center">
-                  <button
-                    onClick={() => setShowAll(true)}
-                    className="rounded-md border border-border px-4 py-1.5 text-xs font-medium text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
-                  >
+                  <button onClick={() => setShowAll(true)} className="rounded-md border border-border px-4 py-1.5 text-xs font-medium text-muted-foreground hover:bg-accent hover:text-foreground transition-colors">
                     Show All {sortedStocks.length} Stocks
                   </button>
                 </div>
               )}
               {showAll && hasMore && (
                 <div className="border-t border-border p-3 text-center">
-                  <button
-                    onClick={() => setShowAll(false)}
-                    className="rounded-md border border-border px-4 py-1.5 text-xs font-medium text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
-                  >
+                  <button onClick={() => setShowAll(false)} className="rounded-md border border-border px-4 py-1.5 text-xs font-medium text-muted-foreground hover:bg-accent hover:text-foreground transition-colors">
                     Show Top 25 Only
                   </button>
                 </div>
