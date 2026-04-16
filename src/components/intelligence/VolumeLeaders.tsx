@@ -1,11 +1,13 @@
 import { useMemo, useState, useEffect } from "react";
 import { ThemeIntelData } from "@/hooks/useThemeIntelligence";
-import { Zap, TrendingUp, TrendingDown, Minus } from "lucide-react";
+import { Zap, TrendingUp, TrendingDown, Minus, ChevronRight } from "lucide-react";
 import { LineChart, Line, ResponsiveContainer } from "recharts";
 import { Skeleton } from "@/components/ui/skeleton";
 import TimeframeTabs from "./TimeframeTabs";
 import { useTimeframeAvailability, type Timeframe } from "@/hooks/useTimeframeAvailability";
 import { useTimeframeLeaders, type VolumeLeaderRow } from "@/hooks/useTimeframeLeaders";
+import { useThemeRowToggle } from "./CollapsibleSection";
+import ThemeTickersPanel from "./ThemeTickersPanel";
 
 const DM_MONO = "'DM Mono', monospace";
 const LS_KEY = "volumeLeaders_tf";
@@ -83,7 +85,7 @@ export default function VolumeLeaders({ themes, onSelectTheme, onDrilldownOpen }
       </div>
 
       {isHistorical ? (
-        <HistoricalVolumeList data={histData} isLoading={isLoadingHist} />
+        <HistoricalVolumeList data={histData} isLoading={isLoadingHist} themes={themes} />
       ) : (
         <TodayVolumeList sorted={sorted} onSelectTheme={onSelectTheme} onDrilldownOpen={onDrilldownOpen} />
       )}
