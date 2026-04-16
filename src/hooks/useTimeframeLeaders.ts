@@ -217,53 +217,107 @@ export function useTimeframeLeaders() {
     setLoading(l => ({ ...l, [key]: true }));
 
     try {
-      const weeksLimit = tf === "1W" ? 1 : tf === "1M" ? 4 : 12;
-      const { data } = await supabase
-        .from("volume_history")
-        .select("theme_name, sustained_vol_pct, avg_rel_vol, week_ending")
-        .order("week_ending", { ascending: false })
-        .limit(weeksLimit * 100); // themes × weeks
+      // Period-aware perf column from Yahoo backfill
+      const perfCol: "perf_1w" | "perf_1m" | "perf_3m" =
+        tf === "1W" ? "perf_1w" : tf === "1M" ? "perf_1m" : "perf_3m";
 
-      if (!data || data.length === 0) return;
+      const [themesRes, ttRes, perfRes, volRes, histRes] = await Promise.all([
+        supabase.from("themes").select("id, name"),
+        supabase.from("theme_tickers").select("theme_id, ticker_symbol"),
+        supabase.from("ticker_performance").select(`symbol, ${perfCol}`),
+        supabase.from("ticker_volume_cache").select("symbol, today_vol, avg_20d, avg_3m"),
+        supabase.from("volume_history").select("theme_name, sustained_vol_pct, avg_rel_vol, week_ending").order("week_ending", { ascending: false }),
+      ]);
 
-      const byTheme = new Map<string, { relVol: number; sustained: number; weekEnding: string }[]>();
-      for (const r of data) {
-        const arr = byTheme.get(r.theme_name) || [];
-        arr.push({
-          relVol: Number(r.avg_rel_vol ?? 0),
-          sustained: Number(r.sustained_vol_pct ?? 0),
-          weekEnding: r.week_ending,
-        });
-        byTheme.set(r.theme_name, arr);
+      const themeNameById = new Map<string, string>();
+      for (const t of themesRes.data ?? []) themeNameById.set(t.id, t.name);
+
+      const perfBySymbol = new Map<string, number | null>();
+      for (const r of (perfRes.data ?? []) as Array<Record<string, unknown>>) {
+        const v = r[perfCol];
+        perfBySymbol.set(String(r.symbol), v == null ? null : Number(v));
       }
 
-      // Only keep the most recent N weeks per theme
+      // Per-ticker relative volume — pick the right baseline for the timeframe.
+      // 1W → today vs 20d avg; 1M/3M → today vs 3m avg (slower baseline = more
+      // meaningful for longer periods).
+      const baseline: "avg_20d" | "avg_3m" = tf === "1W" ? "avg_20d" : "avg_3m";
+      const relVolBySymbol = new Map<string, number | null>();
+      for (const r of volRes.data ?? []) {
+        const today = Number(r.today_vol ?? 0);
+        const avg = Number((r as Record<string, unknown>)[baseline] ?? 0);
+        relVolBySymbol.set(r.symbol, avg > 0 ? today / avg : null);
+      }
+
+      // Group symbols by theme
+      const symbolsByTheme = new Map<string, string[]>();
+      for (const tt of ttRes.data ?? []) {
+        const themeName = themeNameById.get(tt.theme_id);
+        if (!themeName) continue;
+        const arr = symbolsByTheme.get(themeName) ?? [];
+        arr.push(tt.ticker_symbol);
+        symbolsByTheme.set(themeName, arr);
+      }
+
+      // Sustained-vol fallback from weekly history (best available aggregate)
+      const weeksLimit = tf === "1W" ? 1 : tf === "1M" ? 4 : 12;
+      const sustainedByTheme = new Map<string, { sus: number; weeks: number }>();
+      const grouped = new Map<string, Array<{ sus: number; rel: number; w: string }>>();
+      for (const r of histRes.data ?? []) {
+        const arr = grouped.get(r.theme_name) ?? [];
+        arr.push({ sus: Number(r.sustained_vol_pct ?? 0), rel: Number(r.avg_rel_vol ?? 0), w: r.week_ending });
+        grouped.set(r.theme_name, arr);
+      }
+      for (const [theme, rows] of grouped) {
+        const slice = rows.slice(0, weeksLimit);
+        const sus = slice.reduce((a, r) => a + r.sus, 0) / slice.length;
+        sustainedByTheme.set(theme, { sus, weeks: slice.length });
+      }
+
       const results: VolumeLeaderRow[] = [];
-      for (const [theme, rows] of byTheme) {
-        const sorted = rows.sort((a, b) => b.weekEnding.localeCompare(a.weekEnding)).slice(0, weeksLimit);
-        if (sorted.length === 0) continue;
+      const perfByTheme = new Map<string, number>();
 
-        const avgRelVol = Math.round((sorted.reduce((a, r) => a + r.relVol, 0) / sorted.length) * 100) / 100;
-        const avgSustained = Math.round((sorted.reduce((a, r) => a + r.sustained, 0) / sorted.length) * 100) / 100;
-        const trend = sorted.length >= 2
-          ? sorted[0].relVol > sorted[sorted.length - 1].relVol + 0.2 ? "building" as const
-            : sorted[0].relVol < sorted[sorted.length - 1].relVol - 0.2 ? "fading" as const
-            : "flat" as const
-          : "flat" as const;
+      for (const [theme, symbols] of symbolsByTheme) {
+        const relVols = symbols
+          .map(s => relVolBySymbol.get(s))
+          .filter((v): v is number => v != null && Number.isFinite(v) && v > 0);
+        const perfs = symbols
+          .map(s => perfBySymbol.get(s))
+          .filter((v): v is number => v != null && Number.isFinite(v));
+        if (relVols.length === 0) continue;
 
-        const elevatedWeeks = sorted.filter(r => r.relVol > 1.2).length;
+        const avgRelVol = Math.round((relVols.reduce((a, b) => a + b, 0) / relVols.length) * 100) / 100;
+        const avgPerf = perfs.length > 0 ? perfs.reduce((a, b) => a + b, 0) / perfs.length : 0;
+        perfByTheme.set(theme, avgPerf);
+
+        const sus = sustainedByTheme.get(theme);
+        const trend: "building" | "fading" | "flat" =
+          avgPerf > 5 && avgRelVol > 1.2 ? "building"
+          : avgPerf < -5 && avgRelVol > 1.2 ? "fading"
+          : "flat";
 
         results.push({
           themeName: theme,
           avgRelVol,
-          avgSustainedVol: avgSustained,
+          avgSustainedVol: sus ? Math.round(sus.sus * 100) / 100 : Math.round(avgPerf * 100) / 100,
           trend,
-          weekCount: sorted.length,
-          consistent: elevatedWeeks >= 3,
+          weekCount: sus?.weeks ?? 0,
+          consistent: avgRelVol > 1.4 && avgPerf > 0,
         });
       }
 
-      results.sort((a, b) => b.avgRelVol - a.avgRelVol);
+      // Composite ranking: relVol (60%) + normalized |timeframe perf| (40%).
+      // Because perf differs per period (Yahoo-backfilled), 1W/1M/3M produce
+      // distinct orderings.
+      const maxAbsPerf = Math.max(1, ...[...perfByTheme.values()].map(v => Math.abs(v)));
+      results.sort((a, b) => {
+        const aPerf = Math.abs(perfByTheme.get(a.themeName) ?? 0);
+        const bPerf = Math.abs(perfByTheme.get(b.themeName) ?? 0);
+        const aScore = a.avgRelVol * 0.6 + (aPerf / maxAbsPerf) * 0.8;
+        const bScore = b.avgRelVol * 0.6 + (bPerf / maxAbsPerf) * 0.8;
+        return bScore - aScore;
+      });
+
       setVolumeData(prev => ({ ...prev, [tf]: results }));
     } catch (err) {
       console.error("fetchVolume error:", err);
