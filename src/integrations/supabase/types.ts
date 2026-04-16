@@ -368,41 +368,140 @@ export type Database = {
         }
         Relationships: []
       }
-      rs_stock_universe: {
+      qualified_rs_universe: {
         Row: {
-          avg_daily_range: number | null
+          adr_percent: number | null
+          adr_source: string | null
           avg_dollar_volume: number | null
           company_name: string | null
-          created_at: string | null
           current_price: number | null
-          last_scanned: string | null
           market_cap: number | null
-          qualified: boolean | null
+          qualified_at: string
+          return_1d: number | null
+          return_1m: number | null
+          return_3m: number | null
+          return_6m: number | null
+          rs_1d: number | null
+          rs_1m: number | null
+          rs_3m: number | null
+          rs_6m: number | null
+          rs_calculated_at: string | null
+          rs_overall: number | null
           sector: string | null
+          spy_return_1d: number | null
+          spy_return_1m: number | null
+          spy_return_3m: number | null
+          spy_return_6m: number | null
           symbol: string
         }
         Insert: {
-          avg_daily_range?: number | null
+          adr_percent?: number | null
+          adr_source?: string | null
           avg_dollar_volume?: number | null
           company_name?: string | null
-          created_at?: string | null
           current_price?: number | null
-          last_scanned?: string | null
           market_cap?: number | null
-          qualified?: boolean | null
+          qualified_at?: string
+          return_1d?: number | null
+          return_1m?: number | null
+          return_3m?: number | null
+          return_6m?: number | null
+          rs_1d?: number | null
+          rs_1m?: number | null
+          rs_3m?: number | null
+          rs_6m?: number | null
+          rs_calculated_at?: string | null
+          rs_overall?: number | null
           sector?: string | null
+          spy_return_1d?: number | null
+          spy_return_1m?: number | null
+          spy_return_3m?: number | null
+          spy_return_6m?: number | null
           symbol: string
         }
         Update: {
-          avg_daily_range?: number | null
+          adr_percent?: number | null
+          adr_source?: string | null
           avg_dollar_volume?: number | null
           company_name?: string | null
-          created_at?: string | null
           current_price?: number | null
-          last_scanned?: string | null
           market_cap?: number | null
-          qualified?: boolean | null
+          qualified_at?: string
+          return_1d?: number | null
+          return_1m?: number | null
+          return_3m?: number | null
+          return_6m?: number | null
+          rs_1d?: number | null
+          rs_1m?: number | null
+          rs_3m?: number | null
+          rs_6m?: number | null
+          rs_calculated_at?: string | null
+          rs_overall?: number | null
           sector?: string | null
+          spy_return_1d?: number | null
+          spy_return_1m?: number | null
+          spy_return_3m?: number | null
+          spy_return_6m?: number | null
+          symbol?: string
+        }
+        Relationships: []
+      }
+      rs_scan_progress: {
+        Row: {
+          failed: number
+          id: number
+          last_updated: string
+          processed: number
+          qualified: number
+          started_at: string | null
+          status: string
+          total_queued: number
+        }
+        Insert: {
+          failed?: number
+          id?: number
+          last_updated?: string
+          processed?: number
+          qualified?: number
+          started_at?: string | null
+          status?: string
+          total_queued?: number
+        }
+        Update: {
+          failed?: number
+          id?: number
+          last_updated?: string
+          processed?: number
+          qualified?: number
+          started_at?: string | null
+          status?: string
+          total_queued?: number
+        }
+        Relationships: []
+      }
+      stock_scan_queue: {
+        Row: {
+          attempts: number
+          enqueued_at: string
+          last_error: string | null
+          processed_at: string | null
+          status: string
+          symbol: string
+        }
+        Insert: {
+          attempts?: number
+          enqueued_at?: string
+          last_error?: string | null
+          processed_at?: string | null
+          status?: string
+          symbol: string
+        }
+        Update: {
+          attempts?: number
+          enqueued_at?: string
+          last_error?: string | null
+          processed_at?: string | null
+          status?: string
           symbol?: string
         }
         Relationships: []
@@ -614,8 +713,9 @@ export type Database = {
         Row: {
           data_points: number | null
           end_price: number | null
-          fetched_at: string | null
+          fetched_at: string
           id: string
+          ohlc: Json | null
           period: string
           return_pct: number | null
           start_price: number | null
@@ -624,8 +724,9 @@ export type Database = {
         Insert: {
           data_points?: number | null
           end_price?: number | null
-          fetched_at?: string | null
+          fetched_at?: string
           id?: string
+          ohlc?: Json | null
           period: string
           return_pct?: number | null
           start_price?: number | null
@@ -634,8 +735,9 @@ export type Database = {
         Update: {
           data_points?: number | null
           end_price?: number | null
-          fetched_at?: string | null
+          fetched_at?: string
           id?: string
+          ohlc?: Json | null
           period?: string
           return_pct?: number | null
           start_price?: number | null

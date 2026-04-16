@@ -29,3 +29,12 @@ verify_jwt = false
 
 [functions.fetch-fundamentals]
 verify_jwt = false
+
+[functions.seed-universe-queue]
+verify_jwt = false
+
+[functions.process-universe-queue]
+verify_jwt = false
+
+[functions.calculate-rs-scores]
+verify_jwt = false
