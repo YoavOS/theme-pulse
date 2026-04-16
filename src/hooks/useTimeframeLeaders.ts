@@ -56,55 +56,89 @@ export function useTimeframeLeaders() {
     setLoading(l => ({ ...l, [key]: true }));
 
     try {
-      const startDate = getStartDate(tf);
+      // Decide which perf column to read from ticker_performance.
+      // This is the Yahoo-backfilled, period-accurate source — guaranteed
+      // distinct values for 1W vs 1M vs 3M.
+      const perfCol: "perf_1w" | "perf_1m" | "perf_3m" =
+        tf === "1W" ? "perf_1w" : tf === "1M" ? "perf_1m" : "perf_3m";
 
-      // Get EOD data for this period
+      // Pull theme membership + per-symbol perf in parallel
+      const [themesRes, ttRes, perfRes] = await Promise.all([
+        supabase.from("themes").select("id, name"),
+        supabase.from("theme_tickers").select("theme_id, ticker_symbol"),
+        supabase.from("ticker_performance").select(`symbol, ${perfCol}`),
+      ]);
+
+      const themeNameById = new Map<string, string>();
+      for (const t of themesRes.data ?? []) themeNameById.set(t.id, t.name);
+
+      const perfBySymbol = new Map<string, number | null>();
+      for (const r of (perfRes.data ?? []) as Array<Record<string, unknown>>) {
+        const v = r[perfCol];
+        perfBySymbol.set(String(r.symbol), v == null ? null : Number(v));
+      }
+
+      // Group symbols → theme
+      const symbolsByTheme = new Map<string, string[]>();
+      for (const tt of ttRes.data ?? []) {
+        const themeName = themeNameById.get(tt.theme_id);
+        if (!themeName) continue;
+        const arr = symbolsByTheme.get(themeName) ?? [];
+        arr.push(tt.ticker_symbol);
+        symbolsByTheme.set(themeName, arr);
+      }
+
+      // For each theme: average per-ticker perf for the timeframe
+      const startDate = getStartDate(tf);
       const { data: eodRows } = await supabase
         .from("eod_prices")
         .select("symbol, date, close_price, theme_name")
         .gte("date", startDate)
         .order("date", { ascending: true });
 
-      if (!eodRows || eodRows.length === 0) return;
-
-      // Group by theme → dates → avg close
-      const byTheme = new Map<string, Map<string, number[]>>();
-      for (const r of eodRows) {
-        if (!byTheme.has(r.theme_name)) byTheme.set(r.theme_name, new Map());
-        const dates = byTheme.get(r.theme_name)!;
-        if (!dates.has(r.date)) dates.set(r.date, []);
-        dates.get(r.date)!.push(r.close_price);
+      const sparklineByTheme = new Map<string, number[]>();
+      if (eodRows && eodRows.length > 0) {
+        const byTheme = new Map<string, Map<string, number[]>>();
+        for (const r of eodRows) {
+          if (!byTheme.has(r.theme_name)) byTheme.set(r.theme_name, new Map());
+          const dates = byTheme.get(r.theme_name)!;
+          if (!dates.has(r.date)) dates.set(r.date, []);
+          dates.get(r.date)!.push(r.close_price);
+        }
+        for (const [theme, dateMap] of byTheme) {
+          const sortedDates = [...dateMap.keys()].sort();
+          const dailyAvgs = sortedDates.map(d => {
+            const prices = dateMap.get(d)!;
+            return prices.reduce((a, b) => a + b, 0) / prices.length;
+          });
+          const step = Math.max(1, Math.floor(dailyAvgs.length / 7));
+          const sparkline: number[] = [];
+          for (let i = 0; i < dailyAvgs.length; i += step) sparkline.push(dailyAvgs[i]);
+          if (sparkline.length > 0 && sparkline[sparkline.length - 1] !== dailyAvgs[dailyAvgs.length - 1]) {
+            sparkline.push(dailyAvgs[dailyAvgs.length - 1]);
+          }
+          sparklineByTheme.set(theme, sparkline);
+        }
       }
 
       const results: MomentumLeaderRow[] = [];
-      for (const [theme, dateMap] of byTheme) {
-        const sortedDates = [...dateMap.keys()].sort();
-        if (sortedDates.length < 2) continue;
+      for (const [theme, symbols] of symbolsByTheme) {
+        const perfs = symbols
+          .map(s => perfBySymbol.get(s))
+          .filter((v): v is number => v != null && Number.isFinite(v));
+        if (perfs.length === 0) continue;
 
-        const dailyAvgs = sortedDates.map(d => {
-          const prices = dateMap.get(d)!;
-          return prices.reduce((a, b) => a + b, 0) / prices.length;
-        });
+        const avg = perfs.reduce((a, b) => a + b, 0) / perfs.length;
+        const sparkline = sparklineByTheme.get(theme) ?? [];
 
-        const first = dailyAvgs[0];
-        const last = dailyAvgs[dailyAvgs.length - 1];
-        const perf = first > 0 ? Math.round(((last - first) / first) * 10000) / 100 : 0;
-
-        // Is momentum accelerating? Compare first half vs second half
-        const mid = Math.floor(dailyAvgs.length / 2);
-        const firstHalfPerf = mid > 0 && dailyAvgs[0] > 0 ? (dailyAvgs[mid] - dailyAvgs[0]) / dailyAvgs[0] : 0;
-        const secondHalfPerf = dailyAvgs[mid] > 0 ? (dailyAvgs[dailyAvgs.length - 1] - dailyAvgs[mid]) / dailyAvgs[mid] : 0;
-
-        // Sparkline: sample points
-        const step = Math.max(1, Math.floor(dailyAvgs.length / 7));
-        const sparkline: number[] = [];
-        for (let i = 0; i < dailyAvgs.length; i += step) sparkline.push(dailyAvgs[i]);
-        if (sparkline[sparkline.length - 1] !== dailyAvgs[dailyAvgs.length - 1]) sparkline.push(dailyAvgs[dailyAvgs.length - 1]);
+        // Accelerating = more than half of tickers outperform the theme avg
+        const winners = perfs.filter(p => p > avg).length;
+        const trendAccelerating = winners / perfs.length > 0.5;
 
         results.push({
           themeName: theme,
-          perf,
-          trendAccelerating: secondHalfPerf > firstHalfPerf,
+          perf: Math.round(avg * 100) / 100,
+          trendAccelerating,
           sparkline,
         });
       }
