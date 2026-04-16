@@ -274,6 +274,8 @@ function OverviewRow({
     </>
   );
 }
+
+export default function OverviewTab({
   themes,
   isLoading,
 }: {
