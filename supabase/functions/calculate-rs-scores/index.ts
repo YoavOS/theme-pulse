@@ -1,39 +1,13 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
+import { getHistoricalData, YahooPeriod } from "../_shared/yahooHistory.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const YAHOO_DELAY_MS = 500;
-const PERIODS: Array<"1mo" | "3mo" | "6mo"> = ["1mo", "3mo", "6mo"];
-const BATCH_PER_INVOCATION = 30; // symbols processed per invocation (caps Yahoo calls ~ 30*3 = 90)
-
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-
-interface YahooReturn {
-  returnPct: number | null;
-  source: "local" | "yahoo" | "none";
-}
-
-async function yahooReturn(symbol: string, period: "1mo" | "3mo" | "6mo"): Promise<number | null> {
-  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=${period}&interval=1d&includePrePost=false`;
-  try {
-    const res = await fetch(url, {
-      headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" },
-    });
-    if (!res.ok) return null;
-    const data = await res.json();
-    const closes = data?.chart?.result?.[0]?.indicators?.quote?.[0]?.close?.filter((c: any) => c !== null) || [];
-    if (closes.length < 2) return null;
-    const start = closes[0];
-    const end = closes[closes.length - 1];
-    if (start <= 0) return null;
-    return Math.round(((end - start) / start) * 10000) / 100;
-  } catch {
-    return null;
-  }
-}
+const PERIODS: YahooPeriod[] = ["1mo", "3mo", "6mo"];
+const BATCH_PER_INVOCATION = 30; // symbols per invocation
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
@@ -60,29 +34,11 @@ Deno.serve(async (req) => {
       );
     }
 
-    // 2. Get SPY returns (cache check, then Yahoo)
+    // 2. Get SPY returns via shared helper (cache → Yahoo)
     const spyReturns: Record<string, number | null> = {};
     for (const period of PERIODS) {
-      const { data: cached } = await supabase
-        .from("yahoo_history_cache")
-        .select("return_pct, fetched_at")
-        .eq("symbol", "SPY")
-        .eq("period", period)
-        .gte("fetched_at", new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString())
-        .maybeSingle();
-
-      if (cached?.return_pct !== null && cached?.return_pct !== undefined) {
-        spyReturns[period] = Number(cached.return_pct);
-      } else {
-        const r = await yahooReturn("SPY", period);
-        spyReturns[period] = r;
-        if (r !== null) {
-          await supabase.from("yahoo_history_cache").upsert({
-            symbol: "SPY", period, return_pct: r, fetched_at: new Date().toISOString(),
-          }, { onConflict: "symbol,period" });
-        }
-        await sleep(YAHOO_DELAY_MS);
-      }
+      const r = await getHistoricalData(supabase, "SPY", period);
+      spyReturns[period] = r.returnPct;
     }
 
     // 3. Get 1D returns from ticker_performance for batch
@@ -104,33 +60,15 @@ Deno.serve(async (req) => {
       .maybeSingle();
     const spy1d = spyPerf?.perf_1d ?? 0;
 
-    // 4. For each stock: get 1M/3M/6M returns from cache → Yahoo
+    // 4. For each stock: get 1M/3M/6M returns via shared helper (cache → Yahoo)
     const updates: any[] = [];
     for (const u of universe) {
       const sym = u.symbol;
       const periodReturns: Record<string, number | null> = {};
 
       for (const period of PERIODS) {
-        const { data: cached } = await supabase
-          .from("yahoo_history_cache")
-          .select("return_pct, fetched_at")
-          .eq("symbol", sym)
-          .eq("period", period)
-          .gte("fetched_at", new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString())
-          .maybeSingle();
-
-        if (cached?.return_pct !== null && cached?.return_pct !== undefined) {
-          periodReturns[period] = Number(cached.return_pct);
-        } else {
-          const r = await yahooReturn(sym, period);
-          periodReturns[period] = r;
-          if (r !== null) {
-            await supabase.from("yahoo_history_cache").upsert({
-              symbol: sym, period, return_pct: r, fetched_at: new Date().toISOString(),
-            }, { onConflict: "symbol,period" });
-          }
-          await sleep(YAHOO_DELAY_MS);
-        }
+        const r = await getHistoricalData(supabase, sym, period, { todayPrice: u.current_price ?? null });
+        periodReturns[period] = r.returnPct;
       }
 
       const r1d = perf1dMap.get(sym)?.perf1d ?? null;

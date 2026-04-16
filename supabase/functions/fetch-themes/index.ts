@@ -4,7 +4,7 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { getHistoricalData, makeServiceClient, YahooPeriod } from "../_shared/yahooHistory.ts";
 
 const FINNHUB_KEY = Deno.env.get("FINNHUB_API_KEY") || "";
 
@@ -15,20 +15,19 @@ interface QuoteResult {
   error?: string;
 }
 
-function getTimeframeFromTs(timeframe: string): number {
-  const now = Math.floor(Date.now() / 1000);
+// Map our UI timeframe label → YahooPeriod for the historical helper.
+function timeframeToYahooPeriod(timeframe: string): YahooPeriod | null {
   switch (timeframe) {
-    case "1W": return now - 7 * 86400;
-    case "1M": return now - 30 * 86400;
-    case "3M": return now - 90 * 86400;
-    case "YTD": {
-      const jan1 = new Date(new Date().getFullYear(), 0, 1);
-      return Math.floor(jan1.getTime() / 1000);
-    }
-    default: return 0; // "Today" — use /quote
+    case "1W": return "5d";
+    case "1M": return "1mo";
+    case "3M": return "3mo";
+    case "6M": return "6mo";
+    case "YTD": return "ytd";
+    default: return null; // "Today" — uses Finnhub /quote
   }
 }
 
+// Today: Finnhub /quote (still works on free tier).
 async function fetchQuoteDaily(symbol: string): Promise<QuoteResult> {
   try {
     const url = `https://finnhub.io/api/v1/quote?symbol=${encodeURIComponent(symbol)}&token=${FINNHUB_KEY}`;
@@ -43,28 +42,17 @@ async function fetchQuoteDaily(symbol: string): Promise<QuoteResult> {
   }
 }
 
-async function fetchQuoteCandle(symbol: string, fromTs: number): Promise<QuoteResult> {
-  try {
-    const toTs = Math.floor(Date.now() / 1000);
-    const url = `https://finnhub.io/api/v1/stock/candle?symbol=${encodeURIComponent(symbol)}&resolution=D&from=${fromTs}&to=${toTs}&token=${FINNHUB_KEY}`;
-    const res = await fetch(url);
-    if (res.status === 429) return { symbol, pct: 0, price: 0, error: "rate_limited" };
-    const data = await res.json();
-
-    // Finnhub returns { s: "no_data" } when no candles
-    if (!data || data.s === "no_data" || !data.o || !data.c || data.o.length === 0 || data.c.length === 0) {
-      return { symbol, pct: 0, price: 0, error: "no_data" };
-    }
-
-    const firstOpen = data.o[0];
-    const lastClose = data.c[data.c.length - 1];
-    if (firstOpen === 0) return { symbol, pct: 0, price: lastClose, error: "no_data" };
-
-    const pct = ((lastClose - firstOpen) / firstOpen) * 100;
-    return { symbol, pct: Math.round(pct * 100) / 100, price: lastClose };
-  } catch (e) {
-    return { symbol, pct: 0, price: 0, error: String(e) };
+// Historical timeframe via shared Yahoo helper (cache → EOD → Yahoo).
+async function fetchHistoricalQuote(
+  sb: ReturnType<typeof makeServiceClient>,
+  symbol: string,
+  period: YahooPeriod
+): Promise<QuoteResult> {
+  const r = await getHistoricalData(sb, symbol, period);
+  if (r.returnPct === null || r.endPrice === null) {
+    return { symbol, pct: 0, price: 0, error: "no_data" };
   }
+  return { symbol, pct: r.returnPct, price: r.endPrice };
 }
 
 Deno.serve(async (req) => {
@@ -73,9 +61,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const sb = createClient(supabaseUrl, supabaseKey);
+    const sb = makeServiceClient();
 
     const { data: dbThemes } = await sb.from("themes").select("id, name, description");
     const { data: dbTickers } = await sb.from("theme_tickers").select("theme_id, ticker_symbol");
@@ -109,29 +95,31 @@ Deno.serve(async (req) => {
     }
 
     const uniqueSymbols = [...new Set(themeEntries.flatMap(t => t.symbols))];
-    const fromTs = getTimeframeFromTs(timeframe);
-    const useCandles = timeframe !== "Today" && fromTs > 0;
+    const yahooPeriod = timeframeToYahooPeriod(timeframe);
+    const useHistorical = yahooPeriod !== null;
 
-    console.log(`Fetching ${uniqueSymbols.length} symbols for ${themeEntries.length} themes, timeframe=${timeframe}, useCandles=${useCandles}`);
+    console.log(`Fetching ${uniqueSymbols.length} symbols for ${themeEntries.length} themes, timeframe=${timeframe}, useHistorical=${useHistorical}`);
 
     const quoteMap: Record<string, QuoteResult> = {};
-    const batchSize = 10;
     let rateLimited = false;
 
-    for (let i = 0; i < uniqueSymbols.length; i += batchSize) {
-      const batch = uniqueSymbols.slice(i, i + batchSize);
-      const results = await Promise.all(
-        batch.map(s => useCandles ? fetchQuoteCandle(s, fromTs) : fetchQuoteDaily(s))
-      );
-      for (const r of results) quoteMap[r.symbol] = r;
-
-      if (results.some(r => r.error === "rate_limited")) {
-        rateLimited = true;
-        break;
+    if (useHistorical) {
+      // Historical: shared helper (cache → EOD → Yahoo). Small batch since Yahoo is slower.
+      const batchSize = 5;
+      for (let i = 0; i < uniqueSymbols.length; i += batchSize) {
+        const batch = uniqueSymbols.slice(i, i + batchSize);
+        const results = await Promise.all(batch.map(s => fetchHistoricalQuote(sb, s, yahooPeriod!)));
+        for (const r of results) quoteMap[r.symbol] = r;
       }
-
-      if (i + batchSize < uniqueSymbols.length) {
-        await new Promise(r => setTimeout(r, 1200));
+    } else {
+      // Today: Finnhub /quote (still works on free tier).
+      const batchSize = 10;
+      for (let i = 0; i < uniqueSymbols.length; i += batchSize) {
+        const batch = uniqueSymbols.slice(i, i + batchSize);
+        const results = await Promise.all(batch.map(s => fetchQuoteDaily(s)));
+        for (const r of results) quoteMap[r.symbol] = r;
+        if (results.some(r => r.error === "rate_limited")) { rateLimited = true; break; }
+        if (i + batchSize < uniqueSymbols.length) await new Promise(r => setTimeout(r, 1200));
       }
     }
 
