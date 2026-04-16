@@ -61,9 +61,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const sb = createClient(supabaseUrl, supabaseKey);
+    const sb = makeServiceClient();
 
     const { data: dbThemes } = await sb.from("themes").select("id, name, description");
     const { data: dbTickers } = await sb.from("theme_tickers").select("theme_id, ticker_symbol");
