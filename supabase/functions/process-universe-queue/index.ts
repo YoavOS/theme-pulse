@@ -230,13 +230,21 @@ Deno.serve(async (req) => {
       .select("*", { count: "exact", head: true })
       .eq("status", "pending");
 
+    // Preserve "paused" status if it was set during this run; otherwise mark running/complete.
+    const newStatus =
+      progRow?.status === "paused"
+        ? "paused"
+        : (remaining ?? 0) === 0
+          ? "complete"
+          : "running";
+
     await supabase
       .from("rs_scan_progress")
       .update({
         processed: newProcessed,
         qualified: newQualified,
         failed: newFailed,
-        status: (remaining ?? 0) === 0 ? "complete" : "running",
+        status: newStatus,
         last_updated: new Date().toISOString(),
       })
       .eq("id", 1);
