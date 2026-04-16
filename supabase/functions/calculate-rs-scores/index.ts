@@ -34,29 +34,11 @@ Deno.serve(async (req) => {
       );
     }
 
-    // 2. Get SPY returns (cache check, then Yahoo)
+    // 2. Get SPY returns via shared helper (cache → Yahoo)
     const spyReturns: Record<string, number | null> = {};
     for (const period of PERIODS) {
-      const { data: cached } = await supabase
-        .from("yahoo_history_cache")
-        .select("return_pct, fetched_at")
-        .eq("symbol", "SPY")
-        .eq("period", period)
-        .gte("fetched_at", new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString())
-        .maybeSingle();
-
-      if (cached?.return_pct !== null && cached?.return_pct !== undefined) {
-        spyReturns[period] = Number(cached.return_pct);
-      } else {
-        const r = await yahooReturn("SPY", period);
-        spyReturns[period] = r;
-        if (r !== null) {
-          await supabase.from("yahoo_history_cache").upsert({
-            symbol: "SPY", period, return_pct: r, fetched_at: new Date().toISOString(),
-          }, { onConflict: "symbol,period" });
-        }
-        await sleep(YAHOO_DELAY_MS);
-      }
+      const r = await getHistoricalData(supabase, "SPY", period);
+      spyReturns[period] = r.returnPct;
     }
 
     // 3. Get 1D returns from ticker_performance for batch
