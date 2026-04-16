@@ -22,6 +22,39 @@ interface NarrativeState {
   themeCount: number;
 }
 
+import { ChevronRight } from "lucide-react";
+import { useThemeRowToggle } from "./CollapsibleSection";
+import ThemeTickersPanel from "./ThemeTickersPanel";
+
+function TopBottomRow({ t, i, accent }: { t: ThemeIntelData; i: number; accent: string }) {
+  const { open, toggle } = useThemeRowToggle(`insights-tb-${t.themeId}`);
+  return (
+    <div>
+      <button onClick={toggle} className="w-full flex items-center gap-3 text-left hover:bg-[rgba(255,255,255,0.03)] rounded-md py-1 px-1 -mx-1">
+        <ChevronRight size={11} className="text-muted-foreground transition-transform shrink-0" style={{ transform: open ? "rotate(90deg)" : "rotate(0deg)" }} />
+        <span className="w-5 text-right text-xs text-muted-foreground" style={{ fontFamily: DM_MONO }}>{i + 1}</span>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center justify-between gap-2">
+            <span className="font-['Syne',sans-serif] text-[13px] font-medium text-foreground truncate">{t.themeName}</span>
+            <span className={`shrink-0 text-xs ${t.perf_1d >= 0 ? "text-[#00f5c4]" : "text-[#f5a623]"}`} style={{ fontFamily: DM_MONO }}>
+              {t.perf_1d >= 0 ? "+" : ""}{t.perf_1d.toFixed(2)}%
+            </span>
+          </div>
+          <div className="mt-1 h-1 w-full overflow-hidden rounded-full bg-[rgba(255,255,255,0.06)]">
+            <div className="h-full rounded-full transition-all duration-700" style={{ width: `${t.momentumScore}%`, backgroundColor: accent, opacity: 0.7 }} />
+          </div>
+        </div>
+        <span className="w-7 text-right text-[10px] text-muted-foreground" style={{ fontFamily: DM_MONO }}>{t.momentumScore}</span>
+      </button>
+      {open && (
+        <div className="mt-2 mb-1 ml-6">
+          <ThemeTickersPanel theme={t} compact />
+        </div>
+      )}
+    </div>
+  );
+}
+
 function TopBottomCard({
   title,
   themes,
@@ -49,44 +82,7 @@ function TopBottomCard({
       </h4>
       <div className="space-y-2.5">
         {themes.map((t, i) => (
-          <div key={t.themeId} className="flex items-center gap-3">
-            <span
-              className="w-5 text-right text-xs text-muted-foreground"
-              style={{ fontFamily: DM_MONO }}
-            >
-              {i + 1}
-            </span>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center justify-between gap-2">
-                <span className="font-['Syne',sans-serif] text-[13px] font-medium text-foreground truncate">
-                  {t.themeName}
-                </span>
-                <span
-                  className={`shrink-0 text-xs ${t.perf_1d >= 0 ? "text-[#00f5c4]" : "text-[#f5a623]"}`}
-                  style={{ fontFamily: DM_MONO }}
-                >
-                  {t.perf_1d >= 0 ? "+" : ""}
-                  {t.perf_1d.toFixed(2)}%
-                </span>
-              </div>
-              <div className="mt-1 h-1 w-full overflow-hidden rounded-full bg-[rgba(255,255,255,0.06)]">
-                <div
-                  className="h-full rounded-full transition-all duration-700"
-                  style={{
-                    width: `${t.momentumScore}%`,
-                    backgroundColor: accent,
-                    opacity: 0.7,
-                  }}
-                />
-              </div>
-            </div>
-            <span
-              className="w-7 text-right text-[10px] text-muted-foreground"
-              style={{ fontFamily: DM_MONO }}
-            >
-              {t.momentumScore}
-            </span>
-          </div>
+          <TopBottomRow key={t.themeId} t={t} i={i} accent={accent} />
         ))}
       </div>
     </div>

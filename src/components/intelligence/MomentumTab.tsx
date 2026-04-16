@@ -144,16 +144,20 @@ function SkeletonCards() {
 
 /* ── Historical Momentum Card ────────────────────────── */
 
-function HistoricalMomentumCard({ row }: { row: MomentumLeaderRow }) {
+function HistoricalMomentumCard({ row, theme }: { row: MomentumLeaderRow; theme?: ThemeIntelData }) {
+  const { open, toggle } = useThemeRowToggle(`momentum-hist-${row.themeName}`);
   return (
     <div className="rounded-lg p-3.5 transition-all hover:bg-[rgba(255,255,255,0.06)]" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}>
-      <div className="flex items-start justify-between gap-2 mb-2">
-        <h4 className="font-['Syne',sans-serif] font-semibold text-[13px] text-foreground leading-tight">{row.themeName}</h4>
-        <div className="flex items-center gap-1.5">
+      <button onClick={toggle} className="w-full flex items-start justify-between gap-2 mb-2 text-left">
+        <div className="flex items-start gap-1.5 min-w-0 flex-1">
+          <ChevronRight size={12} className="mt-0.5 text-muted-foreground transition-transform shrink-0" style={{ transform: open ? "rotate(90deg)" : "rotate(0deg)" }} />
+          <h4 className="font-['Syne',sans-serif] font-semibold text-[13px] text-foreground leading-tight">{row.themeName}</h4>
+        </div>
+        <div className="flex items-center gap-1.5 shrink-0">
           <MiniSparkline data={row.sparkline} />
           {row.trendAccelerating ? <TrendingUp size={14} className="text-[#00f5c4]" /> : <TrendingDown size={14} className="text-[#f5a623]" />}
         </div>
-      </div>
+      </button>
       <div className="flex items-center gap-2">
         <span className={`text-sm font-bold ${row.perf >= 0 ? "text-[#00f5c4]" : "text-[#f5a623]"}`} style={{ fontFamily: DM_MONO }}>
           {row.perf >= 0 ? "+" : ""}{row.perf.toFixed(2)}%
@@ -162,6 +166,12 @@ function HistoricalMomentumCard({ row }: { row: MomentumLeaderRow }) {
           {row.trendAccelerating ? "⚡ Accelerating" : "📉 Decelerating"}
         </span>
       </div>
+      {open && theme && (
+        <div className="mt-3"><ThemeTickersPanel theme={theme} compact /></div>
+      )}
+      {open && !theme && (
+        <p className="mt-2 text-[10px] text-muted-foreground">Ticker drill-down available on Today timeframe.</p>
+      )}
     </div>
   );
 }
