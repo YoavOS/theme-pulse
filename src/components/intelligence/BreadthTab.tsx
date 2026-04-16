@@ -25,6 +25,7 @@ import ThemeDrilldownModal from "@/components/ThemeDrilldownModal";
 import { useLiveThemeData } from "@/hooks/useLiveThemeData";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { Info } from "lucide-react";
+import CollapsibleSection from "./CollapsibleSection";
 
 const DM_MONO = "'DM Mono', monospace";
 
@@ -812,13 +813,57 @@ export default function BreadthTab({
   }, [liveThemes]);
 
   return (
-    <div className="space-y-4">
-      <MarketBreadthGauge themes={themes} isLoading={isLoading} />
-      <BreadthByTheme themes={themes} isLoading={isLoading} onThemeClick={handleThemeClick} />
-      <BreadthHistory />
-      <DispersionHistory />
-      <BreadthLeadersLaggards themes={themes} isLoading={isLoading} />
-      <BreadthAlertsHistory />
+    <div className="space-y-3">
+      <CollapsibleSection
+        id="breadth-gauge"
+        title="Overall Market Breadth"
+        defaultOpen={true}
+        summary="Hero gauge — % of all theme tickers advancing today."
+      >
+        <MarketBreadthGauge themes={themes} isLoading={isLoading} />
+      </CollapsibleSection>
+
+      <CollapsibleSection
+        id="breadth-by-theme"
+        title="Breadth by Theme"
+        badge={`${themes.length} themes`}
+        summary="Bar chart of advancing % per theme — click any bar to drill down."
+      >
+        <BreadthByTheme themes={themes} isLoading={isLoading} onThemeClick={handleThemeClick} />
+      </CollapsibleSection>
+
+      <CollapsibleSection
+        id="breadth-history"
+        title="Breadth History"
+        summary="Daily market breadth trend with 1W/2W/1M/All toggles."
+      >
+        <BreadthHistory />
+      </CollapsibleSection>
+
+      <CollapsibleSection
+        id="dispersion-history"
+        title="Daily Dispersion History"
+        summary="σ of theme performances · High = rotation · Low = macro-driven."
+      >
+        <DispersionHistory />
+      </CollapsibleSection>
+
+      <CollapsibleSection
+        id="breadth-leaders"
+        title="Breadth Leaders & Laggards"
+        summary="Top and bottom 5 themes by participation breadth."
+      >
+        <BreadthLeadersLaggards themes={themes} isLoading={isLoading} />
+      </CollapsibleSection>
+
+      <CollapsibleSection
+        id="breadth-alerts"
+        title="Breadth Alerts History"
+        summary="Detected single-day breadth surges (>40%) and collapses."
+      >
+        <BreadthAlertsHistory />
+      </CollapsibleSection>
+
       <ThemeDrilldownModal
         theme={drilldownTheme}
         open={drilldownOpen}
