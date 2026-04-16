@@ -346,6 +346,57 @@ export default function RsAlpha() {
               </div>
             </div>
 
+            {/* Export to TradingView */}
+            {sortedStocks.length > 0 && (
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border bg-card px-3 py-2">
+                <div className="text-[11px] text-muted-foreground">
+                  Exports all <strong className="text-foreground">{sortedStocks.length}</strong> tickers in this timeframe for easy import into TradingView.
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={async () => {
+                      const symbols = sortedStocks.map(s => s.symbol);
+                      const text = symbols.join(",");
+                      try {
+                        await navigator.clipboard.writeText(text);
+                        toast.success(`${symbols.length} symbols copied to clipboard.`, {
+                          description: "Paste into TradingView Watchlist → Import symbols.",
+                        });
+                      } catch {
+                        toast.error("Could not copy to clipboard.");
+                      }
+                    }}
+                    className="inline-flex items-center gap-1.5 rounded-md border border-primary/40 bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary transition-colors hover:bg-primary/20"
+                    title="Copy comma-separated tickers"
+                  >
+                    <Copy size={12} /> Export to TradingView (Copy)
+                  </button>
+                  <button
+                    onClick={() => {
+                      const symbols = sortedStocks.map(s => s.symbol);
+                      const blob = new Blob([symbols.join("\n") + "\n"], { type: "text/plain;charset=utf-8" });
+                      const url = URL.createObjectURL(blob);
+                      const tabLabel = TABS.find(t => t.id === activeTab)?.label.replace(/\s+/g, "") ?? activeTab;
+                      const a = document.createElement("a");
+                      a.href = url;
+                      a.download = `RS_${tabLabel}_BestRS_${symbols.length}tickers.txt`;
+                      document.body.appendChild(a);
+                      a.click();
+                      document.body.removeChild(a);
+                      URL.revokeObjectURL(url);
+                      toast.success(`Downloaded ${symbols.length} symbols.`, {
+                        description: "One ticker per line — ready for TradingView import.",
+                      });
+                    }}
+                    className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                    title="Download .txt with one ticker per line"
+                  >
+                    <Download size={12} /> Download .txt
+                  </button>
+                </div>
+              </div>
+            )}
+
             {/* Table */}
             <div className="overflow-hidden rounded-lg border border-border bg-card">
               <div className="overflow-x-auto">
