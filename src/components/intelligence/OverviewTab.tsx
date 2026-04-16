@@ -10,6 +10,7 @@ import { useLiveThemeData } from "@/hooks/useLiveThemeData";
 import { useVolumeDryUp } from "@/hooks/useVolumeDryUp";
 import BubbleChartView from "./BubbleChartView";
 import { useSpyBenchmark, formatRS } from "@/hooks/useSpyBenchmark";
+import CollapsibleSection from "./CollapsibleSection";
 
 const DM_MONO = "'DM Mono', monospace";
 const VIEW_KEY = "overviewView";
