@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { useEodChartData, EodRow } from "@/hooks/useEodChartData";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
+import CollapsibleSection from "./CollapsibleSection";
 
 const DM_MONO = "'DM Mono', monospace";
 
@@ -153,19 +154,15 @@ export default function HeatmapTab() {
   const GAP = 2;
 
   return (
-    <div
-      className="rounded-lg p-4"
-      style={{
-        background: "rgba(255,255,255,0.04)",
-        border: "1px solid rgba(255,255,255,0.08)",
-        backdropFilter: "blur(12px)",
-      }}
+    <CollapsibleSection
+      id="heatmap-calendar"
+      title="Market Strength Calendar"
+      defaultOpen={true}
+      badge={`${daysWithData} day${daysWithData !== 1 ? "s" : ""} captured`}
+      summary="Daily market-strength score across the year — green = up day, red = down day."
     >
-      <h3 className="font-['Syne',sans-serif] text-sm font-semibold text-foreground mb-1">
-        Market Strength Calendar
-      </h3>
       <p className="text-xs text-muted-foreground mb-4">
-        {daysWithData} trading day{daysWithData !== 1 ? "s" : ""} captured · calendar fills automatically with each EOD save
+        Calendar fills automatically with each EOD save
       </p>
 
       <div className="overflow-x-auto">
@@ -267,6 +264,6 @@ export default function HeatmapTab() {
          ))}
          <span>Strong Up</span>
        </div>
-    </div>
+    </CollapsibleSection>
   );
 }
