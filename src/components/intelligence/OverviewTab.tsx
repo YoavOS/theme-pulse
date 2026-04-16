@@ -400,61 +400,17 @@ export default function OverviewTab({
                   {isLoading ? (
                     <SkeletonRows />
                   ) : (
-                    sorted.map((t, i) => {
-                      const borderColor =
-                        t.divergence <= -5
-                          ? "2px solid #f5a623"
-                          : t.divergence >= 5
-                          ? "2px solid #00f5c4"
-                          : "2px solid transparent";
-
-                      return (
-                        <tr
-                          key={t.themeId}
-                          ref={el => { if (el) rowRefs.current.set(t.themeId, el); }}
-                          className={`border-b border-[rgba(255,255,255,0.04)] transition-all duration-200 hover:bg-[rgba(255,255,255,0.03)] ${
-                            highlightId === t.themeId ? "bg-[rgba(0,245,196,0.06)]" : ""
-                          }`}
-                          style={{ borderLeft: borderColor }}
-                        >
-                          <td className="px-3 py-2.5 text-xs text-muted-foreground" style={{ fontFamily: DM_MONO }}>
-                            {i + 1}
-                          </td>
-                          <td className="px-3 py-2.5">
-                            <div className="font-['Syne',sans-serif] font-semibold text-foreground text-[13px] leading-tight">
-                              {t.themeName}
-                            </div>
-                            <div className="text-[10px] text-muted-foreground mt-0.5" style={{ fontFamily: DM_MONO }}>
-                              {t.breadthUp}/{t.breadthTotal} advancing
-                            </div>
-                          </td>
-                          <td className="px-3 py-2.5">
-                            <MomentumBar score={t.momentumScore} />
-                          </td>
-                          <PerfCell value={t.perf_1d} hasData={true} />
-                          {(() => {
-                            const rs = getRelativeStrength(t.perf_1d);
-                            const f = formatRS(rs);
-                            return (
-                              <td className={`px-3 py-2.5 text-right text-sm ${f.color}`} style={{ fontFamily: DM_MONO }}>
-                                {rs !== null ? `${rs >= 0 ? "+" : ""}${rs.toFixed(2)}%` : "--"}
-                              </td>
-                            );
-                          })()}
-                          <PerfCell value={t.perf_1w} hasData={t.hasEodHistory} />
-                          <PerfCell value={t.perf_1m} hasData={t.hasEodHistory} />
-                          <VolCell avgRelVol={t.avgRelVol} isDryingUp={isThemeDryingUp(t.themeName)} />
-                          <BreadthCell up={t.breadthUp} total={t.breadthTotal} />
-                          <td className="px-3 py-2.5 text-center">
-                            <MiniSparkline data={t.sparklineData} />
-                          </td>
-                          <SignalCell divergence={t.divergence} />
-                          <td className="px-3 py-2.5 text-center">
-                            <TrendArrow score={t.momentumScore} />
-                          </td>
-                        </tr>
-                      );
-                    })
+                    sorted.map((t, i) => (
+                      <OverviewRow
+                        key={t.themeId}
+                        rank={i + 1}
+                        theme={t}
+                        highlight={highlightId === t.themeId}
+                        getRelativeStrength={getRelativeStrength}
+                        isThemeDryingUp={isThemeDryingUp}
+                        rowRefs={rowRefs}
+                      />
+                    ))
                   )}
                 </tbody>
               </table>
