@@ -95,29 +95,31 @@ Deno.serve(async (req) => {
     }
 
     const uniqueSymbols = [...new Set(themeEntries.flatMap(t => t.symbols))];
-    const fromTs = getTimeframeFromTs(timeframe);
-    const useCandles = timeframe !== "Today" && fromTs > 0;
+    const yahooPeriod = timeframeToYahooPeriod(timeframe);
+    const useHistorical = yahooPeriod !== null;
 
-    console.log(`Fetching ${uniqueSymbols.length} symbols for ${themeEntries.length} themes, timeframe=${timeframe}, useCandles=${useCandles}`);
+    console.log(`Fetching ${uniqueSymbols.length} symbols for ${themeEntries.length} themes, timeframe=${timeframe}, useHistorical=${useHistorical}`);
 
     const quoteMap: Record<string, QuoteResult> = {};
-    const batchSize = 10;
     let rateLimited = false;
 
-    for (let i = 0; i < uniqueSymbols.length; i += batchSize) {
-      const batch = uniqueSymbols.slice(i, i + batchSize);
-      const results = await Promise.all(
-        batch.map(s => useCandles ? fetchQuoteCandle(s, fromTs) : fetchQuoteDaily(s))
-      );
-      for (const r of results) quoteMap[r.symbol] = r;
-
-      if (results.some(r => r.error === "rate_limited")) {
-        rateLimited = true;
-        break;
+    if (useHistorical) {
+      // Historical: shared helper (cache → EOD → Yahoo). Small batch since Yahoo is slower.
+      const batchSize = 5;
+      for (let i = 0; i < uniqueSymbols.length; i += batchSize) {
+        const batch = uniqueSymbols.slice(i, i + batchSize);
+        const results = await Promise.all(batch.map(s => fetchHistoricalQuote(sb, s, yahooPeriod!)));
+        for (const r of results) quoteMap[r.symbol] = r;
       }
-
-      if (i + batchSize < uniqueSymbols.length) {
-        await new Promise(r => setTimeout(r, 1200));
+    } else {
+      // Today: Finnhub /quote (still works on free tier).
+      const batchSize = 10;
+      for (let i = 0; i < uniqueSymbols.length; i += batchSize) {
+        const batch = uniqueSymbols.slice(i, i + batchSize);
+        const results = await Promise.all(batch.map(s => fetchQuoteDaily(s)));
+        for (const r of results) quoteMap[r.symbol] = r;
+        if (results.some(r => r.error === "rate_limited")) { rateLimited = true; break; }
+        if (i + batchSize < uniqueSymbols.length) await new Promise(r => setTimeout(r, 1200));
       }
     }
 
