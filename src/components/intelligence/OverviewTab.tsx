@@ -469,6 +469,7 @@ export default function OverviewTab({
           </>
         )}
       </div>
+      </CollapsibleSection>
      </div>
    );
 }
