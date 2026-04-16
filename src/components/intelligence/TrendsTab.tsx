@@ -166,20 +166,15 @@ export default function TrendsTab() {
   const lowData = uniqueDates.length < 7;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-3">
       {/* ── AREA CHART ── */}
-      <div
-        className="rounded-lg p-4"
-        style={{
-          background: "rgba(255,255,255,0.04)",
-          border: "1px solid rgba(255,255,255,0.08)",
-          backdropFilter: "blur(12px)",
-        }}
-      >
-        <div className="mb-3 flex items-center justify-between">
-          <h3 className="font-['Syne',sans-serif] text-sm font-semibold text-foreground">
-            Theme Momentum Over Time
-          </h3>
+      <CollapsibleSection
+        id="trends-area"
+        title="Theme Momentum Over Time"
+        defaultOpen={true}
+        badge={`${themeNames.length} themes`}
+        summary="Daily % change per theme — toggle legend to focus, switch timeframe with the buttons."
+        headerActions={
           <div className="flex items-center gap-1 rounded-lg bg-[rgba(255,255,255,0.03)] p-1">
             {TIMEFILTERS.map(tf => (
               <button
@@ -198,8 +193,8 @@ export default function TrendsTab() {
               </button>
             ))}
           </div>
-        </div>
-
+        }
+      >
         {lowData && !noData && (
           <p className="mb-2 text-xs text-muted-foreground">
             Chart will improve as more EOD data accumulates — {uniqueDates.length} day{uniqueDates.length !== 1 ? "s" : ""} saved so far
@@ -270,21 +265,16 @@ export default function TrendsTab() {
             </ResponsiveContainer>
           </div>
         )}
-      </div>
+      </CollapsibleSection>
 
       {/* ── CORRELATION MATRIX ── */}
-      <div
-        className="rounded-lg p-4"
-        style={{
-          background: "rgba(255,255,255,0.04)",
-          border: "1px solid rgba(255,255,255,0.08)",
-          backdropFilter: "blur(12px)",
-        }}
+      <CollapsibleSection
+        id="trends-correlation"
+        title="Theme Correlation Matrix"
+        badge={`${themeNames.length} themes`}
+        summary="Pearson correlation of daily % change between themes — teal = move together, red = inverse."
       >
         <div className="mb-3 flex items-center gap-2">
-          <h3 className="font-['Syne',sans-serif] text-sm font-semibold text-foreground">
-            Theme Correlation Matrix
-          </h3>
           <Tooltip>
             <TooltipTrigger asChild>
               <Info size={12} className="text-muted-foreground cursor-help" />
