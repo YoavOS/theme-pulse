@@ -321,8 +321,6 @@ export default function OverviewTab({
         }
       >
       <div key={viewMode} className="animate-in fade-in duration-200">
-
-      <div key={viewMode} className="animate-in fade-in duration-200">
         {viewMode === "bubble" ? (
           <BubbleChartView themes={themes} isLoading={isLoading} />
         ) : (
