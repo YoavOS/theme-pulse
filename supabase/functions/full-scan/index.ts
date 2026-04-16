@@ -17,32 +17,30 @@ function delay(ms: number) {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-function getTimestampsFromCandles(
-  timestamps: number[],
-  opens: number[],
-  closes: number[],
-  daysAgo: number
-): { firstOpen: number; lastClose: number } | null {
+function calcPct(start: number, end: number): number {
+  if (start === 0) return 0;
+  return Math.round(((end - start) / start) * 10000) / 100;
+}
+
+// Find the close price N days ago in an OHLC array (closest bar at or before cutoff).
+function closeNDaysAgo(ohlc: { ts: number; close: number | null }[], daysAgo: number): number | null {
   const cutoff = Math.floor(Date.now() / 1000) - daysAgo * 86400;
-  let startIdx = -1;
-  for (let i = 0; i < timestamps.length; i++) {
-    if (timestamps[i] >= cutoff) { startIdx = i; break; }
+  // Walk backward to find the last bar with ts <= cutoff
+  for (let i = ohlc.length - 1; i >= 0; i--) {
+    if (ohlc[i].ts <= cutoff && ohlc[i].close !== null) return ohlc[i].close as number;
   }
-  if (startIdx === -1 || timestamps.length === 0) return null;
-  return { firstOpen: opens[startIdx], lastClose: closes[closes.length - 1] };
+  return null;
 }
 
-function calcPct(firstOpen: number, lastClose: number): number {
-  if (firstOpen === 0) return 0;
-  return Math.round(((lastClose - firstOpen) / firstOpen) * 10000) / 100;
-}
-
-async function fetchTickerData(symbol: string): Promise<{
+async function fetchTickerData(
+  sb: ReturnType<typeof createClient>,
+  symbol: string
+): Promise<{
   perf_1d: number; perf_1w: number; perf_1m: number; perf_3m: number; perf_ytd: number; price: number; error?: string;
 }> {
   const result = { perf_1d: 0, perf_1w: 0, perf_1m: 0, perf_3m: 0, perf_ytd: 0, price: 0 };
 
-  // 1. Fetch daily quote
+  // 1. Fetch live quote from Finnhub (still works on free tier)
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     try {
       const res = await fetch(`https://finnhub.io/api/v1/quote?symbol=${encodeURIComponent(symbol)}&token=${FINNHUB_KEY}`);
@@ -62,59 +60,35 @@ async function fetchTickerData(symbol: string): Promise<{
     }
   }
 
-  await delay(CALL_DELAY_MS);
+  // 2. Fetch YTD historical via shared Yahoo helper (cache → EOD → Yahoo).
+  //    One call covers 1W/1M/3M/YTD by walking the OHLC array.
+  try {
+    const hist = await getHistoricalData(sb, symbol, "ytd", { todayPrice: result.price });
+    if (hist.ohlc && hist.ohlc.length > 1) {
+      const ohlc = hist.ohlc;
+      const lastClose = (ohlc[ohlc.length - 1].close as number) ?? result.price;
 
-  // 2. Fetch YTD candles (longest range — derive 1W, 1M, 3M from same data)
-  const jan1 = new Date(new Date().getFullYear(), 0, 1);
-  const fromTs = Math.floor(jan1.getTime() / 1000);
-  const toTs = Math.floor(Date.now() / 1000);
+      // YTD: first bar of the year vs latest
+      const firstClose = ohlc[0].close as number;
+      if (firstClose) result.perf_ytd = calcPct(firstClose, lastClose);
 
-  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-    try {
-      const res = await fetch(
-        `https://finnhub.io/api/v1/stock/candle?symbol=${encodeURIComponent(symbol)}&resolution=D&from=${fromTs}&to=${toTs}&token=${FINNHUB_KEY}`
-      );
-      if (res.status === 429) {
-        if (attempt < MAX_RETRIES) { await delay(RETRY_DELAY_MS); continue; }
-        // Keep daily data, skip historical — not a fatal error
-        console.log(`Candle rate-limited for ${symbol}, keeping daily data only`);
-        break;
-      }
-      if (!res.ok) {
-        // 403 = free tier doesn't support candles — not a fatal error
-        console.log(`Candle ${res.status} for ${symbol}, keeping daily data only`);
-        break;
-      }
-      const data = await res.json();
-      if (!data || data.s === "no_data" || !data.o || !data.c || data.t?.length === 0) {
-        // No candle data — keep daily, historical stays 0
-        break;
-      }
+      const c3m = closeNDaysAgo(ohlc, 90);
+      if (c3m) result.perf_3m = calcPct(c3m, lastClose);
 
-      const t = data.t as number[];
-      const o = data.o as number[];
-      const c = data.c as number[];
+      const c1m = closeNDaysAgo(ohlc, 30);
+      if (c1m) result.perf_1m = calcPct(c1m, lastClose);
 
-      // YTD: first open vs last close
-      if (o.length > 0) result.perf_ytd = calcPct(o[0], c[c.length - 1]);
-
-      // 3M
-      const d3m = getTimestampsFromCandles(t, o, c, 90);
-      if (d3m) result.perf_3m = calcPct(d3m.firstOpen, d3m.lastClose);
-
-      // 1M
-      const d1m = getTimestampsFromCandles(t, o, c, 30);
-      if (d1m) result.perf_1m = calcPct(d1m.firstOpen, d1m.lastClose);
-
-      // 1W
-      const d1w = getTimestampsFromCandles(t, o, c, 7);
-      if (d1w) result.perf_1w = calcPct(d1w.firstOpen, d1w.lastClose);
-
-      break;
-    } catch (e) {
-      if (attempt >= MAX_RETRIES) return { ...result, error: `candle_error: ${e}` };
-      await delay(5000);
+      const c1w = closeNDaysAgo(ohlc, 7);
+      if (c1w) result.perf_1w = calcPct(c1w, lastClose);
+    } else if (hist.returnPct !== null) {
+      // Fell back to a single-point EOD lookup → only YTD is meaningful.
+      result.perf_ytd = hist.returnPct;
+    } else {
+      console.log(`No historical data for ${symbol} (source=${hist.source})`);
     }
+  } catch (e) {
+    console.log(`Historical fetch failed for ${symbol}: ${e}`);
+    // Keep daily quote — historical stays 0.
   }
 
   return result;
