@@ -13,6 +13,7 @@ import HeatmapTab from "@/components/intelligence/HeatmapTab";
 import FundamentalsIntelTab from "@/components/intelligence/FundamentalsIntelTab";
 import React from "react";
 import HelpButton from "@/components/HelpButton";
+import { CollapsibleProvider, ExpandCollapseAll } from "@/components/intelligence/CollapsibleSection";
 
 const SUB_TABS = [
   { id: "overview", label: "Overview", icon: BarChart3 },
@@ -79,6 +80,7 @@ export default function ThemeIntelligence() {
             </span>
           </div>
           <div className="flex items-center gap-2">
+            <ExpandCollapseAll />
             <button
               onClick={runBackfill}
               disabled={isBackfilling}
