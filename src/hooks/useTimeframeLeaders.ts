@@ -275,6 +275,8 @@ export function useTimeframeLeaders() {
       }
 
       const results: VolumeLeaderRow[] = [];
+      const perfByTheme = new Map<string, number>();
+
       for (const [theme, symbols] of symbolsByTheme) {
         const relVols = symbols
           .map(s => relVolBySymbol.get(s))
@@ -286,6 +288,7 @@ export function useTimeframeLeaders() {
 
         const avgRelVol = Math.round((relVols.reduce((a, b) => a + b, 0) / relVols.length) * 100) / 100;
         const avgPerf = perfs.length > 0 ? perfs.reduce((a, b) => a + b, 0) / perfs.length : 0;
+        perfByTheme.set(theme, avgPerf);
 
         const sus = sustainedByTheme.get(theme);
         const trend: "building" | "fading" | "flat" =
@@ -296,28 +299,22 @@ export function useTimeframeLeaders() {
         results.push({
           themeName: theme,
           avgRelVol,
-          avgSustainedVol: sus ? Math.round(sus.sus * 100) / 100 : 0,
+          avgSustainedVol: sus ? Math.round(sus.sus * 100) / 100 : Math.round(avgPerf * 100) / 100,
           trend,
           weekCount: sus?.weeks ?? 0,
-          // Consistent = high relVol AND positive perf for this timeframe
           consistent: avgRelVol > 1.4 && avgPerf > 0,
         });
       }
 
-      // Sort by relVol × |perf| so leaders differ per timeframe
+      // Composite ranking: relVol (60%) + normalized |timeframe perf| (40%).
+      // Because perf differs per period (Yahoo-backfilled), 1W/1M/3M produce
+      // distinct orderings.
+      const maxAbsPerf = Math.max(1, ...[...perfByTheme.values()].map(v => Math.abs(v)));
       results.sort((a, b) => {
-        const aScore = a.avgRelVol * (1 + Math.abs(perfsAvg(a, results) ? 0 : 0));
-        const bScore = b.avgRelVol * (1 + Math.abs(perfsAvg(b, results) ? 0 : 0));
-        return bScore - aScore;
-      });
-
-      // Better: rank by composite (relVol weight 60%, perf weight 40%)
-      const maxAbsPerf = Math.max(1, ...symbolsByTheme.size > 0 ? [...sustainedByTheme.values()].map(v => Math.abs(v.sus)) : [1]);
-      results.sort((a, b) => {
-        const aPerf = sustainedByTheme.get(a.themeName)?.sus ?? 0;
-        const bPerf = sustainedByTheme.get(b.themeName)?.sus ?? 0;
-        const aScore = a.avgRelVol * 0.6 + (Math.abs(aPerf) / maxAbsPerf) * 0.4;
-        const bScore = b.avgRelVol * 0.6 + (Math.abs(bPerf) / maxAbsPerf) * 0.4;
+        const aPerf = Math.abs(perfByTheme.get(a.themeName) ?? 0);
+        const bPerf = Math.abs(perfByTheme.get(b.themeName) ?? 0);
+        const aScore = a.avgRelVol * 0.6 + (aPerf / maxAbsPerf) * 0.8;
+        const bScore = b.avgRelVol * 0.6 + (bPerf / maxAbsPerf) * 0.8;
         return bScore - aScore;
       });
 
@@ -328,9 +325,6 @@ export function useTimeframeLeaders() {
       setLoading(l => ({ ...l, [key]: false }));
     }
   }, []);
-
-  // helper kept for clarity, unused after final sort
-  function perfsAvg(_a: VolumeLeaderRow, _all: VolumeLeaderRow[]): number { return 0; }
 
   const clearCache = useCallback(() => {
     fetched.current.clear();
