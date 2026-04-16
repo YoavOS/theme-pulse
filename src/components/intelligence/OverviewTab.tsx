@@ -10,6 +10,7 @@ import { useLiveThemeData } from "@/hooks/useLiveThemeData";
 import { useVolumeDryUp } from "@/hooks/useVolumeDryUp";
 import BubbleChartView from "./BubbleChartView";
 import { useSpyBenchmark, formatRS } from "@/hooks/useSpyBenchmark";
+import CollapsibleSection from "./CollapsibleSection";
 
 const DM_MONO = "'DM Mono', monospace";
 const VIEW_KEY = "overviewView";
@@ -282,64 +283,43 @@ export default function OverviewTab({
     return enriched;
   }, [enriched, sortMode, getRelativeStrength]);
 
+  const top3Names = themes.slice(0, 3).map(t => t.themeName).join(" · ");
+
   return (
-    <div className="h-full overflow-auto">
-      <VolumeLeaders themes={themes} onSelectTheme={handleSelectTheme} onDrilldownOpen={handleOpenDrilldown} />
+    <div className="h-full overflow-auto space-y-3">
+      <CollapsibleSection
+        id="overview-volume-leaders"
+        title="Volume Leaders"
+        defaultOpen={true}
+        summary="Themes with the strongest relative volume."
+      >
+        <VolumeLeaders themes={themes} onSelectTheme={handleSelectTheme} onDrilldownOpen={handleOpenDrilldown} />
+      </CollapsibleSection>
 
-      <div className="mb-4 flex items-center justify-between">
-        <div className="flex items-center gap-4 text-xs text-muted-foreground">
-          <span className="font-['Syne',sans-serif] text-sm font-semibold text-foreground">
-            Theme Rankings
-          </span>
-          <span>{themes.length} themes ranked</span>
-
-          {/* View toggle */}
-          <div className="flex items-center gap-1 rounded-lg bg-[rgba(255,255,255,0.03)] p-0.5 ml-2">
-            <button
-              onClick={() => handleViewChange("table")}
-              className={`rounded-md px-2.5 py-1 text-[10px] font-medium transition-all ${
-                viewMode === "table"
-                  ? "bg-[rgba(255,255,255,0.08)] text-foreground"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              📋 Table
-            </button>
-            <button
-              onClick={() => handleViewChange("bubble")}
-              className={`rounded-md px-2.5 py-1 text-[10px] font-medium transition-all ${
-                viewMode === "bubble"
-                  ? "bg-[rgba(255,255,255,0.08)] text-foreground"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              ⚬ Bubble Chart
-            </button>
-          </div>
-        </div>
-
-        {viewMode === "table" && (
-          <div className="flex items-center gap-1 rounded-lg bg-[rgba(255,255,255,0.03)] p-1">
-            {(["momentum", "breadth", "spy"] as const).map(mode => (
-              <button
-                key={mode}
-                onClick={() => setSortMode(mode)}
-                className={`relative rounded-md px-3 py-1.5 text-xs font-medium transition-all ${
-                  sortMode === mode
-                    ? "bg-[rgba(255,255,255,0.08)] text-foreground shadow-sm"
-                    : "text-muted-foreground hover:text-foreground hover:bg-[rgba(255,255,255,0.04)]"
-                }`}
-              >
-                {mode === "momentum" ? "Momentum" : mode === "breadth" ? "Breadth" : "vs SPY"}
-                {sortMode === mode && (
-                  <span className="absolute bottom-0 left-1/2 -translate-x-1/2 h-0.5 w-6 rounded-full bg-[#00f5c4]" />
-                )}
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-
+      <CollapsibleSection
+        id="overview-rankings"
+        title="Theme Rankings"
+        defaultOpen={true}
+        badge={`${themes.length} themes`}
+        summary={top3Names ? `Top: ${top3Names}` : undefined}
+        headerActions={
+          <>
+            <div className="flex items-center gap-1 rounded-lg bg-[rgba(255,255,255,0.03)] p-0.5">
+              <button onClick={() => handleViewChange("table")} className={`rounded-md px-2.5 py-1 text-[10px] font-medium ${viewMode === "table" ? "bg-[rgba(255,255,255,0.08)] text-foreground" : "text-muted-foreground hover:text-foreground"}`}>📋 Table</button>
+              <button onClick={() => handleViewChange("bubble")} className={`rounded-md px-2.5 py-1 text-[10px] font-medium ${viewMode === "bubble" ? "bg-[rgba(255,255,255,0.08)] text-foreground" : "text-muted-foreground hover:text-foreground"}`}>⚬ Bubble</button>
+            </div>
+            {viewMode === "table" && (
+              <div className="flex items-center gap-1 rounded-lg bg-[rgba(255,255,255,0.03)] p-0.5">
+                {(["momentum", "breadth", "spy"] as const).map(mode => (
+                  <button key={mode} onClick={() => setSortMode(mode)} className={`rounded-md px-2.5 py-1 text-[10px] font-medium ${sortMode === mode ? "bg-[rgba(255,255,255,0.08)] text-foreground" : "text-muted-foreground hover:text-foreground"}`}>
+                    {mode === "momentum" ? "Momentum" : mode === "breadth" ? "Breadth" : "vs SPY"}
+                  </button>
+                ))}
+              </div>
+            )}
+          </>
+        }
+      >
       <div key={viewMode} className="animate-in fade-in duration-200">
         {viewMode === "bubble" ? (
           <BubbleChartView themes={themes} isLoading={isLoading} />
@@ -487,6 +467,7 @@ export default function OverviewTab({
           </>
         )}
       </div>
+      </CollapsibleSection>
      </div>
    );
 }

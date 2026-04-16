@@ -6,6 +6,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Progress } from "@/components/ui/progress";
 import { ArrowUpDown, ChevronDown, ChevronRight, Loader2, RefreshCw } from "lucide-react";
 import TickerFundamentalsTooltip from "./TickerFundamentalsTooltip";
+import CollapsibleSection from "./CollapsibleSection";
 
 const DM_MONO = "'DM Mono', monospace";
 

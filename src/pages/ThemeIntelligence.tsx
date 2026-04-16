@@ -13,6 +13,7 @@ import HeatmapTab from "@/components/intelligence/HeatmapTab";
 import FundamentalsIntelTab from "@/components/intelligence/FundamentalsIntelTab";
 import React from "react";
 import HelpButton from "@/components/HelpButton";
+import { CollapsibleProvider, ExpandCollapseAll } from "@/components/intelligence/CollapsibleSection";
 
 const SUB_TABS = [
   { id: "overview", label: "Overview", icon: BarChart3 },
@@ -60,104 +61,104 @@ export default function ThemeIntelligence() {
   };
 
   return (
-    <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="sticky top-0 z-30 border-b border-border bg-background/80 backdrop-blur-md">
-        <div className="container flex items-center justify-between py-3">
-          <div className="flex items-center gap-3">
-            <Link
-              to="/"
-              className="rounded-md border border-border p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-            >
-              <ArrowLeft size={16} />
-            </Link>
-            <h1 className="font-['Syne',sans-serif] text-xl font-bold tracking-tight text-foreground">
-              Theme Intelligence
-            </h1>
-            <span className="text-xs text-muted-foreground">
-              {themes.length} themes · {isLoading ? "loading…" : "live"}
-            </span>
+    <CollapsibleProvider key={activeTab} storageKey={`intel-collapsibles-${activeTab}`}>
+      <div className="min-h-screen bg-background">
+        {/* Header */}
+        <header className="sticky top-0 z-30 border-b border-border bg-background/80 backdrop-blur-md">
+          <div className="container flex items-center justify-between py-3">
+            <div className="flex items-center gap-3">
+              <Link
+                to="/"
+                className="rounded-md border border-border p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+              >
+                <ArrowLeft size={16} />
+              </Link>
+              <h1 className="font-['Syne',sans-serif] text-xl font-bold tracking-tight text-foreground">
+                Theme Intelligence
+              </h1>
+              <span className="text-xs text-muted-foreground">
+                {themes.length} themes · {isLoading ? "loading…" : "live"}
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <ExpandCollapseAll />
+              <button
+                onClick={runBackfill}
+                disabled={isBackfilling}
+                className="flex items-center gap-1.5 rounded-md border border-border bg-background/50 px-2.5 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-60"
+                title="Refresh 1W/1M/3M/YTD via Yahoo Finance"
+              >
+                <RefreshCw size={12} className={isBackfilling ? "animate-spin" : ""} />
+                {isBackfilling ? "Refreshing…" : "Refresh historical"}
+              </button>
+              <HelpButton />
+            </div>
           </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={runBackfill}
-              disabled={isBackfilling}
-              className="flex items-center gap-1.5 rounded-md border border-border bg-background/50 px-2.5 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-60"
-              title="Refresh 1W/1M/3M/YTD via Yahoo Finance"
-            >
-              <RefreshCw size={12} className={isBackfilling ? "animate-spin" : ""} />
-              {isBackfilling ? "Refreshing…" : "Refresh historical"}
-            </button>
-            <HelpButton />
-          </div>
-        </div>
 
-        {/* Sub-tab navigation — sticky pills */}
-        <div className="container pb-2">
-          <div className="relative flex items-center gap-1 rounded-lg bg-[rgba(255,255,255,0.03)] p-1 w-fit">
-            {SUB_TABS.map(tab => {
-              const Icon = tab.icon;
-              const isActive = activeTab === tab.id;
-              return (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
-                  className={`relative flex items-center gap-1.5 rounded-md px-3.5 py-1.5 text-xs font-medium transition-all ${
-                    isActive
-                      ? "bg-[rgba(255,255,255,0.08)] text-foreground shadow-sm"
-                      : "text-muted-foreground hover:text-foreground hover:bg-[rgba(255,255,255,0.04)]"
-                  }`}
-                >
-                  <Icon size={13} />
-                  {tab.label}
-                  {isActive && (
-                    <span className="absolute bottom-0 left-1/2 -translate-x-1/2 h-0.5 w-6 rounded-full bg-[#00f5c4]" />
-                  )}
-                </button>
-              );
-            })}
+          {/* Sub-tab navigation — sticky pills */}
+          <div className="container pb-2">
+            <div className="relative flex items-center gap-1 rounded-lg bg-[rgba(255,255,255,0.03)] p-1 w-fit">
+              {SUB_TABS.map(tab => {
+                const Icon = tab.icon;
+                const isActive = activeTab === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    onClick={() => setActiveTab(tab.id)}
+                    className={`relative flex items-center gap-1.5 rounded-md px-3.5 py-1.5 text-xs font-medium transition-all ${
+                      isActive
+                        ? "bg-[rgba(255,255,255,0.08)] text-foreground shadow-sm"
+                        : "text-muted-foreground hover:text-foreground hover:bg-[rgba(255,255,255,0.04)]"
+                    }`}
+                  >
+                    <Icon size={13} />
+                    {tab.label}
+                    {isActive && (
+                      <span className="absolute bottom-0 left-1/2 -translate-x-1/2 h-0.5 w-6 rounded-full bg-[#00f5c4]" />
+                    )}
+                  </button>
+                );
+              })}
+            </div>
           </div>
-        </div>
-      </header>
+        </header>
 
-      {/* Content area with fade transition */}
-      <main className="container py-5">
-        <div
-          key={activeTab}
-          className="animate-in fade-in duration-300"
-        >
-          {activeTab === "overview" && (
-            <OverviewTab themes={themes} isLoading={isLoading} />
-          )}
-          {activeTab === "momentum" && (
-            <MomentumTab accelerating={accelerating} fading={fading} isLoading={isLoading} />
-          )}
-          {activeTab === "breadth" && (
-            <ErrorBoundary label="Breadth">
-              <BreadthTab themes={themes} isLoading={isLoading} />
-            </ErrorBoundary>
-          )}
-          {activeTab === "trends" && (
-            <ErrorBoundary label="Trends">
-              <TrendsTab />
-            </ErrorBoundary>
-          )}
-          {activeTab === "heatmap" && (
-            <ErrorBoundary label="Heatmap">
-              <HeatmapTab />
-            </ErrorBoundary>
-          )}
-          {activeTab === "fundamentals" && (
-            <ErrorBoundary label="Fundamentals">
-              <FundamentalsIntelTab themes={themes} isLoading={isLoading} />
-            </ErrorBoundary>
-          )}
-          {activeTab === "insights" && (
-            <InsightsTab themes={themes} accelerating={accelerating} fading={fading} isLoading={isLoading} />
-          )}
-        </div>
-      </main>
-    </div>
+        {/* Content area with fade transition */}
+        <main className="container py-5">
+          <div className="animate-in fade-in duration-300 space-y-3">
+            {activeTab === "overview" && (
+              <OverviewTab themes={themes} isLoading={isLoading} />
+            )}
+            {activeTab === "momentum" && (
+              <MomentumTab accelerating={accelerating} fading={fading} isLoading={isLoading} />
+            )}
+            {activeTab === "breadth" && (
+              <ErrorBoundary label="Breadth">
+                <BreadthTab themes={themes} isLoading={isLoading} />
+              </ErrorBoundary>
+            )}
+            {activeTab === "trends" && (
+              <ErrorBoundary label="Trends">
+                <TrendsTab />
+              </ErrorBoundary>
+            )}
+            {activeTab === "heatmap" && (
+              <ErrorBoundary label="Heatmap">
+                <HeatmapTab />
+              </ErrorBoundary>
+            )}
+            {activeTab === "fundamentals" && (
+              <ErrorBoundary label="Fundamentals">
+                <FundamentalsIntelTab themes={themes} isLoading={isLoading} />
+              </ErrorBoundary>
+            )}
+            {activeTab === "insights" && (
+              <InsightsTab themes={themes} accelerating={accelerating} fading={fading} isLoading={isLoading} />
+            )}
+          </div>
+        </main>
+      </div>
+    </CollapsibleProvider>
   );
 }
 

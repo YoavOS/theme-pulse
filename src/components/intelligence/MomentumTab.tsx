@@ -9,6 +9,7 @@ import { useVolumeDryUp } from "@/hooks/useVolumeDryUp";
 import TimeframeTabs from "./TimeframeTabs";
 import { useTimeframeAvailability, type Timeframe } from "@/hooks/useTimeframeAvailability";
 import { useTimeframeLeaders, type MomentumLeaderRow } from "@/hooks/useTimeframeLeaders";
+import CollapsibleSection from "./CollapsibleSection";
 
 const DM_MONO = "'DM Mono', monospace";
 const EOD_TOOLTIP = "Accumulating EOD history — available after more daily saves";
@@ -181,13 +182,18 @@ export default function MomentumTab({
   const histAccelerating = histData.filter(r => r.trendAccelerating);
   const histFading = histData.filter(r => !r.trendAccelerating);
 
-  return (
-    <div>
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="font-['Syne',sans-serif] text-sm font-semibold text-foreground">Momentum Leaders</h3>
-        <TimeframeTabs selected={tf} onSelect={setTf} availability={availability} />
-      </div>
+  const summary = isHistorical
+    ? `${histAccelerating.length} accelerating · ${histFading.length} decelerating (${tf})`
+    : `${accelerating.length} accelerating · ${fading.length} fading (today)`;
 
+  return (
+    <CollapsibleSection
+      id="momentum-leaders"
+      title="Momentum Leaders"
+      defaultOpen={true}
+      summary={summary}
+      headerActions={<TimeframeTabs selected={tf} onSelect={setTf} availability={availability} />}
+    >
       {isHistorical ? (
         <div className="grid h-full grid-cols-1 gap-4 md:grid-cols-2">
           <div>
@@ -243,6 +249,6 @@ export default function MomentumTab({
           </div>
         </div>
       )}
-    </div>
+    </CollapsibleSection>
   );
 }
