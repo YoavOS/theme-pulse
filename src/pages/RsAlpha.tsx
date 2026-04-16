@@ -313,8 +313,8 @@ export default function RsAlpha() {
               Click <em>Rebuild Qualified Universe</em> to scan the full US market and find stocks meeting all four quality criteria.
               The scan runs in the background and takes 6–10 hours; results stream in as stocks qualify.
             </p>
-            <button onClick={rebuildUniverse} disabled={isRebuilding} className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50">
-              {isRebuilding ? "Rebuilding…" : "Rebuild Qualified Universe"}
+            <button onClick={() => rebuildUniverse("resume")} disabled={isMutatingScan} className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50">
+              {isMutatingScan ? "Starting…" : "Update Stock List"}
             </button>
           </div>
         ) : (
