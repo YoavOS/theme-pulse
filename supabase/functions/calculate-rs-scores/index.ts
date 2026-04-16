@@ -60,33 +60,15 @@ Deno.serve(async (req) => {
       .maybeSingle();
     const spy1d = spyPerf?.perf_1d ?? 0;
 
-    // 4. For each stock: get 1M/3M/6M returns from cache → Yahoo
+    // 4. For each stock: get 1M/3M/6M returns via shared helper (cache → Yahoo)
     const updates: any[] = [];
     for (const u of universe) {
       const sym = u.symbol;
       const periodReturns: Record<string, number | null> = {};
 
       for (const period of PERIODS) {
-        const { data: cached } = await supabase
-          .from("yahoo_history_cache")
-          .select("return_pct, fetched_at")
-          .eq("symbol", sym)
-          .eq("period", period)
-          .gte("fetched_at", new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString())
-          .maybeSingle();
-
-        if (cached?.return_pct !== null && cached?.return_pct !== undefined) {
-          periodReturns[period] = Number(cached.return_pct);
-        } else {
-          const r = await yahooReturn(sym, period);
-          periodReturns[period] = r;
-          if (r !== null) {
-            await supabase.from("yahoo_history_cache").upsert({
-              symbol: sym, period, return_pct: r, fetched_at: new Date().toISOString(),
-            }, { onConflict: "symbol,period" });
-          }
-          await sleep(YAHOO_DELAY_MS);
-        }
+        const r = await getHistoricalData(supabase, sym, period, { todayPrice: u.current_price ?? null });
+        periodReturns[period] = r.returnPct;
       }
 
       const r1d = perf1dMap.get(sym)?.perf1d ?? null;
