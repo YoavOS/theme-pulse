@@ -765,6 +765,10 @@ export type Database = {
           timeframe: string
         }[]
       }
+      set_universe_cron_active: {
+        Args: { p_active: boolean }
+        Returns: undefined
+      }
     }
     Enums: {
       [_ in never]: never

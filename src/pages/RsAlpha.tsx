@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { ArrowLeft, RefreshCw, Loader2, Info, ChevronDown, ChevronUp, ArrowUpDown, Filter, Hammer } from "lucide-react";
+import { ArrowLeft, RefreshCw, Loader2, Info, ChevronDown, ChevronUp, ArrowUpDown, Filter, Hammer, Pause, Play, RotateCcw } from "lucide-react";
 import { useRsAlpha, RsStock, RS_FILTER_THRESHOLDS } from "@/hooks/useRsAlpha";
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -69,8 +69,9 @@ function pctDisplay(val: number | null): string {
 
 export default function RsAlpha() {
   const {
-    stocks, isLoading, isRebuilding, isRecalculating, recalcStatus,
-    error, progress, rebuildUniverse, recalculateRs,
+    stocks, isLoading, isRebuilding, isPaused, isMutatingScan,
+    isRecalculating, recalcStatus,
+    error, progress, rebuildUniverse, pauseScan, recalculateRs,
   } = useRsAlpha();
   const [activeTab, setActiveTab] = useState<TabId>("overall");
   const [showAll, setShowAll] = useState(false);
@@ -121,6 +122,14 @@ export default function RsAlpha() {
     ? Math.min(100, Math.round((progress.processed / progress.totalQueued) * 100))
     : 0;
 
+  const formatEta = (sec: number | null): string => {
+    if (sec === null || sec <= 0) return "—";
+    const h = Math.floor(sec / 3600);
+    const m = Math.floor((sec % 3600) / 60);
+    if (h > 0) return `~${h}h ${m}m remaining`;
+    return `~${m}m remaining`;
+  };
+
   return (
     <div className="min-h-screen bg-background">
       <header className="sticky top-0 z-30 border-b border-border bg-background/80 backdrop-blur-md">
@@ -148,18 +157,55 @@ export default function RsAlpha() {
             </TooltipProvider>
           </div>
           <div className="flex items-center gap-2">
-            <button
-              onClick={rebuildUniverse}
-              disabled={isRebuilding}
-              className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-50"
-              title="Rebuild qualified universe from full US market"
-            >
-              {isRebuilding ? (
-                <><Loader2 size={12} className="animate-spin" /> Rebuilding…</>
-              ) : (
-                <><Hammer size={12} /> Rebuild Qualified Universe</>
-              )}
-            </button>
+            {/* Start / Resume / Continue */}
+            {!isRebuilding && (
+              <button
+                onClick={() => rebuildUniverse("resume")}
+                disabled={isMutatingScan}
+                className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-50"
+                title={isPaused ? "Resume the paused scan" : "Start or continue the qualified universe scan"}
+              >
+                {isMutatingScan ? (
+                  <><Loader2 size={12} className="animate-spin" /> Working…</>
+                ) : isPaused ? (
+                  <><Play size={12} /> Resume Scan</>
+                ) : progress.totalQueued > 0 && progress.processed < progress.totalQueued ? (
+                  <><Play size={12} /> Continue Scan</>
+                ) : (
+                  <><Hammer size={12} /> Update Stock List</>
+                )}
+              </button>
+            )}
+
+            {/* Pause */}
+            {isRebuilding && (
+              <button
+                onClick={() => pauseScan()}
+                disabled={isMutatingScan}
+                className="inline-flex items-center gap-1.5 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-1.5 text-xs font-medium text-amber-500 transition-colors hover:bg-amber-500/20 disabled:opacity-50"
+                title="Pause the scan (resumable later)"
+              >
+                {isMutatingScan ? <Loader2 size={12} className="animate-spin" /> : <Pause size={12} />}
+                Pause Scan
+              </button>
+            )}
+
+            {/* Restart from scratch */}
+            {progress.totalQueued > 0 && (
+              <button
+                onClick={() => {
+                  if (confirm("Restart the scan from scratch? This wipes existing progress and re-fetches the full US universe.")) {
+                    rebuildUniverse("restart");
+                  }
+                }}
+                disabled={isMutatingScan}
+                className="inline-flex items-center justify-center rounded-md border border-border px-2 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-50"
+                title="Wipe progress and restart from scratch"
+              >
+                <RotateCcw size={12} />
+              </button>
+            )}
+
             <button
               onClick={recalculateRs}
               disabled={isRecalculating || isRebuilding || stocks.length === 0}
@@ -190,23 +236,30 @@ export default function RsAlpha() {
         </div>
 
         {/* Rebuild progress bar */}
-        {(isRebuilding || progress.status === "running") && (
+        {(isRebuilding || isPaused || (progress.totalQueued > 0 && progress.processed < progress.totalQueued)) && (
           <div className="container pb-2">
-            <div className="rounded-md border border-accent/30 bg-accent/5 px-3 py-2 text-xs">
+            <div className={`rounded-md border px-3 py-2 text-xs ${isPaused ? "border-amber-500/30 bg-amber-500/5" : "border-accent/30 bg-accent/5"}`}>
               <div className="flex items-center justify-between mb-1.5">
                 <span className="text-foreground font-medium">
-                  <Hammer size={11} className="mr-1 inline" />
-                  Rebuilding qualified universe… ({rebuildPctDone}%)
+                  {isPaused ? <Pause size={11} className="mr-1 inline text-amber-500" /> : <Hammer size={11} className="mr-1 inline" />}
+                  {isPaused ? "Scan paused" : "Building qualified universe"} — {rebuildPctDone}%
                 </span>
                 <span className="text-muted-foreground">
-                  {progress.processed.toLocaleString()} / {progress.totalQueued.toLocaleString()} processed · {progress.qualified} qualified
+                  {progress.processed.toLocaleString()} / {progress.totalQueued.toLocaleString()} symbols · {progress.qualified} qualified · {progress.failed} failed
                 </span>
               </div>
               <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
-                <div className="h-full bg-primary transition-all" style={{ width: `${rebuildPctDone}%` }} />
+                <div className={`h-full transition-all ${isPaused ? "bg-amber-500/60" : "bg-primary"}`} style={{ width: `${rebuildPctDone}%` }} />
               </div>
-              <div className="mt-1.5 text-[10px] text-muted-foreground">
-                Background worker processes ~50 symbols/min. You can leave this page — progress continues server-side.
+              <div className="mt-1.5 flex items-center justify-between text-[10px] text-muted-foreground">
+                <span>
+                  {isPaused
+                    ? "Click Resume Scan to continue from where it stopped."
+                    : "~50 symbols/min · runs server-side · safe to close this tab."}
+                </span>
+                {!isPaused && progress.etaSeconds !== null && (
+                  <span className="font-medium">{formatEta(progress.etaSeconds)}</span>
+                )}
               </div>
             </div>
           </div>
@@ -260,8 +313,8 @@ export default function RsAlpha() {
               Click <em>Rebuild Qualified Universe</em> to scan the full US market and find stocks meeting all four quality criteria.
               The scan runs in the background and takes 6–10 hours; results stream in as stocks qualify.
             </p>
-            <button onClick={rebuildUniverse} disabled={isRebuilding} className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50">
-              {isRebuilding ? "Rebuilding…" : "Rebuild Qualified Universe"}
+            <button onClick={() => rebuildUniverse("resume")} disabled={isMutatingScan} className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50">
+              {isMutatingScan ? "Starting…" : "Update Stock List"}
             </button>
           </div>
         ) : (

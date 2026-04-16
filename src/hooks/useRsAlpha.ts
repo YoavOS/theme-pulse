@@ -35,25 +35,26 @@ export interface RsStock {
 }
 
 export interface RebuildProgress {
-  status: "idle" | "running" | "complete";
+  status: "idle" | "running" | "paused" | "complete";
   totalQueued: number;
   processed: number;
   qualified: number;
   failed: number;
   startedAt: string | null;
   lastUpdated: string | null;
+  etaSeconds: number | null; // estimated seconds remaining
 }
 
 export function useRsAlpha() {
   const [stocks, setStocks] = useState<RsStock[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [isRebuilding, setIsRebuilding] = useState(false);
+  const [isMutatingScan, setIsMutatingScan] = useState(false);
   const [isRecalculating, setIsRecalculating] = useState(false);
   const [recalcStatus, setRecalcStatus] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
   const [progress, setProgress] = useState<RebuildProgress>({
     status: "idle", totalQueued: 0, processed: 0, qualified: 0, failed: 0,
-    startedAt: null, lastUpdated: null,
+    startedAt: null, lastUpdated: null, etaSeconds: null,
   });
   const pollRef = useRef<number | null>(null);
 
@@ -100,63 +101,96 @@ export function useRsAlpha() {
     }
   }, []);
 
-  // ── Load progress ──
+  // ── Load progress + compute ETA ──
   const loadProgress = useCallback(async () => {
     const { data } = await supabase.from("rs_scan_progress").select("*").eq("id", 1).maybeSingle();
-    if (data) {
-      setProgress({
-        status: (data.status as any) ?? "idle",
-        totalQueued: data.total_queued ?? 0,
-        processed: data.processed ?? 0,
-        qualified: data.qualified ?? 0,
-        failed: data.failed ?? 0,
-        startedAt: data.started_at,
-        lastUpdated: data.last_updated,
-      });
-      if (data.status === "running") {
-        setIsRebuilding(true);
-      } else {
-        setIsRebuilding(false);
-      }
+    if (!data) return;
+    const status = (data.status as RebuildProgress["status"]) ?? "idle";
+    const total = data.total_queued ?? 0;
+    const processed = data.processed ?? 0;
+    const startedAt = data.started_at;
+
+    let etaSeconds: number | null = null;
+    if (status === "running" && startedAt && processed > 0 && total > processed) {
+      const elapsedSec = (Date.now() - new Date(startedAt).getTime()) / 1000;
+      const rate = processed / elapsedSec; // symbols/sec
+      if (rate > 0) etaSeconds = Math.round((total - processed) / rate);
     }
+
+    setProgress({
+      status,
+      totalQueued: total,
+      processed,
+      qualified: data.qualified ?? 0,
+      failed: data.failed ?? 0,
+      startedAt,
+      lastUpdated: data.last_updated,
+      etaSeconds,
+    });
   }, []);
 
-  // ── Initial load + start progress polling ──
+  // ── Initial load + polling ──
   useEffect(() => {
     loadStocks();
     loadProgress();
-    pollRef.current = window.setInterval(() => {
-      loadProgress();
-    }, 5000);
+    pollRef.current = window.setInterval(loadProgress, 5000);
     return () => {
       if (pollRef.current) window.clearInterval(pollRef.current);
     };
   }, [loadStocks, loadProgress]);
 
-  // Reload stocks when rebuild completes
+  // Reload stocks whenever qualified count grows
   useEffect(() => {
-    if (progress.status === "complete" && progress.qualified > 0) {
+    if (progress.qualified > 0) {
       loadStocks();
     }
-  }, [progress.status, progress.qualified, loadStocks]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [progress.qualified]);
 
-  // ── Trigger heavy rebuild (Stage 1) ──
-  const rebuildUniverse = useCallback(async () => {
+  // ── Start / Resume heavy scan ──
+  // mode "resume" (default) continues from last point; "restart" wipes and reseeds.
+  const rebuildUniverse = useCallback(async (mode: "resume" | "restart" = "resume") => {
     setError(null);
-    setIsRebuilding(true);
+    setIsMutatingScan(true);
     try {
-      const { data, error: fnErr } = await supabase.functions.invoke("seed-universe-queue", { body: {} });
+      const { data, error: fnErr } = await supabase.functions.invoke("seed-universe-queue", {
+        body: { mode },
+      });
       if (fnErr) throw new Error(fnErr.message);
       if (data?.error) throw new Error(data.error);
       await loadProgress();
     } catch (e) {
       console.error("rebuildUniverse error:", e);
       setError(e instanceof Error ? e.message : String(e));
-      setIsRebuilding(false);
+    } finally {
+      setIsMutatingScan(false);
     }
   }, [loadProgress]);
 
-  // ── Recalculate RS scores (Stage 2 - light scan) ──
+  // ── Pause / Resume cron worker ──
+  const pauseScan = useCallback(async () => {
+    setIsMutatingScan(true);
+    try {
+      const { data, error: fnErr } = await supabase.functions.invoke("pause-universe-scan", {
+        body: { action: "pause" },
+      });
+      if (fnErr) throw new Error(fnErr.message);
+      if (data?.error) throw new Error(data.error);
+      await loadProgress();
+    } catch (e) {
+      console.error("pauseScan error:", e);
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setIsMutatingScan(false);
+    }
+  }, [loadProgress]);
+
+  const resumeScan = useCallback(async () => {
+    // Resume = same as rebuild "resume" (re-enables cron, recovers stuck symbols)
+    await rebuildUniverse("resume");
+  }, [rebuildUniverse]);
+
+  // ── Recalculate RS scores (Stage 2) ──
   const recalculateRs = useCallback(async () => {
     setError(null);
     setIsRecalculating(true);
@@ -188,15 +222,22 @@ export function useRsAlpha() {
     }
   }, [loadStocks]);
 
+  const isRebuilding = progress.status === "running";
+  const isPaused = progress.status === "paused";
+
   return {
     stocks,
     isLoading,
     isRebuilding,
+    isPaused,
+    isMutatingScan,
     isRecalculating,
     recalcStatus,
     error,
     progress,
-    rebuildUniverse,
+    rebuildUniverse,         // call with "resume" (default) or "restart"
+    pauseScan,
+    resumeScan,
     recalculateRs,
     reload: loadStocks,
   };

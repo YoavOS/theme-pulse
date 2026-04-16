@@ -65,6 +65,27 @@ Deno.serve(async (req) => {
 
     const supabase = createClient(SB_URL, SB_KEY);
 
+    // 0. Recover symbols stuck in "processing" for >5 min (dead worker)
+    const fiveMinAgo = new Date(Date.now() - 5 * 60_000).toISOString();
+    await supabase
+      .from("stock_scan_queue")
+      .update({ status: "pending" })
+      .eq("status", "processing")
+      .lt("enqueued_at", fiveMinAgo);
+
+    // 0b. Respect pause: if progress.status = 'paused', do nothing
+    const { data: prog } = await supabase
+      .from("rs_scan_progress")
+      .select("status")
+      .eq("id", 1)
+      .maybeSingle();
+    if (prog?.status === "paused") {
+      return new Response(
+        JSON.stringify({ ok: true, processed: 0, message: "scan paused" }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     // 1. Claim a batch of pending symbols
     const { data: pending } = await supabase
       .from("stock_scan_queue")
