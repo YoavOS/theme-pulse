@@ -10,7 +10,9 @@ import { useLiveThemeData } from "@/hooks/useLiveThemeData";
 import { useVolumeDryUp } from "@/hooks/useVolumeDryUp";
 import BubbleChartView from "./BubbleChartView";
 import { useSpyBenchmark, formatRS } from "@/hooks/useSpyBenchmark";
-import CollapsibleSection from "./CollapsibleSection";
+import CollapsibleSection, { useThemeRowToggle } from "./CollapsibleSection";
+import ThemeTickersPanel from "./ThemeTickersPanel";
+import { ChevronRight } from "lucide-react";
 
 const DM_MONO = "'DM Mono', monospace";
 const VIEW_KEY = "overviewView";
