@@ -1,39 +1,13 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
+import { getHistoricalData, YahooPeriod } from "../_shared/yahooHistory.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const YAHOO_DELAY_MS = 500;
-const PERIODS: Array<"1mo" | "3mo" | "6mo"> = ["1mo", "3mo", "6mo"];
-const BATCH_PER_INVOCATION = 30; // symbols processed per invocation (caps Yahoo calls ~ 30*3 = 90)
-
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-
-interface YahooReturn {
-  returnPct: number | null;
-  source: "local" | "yahoo" | "none";
-}
-
-async function yahooReturn(symbol: string, period: "1mo" | "3mo" | "6mo"): Promise<number | null> {
-  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=${period}&interval=1d&includePrePost=false`;
-  try {
-    const res = await fetch(url, {
-      headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" },
-    });
-    if (!res.ok) return null;
-    const data = await res.json();
-    const closes = data?.chart?.result?.[0]?.indicators?.quote?.[0]?.close?.filter((c: any) => c !== null) || [];
-    if (closes.length < 2) return null;
-    const start = closes[0];
-    const end = closes[closes.length - 1];
-    if (start <= 0) return null;
-    return Math.round(((end - start) / start) * 10000) / 100;
-  } catch {
-    return null;
-  }
-}
+const PERIODS: YahooPeriod[] = ["1mo", "3mo", "6mo"];
+const BATCH_PER_INVOCATION = 30; // symbols per invocation
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
