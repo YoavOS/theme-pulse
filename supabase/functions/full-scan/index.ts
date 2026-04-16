@@ -5,6 +5,7 @@ const corsHeaders = {
 };
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { getHistoricalData } from "../_shared/yahooHistory.ts";
 
 const FINNHUB_KEY = Deno.env.get("FINNHUB_API_KEY") || "";
 const TICKERS_PER_CHUNK = 12; // tickers per edge function invocation
