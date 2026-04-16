@@ -194,7 +194,7 @@ Deno.serve(async (req) => {
 
       // Process tickers SEQUENTIALLY — one at a time
       for (const { symbol } of pending) {
-        const data = await fetchTickerData(symbol);
+        const data = await fetchTickerData(sb, symbol);
 
         if (data.error) {
           console.log(`FAILED ${symbol}: ${data.error}`);
