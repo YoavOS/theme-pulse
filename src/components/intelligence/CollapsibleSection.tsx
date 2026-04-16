@@ -4,12 +4,21 @@ import { ChevronDown } from "lucide-react";
 /* ─────────── Page-level controller ─────────── */
 
 type Ctx = {
+  // Section-level (large cards)
   registerSection: (id: string, defaultOpen: boolean) => void;
   isOpen: (id: string) => boolean;
   toggle: (id: string) => void;
   expandAll: () => void;
   collapseAll: () => void;
   count: number;
+
+  // Theme-row-level (per-theme ticker drill-downs)
+  registerThemeRow: (id: string) => void;
+  isThemeRowOpen: (id: string) => boolean;
+  toggleThemeRow: (id: string) => void;
+  expandAllThemeRows: () => void;
+  collapseAllThemeRows: () => void;
+  themeRowCount: number;
 };
 
 const CollapsibleCtx = createContext<Ctx | null>(null);
@@ -29,7 +38,9 @@ export function CollapsibleProvider({
       return {};
     }
   });
+  const [themeRowMap, setThemeRowMap] = useState<Record<string, boolean>>({});
   const known = useRef<Set<string>>(new Set());
+  const knownThemeRows = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     try {
@@ -66,9 +77,40 @@ export function CollapsibleProvider({
     });
   }, []);
 
+  /* ─── Theme-row controls ─── */
+
+  const registerThemeRow = useCallback((id: string) => {
+    if (knownThemeRows.current.has(id)) return;
+    knownThemeRows.current.add(id);
+  }, []);
+
+  const isThemeRowOpen = useCallback((id: string) => themeRowMap[id] ?? false, [themeRowMap]);
+
+  const toggleThemeRow = useCallback(
+    (id: string) => setThemeRowMap(prev => ({ ...prev, [id]: !prev[id] })),
+    [],
+  );
+
+  const expandAllThemeRows = useCallback(() => {
+    setThemeRowMap(() => {
+      const next: Record<string, boolean> = {};
+      knownThemeRows.current.forEach(id => (next[id] = true));
+      return next;
+    });
+  }, []);
+
+  const collapseAllThemeRows = useCallback(() => {
+    setThemeRowMap({});
+  }, []);
+
   const value = useMemo<Ctx>(
-    () => ({ registerSection, isOpen, toggle, expandAll, collapseAll, count: known.current.size }),
-    [registerSection, isOpen, toggle, expandAll, collapseAll],
+    () => ({
+      registerSection, isOpen, toggle, expandAll, collapseAll, count: known.current.size,
+      registerThemeRow, isThemeRowOpen, toggleThemeRow, expandAllThemeRows, collapseAllThemeRows,
+      themeRowCount: knownThemeRows.current.size,
+    }),
+    [registerSection, isOpen, toggle, expandAll, collapseAll,
+     registerThemeRow, isThemeRowOpen, toggleThemeRow, expandAllThemeRows, collapseAllThemeRows],
   );
 
   return <CollapsibleCtx.Provider value={value}>{children}</CollapsibleCtx.Provider>;
@@ -80,25 +122,51 @@ export function useCollapsibleController() {
   return ctx;
 }
 
+/* ─────────── Hook for individual theme rows ─────────── */
+
+export function useThemeRowToggle(id: string) {
+  const { registerThemeRow, isThemeRowOpen, toggleThemeRow } = useCollapsibleController();
+  useEffect(() => { registerThemeRow(id); }, [id, registerThemeRow]);
+  return { open: isThemeRowOpen(id), toggle: () => toggleThemeRow(id) };
+}
+
 /* ─────────── Expand / Collapse All button bar ─────────── */
 
 export function ExpandCollapseAll() {
-  const { expandAll, collapseAll } = useCollapsibleController();
+  const { expandAll, collapseAll, expandAllThemeRows, collapseAllThemeRows } = useCollapsibleController();
   return (
-    <div className="flex items-center gap-1 rounded-lg bg-[rgba(255,255,255,0.03)] p-0.5">
-      <button
-        onClick={expandAll}
-        className="rounded-md px-2.5 py-1 text-[10px] font-medium text-muted-foreground transition-colors hover:bg-[rgba(255,255,255,0.06)] hover:text-foreground"
-      >
-        Expand all
-      </button>
-      <span className="h-3 w-px bg-[rgba(255,255,255,0.08)]" />
-      <button
-        onClick={collapseAll}
-        className="rounded-md px-2.5 py-1 text-[10px] font-medium text-muted-foreground transition-colors hover:bg-[rgba(255,255,255,0.06)] hover:text-foreground"
-      >
-        Collapse all
-      </button>
+    <div className="flex items-center gap-1.5">
+      <div className="flex items-center gap-1 rounded-lg bg-[rgba(255,255,255,0.03)] p-0.5">
+        <button
+          onClick={expandAll}
+          className="rounded-md px-2.5 py-1 text-[10px] font-medium text-muted-foreground transition-colors hover:bg-[rgba(255,255,255,0.06)] hover:text-foreground"
+        >
+          Expand all
+        </button>
+        <span className="h-3 w-px bg-[rgba(255,255,255,0.08)]" />
+        <button
+          onClick={collapseAll}
+          className="rounded-md px-2.5 py-1 text-[10px] font-medium text-muted-foreground transition-colors hover:bg-[rgba(255,255,255,0.06)] hover:text-foreground"
+        >
+          Collapse all
+        </button>
+      </div>
+      <div className="flex items-center gap-1 rounded-lg bg-[rgba(0,245,196,0.06)] p-0.5 border border-[rgba(0,245,196,0.12)]">
+        <button
+          onClick={expandAllThemeRows}
+          className="rounded-md px-2.5 py-1 text-[10px] font-medium text-[#00f5c4] transition-colors hover:bg-[rgba(0,245,196,0.1)]"
+          title="Expand every theme to reveal its underlying tickers"
+        >
+          Show all details
+        </button>
+        <span className="h-3 w-px bg-[rgba(0,245,196,0.15)]" />
+        <button
+          onClick={collapseAllThemeRows}
+          className="rounded-md px-2.5 py-1 text-[10px] font-medium text-[#00f5c4]/80 transition-colors hover:bg-[rgba(0,245,196,0.1)]"
+        >
+          Hide all details
+        </button>
+      </div>
     </div>
   );
 }
@@ -108,14 +176,10 @@ export function ExpandCollapseAll() {
 interface CollapsibleSectionProps {
   id: string;
   title: string;
-  /** Small label rendered after the title, e.g. "12 themes" */
   badge?: ReactNode;
-  /** Compact preview shown when collapsed, e.g. top-3 chips */
   summary?: ReactNode;
-  /** Slot in the header (right-aligned, before chevron). Stops propagation. */
   headerActions?: ReactNode;
   defaultOpen?: boolean;
-  /** Optional accent color for the title hairline */
   accent?: string;
   children: ReactNode;
 }
