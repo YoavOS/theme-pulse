@@ -10,6 +10,7 @@ import { useVolumeDryUp } from "@/hooks/useVolumeDryUp";
 import { calculateDispersion, getDispersionLabel, getDispersionShortLabel } from "@/hooks/useDispersion";
 import { useSpyBenchmark } from "@/hooks/useSpyBenchmark";
 import { useThemeNews, NewsArticle } from "@/hooks/useThemeNews";
+import CollapsibleSection from "./CollapsibleSection";
 
 const DM_MONO = "'DM Mono', monospace";
 const COOLDOWN_MS = 30_000;
