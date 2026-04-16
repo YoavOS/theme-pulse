@@ -1,25 +1,26 @@
-import { useState, useMemo, useEffect, useCallback } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { ArrowLeft, RefreshCw, Loader2, Info, ChevronDown, ChevronUp, ArrowUpDown, Filter, Globe, Database } from "lucide-react";
+import { ArrowLeft, RefreshCw, Loader2, Info, ChevronDown, ChevronUp, ArrowUpDown, Filter, Hammer } from "lucide-react";
 import { useRsAlpha, RsStock, RS_FILTER_THRESHOLDS } from "@/hooks/useRsAlpha";
-import { useFullScan } from "@/hooks/useFullScan";
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip";
 import { Skeleton } from "@/components/ui/skeleton";
 import HelpButton from "@/components/HelpButton";
 
-type TabId = "overall" | "1m" | "3m" | "6m";
-type SortField = "rank" | "symbol" | "themeName" | "rs" | "stockReturn" | "spyReturn" | "price";
+type TabId = "overall" | "1d" | "1m" | "3m" | "6m";
+type SortField = "rank" | "symbol" | "company" | "rs" | "stockReturn" | "spyReturn" | "price";
 type SortDir = "asc" | "desc";
 
 const TABS: { id: TabId; label: string }[] = [
-  { id: "overall", label: "Overall Best RS" },
-  { id: "1m", label: "1 Month Best RS" },
-  { id: "3m", label: "3 Month Best RS" },
-  { id: "6m", label: "6 Month Best RS" },
+  { id: "overall", label: "Overall" },
+  { id: "1d", label: "1 Day" },
+  { id: "1m", label: "1 Month" },
+  { id: "3m", label: "3 Months" },
+  { id: "6m", label: "6 Months" },
 ];
 
 function getRsField(stock: RsStock, tab: TabId): number | null {
   switch (tab) {
+    case "1d": return stock.rs1d;
     case "1m": return stock.rs1m;
     case "3m": return stock.rs3m;
     case "6m": return stock.rs6m;
@@ -28,26 +29,20 @@ function getRsField(stock: RsStock, tab: TabId): number | null {
 }
 function getReturnField(stock: RsStock, tab: TabId): number | null {
   switch (tab) {
+    case "1d": return stock.return1d;
     case "1m": return stock.return1m;
     case "3m": return stock.return3m;
     case "6m": return stock.return6m;
-    default: return stock.return1m;
+    default: return stock.return1m; // Overall column shows 1M return
   }
 }
 function getSpyField(stock: RsStock, tab: TabId): number | null {
   switch (tab) {
+    case "1d": return stock.spyReturn1d;
     case "1m": return stock.spyReturn1m;
     case "3m": return stock.spyReturn3m;
     case "6m": return stock.spyReturn6m;
     default: return stock.spyReturn1m;
-  }
-}
-function getSourceField(stock: RsStock, tab: TabId): string | undefined {
-  switch (tab) {
-    case "1m": return stock.source1m;
-    case "3m": return stock.source3m;
-    case "6m": return stock.source6m;
-    default: return undefined;
   }
 }
 
@@ -74,28 +69,15 @@ function pctDisplay(val: number | null): string {
 
 export default function RsAlpha() {
   const {
-    stocks, isCalculating, lastCalculated, error, filterStats,
-    calculateRs, universeScan, scanUniverse,
+    stocks, isLoading, isRebuilding, isRecalculating, recalcStatus,
+    error, progress, rebuildUniverse, recalculateRs,
   } = useRsAlpha();
   const [activeTab, setActiveTab] = useState<TabId>("overall");
   const [showAll, setShowAll] = useState(false);
   const [sortField, setSortField] = useState<SortField>("rs");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
-  const [isScanning, setIsScanning] = useState(false);
 
-  const handleScanComplete = useCallback(() => {}, []);
-  const { startFullScan, isRunning: isFullScanning, statusText: scanStatus } = useFullScan(handleScanComplete);
-
-  useEffect(() => {
-    if (stocks.length === 0 && !isCalculating) calculateRs();
-  }, []);
-
-  const handleRefresh = useCallback(async () => {
-    setIsScanning(true);
-    try { await startFullScan(); } catch {}
-    await calculateRs();
-    setIsScanning(false);
-  }, [startFullScan, calculateRs]);
+  useEffect(() => { setShowAll(false); }, [activeTab]);
 
   const toggleSort = (field: SortField) => {
     if (sortField === field) setSortDir(d => d === "desc" ? "asc" : "desc");
@@ -108,9 +90,10 @@ export default function RsAlpha() {
       const mul = sortDir === "desc" ? -1 : 1;
       switch (sortField) {
         case "symbol": return mul * a.symbol.localeCompare(b.symbol);
-        case "themeName": return mul * a.themeName.localeCompare(b.themeName);
+        case "company": return mul * (a.companyName ?? "").localeCompare(b.companyName ?? "");
         case "rs": return mul * ((getRsField(a, activeTab) ?? -999) - (getRsField(b, activeTab) ?? -999));
         case "stockReturn": return mul * ((getReturnField(a, activeTab) ?? -999) - (getReturnField(b, activeTab) ?? -999));
+        case "spyReturn": return mul * ((getSpyField(a, activeTab) ?? -999) - (getSpyField(b, activeTab) ?? -999));
         case "price": return mul * ((a.price ?? 0) - (b.price ?? 0));
         default: return 0;
       }
@@ -119,12 +102,6 @@ export default function RsAlpha() {
 
   const displayStocks = showAll ? sortedStocks : sortedStocks.slice(0, 25);
   const hasMore = sortedStocks.length > 25;
-
-  // Check if current tab uses Yahoo data
-  const yahooCount = sortedStocks.filter(s => {
-    const src = getSourceField(s, activeTab);
-    return src === "yahoo";
-  }).length;
 
   const SortHeader = ({ field, label, className = "" }: { field: SortField; label: string; className?: string }) => (
     <button
@@ -140,6 +117,10 @@ export default function RsAlpha() {
     </button>
   );
 
+  const rebuildPctDone = progress.totalQueued > 0
+    ? Math.min(100, Math.round((progress.processed / progress.totalQueued) * 100))
+    : 0;
+
   return (
     <div className="min-h-screen bg-background">
       <header className="sticky top-0 z-30 border-b border-border bg-background/80 backdrop-blur-md">
@@ -154,111 +135,103 @@ export default function RsAlpha() {
                 <TooltipTrigger asChild>
                   <span className="cursor-help text-muted-foreground"><Info size={14} /></span>
                 </TooltipTrigger>
-                <TooltipContent side="bottom" className="max-w-[320px] text-xs">
-                  <p className="font-semibold mb-1">Relative Strength Score</p>
-                  <p className="text-muted-foreground">
-                    RS = Stock % return − SPY % return over the same period.
-                    Overall: 50% 1M + 30% 3M + 20% 6M. Uses Yahoo Finance fallback when local history is insufficient for 3M/6M.
+                <TooltipContent side="bottom" className="max-w-[340px] text-xs">
+                  <p className="font-semibold mb-1">Relative Strength (RS)</p>
+                  <p className="text-muted-foreground mb-2">
+                    RS = Stock % return − SPY % return for each timeframe.
+                    1D uses live scan data; 1M / 3M / 6M use Yahoo Finance with a 24h cache.
                   </p>
+                  <p className="font-semibold mb-1">Overall weighting</p>
+                  <p className="text-muted-foreground">50% × 1M + 30% × 3M + 20% × 6M (weights auto-rebalance if a timeframe is missing).</p>
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
-            {lastCalculated && (
-              <span className="text-xs text-muted-foreground">
-                Updated {lastCalculated.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}
-              </span>
-            )}
           </div>
           <div className="flex items-center gap-2">
-            <TooltipProvider delayDuration={200}>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button
-                    onClick={scanUniverse}
-                    disabled={universeScan.isScanning || isCalculating}
-                    className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-50"
-                  >
-                    {universeScan.isScanning ? (
-                      <><Loader2 size={12} className="animate-spin" /> Scanning…</>
-                    ) : (
-                      <><Globe size={12} /> Expand Universe</>
-                    )}
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent side="bottom" className="max-w-[280px] text-xs">
-                  Scan broader US market via Finnhub to find stocks beyond your themes. Takes several minutes due to API rate limits.
-                  {universeScan.totalInUniverse > 0 && ` Currently ${universeScan.totalInUniverse} stocks in universe.`}
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
             <button
-              onClick={handleRefresh}
-              disabled={isCalculating || isFullScanning || isScanning}
+              onClick={rebuildUniverse}
+              disabled={isRebuilding}
+              className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-50"
+              title="Rebuild qualified universe from full US market"
+            >
+              {isRebuilding ? (
+                <><Loader2 size={12} className="animate-spin" /> Rebuilding…</>
+              ) : (
+                <><Hammer size={12} /> Rebuild Qualified Universe</>
+              )}
+            </button>
+            <button
+              onClick={recalculateRs}
+              disabled={isRecalculating || isRebuilding || stocks.length === 0}
               className="inline-flex items-center gap-1.5 rounded-md border border-primary/40 bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary transition-colors hover:bg-primary/20 disabled:opacity-50"
             >
-              {isCalculating || isFullScanning || isScanning ? (
-                <><Loader2 size={12} className="animate-spin" /> Updating…</>
+              {isRecalculating ? (
+                <><Loader2 size={12} className="animate-spin" /> {recalcStatus || "Recalculating…"}</>
               ) : (
-                <><RefreshCw size={12} /> Refresh & Update All</>
+                <><RefreshCw size={12} /> Recalculate RS Scores</>
               )}
             </button>
             <HelpButton />
           </div>
         </div>
 
-        {/* Filter criteria banner */}
+        {/* Filter banner */}
         <div className="container pb-1.5">
           <div className="flex items-center gap-2 rounded-md border border-border/50 bg-muted/20 px-3 py-1.5 text-[11px] text-muted-foreground">
             <Filter size={11} className="shrink-0" />
             <span>
-              Showing stocks with: Market Cap &gt; ${RS_FILTER_THRESHOLDS.MIN_MARKET_CAP >= 1000 ? `${RS_FILTER_THRESHOLDS.MIN_MARKET_CAP / 1000}B` : `${RS_FILTER_THRESHOLDS.MIN_MARKET_CAP}M`}
-              {" · "}Avg Dollar Volume &gt; ${(RS_FILTER_THRESHOLDS.MIN_DOLLAR_VOLUME / 1_000_000).toFixed(0)}M/day
+              Showing RS rankings from <strong className="text-foreground">{stocks.length}</strong> qualified stocks
+              (Market Cap &gt; ${RS_FILTER_THRESHOLDS.MIN_MARKET_CAP / 1000}B
+              {" · "}Avg Dollar Volume &gt; ${(RS_FILTER_THRESHOLDS.MIN_DOLLAR_VOLUME / 1_000_000).toFixed(0)}M
               {" · "}Avg Daily Range &gt; {RS_FILTER_THRESHOLDS.MIN_AVG_DAILY_RANGE}%
-              {" · "}Price &gt; ${RS_FILTER_THRESHOLDS.MIN_PRICE}
+              {" · "}Price &gt; ${RS_FILTER_THRESHOLDS.MIN_PRICE})
             </span>
-            {filterStats && (
-              <span className="ml-auto flex items-center gap-1.5 text-[10px] opacity-70">
-                {filterStats.universeSource === "universe_table" && <Globe size={9} />}
-                {filterStats.universeSource === "themes" && <Database size={9} />}
-                {filterStats.passedFilter}/{filterStats.totalBeforeFilter} qualified
-              </span>
-            )}
           </div>
         </div>
 
-        {/* Universe scan progress */}
-        {universeScan.isScanning && universeScan.progress && (
-          <div className="container pb-1.5">
-            <div className="rounded-md border border-accent/20 bg-accent/5 px-3 py-1.5 text-xs text-accent-foreground">
-              <Globe size={11} className="mr-1 inline" />
-              {universeScan.progress}
-            </div>
-          </div>
-        )}
-
-        {/* Loading status */}
-        {(isCalculating || isFullScanning || isScanning) && (
+        {/* Rebuild progress bar */}
+        {(isRebuilding || progress.status === "running") && (
           <div className="container pb-2">
-            <div className="rounded-md border border-primary/20 bg-primary/5 px-3 py-2 text-xs text-primary">
-              <Loader2 size={12} className="mr-1.5 inline animate-spin" />
-              {isFullScanning ? scanStatus || "Updating historical data for all stocks…" : "Calculating RS scores (using Yahoo Finance for 3M/6M if needed)…"}
-              <span className="text-muted-foreground ml-2">(this may take a while)</span>
+            <div className="rounded-md border border-accent/30 bg-accent/5 px-3 py-2 text-xs">
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-foreground font-medium">
+                  <Hammer size={11} className="mr-1 inline" />
+                  Rebuilding qualified universe… ({rebuildPctDone}%)
+                </span>
+                <span className="text-muted-foreground">
+                  {progress.processed.toLocaleString()} / {progress.totalQueued.toLocaleString()} processed · {progress.qualified} qualified
+                </span>
+              </div>
+              <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
+                <div className="h-full bg-primary transition-all" style={{ width: `${rebuildPctDone}%` }} />
+              </div>
+              <div className="mt-1.5 text-[10px] text-muted-foreground">
+                Background worker processes ~50 symbols/min. You can leave this page — progress continues server-side.
+              </div>
             </div>
           </div>
         )}
 
-        {/* Tab navigation */}
+        {progress.status === "complete" && progress.totalQueued > 0 && !isRebuilding && (
+          <div className="container pb-2">
+            <div className="rounded-md border border-[hsl(160,70%,50%)]/30 bg-[hsl(160,70%,50%)]/5 px-3 py-1.5 text-xs text-[hsl(160,70%,50%)]">
+              ✓ Universe rebuild complete — {progress.qualified} stocks meet all four criteria.
+            </div>
+          </div>
+        )}
+
+        {/* Tabs */}
         <div className="container pb-2">
           <div className="flex items-center gap-1 rounded-lg bg-muted/30 p-1 w-fit">
             {TABS.map(tab => (
               <button
                 key={tab.id}
-                onClick={() => { setActiveTab(tab.id); setShowAll(false); setSortField("rs"); setSortDir("desc"); }}
+                onClick={() => { setActiveTab(tab.id); setSortField("rs"); setSortDir("desc"); }}
                 className={`relative rounded-md px-3.5 py-1.5 text-xs font-medium transition-all ${
                   activeTab === tab.id ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
                 }`}
               >
-                {tab.label}
+                {tab.label} Best RS
                 {activeTab === tab.id && <span className="absolute bottom-0 left-1/2 -translate-x-1/2 h-0.5 w-6 rounded-full bg-primary" />}
               </button>
             ))}
@@ -271,39 +244,32 @@ export default function RsAlpha() {
           <div className="mb-4 rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">{error}</div>
         )}
 
-        {/* Yahoo fallback note for 3M/6M */}
-        {(activeTab === "3m" || activeTab === "6m") && yahooCount > 0 && (
-          <div className="mb-3 rounded-md border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-xs text-amber-400 flex items-center gap-2">
-            <Info size={12} className="shrink-0" />
-            {yahooCount} stock{yahooCount !== 1 ? "s" : ""} using Yahoo Finance fallback data (local EOD history insufficient for {activeTab === "3m" ? "3-month" : "6-month"} calculations).
-          </div>
-        )}
+        {/* Recommendation note */}
+        <div className="mb-4 rounded-md border border-border/50 bg-muted/10 px-3 py-2 text-[11px] text-muted-foreground">
+          <strong className="text-foreground">Tip:</strong> Run <em>Rebuild Qualified Universe</em> once per week (or when market conditions shift) to refresh the stock pool. The scan runs in the background and may take several hours. Use <em>Recalculate RS Scores</em> daily for fresh rankings on the existing universe.
+        </div>
 
-        {isCalculating && stocks.length === 0 ? (
+        {isLoading && stocks.length === 0 ? (
           <div className="space-y-2">
             {Array.from({ length: 10 }).map((_, i) => <Skeleton key={i} className="h-12 w-full rounded-md" />)}
           </div>
-        ) : stocks.length === 0 && !isCalculating ? (
+        ) : stocks.length === 0 ? (
           <div className="flex flex-col items-center justify-center rounded-lg border border-border bg-card py-20 text-center">
-            <h3 className="text-lg font-semibold text-foreground mb-1">No RS Data Yet</h3>
-            <p className="text-sm text-muted-foreground mb-4">
-              Run a Full Scan first, or expand the stock universe to scan beyond your themes.
+            <h3 className="text-lg font-semibold text-foreground mb-1">No Qualified Universe Yet</h3>
+            <p className="text-sm text-muted-foreground mb-4 max-w-md">
+              Click <em>Rebuild Qualified Universe</em> to scan the full US market and find stocks meeting all four quality criteria.
+              The scan runs in the background and takes 6–10 hours; results stream in as stocks qualify.
             </p>
-            <div className="flex gap-3">
-              <button onClick={handleRefresh} disabled={isFullScanning} className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90">
-                {isFullScanning ? "Scanning…" : "Refresh & Update All"}
-              </button>
-              <button onClick={scanUniverse} disabled={universeScan.isScanning} className="rounded-md border border-border px-4 py-2 text-sm font-medium text-muted-foreground hover:bg-accent">
-                {universeScan.isScanning ? "Scanning…" : "Expand Universe"}
-              </button>
-            </div>
+            <button onClick={rebuildUniverse} disabled={isRebuilding} className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50">
+              {isRebuilding ? "Rebuilding…" : "Rebuild Qualified Universe"}
+            </button>
           </div>
         ) : (
           <>
             {/* Summary stats */}
             <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
               <div className="rounded-lg border border-border bg-card p-3">
-                <div className="text-xs text-muted-foreground">Filtered Stocks</div>
+                <div className="text-xs text-muted-foreground">Qualified Stocks</div>
                 <div className="text-xl font-bold text-foreground">{sortedStocks.length}</div>
               </div>
               <div className="rounded-lg border border-border bg-card p-3">
@@ -334,10 +300,10 @@ export default function RsAlpha() {
                     <tr className="border-b border-border bg-muted/30">
                       <th className="px-3 py-2.5 text-left text-xs font-medium text-muted-foreground w-12">#</th>
                       <th className="px-3 py-2.5 text-left"><SortHeader field="symbol" label="Ticker" /></th>
-                      <th className="px-3 py-2.5 text-left"><SortHeader field="themeName" label="Theme / Sector" /></th>
+                      <th className="px-3 py-2.5 text-left"><SortHeader field="company" label="Company" /></th>
                       <th className="px-3 py-2.5 text-right"><SortHeader field="rs" label="RS Score" className="justify-end" /></th>
                       <th className="px-3 py-2.5 text-right"><SortHeader field="stockReturn" label="Stock Return" className="justify-end" /></th>
-                      <th className="px-3 py-2.5 text-right text-xs font-medium text-muted-foreground">SPY Return</th>
+                      <th className="px-3 py-2.5 text-right"><SortHeader field="spyReturn" label="SPY Return" className="justify-end" /></th>
                       <th className="px-3 py-2.5 text-right"><SortHeader field="price" label="Price" className="justify-end" /></th>
                     </tr>
                   </thead>
@@ -346,17 +312,13 @@ export default function RsAlpha() {
                       const rs = getRsField(stock, activeTab);
                       const ret = getReturnField(stock, activeTab);
                       const spy = getSpyField(stock, activeTab);
-                      const src = getSourceField(stock, activeTab);
                       return (
                         <tr key={stock.symbol} className={`border-b border-border/50 transition-colors hover:bg-muted/20 ${rsBg(rs)}`}>
                           <td className="px-3 py-2 text-xs text-muted-foreground">{idx + 1}</td>
-                          <td className="px-3 py-2 font-mono font-semibold text-foreground">
-                            {stock.symbol}
-                            {src === "yahoo" && (
-                              <span className="ml-1 text-[9px] text-amber-500/70" title="Yahoo Finance data">Y</span>
-                            )}
+                          <td className="px-3 py-2 font-mono font-semibold text-foreground">{stock.symbol}</td>
+                          <td className="px-3 py-2 text-muted-foreground max-w-[240px] truncate" title={stock.companyName ?? ""}>
+                            {stock.companyName ?? stock.sector ?? "—"}
                           </td>
-                          <td className="px-3 py-2 text-muted-foreground max-w-[180px] truncate">{stock.themeName}</td>
                           <td className={`px-3 py-2 text-right font-mono font-semibold ${rsColor(rs)}`}>{pctDisplay(rs)}</td>
                           <td className={`px-3 py-2 text-right font-mono ${ret !== null && ret >= 0 ? "text-[hsl(160,60%,55%)]" : "text-destructive/80"}`}>
                             {pctDisplay(ret)}
