@@ -16,7 +16,47 @@ Deno.serve(async (req) => {
 
     const supabase = createClient(SB_URL, SB_KEY);
 
-    // 1. Fetch full US symbol list
+    // Parse optional body: { mode: "resume" | "restart" }
+    let mode: "resume" | "restart" = "resume";
+    try {
+      const body = await req.json();
+      if (body?.mode === "restart") mode = "restart";
+    } catch (_) { /* no body */ }
+
+    // ── Check if there's already pending/processing work ──
+    const { count: pendingCount } = await supabase
+      .from("stock_scan_queue")
+      .select("*", { count: "exact", head: true })
+      .in("status", ["pending", "processing"]);
+
+    // ── RESUME path: pending work exists and user did not force restart ──
+    if (mode === "resume" && (pendingCount ?? 0) > 0) {
+      // Recover any "processing" symbols stuck from a dead worker (>5 min old)
+      const fiveMinAgo = new Date(Date.now() - 5 * 60_000).toISOString();
+      await supabase
+        .from("stock_scan_queue")
+        .update({ status: "pending" })
+        .eq("status", "processing")
+        .lt("enqueued_at", fiveMinAgo);
+
+      // Mark progress as running again
+      await supabase
+        .from("rs_scan_progress")
+        .update({ status: "running", last_updated: new Date().toISOString() })
+        .eq("id", 1);
+
+      // Re-enable cron job
+      try {
+        await supabase.rpc("set_universe_cron_active", { p_active: true });
+      } catch (_) { /* function may not exist yet, ignore */ }
+
+      return new Response(
+        JSON.stringify({ ok: true, mode: "resumed", pending: pendingCount }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // ── RESTART path: fetch full universe and reseed ──
     const res = await fetch(
       `https://finnhub.io/api/v1/stock/symbol?exchange=US&token=${FINNHUB_KEY}`
     );
@@ -29,11 +69,11 @@ Deno.serve(async (req) => {
 
     console.log(`Seeding ${symbols.length} symbols into scan queue`);
 
-    // 2. Clear existing queue + qualified universe
+    // Clear queue + qualified universe
     await supabase.from("stock_scan_queue").delete().neq("symbol", "__none__");
     await supabase.from("qualified_rs_universe").delete().neq("symbol", "__none__");
 
-    // 3. Insert in batches of 1000
+    // Insert in batches of 1000
     let inserted = 0;
     for (let i = 0; i < symbols.length; i += 1000) {
       const batch = symbols.slice(i, i + 1000).map((s) => ({
@@ -47,7 +87,7 @@ Deno.serve(async (req) => {
       else inserted += batch.length;
     }
 
-    // 4. Reset progress tracker
+    // Reset progress tracker
     await supabase
       .from("rs_scan_progress")
       .update({
@@ -61,8 +101,13 @@ Deno.serve(async (req) => {
       })
       .eq("id", 1);
 
+    // Enable cron
+    try {
+      await supabase.rpc("set_universe_cron_active", { p_active: true });
+    } catch (_) { /* ignore if helper not deployed */ }
+
     return new Response(
-      JSON.stringify({ ok: true, total_queued: inserted }),
+      JSON.stringify({ ok: true, mode: "restarted", total_queued: inserted }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (err) {
