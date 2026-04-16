@@ -370,7 +370,7 @@ export default function TrendsTab() {
             Need at least 2 themes with EOD data to show correlations
           </p>
         )}
-      </div>
+      </CollapsibleSection>
     </div>
   );
 }
