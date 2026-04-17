@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { ArrowLeft, RefreshCw, Loader2, Info, ChevronDown, ChevronUp, ArrowUpDown, Filter, Hammer, Pause, Play, RotateCcw, Copy, Download, Settings2 } from "lucide-react";
+import { ArrowLeft, RefreshCw, Loader2, Info, ChevronDown, ChevronUp, ArrowUpDown, Filter, Hammer, Pause, Play, RotateCcw, Copy, Download, Settings2, PieChart as PieChartIcon } from "lucide-react";
 import { toast } from "sonner";
 import { useRsAlpha, RsStock, RS_FILTER_THRESHOLDS } from "@/hooks/useRsAlpha";
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip";
@@ -9,6 +9,7 @@ import HelpButton from "@/components/HelpButton";
 import OverallWeightsPanel, { RsWeights, DEFAULT_RS_WEIGHTS, normalizeWeights } from "@/components/rs/OverallWeightsPanel";
 import RsRatingBadge, { computeRsRatings } from "@/components/rs/RsRatingBadge";
 import CustomTradingViewListModal from "@/components/rs/CustomTradingViewListModal";
+import SectorDistributionModal from "@/components/rs/SectorDistributionModal";
 
 type TabId = "overall" | "1d" | "1w" | "1m" | "3m" | "6m";
 type SortField = "rank" | "symbol" | "company" | "rs" | "rating" | "stockReturn" | "spyReturn" | "price";
@@ -88,6 +89,7 @@ export default function RsAlpha() {
   const [sortField, setSortField] = useState<SortField>("rs");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [customListOpen, setCustomListOpen] = useState(false);
+  const [sectorDistOpen, setSectorDistOpen] = useState(false);
   const [hideOtc, setHideOtc] = useState<boolean>(() => {
     const saved = typeof window !== "undefined" ? localStorage.getItem("rs-hide-otc") : null;
     return saved === null ? true : saved === "true";
@@ -499,6 +501,13 @@ export default function RsAlpha() {
                     <Download size={12} /> Download .txt
                   </button>
                   <button
+                    onClick={() => setSectorDistOpen(true)}
+                    className="inline-flex items-center gap-1.5 rounded-md border border-accent/60 bg-accent/15 px-3 py-1.5 text-xs font-semibold text-foreground transition-colors hover:bg-accent/25"
+                    title="View interactive GICS sector breakdown of this list"
+                  >
+                    <PieChartIcon size={12} /> Sector Distribution
+                  </button>
+                  <button
                     onClick={() => setCustomListOpen(true)}
                     className="inline-flex items-center gap-1.5 rounded-md border border-primary/60 bg-primary/15 px-3 py-1.5 text-xs font-semibold text-primary transition-colors hover:bg-primary/25"
                     title="Open custom filters to build a refined TradingView list"
@@ -578,6 +587,18 @@ export default function RsAlpha() {
       <CustomTradingViewListModal
         open={customListOpen}
         onOpenChange={setCustomListOpen}
+        tabId={activeTab}
+        tabLabel={`${TABS.find(t => t.id === activeTab)?.label ?? ""} Best RS`}
+        stocks={sortedStocks}
+        ratingMap={ratingMap}
+        getRsForTab={getRsForTab}
+        getReturnField={getReturnField}
+        isOtcSymbol={isOtcSymbol}
+      />
+
+      <SectorDistributionModal
+        open={sectorDistOpen}
+        onOpenChange={setSectorDistOpen}
         tabId={activeTab}
         tabLabel={`${TABS.find(t => t.id === activeTab)?.label ?? ""} Best RS`}
         stocks={sortedStocks}
