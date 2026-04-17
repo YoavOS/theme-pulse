@@ -1,5 +1,7 @@
 import { useMemo, useState } from "react";
-import { Copy, Download, Settings2, X } from "lucide-react";
+import { Copy, Download, Settings2, X, Check, ChevronDown } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Slider } from "@/components/ui/slider";
@@ -34,6 +36,30 @@ export default function CustomTradingViewListModal({
   const [minAdr, setMinAdr] = useState<number>(3.0);
   const [excludeOtc, setExcludeOtc] = useState<boolean>(true);
   const [sortBy, setSortBy] = useState<SortBy>("rs");
+  const [excludeSectorsOn, setExcludeSectorsOn] = useState<boolean>(false);
+  const [excludedSectors, setExcludedSectors] = useState<Set<string>>(new Set());
+  const [sectorSearch, setSectorSearch] = useState<string>("");
+  const [sectorPopoverOpen, setSectorPopoverOpen] = useState<boolean>(false);
+
+  const allSectors = useMemo(() => {
+    const set = new Set<string>();
+    stocks.forEach(s => { if (s.sector && s.sector.trim()) set.add(s.sector.trim()); });
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [stocks]);
+
+  const filteredSectors = useMemo(() => {
+    const q = sectorSearch.trim().toLowerCase();
+    if (!q) return allSectors;
+    return allSectors.filter(s => s.toLowerCase().includes(q));
+  }, [allSectors, sectorSearch]);
+
+  const toggleSector = (sec: string) => {
+    setExcludedSectors(prev => {
+      const next = new Set(prev);
+      if (next.has(sec)) next.delete(sec); else next.add(sec);
+      return next;
+    });
+  };
 
   const filtered = useMemo(() => {
     let list = stocks.filter(s => {
@@ -43,6 +69,9 @@ export default function CustomTradingViewListModal({
       if (s.adrPercent === null || s.adrPercent < minAdr) return false;
       if (acceleratingOnly) {
         if (s.rs1m === null || s.rs3m === null || !(s.rs1m > s.rs3m)) return false;
+      }
+      if (excludeSectorsOn && excludedSectors.size > 0) {
+        if (s.sector && excludedSectors.has(s.sector.trim())) return false;
       }
       return true;
     });
@@ -55,7 +84,7 @@ export default function CustomTradingViewListModal({
 
     if (topN < TOPN_MAX) list = list.slice(0, topN);
     return list;
-  }, [stocks, ratingMap, minRating, minAdr, acceleratingOnly, excludeOtc, sortBy, topN, tabId, getRsForTab, getReturnField, isOtcSymbol]);
+  }, [stocks, ratingMap, minRating, minAdr, acceleratingOnly, excludeOtc, sortBy, topN, tabId, getRsForTab, getReturnField, isOtcSymbol, excludeSectorsOn, excludedSectors]);
 
   const symbols = filtered.map(s => s.symbol);
 
@@ -199,6 +228,92 @@ export default function CustomTradingViewListModal({
                 <span className="block text-[10px] text-muted-foreground">Hide foreign / pink sheets</span>
               </span>
             </label>
+          </div>
+
+          {/* Exclude Sector / Industry */}
+          <div className="space-y-2 rounded-md border border-border bg-muted/20 px-3 py-2.5">
+            <div className="flex items-center justify-between">
+              <label className="flex items-center gap-2 text-xs cursor-pointer">
+                <Checkbox checked={excludeSectorsOn} onCheckedChange={(v) => setExcludeSectorsOn(!!v)} />
+                <span>
+                  <span className="font-medium text-foreground">Exclude Sector / Industry</span>
+                  <span className="block text-[10px] text-muted-foreground">
+                    {excludeSectorsOn
+                      ? excludedSectors.size > 0
+                        ? `${excludedSectors.size} excluded`
+                        : "Pick sectors to exclude"
+                      : "Off"}
+                  </span>
+                </span>
+              </label>
+              <Popover open={sectorPopoverOpen} onOpenChange={setSectorPopoverOpen}>
+                <PopoverTrigger asChild>
+                  <button
+                    disabled={!excludeSectorsOn || allSectors.length === 0}
+                    className="inline-flex items-center gap-1.5 rounded-md border border-border bg-background px-2.5 py-1 text-[11px] font-medium text-foreground hover:bg-accent disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    {excludedSectors.size > 0 ? `${excludedSectors.size} selected` : "Choose sectors"}
+                    <ChevronDown size={12} />
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent className="w-72 p-0" align="end">
+                  <div className="border-b border-border p-2">
+                    <Input
+                      autoFocus
+                      placeholder="Search sectors…"
+                      value={sectorSearch}
+                      onChange={(e) => setSectorSearch(e.target.value)}
+                      className="h-7 text-xs"
+                    />
+                  </div>
+                  <div className="max-h-64 overflow-y-auto py-1">
+                    {filteredSectors.length === 0 ? (
+                      <div className="px-3 py-4 text-center text-[11px] text-muted-foreground">
+                        No sectors found
+                      </div>
+                    ) : filteredSectors.map(sec => {
+                      const checked = excludedSectors.has(sec);
+                      return (
+                        <button
+                          key={sec}
+                          onClick={() => toggleSector(sec)}
+                          className="flex w-full items-center justify-between gap-2 px-3 py-1.5 text-left text-xs hover:bg-accent"
+                        >
+                          <span className={checked ? "font-medium text-foreground" : "text-muted-foreground"}>{sec}</span>
+                          {checked && <Check size={12} className="text-primary" />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {excludedSectors.size > 0 && (
+                    <div className="flex items-center justify-between border-t border-border px-2 py-1.5">
+                      <span className="text-[10px] text-muted-foreground">{excludedSectors.size} selected</span>
+                      <button
+                        onClick={() => setExcludedSectors(new Set())}
+                        className="text-[10px] font-medium text-primary hover:underline"
+                      >
+                        Clear all
+                      </button>
+                    </div>
+                  )}
+                </PopoverContent>
+              </Popover>
+            </div>
+            {excludeSectorsOn && excludedSectors.size > 0 && (
+              <div className="flex flex-wrap gap-1 pt-1">
+                {Array.from(excludedSectors).map(sec => (
+                  <button
+                    key={sec}
+                    onClick={() => toggleSector(sec)}
+                    className="inline-flex items-center gap-1 rounded-md border border-destructive/40 bg-destructive/10 px-2 py-0.5 text-[10px] font-medium text-destructive hover:bg-destructive/20"
+                    title="Click to remove"
+                  >
+                    {sec}
+                    <X size={10} />
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Live preview */}
