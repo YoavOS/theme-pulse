@@ -63,11 +63,28 @@ Deno.serve(async (req) => {
     if (!res.ok) throw new Error(`Finnhub symbol list failed: ${res.status}`);
     const data = await res.json();
 
+    // Allowed major US exchanges only — block OTC/Pink/Grey markets at the source.
+    const ALLOWED_MICS = new Set([
+      "XNYS", "XNAS", "XASE", "ARCX", "BATS", "IEXG", "XCIS", "XNGS", "XNCM", "XNMS",
+    ]);
+    const OTC_HINT = /\b(OTC|PINK|GREY|GRAY|OTCM|OTCBB|OTCPK|OOTC)\b/i;
+
     const symbols: string[] = data
-      .filter((s: any) => s.type === "Common Stock" && s.symbol && !s.symbol.includes("."))
+      .filter((s: any) => {
+        if (!s.symbol || s.type !== "Common Stock") return false;
+        // Block any ticker with suffixes (.PK / .OB / .OTC etc.)
+        if (s.symbol.includes(".")) return false;
+        // Block 5-letter symbols ending in F (foreign OTC convention, e.g. FKURF)
+        if (/^[A-Z]{5}$/.test(s.symbol) && s.symbol.endsWith("F")) return false;
+        // Block by exchange MIC if present — only allow whitelisted majors
+        if (s.mic && !ALLOWED_MICS.has(s.mic)) return false;
+        // Block by exchange string mentioning OTC/Pink/Grey
+        if (s.exchange && OTC_HINT.test(s.exchange)) return false;
+        return true;
+      })
       .map((s: any) => s.symbol);
 
-    console.log(`Seeding ${symbols.length} symbols into scan queue`);
+    console.log(`Seeding ${symbols.length} symbols into scan queue (OTC excluded)`);
 
     // Clear queue + qualified universe
     await supabase.from("stock_scan_queue").delete().neq("symbol", "__none__");
