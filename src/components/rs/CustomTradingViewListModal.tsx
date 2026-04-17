@@ -7,6 +7,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Slider } from "@/components/ui/slider";
 import { Checkbox } from "@/components/ui/checkbox";
 import { RsStock } from "@/hooks/useRsAlpha";
+import { ALL_GICS_SECTORS, GICS_SECTORS, expandSelectedToIndustries } from "@/lib/sectorTaxonomy";
 
 export type CustomListTab = "overall" | "1d" | "1m" | "3m" | "6m";
 type SortBy = "rs" | "rating" | "return";
@@ -41,17 +42,45 @@ export default function CustomTradingViewListModal({
   const [sectorSearch, setSectorSearch] = useState<string>("");
   const [sectorPopoverOpen, setSectorPopoverOpen] = useState<boolean>(false);
 
-  const allSectors = useMemo(() => {
+  // Industries actually present in the qualified universe (used to show counts and an "Other" group)
+  const universeIndustries = useMemo(() => {
     const set = new Set<string>();
     stocks.forEach(s => { if (s.sector && s.sector.trim()) set.add(s.sector.trim()); });
-    return Array.from(set).sort((a, b) => a.localeCompare(b));
+    return set;
   }, [stocks]);
 
-  const filteredSectors = useMemo(() => {
+  // Build groups: GICS sector -> [industries], plus an "Other" bucket for unmapped strings present in the data.
+  const groupedSectors = useMemo(() => {
+    const groups: { gics: string; industries: string[] }[] = [];
+    const mappedLower = new Set<string>();
+    for (const gics of ALL_GICS_SECTORS) {
+      const industries = [...GICS_SECTORS[gics]].sort((a, b) => a.localeCompare(b));
+      industries.forEach(i => mappedLower.add(i.toLowerCase().trim()));
+      groups.push({ gics, industries });
+    }
+    // Anything in the universe that isn't mapped → "Other"
+    const other: string[] = [];
+    universeIndustries.forEach(ind => {
+      if (!mappedLower.has(ind.toLowerCase().trim())) other.push(ind);
+    });
+    if (other.length > 0) {
+      groups.push({ gics: "Other", industries: other.sort((a, b) => a.localeCompare(b)) });
+    }
+    return groups;
+  }, [universeIndustries]);
+
+  const filteredGroups = useMemo(() => {
     const q = sectorSearch.trim().toLowerCase();
-    if (!q) return allSectors;
-    return allSectors.filter(s => s.toLowerCase().includes(q));
-  }, [allSectors, sectorSearch]);
+    if (!q) return groupedSectors;
+    return groupedSectors
+      .map(g => ({
+        gics: g.gics,
+        industries: g.industries.filter(i => i.toLowerCase().includes(q)),
+        match: g.gics.toLowerCase().includes(q),
+      }))
+      .filter(g => g.match || g.industries.length > 0)
+      .map(g => ({ gics: g.gics, industries: g.match && g.industries.length === 0 ? GICS_SECTORS[g.gics] ?? [] : g.industries }));
+  }, [groupedSectors, sectorSearch]);
 
   const toggleSector = (sec: string) => {
     setExcludedSectors(prev => {
@@ -71,7 +100,8 @@ export default function CustomTradingViewListModal({
         if (s.rs1m === null || s.rs3m === null || !(s.rs1m > s.rs3m)) return false;
       }
       if (excludeSectorsOn && excludedSectors.size > 0) {
-        if (s.sector && excludedSectors.has(s.sector.trim())) return false;
+        const expanded = expandedExclusions;
+        if (s.sector && expanded.has(s.sector.toLowerCase().trim())) return false;
       }
       return true;
     });
