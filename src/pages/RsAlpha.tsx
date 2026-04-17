@@ -492,6 +492,13 @@ export default function RsAlpha() {
                   >
                     <Download size={12} /> Download .txt
                   </button>
+                  <button
+                    onClick={() => setCustomListOpen(true)}
+                    className="inline-flex items-center gap-1.5 rounded-md border border-primary/60 bg-primary/15 px-3 py-1.5 text-xs font-semibold text-primary transition-colors hover:bg-primary/25"
+                    title="Open custom filters to build a refined TradingView list"
+                  >
+                    <Settings2 size={12} /> Create Custom TradingView List
+                  </button>
                 </div>
               </div>
             )}
