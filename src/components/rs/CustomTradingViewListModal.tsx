@@ -230,6 +230,92 @@ export default function CustomTradingViewListModal({
             </label>
           </div>
 
+          {/* Exclude Sector / Industry */}
+          <div className="space-y-2 rounded-md border border-border bg-muted/20 px-3 py-2.5">
+            <div className="flex items-center justify-between">
+              <label className="flex items-center gap-2 text-xs cursor-pointer">
+                <Checkbox checked={excludeSectorsOn} onCheckedChange={(v) => setExcludeSectorsOn(!!v)} />
+                <span>
+                  <span className="font-medium text-foreground">Exclude Sector / Industry</span>
+                  <span className="block text-[10px] text-muted-foreground">
+                    {excludeSectorsOn
+                      ? excludedSectors.size > 0
+                        ? `${excludedSectors.size} excluded`
+                        : "Pick sectors to exclude"
+                      : "Off"}
+                  </span>
+                </span>
+              </label>
+              <Popover open={sectorPopoverOpen} onOpenChange={setSectorPopoverOpen}>
+                <PopoverTrigger asChild>
+                  <button
+                    disabled={!excludeSectorsOn || allSectors.length === 0}
+                    className="inline-flex items-center gap-1.5 rounded-md border border-border bg-background px-2.5 py-1 text-[11px] font-medium text-foreground hover:bg-accent disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    {excludedSectors.size > 0 ? `${excludedSectors.size} selected` : "Choose sectors"}
+                    <ChevronDown size={12} />
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent className="w-72 p-0" align="end">
+                  <div className="border-b border-border p-2">
+                    <Input
+                      autoFocus
+                      placeholder="Search sectors…"
+                      value={sectorSearch}
+                      onChange={(e) => setSectorSearch(e.target.value)}
+                      className="h-7 text-xs"
+                    />
+                  </div>
+                  <div className="max-h-64 overflow-y-auto py-1">
+                    {filteredSectors.length === 0 ? (
+                      <div className="px-3 py-4 text-center text-[11px] text-muted-foreground">
+                        No sectors found
+                      </div>
+                    ) : filteredSectors.map(sec => {
+                      const checked = excludedSectors.has(sec);
+                      return (
+                        <button
+                          key={sec}
+                          onClick={() => toggleSector(sec)}
+                          className="flex w-full items-center justify-between gap-2 px-3 py-1.5 text-left text-xs hover:bg-accent"
+                        >
+                          <span className={checked ? "font-medium text-foreground" : "text-muted-foreground"}>{sec}</span>
+                          {checked && <Check size={12} className="text-primary" />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {excludedSectors.size > 0 && (
+                    <div className="flex items-center justify-between border-t border-border px-2 py-1.5">
+                      <span className="text-[10px] text-muted-foreground">{excludedSectors.size} selected</span>
+                      <button
+                        onClick={() => setExcludedSectors(new Set())}
+                        className="text-[10px] font-medium text-primary hover:underline"
+                      >
+                        Clear all
+                      </button>
+                    </div>
+                  )}
+                </PopoverContent>
+              </Popover>
+            </div>
+            {excludeSectorsOn && excludedSectors.size > 0 && (
+              <div className="flex flex-wrap gap-1 pt-1">
+                {Array.from(excludedSectors).map(sec => (
+                  <button
+                    key={sec}
+                    onClick={() => toggleSector(sec)}
+                    className="inline-flex items-center gap-1 rounded-md border border-destructive/40 bg-destructive/10 px-2 py-0.5 text-[10px] font-medium text-destructive hover:bg-destructive/20"
+                    title="Click to remove"
+                  >
+                    {sec}
+                    <X size={10} />
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
           {/* Live preview */}
           <div className="rounded-md border border-primary/30 bg-primary/5 px-3 py-2.5 text-xs">
             <div className="flex items-center justify-between">
