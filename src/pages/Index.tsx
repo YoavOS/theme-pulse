@@ -941,8 +941,10 @@ export default function Index() {
               getThemeFundamentalScore={getThemeFundamentalScore}
             />
           )}
+            </div>
+          </main>
         </div>
-      </main>
+      </div>
 
       {/* ─── FOOTER ──────────────────────────────────── */}
       <footer className="border-t border-border py-6 text-center text-xs text-muted-foreground">
