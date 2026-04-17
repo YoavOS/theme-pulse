@@ -90,6 +90,12 @@ export default function CustomTradingViewListModal({
     });
   };
 
+  // Expanded set (lowercased industry strings) for fast membership testing
+  const expandedExclusions = useMemo(
+    () => expandSelectedToIndustries(excludedSectors),
+    [excludedSectors]
+  );
+
   const filtered = useMemo(() => {
     let list = stocks.filter(s => {
       if (excludeOtc && isOtcSymbol(s.symbol)) return false;
