@@ -230,7 +230,7 @@ export default function Index() {
         onCancel={() => setShowDemoConfirm(false)}
       />
       {/* ─── ROW 1: Title + Status ──────────────────── */}
-      <header className="sticky top-0 z-30 border-b border-border bg-background/80 backdrop-blur-md">
+      <header className={`sticky top-0 z-30 border-b border-border backdrop-blur-md transition-all ${enhancedView ? "bg-background/60 shadow-[0_8px_32px_-12px_hsl(var(--primary)/0.15)] backdrop-saturate-150" : "bg-background/80"}`}>
         <div className="container py-3">
           {/* Row 1 */}
           <div className="flex items-center justify-between">
@@ -406,6 +406,42 @@ export default function Index() {
                 onDashboardUpdate={handleScanComplete}
                 buildThemesFromPerf={buildThemesFromPerf}
               />
+
+              {/* Enhanced View toggle */}
+              <TooltipProvider delayDuration={200}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      onClick={() => setEnhancedView(v => !v)}
+                      className={`inline-flex items-center gap-1 rounded-md border p-1.5 transition-colors ${
+                        enhancedView
+                          ? "border-primary/50 bg-primary/15 text-primary"
+                          : "border-border text-muted-foreground hover:bg-accent hover:text-foreground"
+                      }`}
+                      aria-pressed={enhancedView}
+                      title="Toggle Enhanced View"
+                    >
+                      <Sparkles size={14} />
+                      <span className="hidden text-[11px] font-medium sm:inline">Enhanced</span>
+                      <span
+                        className={`relative ml-0.5 inline-block h-3.5 w-6 rounded-full transition-colors ${
+                          enhancedView ? "bg-primary" : "bg-muted-foreground/30"
+                        }`}
+                      >
+                        <span
+                          className={`absolute top-0.5 h-2.5 w-2.5 rounded-full bg-background transition-transform ${
+                            enhancedView ? "translate-x-3" : "translate-x-0.5"
+                          }`}
+                        />
+                      </span>
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom" className="max-w-[220px] text-xs">
+                    <p className="font-semibold mb-1">Enhanced View</p>
+                    <p className="text-muted-foreground">Adds a premium gradient background, subtle noise texture, more breathing room, and soft elevation. Cards are unchanged.</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
 
               {/* Help button */}
               <HelpButton />
@@ -599,7 +635,7 @@ export default function Index() {
         </div>
       )}
 
-      <main className="container py-6">
+      <main className={`container transition-all ${enhancedView ? "py-10 px-6 sm:px-8" : "py-6"}`}>
         {/* Search results banner */}
         {searchResult && (
           <div className="mb-4 flex items-center gap-2 rounded-lg border border-primary/20 bg-primary/5 px-4 py-2.5 text-sm">
