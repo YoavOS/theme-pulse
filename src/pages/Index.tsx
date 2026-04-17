@@ -4,7 +4,7 @@ import { useLiveThemeData } from "@/hooks/useLiveThemeData";
 import ThemeCard from "@/components/ThemeCard";
 import ThemeDrilldownModal from "@/components/ThemeDrilldownModal";
 import ValidateTickersDialog from "@/components/ValidateTickersDialog";
-import { RefreshCw, Download, TrendingUp, TrendingDown, Wifi, WifiOff, Loader2, Settings, ScanLine, X, ShieldCheck, Brain, Bookmark, ChevronDown, LayoutDashboard, AlertTriangle, LayoutGrid, List, Flame, Circle, BarChart3, Calendar, Bell, Zap } from "lucide-react";
+import { RefreshCw, Download, TrendingUp, TrendingDown, Wifi, WifiOff, Loader2, Settings, ScanLine, X, ShieldCheck, Brain, Bookmark, ChevronDown, LayoutDashboard, AlertTriangle, LayoutGrid, List, Flame, Circle, BarChart3, Calendar, Bell, Zap, Sparkles } from "lucide-react";
 import RankedListView from "@/components/dashboard/RankedListView";
 import HeatmapGridView from "@/components/dashboard/HeatmapGridView";
 import DashboardBubbleView from "@/components/dashboard/DashboardBubbleView";
@@ -52,6 +52,11 @@ export default function Index() {
   const [drilldownTheme, setDrilldownTheme] = useState<ThemeData | null>(null);
   const [showOptions, setShowOptions] = useState(false);
   const [showDemoConfirm, setShowDemoConfirm] = useState(false);
+  const [enhancedView, setEnhancedView] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    return localStorage.getItem("enhancedView") === "true";
+  });
+  useEffect(() => { localStorage.setItem("enhancedView", String(enhancedView)); }, [enhancedView]);
   const { pinned, alerts, getAlert } = useWatchlist();
   const unreadAlertCount = useUnreadAlertCount();
   const { fetchVolume, getThemeSignals } = useVolumeData();
