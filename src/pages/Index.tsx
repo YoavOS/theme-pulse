@@ -269,7 +269,7 @@ export default function Index() {
         onCancel={() => setShowDemoConfirm(false)}
       />
       {/* ─── ROW 1: Title + Status ──────────────────── */}
-      <header className={`sticky top-0 z-30 border-b border-border backdrop-blur-md transition-all ${enhancedView ? "bg-background/60 shadow-[0_8px_32px_-12px_hsl(var(--primary)/0.15)] backdrop-saturate-150" : "bg-background/80"}`}>
+      <header className={`sticky top-0 z-30 border-b transition-all ${enhancedView ? "border-white/5 bg-[hsl(220_25%_6%/0.55)] shadow-[0_1px_0_0_hsl(var(--primary)/0.18),0_20px_50px_-30px_hsl(var(--primary)/0.35)] backdrop-blur-xl backdrop-saturate-150" : "border-border bg-background/80 backdrop-blur-md"}`}>
         <div className="container py-3">
           {/* Row 1 */}
           <div className="flex items-center justify-between">
