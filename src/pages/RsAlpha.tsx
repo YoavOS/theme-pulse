@@ -86,9 +86,26 @@ export default function RsAlpha() {
     const saved = typeof window !== "undefined" ? localStorage.getItem("rs-hide-otc") : null;
     return saved === null ? true : saved === "true";
   });
+  const [weights, setWeights] = useState<RsWeights>(() => {
+    if (typeof window === "undefined") return { ...DEFAULT_RS_WEIGHTS };
+    try {
+      const raw = localStorage.getItem(RS_WEIGHTS_KEY);
+      if (!raw) return { ...DEFAULT_RS_WEIGHTS };
+      const parsed = JSON.parse(raw);
+      return {
+        w1d: Number(parsed.w1d ?? DEFAULT_RS_WEIGHTS.w1d),
+        w1m: Number(parsed.w1m ?? DEFAULT_RS_WEIGHTS.w1m),
+        w3m: Number(parsed.w3m ?? DEFAULT_RS_WEIGHTS.w3m),
+        w6m: Number(parsed.w6m ?? DEFAULT_RS_WEIGHTS.w6m),
+      };
+    } catch {
+      return { ...DEFAULT_RS_WEIGHTS };
+    }
+  });
 
   useEffect(() => { setShowAll(false); }, [activeTab]);
   useEffect(() => { localStorage.setItem("rs-hide-otc", String(hideOtc)); }, [hideOtc]);
+  useEffect(() => { localStorage.setItem(RS_WEIGHTS_KEY, JSON.stringify(weights)); }, [weights]);
 
   // Heuristic: 5-letter all-caps tickers ending in 'F' are typically foreign OTC (e.g., FKURF).
   // Also defensively block any symbol with OTC suffixes that may have slipped through historically.
@@ -99,34 +116,62 @@ export default function RsAlpha() {
     return false;
   };
 
+  // Compute custom Overall RS using user-defined weights (auto-rebalance for missing timeframes).
+  const computeCustomOverall = (s: RsStock): number | null => {
+    const parts: { v: number; w: number }[] = [];
+    if (s.rs1d !== null && weights.w1d > 0) parts.push({ v: s.rs1d, w: weights.w1d });
+    if (s.rs1m !== null && weights.w1m > 0) parts.push({ v: s.rs1m, w: weights.w1m });
+    if (s.rs3m !== null && weights.w3m > 0) parts.push({ v: s.rs3m, w: weights.w3m });
+    if (s.rs6m !== null && weights.w6m > 0) parts.push({ v: s.rs6m, w: weights.w6m });
+    if (parts.length === 0) return null;
+    const tw = parts.reduce((sum, p) => sum + p.w, 0);
+    if (tw <= 0) return null;
+    return Math.round(parts.reduce((sum, p) => sum + p.v * (p.w / tw), 0) * 100) / 100;
+  };
+
+  const getRsForTab = (s: RsStock, tab: TabId): number | null => {
+    if (tab === "overall") return computeCustomOverall(s);
+    return getRsField(s, tab);
+  };
+
   const toggleSort = (field: SortField) => {
     if (sortField === field) setSortDir(d => d === "desc" ? "asc" : "desc");
     else { setSortField(field); setSortDir("desc"); }
   };
 
-  const sortedStocks = useMemo(() => {
+  // Filter, then compute RS Rating (1-99) by ranking within the filtered list for the active timeframe.
+  const { sortedStocks, ratingMap } = useMemo(() => {
     const filtered = stocks.filter(s => {
-      if (getRsField(s, activeTab) === null) return false;
+      if (getRsForTab(s, activeTab) === null) return false;
       if (hideOtc && isOtcSymbol(s.symbol)) return false;
       return true;
     });
-    return [...filtered].sort((a, b) => {
+    const rsValues = filtered.map(s => getRsForTab(s, activeTab));
+    const ratings = computeRsRatings(rsValues);
+    const map = new Map<string, number | null>();
+    filtered.forEach((s, i) => map.set(s.symbol, ratings[i]));
+
+    const sorted = [...filtered].sort((a, b) => {
       const mul = sortDir === "desc" ? -1 : 1;
       switch (sortField) {
         case "symbol": return mul * a.symbol.localeCompare(b.symbol);
         case "company": return mul * (a.companyName ?? "").localeCompare(b.companyName ?? "");
-        case "rs": return mul * ((getRsField(a, activeTab) ?? -999) - (getRsField(b, activeTab) ?? -999));
+        case "rs": return mul * ((getRsForTab(a, activeTab) ?? -999) - (getRsForTab(b, activeTab) ?? -999));
+        case "rating": return mul * ((map.get(a.symbol) ?? -1) - (map.get(b.symbol) ?? -1));
         case "stockReturn": return mul * ((getReturnField(a, activeTab) ?? -999) - (getReturnField(b, activeTab) ?? -999));
         case "spyReturn": return mul * ((getSpyField(a, activeTab) ?? -999) - (getSpyField(b, activeTab) ?? -999));
         case "price": return mul * ((a.price ?? 0) - (b.price ?? 0));
         default: return 0;
       }
     });
-  }, [stocks, activeTab, sortField, sortDir, hideOtc]);
+    return { sortedStocks: sorted, ratingMap: map };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stocks, activeTab, sortField, sortDir, hideOtc, weights]);
 
   const otcHiddenCount = useMemo(
-    () => hideOtc ? stocks.filter(s => isOtcSymbol(s.symbol) && getRsField(s, activeTab) !== null).length : 0,
-    [stocks, hideOtc, activeTab]
+    () => hideOtc ? stocks.filter(s => isOtcSymbol(s.symbol) && getRsForTab(s, activeTab) !== null).length : 0,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [stocks, hideOtc, activeTab, weights]
   );
 
   const displayStocks = showAll ? sortedStocks : sortedStocks.slice(0, 25);
