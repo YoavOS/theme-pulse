@@ -19,14 +19,17 @@ export interface RsStock {
   adrPercent: number | null;
   adrSource: string | null;
   return1d: number | null;
+  return1w: number | null;
   return1m: number | null;
   return3m: number | null;
   return6m: number | null;
   spyReturn1d: number | null;
+  spyReturn1w: number | null;
   spyReturn1m: number | null;
   spyReturn3m: number | null;
   spyReturn6m: number | null;
   rs1d: number | null;
+  rs1w: number | null;
   rs1m: number | null;
   rs3m: number | null;
   rs6m: number | null;
@@ -78,14 +81,17 @@ export function useRsAlpha() {
         adrPercent: r.adr_percent !== null ? Number(r.adr_percent) : null,
         adrSource: r.adr_source,
         return1d: r.return_1d !== null ? Number(r.return_1d) : null,
+        return1w: (r as any).return_1w !== null && (r as any).return_1w !== undefined ? Number((r as any).return_1w) : null,
         return1m: r.return_1m !== null ? Number(r.return_1m) : null,
         return3m: r.return_3m !== null ? Number(r.return_3m) : null,
         return6m: r.return_6m !== null ? Number(r.return_6m) : null,
         spyReturn1d: r.spy_return_1d !== null ? Number(r.spy_return_1d) : null,
+        spyReturn1w: (r as any).spy_return_1w !== null && (r as any).spy_return_1w !== undefined ? Number((r as any).spy_return_1w) : null,
         spyReturn1m: r.spy_return_1m !== null ? Number(r.spy_return_1m) : null,
         spyReturn3m: r.spy_return_3m !== null ? Number(r.spy_return_3m) : null,
         spyReturn6m: r.spy_return_6m !== null ? Number(r.spy_return_6m) : null,
         rs1d: r.rs_1d !== null ? Number(r.rs_1d) : null,
+        rs1w: (r as any).rs_1w !== null && (r as any).rs_1w !== undefined ? Number((r as any).rs_1w) : null,
         rs1m: r.rs_1m !== null ? Number(r.rs_1m) : null,
         rs3m: r.rs_3m !== null ? Number(r.rs_3m) : null,
         rs6m: r.rs_6m !== null ? Number(r.rs_6m) : null,
