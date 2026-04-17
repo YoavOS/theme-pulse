@@ -36,6 +36,30 @@ export default function CustomTradingViewListModal({
   const [minAdr, setMinAdr] = useState<number>(3.0);
   const [excludeOtc, setExcludeOtc] = useState<boolean>(true);
   const [sortBy, setSortBy] = useState<SortBy>("rs");
+  const [excludeSectorsOn, setExcludeSectorsOn] = useState<boolean>(false);
+  const [excludedSectors, setExcludedSectors] = useState<Set<string>>(new Set());
+  const [sectorSearch, setSectorSearch] = useState<string>("");
+  const [sectorPopoverOpen, setSectorPopoverOpen] = useState<boolean>(false);
+
+  const allSectors = useMemo(() => {
+    const set = new Set<string>();
+    stocks.forEach(s => { if (s.sector && s.sector.trim()) set.add(s.sector.trim()); });
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [stocks]);
+
+  const filteredSectors = useMemo(() => {
+    const q = sectorSearch.trim().toLowerCase();
+    if (!q) return allSectors;
+    return allSectors.filter(s => s.toLowerCase().includes(q));
+  }, [allSectors, sectorSearch]);
+
+  const toggleSector = (sec: string) => {
+    setExcludedSectors(prev => {
+      const next = new Set(prev);
+      if (next.has(sec)) next.delete(sec); else next.add(sec);
+      return next;
+    });
+  };
 
   const filtered = useMemo(() => {
     let list = stocks.filter(s => {
