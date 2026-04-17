@@ -4,7 +4,7 @@ import { useLiveThemeData } from "@/hooks/useLiveThemeData";
 import ThemeCard from "@/components/ThemeCard";
 import ThemeDrilldownModal from "@/components/ThemeDrilldownModal";
 import ValidateTickersDialog from "@/components/ValidateTickersDialog";
-import { RefreshCw, Download, TrendingUp, TrendingDown, Wifi, WifiOff, Loader2, Settings, ScanLine, X, ShieldCheck, Brain, Bookmark, ChevronDown, LayoutDashboard, AlertTriangle, LayoutGrid, List, Flame, Circle, BarChart3, Calendar, Bell, Zap } from "lucide-react";
+import { RefreshCw, Download, TrendingUp, TrendingDown, Wifi, WifiOff, Loader2, Settings, ScanLine, X, ShieldCheck, Brain, Bookmark, ChevronDown, LayoutDashboard, AlertTriangle, LayoutGrid, List, Flame, Circle, BarChart3, Calendar, Bell, Zap, Sparkles } from "lucide-react";
 import RankedListView from "@/components/dashboard/RankedListView";
 import HeatmapGridView from "@/components/dashboard/HeatmapGridView";
 import DashboardBubbleView from "@/components/dashboard/DashboardBubbleView";
@@ -52,6 +52,11 @@ export default function Index() {
   const [drilldownTheme, setDrilldownTheme] = useState<ThemeData | null>(null);
   const [showOptions, setShowOptions] = useState(false);
   const [showDemoConfirm, setShowDemoConfirm] = useState(false);
+  const [enhancedView, setEnhancedView] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    return localStorage.getItem("enhancedView") === "true";
+  });
+  useEffect(() => { localStorage.setItem("enhancedView", String(enhancedView)); }, [enhancedView]);
   const { pinned, alerts, getAlert } = useWatchlist();
   const unreadAlertCount = useUnreadAlertCount();
   const { fetchVolume, getThemeSignals } = useVolumeData();
@@ -187,7 +192,29 @@ export default function Index() {
   };
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className={`relative min-h-screen bg-background ${enhancedView ? "enhanced-view" : ""}`}>
+      {/* Enhanced background layer (only visible when toggle ON) */}
+      {enhancedView && (
+        <>
+          <div
+            aria-hidden
+            className="pointer-events-none fixed inset-0 z-0 animate-fade-in"
+            style={{
+              background:
+                "radial-gradient(1200px 600px at 15% -10%, hsl(var(--primary) / 0.08), transparent 60%), radial-gradient(900px 500px at 95% 10%, hsl(280 70% 50% / 0.06), transparent 60%), linear-gradient(180deg, hsl(var(--background)) 0%, hsl(220 20% 4%) 100%)",
+            }}
+          />
+          <div
+            aria-hidden
+            className="pointer-events-none fixed inset-0 z-0 opacity-[0.035] mix-blend-overlay animate-fade-in"
+            style={{
+              backgroundImage:
+                "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 0.6 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>\")",
+            }}
+          />
+        </>
+      )}
+      <div className="relative z-10">
       {/* Stale data banner */}
       {isStale && isLive && (
         <div className="border-b border-[hsl(40,80%,50%)]/30 bg-[hsl(40,80%,50%)]/10 px-4 py-2 text-center text-xs text-[hsl(40,80%,50%)]">
@@ -203,7 +230,7 @@ export default function Index() {
         onCancel={() => setShowDemoConfirm(false)}
       />
       {/* ─── ROW 1: Title + Status ──────────────────── */}
-      <header className="sticky top-0 z-30 border-b border-border bg-background/80 backdrop-blur-md">
+      <header className={`sticky top-0 z-30 border-b border-border backdrop-blur-md transition-all ${enhancedView ? "bg-background/60 shadow-[0_8px_32px_-12px_hsl(var(--primary)/0.15)] backdrop-saturate-150" : "bg-background/80"}`}>
         <div className="container py-3">
           {/* Row 1 */}
           <div className="flex items-center justify-between">
@@ -379,6 +406,42 @@ export default function Index() {
                 onDashboardUpdate={handleScanComplete}
                 buildThemesFromPerf={buildThemesFromPerf}
               />
+
+              {/* Enhanced View toggle */}
+              <TooltipProvider delayDuration={200}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      onClick={() => setEnhancedView(v => !v)}
+                      className={`inline-flex items-center gap-1 rounded-md border p-1.5 transition-colors ${
+                        enhancedView
+                          ? "border-primary/50 bg-primary/15 text-primary"
+                          : "border-border text-muted-foreground hover:bg-accent hover:text-foreground"
+                      }`}
+                      aria-pressed={enhancedView}
+                      title="Toggle Enhanced View"
+                    >
+                      <Sparkles size={14} />
+                      <span className="hidden text-[11px] font-medium sm:inline">Enhanced</span>
+                      <span
+                        className={`relative ml-0.5 inline-block h-3.5 w-6 rounded-full transition-colors ${
+                          enhancedView ? "bg-primary" : "bg-muted-foreground/30"
+                        }`}
+                      >
+                        <span
+                          className={`absolute top-0.5 h-2.5 w-2.5 rounded-full bg-background transition-transform ${
+                            enhancedView ? "translate-x-3" : "translate-x-0.5"
+                          }`}
+                        />
+                      </span>
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom" className="max-w-[220px] text-xs">
+                    <p className="font-semibold mb-1">Enhanced View</p>
+                    <p className="text-muted-foreground">Adds a premium gradient background, subtle noise texture, more breathing room, and soft elevation. Cards are unchanged.</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
 
               {/* Help button */}
               <HelpButton />
@@ -572,7 +635,7 @@ export default function Index() {
         </div>
       )}
 
-      <main className="container py-6">
+      <main className={`container transition-all ${enhancedView ? "py-10 px-6 sm:px-8" : "py-6"}`}>
         {/* Search results banner */}
         {searchResult && (
           <div className="mb-4 flex items-center gap-2 rounded-lg border border-primary/20 bg-primary/5 px-4 py-2.5 text-sm">
@@ -590,7 +653,14 @@ export default function Index() {
           </div>
         )}
 
-        <div className="transition-opacity duration-200" key={dashboardView}>
+        <div
+          className={`transition-opacity duration-200 ${
+            enhancedView
+              ? "rounded-2xl border border-border/40 bg-card/20 p-6 shadow-[0_24px_60px_-30px_hsl(var(--primary)/0.25),0_0_0_1px_hsl(var(--border)/0.4)] backdrop-blur-sm sm:p-8"
+              : ""
+          }`}
+          key={dashboardView}
+        >
           {dashboardView === "cards" && (
             <>
               <Section
@@ -711,6 +781,7 @@ export default function Index() {
           sentiment={newsPanelSentiment}
         />
       )}
+      </div>
     </div>
   );
 }
