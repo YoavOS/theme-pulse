@@ -738,6 +738,7 @@ export default function Index() {
           sentiment={newsPanelSentiment}
         />
       )}
+      </div>
     </div>
   );
 }
