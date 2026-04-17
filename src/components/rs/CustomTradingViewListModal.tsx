@@ -70,6 +70,9 @@ export default function CustomTradingViewListModal({
       if (acceleratingOnly) {
         if (s.rs1m === null || s.rs3m === null || !(s.rs1m > s.rs3m)) return false;
       }
+      if (excludeSectorsOn && excludedSectors.size > 0) {
+        if (s.sector && excludedSectors.has(s.sector.trim())) return false;
+      }
       return true;
     });
 
@@ -81,7 +84,7 @@ export default function CustomTradingViewListModal({
 
     if (topN < TOPN_MAX) list = list.slice(0, topN);
     return list;
-  }, [stocks, ratingMap, minRating, minAdr, acceleratingOnly, excludeOtc, sortBy, topN, tabId, getRsForTab, getReturnField, isOtcSymbol]);
+  }, [stocks, ratingMap, minRating, minAdr, acceleratingOnly, excludeOtc, sortBy, topN, tabId, getRsForTab, getReturnField, isOtcSymbol, excludeSectorsOn, excludedSectors]);
 
   const symbols = filtered.map(s => s.symbol);
 
