@@ -1,0 +1,103 @@
+import { useState } from "react";
+import { Settings2, RotateCcw } from "lucide-react";
+
+export interface RsWeights {
+  w1d: number;
+  w1m: number;
+  w3m: number;
+  w6m: number;
+}
+
+export const DEFAULT_RS_WEIGHTS: RsWeights = { w1d: 0, w1m: 50, w3m: 30, w6m: 20 };
+
+export function normalizeWeights(w: RsWeights): RsWeights {
+  const total = w.w1d + w.w1m + w.w3m + w.w6m;
+  if (total <= 0) return { ...DEFAULT_RS_WEIGHTS };
+  const f = 100 / total;
+  return {
+    w1d: Math.round(w.w1d * f),
+    w1m: Math.round(w.w1m * f),
+    w3m: Math.round(w.w3m * f),
+    w6m: Math.round(w.w6m * f),
+  };
+}
+
+interface Props {
+  weights: RsWeights;
+  onChange: (w: RsWeights) => void;
+  onReset: () => void;
+}
+
+export default function OverallWeightsPanel({ weights, onChange, onReset }: Props) {
+  const [open, setOpen] = useState(false);
+  const total = weights.w1d + weights.w1m + weights.w3m + weights.w6m;
+  const norm = normalizeWeights(weights);
+
+  const update = (key: keyof RsWeights, val: number) => {
+    onChange({ ...weights, [key]: Math.max(0, Math.min(100, val)) });
+  };
+
+  const Row = ({ label, k }: { label: string; k: keyof RsWeights }) => (
+    <div className="flex items-center gap-3">
+      <span className="w-12 text-xs font-medium text-muted-foreground">{label}</span>
+      <input
+        type="range"
+        min={0}
+        max={100}
+        value={weights[k]}
+        onChange={(e) => update(k, Number(e.target.value))}
+        className="flex-1 accent-primary"
+      />
+      <input
+        type="number"
+        min={0}
+        max={100}
+        value={weights[k]}
+        onChange={(e) => update(k, Number(e.target.value))}
+        className="w-14 rounded-md border border-border bg-background px-2 py-1 text-right text-xs"
+      />
+      <span className="w-10 text-right text-[11px] text-muted-foreground">{norm[k]}%</span>
+    </div>
+  );
+
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+        title="Customize Overall RS weights"
+      >
+        <Settings2 size={12} /> Overall RS Settings
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+          <div className="absolute right-0 top-full z-50 mt-1 w-[360px] rounded-lg border border-border bg-card p-4 shadow-xl">
+            <div className="mb-2 flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-foreground">Overall RS Weights</h3>
+              <button
+                onClick={onReset}
+                className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground"
+                title="Reset to defaults"
+              >
+                <RotateCcw size={11} /> Reset
+              </button>
+            </div>
+            <p className="mb-3 text-[11px] text-muted-foreground">
+              Weights auto-normalize to 100%. Overall RS only updates for stocks with data in each weighted timeframe.
+            </p>
+            <div className="space-y-2.5">
+              <Row label="1 Day" k="w1d" />
+              <Row label="1 Month" k="w1m" />
+              <Row label="3 Month" k="w3m" />
+              <Row label="6 Month" k="w6m" />
+            </div>
+            <div className="mt-3 border-t border-border pt-2 text-[11px] text-muted-foreground">
+              Raw total: <span className="font-mono text-foreground">{total}</span> · normalized to 100%
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
