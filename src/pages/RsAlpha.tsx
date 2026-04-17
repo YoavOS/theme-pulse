@@ -247,15 +247,32 @@ export default function RsAlpha() {
 
         {/* Filter banner */}
         <div className="container pb-1.5">
-          <div className="flex items-center gap-2 rounded-md border border-border/50 bg-muted/20 px-3 py-1.5 text-[11px] text-muted-foreground">
-            <Filter size={11} className="shrink-0" />
-            <span>
-              Showing RS rankings from <strong className="text-foreground">{stocks.length}</strong> qualified stocks
-              (Market Cap &gt; ${RS_FILTER_THRESHOLDS.MIN_MARKET_CAP / 1000}B
-              {" · "}Avg Dollar Volume &gt; ${(RS_FILTER_THRESHOLDS.MIN_DOLLAR_VOLUME / 1_000_000).toFixed(0)}M
-              {" · "}Avg Daily Range &gt; {RS_FILTER_THRESHOLDS.MIN_AVG_DAILY_RANGE}%
-              {" · "}Price &gt; ${RS_FILTER_THRESHOLDS.MIN_PRICE})
-            </span>
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border/50 bg-muted/20 px-3 py-1.5 text-[11px] text-muted-foreground">
+            <div className="flex items-center gap-2">
+              <Filter size={11} className="shrink-0" />
+              <span>
+                Showing RS rankings from <strong className="text-foreground">{sortedStocks.length}</strong> qualified stocks
+                (Market Cap &gt; ${RS_FILTER_THRESHOLDS.MIN_MARKET_CAP / 1000}B
+                {" · "}Avg Dollar Volume &gt; ${(RS_FILTER_THRESHOLDS.MIN_DOLLAR_VOLUME / 1_000_000).toFixed(0)}M
+                {" · "}Avg Daily Range &gt; {RS_FILTER_THRESHOLDS.MIN_AVG_DAILY_RANGE}%
+                {" · "}Price &gt; ${RS_FILTER_THRESHOLDS.MIN_PRICE})
+              </span>
+            </div>
+            <label className="flex items-center gap-2 cursor-pointer select-none" title="Hide OTC / Pink Sheet tickers (e.g. 5-letter foreign symbols ending in F)">
+              <span className={hideOtc ? "text-foreground font-medium" : ""}>Hide OTC Stocks</span>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={hideOtc}
+                onClick={() => setHideOtc(v => !v)}
+                className={`relative inline-flex h-4 w-7 items-center rounded-full transition-colors ${hideOtc ? "bg-primary" : "bg-muted-foreground/30"}`}
+              >
+                <span className={`inline-block h-3 w-3 transform rounded-full bg-background transition-transform ${hideOtc ? "translate-x-3.5" : "translate-x-0.5"}`} />
+              </button>
+              {hideOtc && otcHiddenCount > 0 && (
+                <span className="text-[10px] text-muted-foreground">({otcHiddenCount} hidden)</span>
+              )}
+            </label>
           </div>
         </div>
 
