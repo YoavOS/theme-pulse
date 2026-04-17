@@ -502,6 +502,7 @@ export default function RsAlpha() {
                     <tr className="border-b border-border bg-muted/30">
                       <th className="px-3 py-2.5 text-left text-xs font-medium text-muted-foreground w-12">#</th>
                       <th className="px-3 py-2.5 text-left"><SortHeader field="symbol" label="Ticker" /></th>
+                      <th className="px-3 py-2.5 text-center"><SortHeader field="rating" label="RS Rating" className="justify-center" /></th>
                       <th className="px-3 py-2.5 text-left"><SortHeader field="company" label="Company" /></th>
                       <th className="px-3 py-2.5 text-right"><SortHeader field="rs" label="RS Score" className="justify-end" /></th>
                       <th className="px-3 py-2.5 text-right"><SortHeader field="stockReturn" label="Stock Return" className="justify-end" /></th>
@@ -511,13 +512,15 @@ export default function RsAlpha() {
                   </thead>
                   <tbody>
                     {displayStocks.map((stock, idx) => {
-                      const rs = getRsField(stock, activeTab);
+                      const rs = getRsForTab(stock, activeTab);
                       const ret = getReturnField(stock, activeTab);
                       const spy = getSpyField(stock, activeTab);
+                      const rating = ratingMap.get(stock.symbol) ?? null;
                       return (
                         <tr key={stock.symbol} className={`border-b border-border/50 transition-colors hover:bg-muted/20 ${rsBg(rs)}`}>
                           <td className="px-3 py-2 text-xs text-muted-foreground">{idx + 1}</td>
                           <td className="px-3 py-2 font-mono font-semibold text-foreground">{stock.symbol}</td>
+                          <td className="px-3 py-2 text-center"><RsRatingBadge rating={rating} /></td>
                           <td className="px-3 py-2 text-muted-foreground max-w-[240px] truncate" title={stock.companyName ?? ""}>
                             {stock.companyName ?? stock.sector ?? "—"}
                           </td>
