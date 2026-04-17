@@ -152,6 +152,17 @@ Deno.serve(async (req) => {
         const mcM = prof?.marketCapitalization; // in millions
         await sleep(FINNHUB_DELAY_MS);
 
+        // --- OTC hard exclusion: drop anything not on a major US exchange ---
+        const exch = String(prof?.exchange ?? "").toUpperCase();
+        const isOtc =
+          /OTC|PINK|GREY|GRAY|OOTC|OTCBB|OTCMKTS|OTCPK/.test(exch) ||
+          (/^[A-Z]{5}$/.test(sym) && sym.endsWith("F")); // 5-letter foreign OTC convention
+        if (isOtc) {
+          await supabase.from("stock_scan_queue").update({ status: "skipped", last_error: `otc:${exch}`, processed_at: new Date().toISOString() }).eq("symbol", sym);
+          processedCount++;
+          continue;
+        }
+
         if (!mcM || mcM < FILTERS.MIN_MARKET_CAP_M) {
           await supabase.from("stock_scan_queue").update({ status: "skipped", processed_at: new Date().toISOString() }).eq("symbol", sym);
           processedCount++;
