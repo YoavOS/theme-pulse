@@ -6,10 +6,14 @@ import { useRsAlpha, RsStock, RS_FILTER_THRESHOLDS } from "@/hooks/useRsAlpha";
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip";
 import { Skeleton } from "@/components/ui/skeleton";
 import HelpButton from "@/components/HelpButton";
+import OverallWeightsPanel, { RsWeights, DEFAULT_RS_WEIGHTS, normalizeWeights } from "@/components/rs/OverallWeightsPanel";
+import RsRatingBadge, { computeRsRatings } from "@/components/rs/RsRatingBadge";
 
 type TabId = "overall" | "1d" | "1m" | "3m" | "6m";
-type SortField = "rank" | "symbol" | "company" | "rs" | "stockReturn" | "spyReturn" | "price";
+type SortField = "rank" | "symbol" | "company" | "rs" | "rating" | "stockReturn" | "spyReturn" | "price";
 type SortDir = "asc" | "desc";
+
+const RS_WEIGHTS_KEY = "rs-overall-weights-v1";
 
 const TABS: { id: TabId; label: string }[] = [
   { id: "overall", label: "Overall" },
