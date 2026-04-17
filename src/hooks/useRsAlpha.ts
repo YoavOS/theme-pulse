@@ -9,6 +9,20 @@ export const RS_FILTER_THRESHOLDS = {
   MIN_PRICE: 6,
 };
 
+const SUPABASE_PAGE_SIZE = 1000;
+const PERF_CHUNK_SIZE = 500;
+
+const toNumberOrNull = (value: unknown): number | null =>
+  value === null || value === undefined ? null : Number(value);
+
+function chunkArray<T>(items: T[], chunkSize: number): T[][] {
+  const chunks: T[][] = [];
+  for (let i = 0; i < items.length; i += chunkSize) {
+    chunks.push(items.slice(i, i + chunkSize));
+  }
+  return chunks;
+}
+
 export interface RsStock {
   symbol: string;
   companyName: string | null;
@@ -66,38 +80,85 @@ export function useRsAlpha() {
     setIsLoading(true);
     setError(null);
     try {
-      const { data, error: dbErr } = await supabase
-        .from("qualified_rs_universe")
-        .select("*")
-        .order("rs_overall", { ascending: false, nullsFirst: false });
-      if (dbErr) throw dbErr;
-      const mapped: RsStock[] = (data ?? []).map((r) => ({
+      const qualifiedRows: any[] = [];
+      for (let from = 0; ; from += SUPABASE_PAGE_SIZE) {
+        const { data, error: dbErr } = await supabase
+          .from("qualified_rs_universe")
+          .select("*")
+          .order("rs_overall", { ascending: false, nullsFirst: false })
+          .range(from, from + SUPABASE_PAGE_SIZE - 1);
+        if (dbErr) throw dbErr;
+        if (!data?.length) break;
+        qualifiedRows.push(...data);
+        if (data.length < SUPABASE_PAGE_SIZE) break;
+      }
+
+      const symbols = qualifiedRows.map((row) => row.symbol).filter(Boolean);
+      const perfChunks = chunkArray(symbols, PERF_CHUNK_SIZE);
+      const [spyPerfResult, ...perfResults] = await Promise.all([
+        supabase
+          .from("ticker_performance")
+          .select("perf_1d")
+          .eq("symbol", "SPY")
+          .maybeSingle(),
+        ...perfChunks.map((chunk) =>
+          supabase
+            .from("ticker_performance")
+            .select("symbol, perf_1d, price")
+            .in("symbol", chunk)
+        ),
+      ]);
+
+      if (spyPerfResult.error) throw spyPerfResult.error;
+
+      const livePerfMap = new Map<string, { perf1d: number | null; price: number | null }>();
+      for (const result of perfResults) {
+        if (result.error) throw result.error;
+        for (const row of result.data ?? []) {
+          livePerfMap.set(row.symbol, {
+            perf1d: toNumberOrNull(row.perf_1d),
+            price: toNumberOrNull(row.price),
+          });
+        }
+      }
+
+      const spyReturn1d = toNumberOrNull(spyPerfResult.data?.perf_1d);
+      const mapped: RsStock[] = qualifiedRows.map((r) => {
+        const livePerf = livePerfMap.get(r.symbol);
+        const return1d = livePerf?.perf1d ?? toNumberOrNull(r.return_1d);
+        const effectiveSpyReturn1d = spyReturn1d ?? toNumberOrNull(r.spy_return_1d);
+        const rs1d =
+          return1d !== null && effectiveSpyReturn1d !== null
+            ? Math.round((return1d - effectiveSpyReturn1d) * 100) / 100
+            : toNumberOrNull(r.rs_1d);
+
+        return {
         symbol: r.symbol,
         companyName: r.company_name,
         sector: r.sector,
-        price: r.current_price !== null ? Number(r.current_price) : null,
-        marketCap: r.market_cap !== null ? Number(r.market_cap) : null,
-        avgDollarVolume: r.avg_dollar_volume !== null ? Number(r.avg_dollar_volume) : null,
-        adrPercent: r.adr_percent !== null ? Number(r.adr_percent) : null,
+        price: livePerf?.price ?? toNumberOrNull(r.current_price),
+        marketCap: toNumberOrNull(r.market_cap),
+        avgDollarVolume: toNumberOrNull(r.avg_dollar_volume),
+        adrPercent: toNumberOrNull(r.adr_percent),
         adrSource: r.adr_source,
-        return1d: r.return_1d !== null ? Number(r.return_1d) : null,
-        return1w: (r as any).return_1w !== null && (r as any).return_1w !== undefined ? Number((r as any).return_1w) : null,
-        return1m: r.return_1m !== null ? Number(r.return_1m) : null,
-        return3m: r.return_3m !== null ? Number(r.return_3m) : null,
-        return6m: r.return_6m !== null ? Number(r.return_6m) : null,
-        spyReturn1d: r.spy_return_1d !== null ? Number(r.spy_return_1d) : null,
-        spyReturn1w: (r as any).spy_return_1w !== null && (r as any).spy_return_1w !== undefined ? Number((r as any).spy_return_1w) : null,
-        spyReturn1m: r.spy_return_1m !== null ? Number(r.spy_return_1m) : null,
-        spyReturn3m: r.spy_return_3m !== null ? Number(r.spy_return_3m) : null,
-        spyReturn6m: r.spy_return_6m !== null ? Number(r.spy_return_6m) : null,
-        rs1d: r.rs_1d !== null ? Number(r.rs_1d) : null,
-        rs1w: (r as any).rs_1w !== null && (r as any).rs_1w !== undefined ? Number((r as any).rs_1w) : null,
-        rs1m: r.rs_1m !== null ? Number(r.rs_1m) : null,
-        rs3m: r.rs_3m !== null ? Number(r.rs_3m) : null,
-        rs6m: r.rs_6m !== null ? Number(r.rs_6m) : null,
-        rsOverall: r.rs_overall !== null ? Number(r.rs_overall) : null,
+        return1d,
+        return1w: toNumberOrNull((r as any).return_1w),
+        return1m: toNumberOrNull(r.return_1m),
+        return3m: toNumberOrNull(r.return_3m),
+        return6m: toNumberOrNull(r.return_6m),
+        spyReturn1d: effectiveSpyReturn1d,
+        spyReturn1w: toNumberOrNull((r as any).spy_return_1w),
+        spyReturn1m: toNumberOrNull(r.spy_return_1m),
+        spyReturn3m: toNumberOrNull(r.spy_return_3m),
+        spyReturn6m: toNumberOrNull(r.spy_return_6m),
+        rs1d,
+        rs1w: toNumberOrNull((r as any).rs_1w),
+        rs1m: toNumberOrNull(r.rs_1m),
+        rs3m: toNumberOrNull(r.rs_3m),
+        rs6m: toNumberOrNull(r.rs_6m),
+        rsOverall: toNumberOrNull(r.rs_overall),
         rsCalculatedAt: r.rs_calculated_at,
-      }));
+      }});
       setStocks(mapped);
     } catch (e) {
       console.error("loadStocks error:", e);
