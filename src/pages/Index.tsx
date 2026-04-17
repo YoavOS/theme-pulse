@@ -196,20 +196,59 @@ export default function Index() {
       {/* Enhanced background layer (only visible when toggle ON) */}
       {enhancedView && (
         <>
+          {/* Base deep gradient */}
           <div
             aria-hidden
             className="pointer-events-none fixed inset-0 z-0 animate-fade-in"
             style={{
               background:
-                "radial-gradient(1200px 600px at 15% -10%, hsl(var(--primary) / 0.08), transparent 60%), radial-gradient(900px 500px at 95% 10%, hsl(280 70% 50% / 0.06), transparent 60%), linear-gradient(180deg, hsl(var(--background)) 0%, hsl(220 20% 4%) 100%)",
+                "linear-gradient(180deg, hsl(220 25% 6%) 0%, hsl(222 28% 4%) 45%, hsl(220 30% 3%) 100%)",
             }}
           />
+          {/* Aurora mesh blobs */}
           <div
             aria-hidden
-            className="pointer-events-none fixed inset-0 z-0 opacity-[0.035] mix-blend-overlay animate-fade-in"
+            className="pointer-events-none fixed inset-0 z-0 animate-fade-in"
+            style={{
+              background: [
+                "radial-gradient(900px 700px at 8% -5%, hsl(var(--primary) / 0.18), transparent 55%)",
+                "radial-gradient(800px 600px at 100% 0%, hsl(265 85% 60% / 0.14), transparent 55%)",
+                "radial-gradient(700px 500px at 50% 110%, hsl(190 90% 55% / 0.10), transparent 60%)",
+                "radial-gradient(600px 400px at 95% 85%, hsl(330 80% 60% / 0.07), transparent 60%)",
+              ].join(","),
+              filter: "saturate(1.1)",
+            }}
+          />
+          {/* Subtle grid pattern */}
+          <div
+            aria-hidden
+            className="pointer-events-none fixed inset-0 z-0 opacity-[0.04] animate-fade-in"
             style={{
               backgroundImage:
-                "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 0.6 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>\")",
+                "linear-gradient(hsl(var(--primary)/0.7) 1px, transparent 1px), linear-gradient(90deg, hsl(var(--primary)/0.7) 1px, transparent 1px)",
+              backgroundSize: "56px 56px",
+              maskImage:
+                "radial-gradient(ellipse 90% 70% at 50% 30%, black 40%, transparent 85%)",
+              WebkitMaskImage:
+                "radial-gradient(ellipse 90% 70% at 50% 30%, black 40%, transparent 85%)",
+            }}
+          />
+          {/* Fine noise grain */}
+          <div
+            aria-hidden
+            className="pointer-events-none fixed inset-0 z-0 opacity-[0.05] mix-blend-overlay animate-fade-in"
+            style={{
+              backgroundImage:
+                "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 0.55 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>\")",
+            }}
+          />
+          {/* Vignette for depth */}
+          <div
+            aria-hidden
+            className="pointer-events-none fixed inset-0 z-0 animate-fade-in"
+            style={{
+              background:
+                "radial-gradient(ellipse 100% 80% at 50% 40%, transparent 55%, hsl(220 35% 2% / 0.55) 100%)",
             }}
           />
         </>
