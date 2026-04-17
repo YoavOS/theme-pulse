@@ -704,32 +704,148 @@ export default function Index() {
         </div>
       )}
 
-      <main className={`container transition-all ${enhancedView ? "py-12 px-6 sm:px-10" : "py-6"}`}>
-        {/* Search results banner */}
-        {searchResult && (
-          <div className="mb-4 flex items-center gap-2 rounded-lg border border-primary/20 bg-primary/5 px-4 py-2.5 text-sm">
-            <span className="font-medium text-foreground">
-              {searchResult.matchingThemes.length > 0
-                ? `Showing ${searchResult.matchingThemes.length} theme${searchResult.matchingThemes.length === 1 ? "" : "s"} matching "${searchQuery}"`
-                : `No themes match your query`}
-            </span>
-            {searchResult.explanation && (
-              <span className="text-xs text-muted-foreground">· {searchResult.explanation}</span>
-            )}
-            <button onClick={clearSearch} className="ml-auto inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground">
-              Clear <X size={12} />
-            </button>
-          </div>
-        )}
+      <div className={enhancedView ? "container px-4 py-8 sm:px-8 sm:py-10" : ""}>
+        <div className={enhancedView ? "flex gap-6 lg:gap-8" : ""}>
+          {/* ── Enhanced-mode left vertical nav rail ── */}
+          {enhancedView && (
+            <aside className="sticky top-[140px] hidden h-fit w-52 shrink-0 lg:block">
+              <nav className="flex flex-col gap-1 rounded-2xl border border-white/[0.06] bg-gradient-to-b from-white/[0.03] to-white/[0.005] p-2 shadow-[0_20px_40px_-30px_hsl(var(--primary)/0.3),inset_0_1px_0_0_hsl(0_0%_100%/0.04)] backdrop-blur-md">
+                <p className="px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">Navigate</p>
+                {dashboardTabs.map((tab) => (
+                  <Link
+                    key={tab.to}
+                    to={tab.to}
+                    className={`group relative inline-flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-medium transition-all ${
+                      tab.active
+                        ? "bg-primary/15 text-primary shadow-[inset_0_0_0_1px_hsl(var(--primary)/0.3)]"
+                        : `text-muted-foreground hover:bg-white/[0.04] hover:text-foreground ${tab.color}`
+                    }`}
+                  >
+                    {tab.active && (
+                      <span className="absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r-full bg-primary shadow-[0_0_12px_hsl(var(--primary)/0.6)]" />
+                    )}
+                    <span className={tab.active ? "text-primary" : tab.color}>{tab.icon}</span>
+                    <span className="flex-1">{tab.label}</span>
+                    {tab.badge && (
+                      <span className={`inline-flex items-center justify-center rounded-full px-1.5 py-0 text-[9px] font-bold ${
+                        tab.to === "/alerts"
+                          ? "bg-destructive text-destructive-foreground"
+                          : "bg-primary/20 text-primary"
+                      }`}>
+                        {tab.badge}
+                      </span>
+                    )}
+                    {tab.pulse && (
+                      <span className="h-2 w-2 rounded-full bg-[hsl(40,80%,50%)] animate-pulse" title="EOD not saved today" />
+                    )}
+                  </Link>
+                ))}
+              </nav>
+            </aside>
+          )}
 
-        <div
-          className={`relative transition-opacity duration-200 ${
-            enhancedView
-              ? "rounded-3xl border border-white/[0.06] bg-gradient-to-b from-white/[0.025] to-white/[0.005] p-6 shadow-[0_40px_80px_-40px_hsl(var(--primary)/0.35),0_0_0_1px_hsl(var(--border)/0.35),inset_0_1px_0_0_hsl(0_0%_100%/0.04)] backdrop-blur-md sm:p-10"
-              : ""
-          }`}
-          key={dashboardView}
-        >
+          {/* ── Main content column ── */}
+          <main className={`min-w-0 flex-1 transition-all ${enhancedView ? "" : "container py-6"}`}>
+            {/* Mobile-only horizontal nav (Enhanced mode, lg-) */}
+            {enhancedView && (
+              <nav className="mb-4 flex gap-1.5 overflow-x-auto rounded-xl border border-white/[0.06] bg-white/[0.02] p-1.5 backdrop-blur-md lg:hidden">
+                {dashboardTabs.map((tab) => (
+                  <Link
+                    key={tab.to}
+                    to={tab.to}
+                    className={`relative inline-flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-all ${
+                      tab.active
+                        ? "bg-primary/15 text-primary"
+                        : `text-muted-foreground hover:bg-white/[0.04] hover:text-foreground ${tab.color}`
+                    }`}
+                  >
+                    <span className={tab.active ? "text-primary" : tab.color}>{tab.icon}</span>
+                    {tab.label}
+                  </Link>
+                ))}
+              </nav>
+            )}
+
+            {/* Search results banner */}
+            {searchResult && (
+              <div className="mb-4 flex items-center gap-2 rounded-lg border border-primary/20 bg-primary/5 px-4 py-2.5 text-sm">
+                <span className="font-medium text-foreground">
+                  {searchResult.matchingThemes.length > 0
+                    ? `Showing ${searchResult.matchingThemes.length} theme${searchResult.matchingThemes.length === 1 ? "" : "s"} matching "${searchQuery}"`
+                    : `No themes match your query`}
+                </span>
+                {searchResult.explanation && (
+                  <span className="text-xs text-muted-foreground">· {searchResult.explanation}</span>
+                )}
+                <button onClick={clearSearch} className="ml-auto inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground">
+                  Clear <X size={12} />
+                </button>
+              </div>
+            )}
+
+            {/* Enhanced-mode toolbar above the cards: Timeframes (left) + View switcher (right) */}
+            {enhancedView && (
+              <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/[0.06] bg-white/[0.025] px-3 py-2 shadow-[0_10px_30px_-20px_hsl(var(--primary)/0.3),inset_0_1px_0_0_hsl(0_0%_100%/0.04)] backdrop-blur-md">
+                <div className="flex items-center gap-2">
+                  <span className="px-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">Timeframe</span>
+                  <div className="flex rounded-lg border border-white/[0.06] bg-black/20">
+                    {TIMEFRAMES.map((tf) => (
+                      <button
+                        key={tf}
+                        onClick={() => setActiveTimeframe(tf)}
+                        className={`px-3 py-1.5 text-xs font-semibold transition-colors ${
+                          activeTimeframe === tf
+                            ? "bg-primary text-primary-foreground"
+                            : "text-muted-foreground hover:text-foreground"
+                        }`}
+                      >
+                        {tf}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <span className="px-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">View</span>
+                  <TooltipProvider delayDuration={200}>
+                    <div className="flex items-center rounded-lg border border-white/[0.06] bg-black/20">
+                      {([
+                        { key: "cards" as const, icon: <LayoutGrid size={14} />, label: "Card Grid" },
+                        { key: "list" as const, icon: <List size={14} />, label: "Ranked List" },
+                        { key: "heatmap" as const, icon: <Flame size={14} />, label: "Heatmap" },
+                        { key: "bars" as const, icon: <BarChart3 size={14} />, label: "Bar Chart" },
+                        { key: "bubble" as const, icon: <Circle size={14} />, label: "Bubble Chart" },
+                      ]).map((v) => (
+                        <Tooltip key={v.key}>
+                          <TooltipTrigger asChild>
+                            <button
+                              onClick={() => switchView(v.key)}
+                              className={`p-1.5 transition-colors ${
+                                dashboardView === v.key
+                                  ? "bg-primary text-primary-foreground"
+                                  : "text-muted-foreground hover:text-foreground"
+                              }`}
+                            >
+                              {v.icon}
+                            </button>
+                          </TooltipTrigger>
+                          <TooltipContent side="bottom" className="text-xs">{v.label}</TooltipContent>
+                        </Tooltip>
+                      ))}
+                    </div>
+                  </TooltipProvider>
+                </div>
+              </div>
+            )}
+
+            <div
+              className={`relative transition-opacity duration-200 ${
+                enhancedView
+                  ? "rounded-3xl border border-white/[0.06] bg-gradient-to-b from-white/[0.025] to-white/[0.005] p-6 shadow-[0_40px_80px_-40px_hsl(var(--primary)/0.35),0_0_0_1px_hsl(var(--border)/0.35),inset_0_1px_0_0_hsl(0_0%_100%/0.04)] backdrop-blur-md sm:p-8"
+                  : ""
+              }`}
+              key={dashboardView}
+            >
           {dashboardView === "cards" && (
             <>
               <Section
