@@ -674,7 +674,7 @@ export default function Index() {
         </div>
       )}
 
-      <main className={`container transition-all ${enhancedView ? "py-10 px-6 sm:px-8" : "py-6"}`}>
+      <main className={`container transition-all ${enhancedView ? "py-12 px-6 sm:px-10" : "py-6"}`}>
         {/* Search results banner */}
         {searchResult && (
           <div className="mb-4 flex items-center gap-2 rounded-lg border border-primary/20 bg-primary/5 px-4 py-2.5 text-sm">
@@ -693,9 +693,9 @@ export default function Index() {
         )}
 
         <div
-          className={`transition-opacity duration-200 ${
+          className={`relative transition-opacity duration-200 ${
             enhancedView
-              ? "rounded-2xl border border-border/40 bg-card/20 p-6 shadow-[0_24px_60px_-30px_hsl(var(--primary)/0.25),0_0_0_1px_hsl(var(--border)/0.4)] backdrop-blur-sm sm:p-8"
+              ? "rounded-3xl border border-white/[0.06] bg-gradient-to-b from-white/[0.025] to-white/[0.005] p-6 shadow-[0_40px_80px_-40px_hsl(var(--primary)/0.35),0_0_0_1px_hsl(var(--border)/0.35),inset_0_1px_0_0_hsl(0_0%_100%/0.04)] backdrop-blur-md sm:p-10"
               : ""
           }`}
           key={dashboardView}
