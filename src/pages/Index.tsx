@@ -653,7 +653,14 @@ export default function Index() {
           </div>
         )}
 
-        <div className="transition-opacity duration-200" key={dashboardView}>
+        <div
+          className={`transition-opacity duration-200 ${
+            enhancedView
+              ? "rounded-2xl border border-border/40 bg-card/20 p-6 shadow-[0_24px_60px_-30px_hsl(var(--primary)/0.25),0_0_0_1px_hsl(var(--border)/0.4)] backdrop-blur-sm sm:p-8"
+              : ""
+          }`}
+          key={dashboardView}
+        >
           {dashboardView === "cards" && (
             <>
               <Section
