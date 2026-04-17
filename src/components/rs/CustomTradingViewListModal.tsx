@@ -7,6 +7,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Slider } from "@/components/ui/slider";
 import { Checkbox } from "@/components/ui/checkbox";
 import { RsStock } from "@/hooks/useRsAlpha";
+import { ALL_GICS_SECTORS, GICS_SECTORS, expandSelectedToIndustries } from "@/lib/sectorTaxonomy";
 
 export type CustomListTab = "overall" | "1d" | "1m" | "3m" | "6m";
 type SortBy = "rs" | "rating" | "return";
@@ -41,17 +42,45 @@ export default function CustomTradingViewListModal({
   const [sectorSearch, setSectorSearch] = useState<string>("");
   const [sectorPopoverOpen, setSectorPopoverOpen] = useState<boolean>(false);
 
-  const allSectors = useMemo(() => {
+  // Industries actually present in the qualified universe (used to show counts and an "Other" group)
+  const universeIndustries = useMemo(() => {
     const set = new Set<string>();
     stocks.forEach(s => { if (s.sector && s.sector.trim()) set.add(s.sector.trim()); });
-    return Array.from(set).sort((a, b) => a.localeCompare(b));
+    return set;
   }, [stocks]);
 
-  const filteredSectors = useMemo(() => {
+  // Build groups: GICS sector -> [industries], plus an "Other" bucket for unmapped strings present in the data.
+  const groupedSectors = useMemo(() => {
+    const groups: { gics: string; industries: string[] }[] = [];
+    const mappedLower = new Set<string>();
+    for (const gics of ALL_GICS_SECTORS) {
+      const industries = [...GICS_SECTORS[gics]].sort((a, b) => a.localeCompare(b));
+      industries.forEach(i => mappedLower.add(i.toLowerCase().trim()));
+      groups.push({ gics, industries });
+    }
+    // Anything in the universe that isn't mapped → "Other"
+    const other: string[] = [];
+    universeIndustries.forEach(ind => {
+      if (!mappedLower.has(ind.toLowerCase().trim())) other.push(ind);
+    });
+    if (other.length > 0) {
+      groups.push({ gics: "Other", industries: other.sort((a, b) => a.localeCompare(b)) });
+    }
+    return groups;
+  }, [universeIndustries]);
+
+  const filteredGroups = useMemo(() => {
     const q = sectorSearch.trim().toLowerCase();
-    if (!q) return allSectors;
-    return allSectors.filter(s => s.toLowerCase().includes(q));
-  }, [allSectors, sectorSearch]);
+    if (!q) return groupedSectors;
+    return groupedSectors
+      .map(g => ({
+        gics: g.gics,
+        industries: g.industries.filter(i => i.toLowerCase().includes(q)),
+        match: g.gics.toLowerCase().includes(q),
+      }))
+      .filter(g => g.match || g.industries.length > 0)
+      .map(g => ({ gics: g.gics, industries: g.match && g.industries.length === 0 ? GICS_SECTORS[g.gics] ?? [] : g.industries }));
+  }, [groupedSectors, sectorSearch]);
 
   const toggleSector = (sec: string) => {
     setExcludedSectors(prev => {
@@ -60,6 +89,12 @@ export default function CustomTradingViewListModal({
       return next;
     });
   };
+
+  // Expanded set (lowercased industry strings) for fast membership testing
+  const expandedExclusions = useMemo(
+    () => expandSelectedToIndustries(excludedSectors),
+    [excludedSectors]
+  );
 
   const filtered = useMemo(() => {
     let list = stocks.filter(s => {
@@ -71,7 +106,8 @@ export default function CustomTradingViewListModal({
         if (s.rs1m === null || s.rs3m === null || !(s.rs1m > s.rs3m)) return false;
       }
       if (excludeSectorsOn && excludedSectors.size > 0) {
-        if (s.sector && excludedSectors.has(s.sector.trim())) return false;
+        const expanded = expandedExclusions;
+        if (s.sector && expanded.has(s.sector.toLowerCase().trim())) return false;
       }
       return true;
     });
@@ -249,39 +285,73 @@ export default function CustomTradingViewListModal({
               <Popover open={sectorPopoverOpen} onOpenChange={setSectorPopoverOpen}>
                 <PopoverTrigger asChild>
                   <button
-                    disabled={!excludeSectorsOn || allSectors.length === 0}
+                    disabled={!excludeSectorsOn}
                     className="inline-flex items-center gap-1.5 rounded-md border border-border bg-background px-2.5 py-1 text-[11px] font-medium text-foreground hover:bg-accent disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     {excludedSectors.size > 0 ? `${excludedSectors.size} selected` : "Choose sectors"}
                     <ChevronDown size={12} />
                   </button>
                 </PopoverTrigger>
-                <PopoverContent className="w-72 p-0" align="end">
+                <PopoverContent className="w-80 p-0" align="end">
                   <div className="border-b border-border p-2">
                     <Input
                       autoFocus
-                      placeholder="Search sectors…"
+                      placeholder="Search GICS sectors or industries…"
                       value={sectorSearch}
                       onChange={(e) => setSectorSearch(e.target.value)}
                       className="h-7 text-xs"
                     />
                   </div>
-                  <div className="max-h-64 overflow-y-auto py-1">
-                    {filteredSectors.length === 0 ? (
+                  <div className="max-h-72 overflow-y-auto py-1">
+                    {filteredGroups.length === 0 ? (
                       <div className="px-3 py-4 text-center text-[11px] text-muted-foreground">
-                        No sectors found
+                        No matches
                       </div>
-                    ) : filteredSectors.map(sec => {
-                      const checked = excludedSectors.has(sec);
+                    ) : filteredGroups.map(group => {
+                      const gicsChecked = excludedSectors.has(group.gics);
+                      const childCount = group.industries.filter(i => universeIndustries.has(i)).length;
                       return (
-                        <button
-                          key={sec}
-                          onClick={() => toggleSector(sec)}
-                          className="flex w-full items-center justify-between gap-2 px-3 py-1.5 text-left text-xs hover:bg-accent"
-                        >
-                          <span className={checked ? "font-medium text-foreground" : "text-muted-foreground"}>{sec}</span>
-                          {checked && <Check size={12} className="text-primary" />}
-                        </button>
+                        <div key={group.gics} className="border-b border-border/40 last:border-b-0">
+                          {/* GICS sector header — clickable to toggle the whole group */}
+                          <button
+                            onClick={() => toggleSector(group.gics)}
+                            className="flex w-full items-center justify-between gap-2 bg-muted/40 px-3 py-1.5 text-left text-[11px] font-semibold uppercase tracking-wide hover:bg-accent"
+                          >
+                            <span className={gicsChecked ? "text-primary" : "text-foreground"}>
+                              {group.gics}
+                              {childCount > 0 && (
+                                <span className="ml-1.5 font-normal normal-case text-[10px] text-muted-foreground">
+                                  ({childCount} in universe)
+                                </span>
+                              )}
+                            </span>
+                            {gicsChecked && <Check size={12} className="text-primary" />}
+                          </button>
+                          {/* Child industries */}
+                          {group.industries.map(ind => {
+                            const checked = excludedSectors.has(ind);
+                            const inUniverse = universeIndustries.has(ind);
+                            const coveredByGics = gicsChecked;
+                            return (
+                              <button
+                                key={`${group.gics}-${ind}`}
+                                onClick={() => toggleSector(ind)}
+                                disabled={coveredByGics}
+                                className="flex w-full items-center justify-between gap-2 pl-6 pr-3 py-1 text-left text-xs hover:bg-accent disabled:opacity-50 disabled:cursor-not-allowed"
+                              >
+                                <span className={
+                                  checked || coveredByGics
+                                    ? "font-medium text-foreground"
+                                    : inUniverse ? "text-foreground/80" : "text-muted-foreground"
+                                }>
+                                  {ind}
+                                  {!inUniverse && <span className="ml-1 text-[9px] text-muted-foreground">·n/a</span>}
+                                </span>
+                                {(checked || coveredByGics) && <Check size={12} className="text-primary" />}
+                              </button>
+                            );
+                          })}
+                        </div>
                       );
                     })}
                   </div>
