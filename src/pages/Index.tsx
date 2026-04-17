@@ -270,16 +270,21 @@ export default function Index() {
       />
       {/* ─── ROW 1: Title + Status ──────────────────── */}
       <header className={`sticky top-0 z-30 border-b transition-all ${enhancedView ? "border-white/5 bg-[hsl(220_25%_6%/0.55)] shadow-[0_1px_0_0_hsl(var(--primary)/0.18),0_20px_50px_-30px_hsl(var(--primary)/0.35)] backdrop-blur-xl backdrop-saturate-150" : "border-border bg-background/80 backdrop-blur-md"}`}>
-        <div className="container py-3">
-          {/* Row 1 */}
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-xl font-extrabold tracking-tight text-foreground sm:text-2xl">
+        <div className={`container ${enhancedView ? "py-4" : "py-3"}`}>
+          {/* Row 1: Title + Status */}
+          <div className="flex items-center justify-between gap-4">
+            <div className="min-w-0">
+              <h1 className={`font-extrabold tracking-tight text-foreground ${enhancedView ? "text-2xl sm:text-[1.75rem]" : "text-xl sm:text-2xl"}`}>
                 Best Performing Themes{" "}
                 <span className="text-primary">{formatDate(lastFetched)}</span>
               </h1>
+              {enhancedView && (
+                <p className="mt-0.5 text-[11px] text-muted-foreground">
+                  {formatTime(lastFetched)} · {themes.length} themes{isLive ? ` · ${symbolsFetched} symbols` : ""}
+                </p>
+              )}
             </div>
-            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <div className={`flex items-center gap-2 text-xs text-muted-foreground ${enhancedView ? "flex-wrap justify-end" : ""}`}>
               {isLive ? (
                 <span className="inline-flex items-center gap-1 text-gain-medium">
                   <Wifi size={12} /> Live
@@ -339,9 +344,13 @@ export default function Index() {
                   </Tooltip>
                 </TooltipProvider>
               )}
-              <span className="hidden sm:inline">· {formatTime(lastFetched)}</span>
-              <span className="hidden sm:inline">· {themes.length} themes</span>
-              {isLive && <span className="hidden sm:inline">· {symbolsFetched} symbols</span>}
+              {!enhancedView && (
+                <>
+                  <span className="hidden sm:inline">· {formatTime(lastFetched)}</span>
+                  <span className="hidden sm:inline">· {themes.length} themes</span>
+                  {isLive && <span className="hidden sm:inline">· {symbolsFetched} symbols</span>}
+                </>
+              )}
               {scanProgress && scanProgress.failed > 0 && (
                 <span className="text-[10px] text-destructive">⚠ {scanProgress.failed} unavailable</span>
               )}
@@ -349,7 +358,7 @@ export default function Index() {
           </div>
 
           {/* Search bar */}
-          <div className="mt-2.5">
+          <div className={enhancedView ? "mt-3" : "mt-2.5"}>
             <ThemeSearchBar
               query={searchQuery}
               setQuery={setSearchQuery}
@@ -360,247 +369,102 @@ export default function Index() {
             />
           </div>
 
-          {/* Row 2: Timeframes + Actions */}
-          <div className="mt-2.5 flex items-center justify-between gap-3">
-            {/* Left: Timeframe pills */}
-            <div className="flex items-center gap-2">
-              <div className="flex rounded-md border border-border bg-secondary/50">
-                {TIMEFRAMES.map((tf) => (
-                  <button
-                    key={tf}
-                    onClick={() => setActiveTimeframe(tf)}
-                    className={`px-3 py-1.5 text-xs font-semibold transition-colors ${
-                      activeTimeframe === tf
-                        ? "bg-primary text-primary-foreground"
-                        : "text-muted-foreground hover:text-foreground"
-                    }`}
-                  >
-                    {tf}
-                  </button>
-                ))}
-              </div>
-
-              {/* View switcher */}
-              <TooltipProvider delayDuration={200}>
-                <div className="flex items-center rounded-md border border-border bg-secondary/50">
-                  {([
-                    { key: "cards" as const, icon: <LayoutGrid size={14} />, label: "Card Grid" },
-                    { key: "list" as const, icon: <List size={14} />, label: "Ranked List" },
-                    { key: "heatmap" as const, icon: <Flame size={14} />, label: "Heatmap" },
-                    { key: "bars" as const, icon: <BarChart3 size={14} />, label: "Bar Chart" },
-                    { key: "bubble" as const, icon: <Circle size={14} />, label: "Bubble Chart" },
-                  ]).map((v) => (
-                    <Tooltip key={v.key}>
-                      <TooltipTrigger asChild>
-                        <button
-                          onClick={() => switchView(v.key)}
-                          className={`p-1.5 transition-colors ${
-                            dashboardView === v.key
-                              ? "bg-primary text-primary-foreground"
-                              : "text-muted-foreground hover:text-foreground"
-                          }`}
-                        >
-                          {v.icon}
-                        </button>
-                      </TooltipTrigger>
-                      <TooltipContent side="bottom" className="text-xs">{v.label}</TooltipContent>
-                    </Tooltip>
+          {/* Row 2: Timeframes + Actions — STANDARD MODE ONLY (in enhanced, these move into the toolbar above the cards) */}
+          {!enhancedView && (
+            <div className="mt-2.5 flex items-center justify-between gap-3">
+              {/* Left: Timeframe pills */}
+              <div className="flex items-center gap-2">
+                <div className="flex rounded-md border border-border bg-secondary/50">
+                  {TIMEFRAMES.map((tf) => (
+                    <button
+                      key={tf}
+                      onClick={() => setActiveTimeframe(tf)}
+                      className={`px-3 py-1.5 text-xs font-semibold transition-colors ${
+                        activeTimeframe === tf
+                          ? "bg-primary text-primary-foreground"
+                          : "text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      {tf}
+                    </button>
                   ))}
                 </div>
-              </TooltipProvider>
-            </div>
 
-            {/* Right: Primary actions */}
-            <div className="flex items-center gap-2">
-              {/* Full Scan */}
-              <button
-                onClick={startFullScan}
-                disabled={isFullScanning || isLoading}
-                className="rounded-md border border-primary/40 bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary transition-colors hover:bg-primary/20 disabled:opacity-50"
-                title="Update all themes sequentially"
-              >
-                {isFullScanning ? (
-                  <span className="inline-flex items-center gap-1">
-                    <Loader2 size={12} className="animate-spin" /> Scanning…
-                  </span>
-                ) : (
-                  <span className="inline-flex items-center gap-1">
-                    <ScanLine size={12} /> Full Scan
-                  </span>
-                )}
-              </button>
-              {fullScanStatus && (
-                <span className="hidden sm:inline-flex max-w-[200px] items-center gap-1 truncate text-[10px] text-muted-foreground" title={fullScanStatus}>
-                  {fullScanStatus}
-                  {!isFullScanning && fullScanStatus.includes("ticker") && (
-                    <button onClick={clearProgress} className="ml-1 rounded p-0.5 text-destructive hover:bg-destructive/10" title="Clear">
-                      <X size={10} />
-                    </button>
-                  )}
-                </span>
-              )}
+                {/* View switcher */}
+                <TooltipProvider delayDuration={200}>
+                  <div className="flex items-center rounded-md border border-border bg-secondary/50">
+                    {([
+                      { key: "cards" as const, icon: <LayoutGrid size={14} />, label: "Card Grid" },
+                      { key: "list" as const, icon: <List size={14} />, label: "Ranked List" },
+                      { key: "heatmap" as const, icon: <Flame size={14} />, label: "Heatmap" },
+                      { key: "bars" as const, icon: <BarChart3 size={14} />, label: "Bar Chart" },
+                      { key: "bubble" as const, icon: <Circle size={14} />, label: "Bubble Chart" },
+                    ]).map((v) => (
+                      <Tooltip key={v.key}>
+                        <TooltipTrigger asChild>
+                          <button
+                            onClick={() => switchView(v.key)}
+                            className={`p-1.5 transition-colors ${
+                              dashboardView === v.key
+                                ? "bg-primary text-primary-foreground"
+                                : "text-muted-foreground hover:text-foreground"
+                            }`}
+                          >
+                            {v.icon}
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent side="bottom" className="text-xs">{v.label}</TooltipContent>
+                      </Tooltip>
+                    ))}
+                  </div>
+                </TooltipProvider>
+              </div>
 
-              {/* EOD Routine Button */}
-              <EodRoutineButton
-                onDashboardUpdate={handleScanComplete}
-                buildThemesFromPerf={buildThemesFromPerf}
-              />
-
-              {/* Enhanced View toggle */}
-              <TooltipProvider delayDuration={200}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <button
-                      onClick={() => setEnhancedView(v => !v)}
-                      className={`inline-flex items-center gap-1 rounded-md border p-1.5 transition-colors ${
-                        enhancedView
-                          ? "border-primary/50 bg-primary/15 text-primary"
-                          : "border-border text-muted-foreground hover:bg-accent hover:text-foreground"
-                      }`}
-                      aria-pressed={enhancedView}
-                      title="Toggle Enhanced View"
-                    >
-                      <Sparkles size={14} />
-                      <span className="hidden text-[11px] font-medium sm:inline">Enhanced</span>
-                      <span
-                        className={`relative ml-0.5 inline-block h-3.5 w-6 rounded-full transition-colors ${
-                          enhancedView ? "bg-primary" : "bg-muted-foreground/30"
-                        }`}
-                      >
-                        <span
-                          className={`absolute top-0.5 h-2.5 w-2.5 rounded-full bg-background transition-transform ${
-                            enhancedView ? "translate-x-3" : "translate-x-0.5"
-                          }`}
-                        />
-                      </span>
-                    </button>
-                  </TooltipTrigger>
-                  <TooltipContent side="bottom" className="max-w-[220px] text-xs">
-                    <p className="font-semibold mb-1">Enhanced View</p>
-                    <p className="text-muted-foreground">Adds a premium gradient background, subtle noise texture, more breathing room, and soft elevation. Cards are unchanged.</p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-
-              {/* Help button */}
-              <HelpButton />
-
-              {/* Options dropdown */}
-              <div className="relative">
-                <button
-                  onClick={() => setShowOptions(!showOptions)}
-                  className="inline-flex items-center gap-1 rounded-md border border-border p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-                  title="More options"
-                >
-                  <Settings size={14} />
-                  <ChevronDown size={10} className={`transition-transform ${showOptions ? "rotate-180" : ""}`} />
-                </button>
-                {showOptions && (
-                  <>
-                    <div className="fixed inset-0 z-40" onClick={() => setShowOptions(false)} />
-                    <div className="absolute right-0 top-full z-50 mt-1 w-56 rounded-lg border border-border bg-card p-1 shadow-xl">
-                      {isLive ? (
-                        <button
-                          onClick={() => { setShowDemoConfirm(true); setShowOptions(false); }}
-                          className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-xs text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
-                        >
-                          <WifiOff size={13} /> Switch to Demo Data
-                        </button>
-                      ) : (
-                        <button
-                          onClick={() => { fetchLiveData(); setShowOptions(false); }}
-                          disabled={isLoading}
-                          className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-xs text-gain-medium hover:bg-accent transition-colors disabled:opacity-50"
-                        >
-                          <Wifi size={13} /> Go Live (All)
-                        </button>
-                      )}
-                      <button
-                        onClick={() => { setShowSelector(!showSelector); setShowOptions(false); }}
-                        className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-xs text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
-                      >
-                        <ScanLine size={13} /> {showSelector ? "Hide" : "Select"} Themes
-                      </button>
-                      <button
-                        onClick={() => { setShowPlaceholders(!showPlaceholders); setShowOptions(false); }}
-                        className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-xs text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
-                      >
-                        <LayoutDashboard size={13} /> {showPlaceholders ? "Hide" : "Show"} Empty Themes
-                      </button>
-                      <button
-                        onClick={() => { handleExport(); setShowOptions(false); }}
-                        className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-xs text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
-                      >
-                        <Download size={13} /> Export CSV
-                      </button>
-                      <button
-                        onClick={() => { setShowValidateDialog(true); setShowOptions(false); }}
-                        className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-xs text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
-                      >
-                        <ShieldCheck size={13} /> Validate Tickers
-                      </button>
-                      <button
-                        onClick={() => { isLive && fetchLiveData(); setShowOptions(false); }}
-                        disabled={isLoading || !isLive}
-                        className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-xs text-muted-foreground hover:bg-accent hover:text-foreground transition-colors disabled:opacity-30"
-                      >
-                        <RefreshCw size={13} /> Refresh Data
-                      </button>
-                      <div className="my-1 border-t border-border" />
-                      <Link
-                        to="/admin"
-                        onClick={() => setShowOptions(false)}
-                        className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-xs text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
-                      >
-                        <Settings size={13} /> Manage Themes & Tickers
-                      </Link>
-                    </div>
-                  </>
-                )}
+              {/* Right: Primary actions — standard mode */}
+              <div className="flex items-center gap-2">
+                {renderHeaderActions()}
               </div>
             </div>
-          </div>
+          )}
 
-          {/* Row 3: Tab Navigation */}
-          <div className="mt-3 flex items-center gap-1 border-t border-border/50 pt-2.5">
-            {([
-              { to: "/", label: "Dashboard", icon: <LayoutDashboard size={14} />, active: true, color: "", badge: null as number | string | null, pulse: false },
-              { to: "/intelligence", label: "Intelligence", icon: <Brain size={14} />, active: false, color: "text-primary", badge: null, pulse: false },
-              { to: "/watchlist", label: "Watchlist", icon: <Bookmark size={14} />, active: false, color: "text-[hsl(40,80%,50%)]",
-                badge: pinned.length > 0 ? pinned.length : null, pulse: false },
-              { to: "/alerts", label: "Alerts", icon: <Bell size={14} />, active: false, color: "text-destructive",
-                badge: unreadAlertCount > 99 ? "99+" : unreadAlertCount > 0 ? unreadAlertCount : null, pulse: false },
-              { to: "/rs-alpha", label: "RS Alpha", icon: <Zap size={14} />, active: false, color: "text-[hsl(280,70%,60%)]",
-                badge: null, pulse: false },
-              { to: "/eod-history", label: "EOD History", icon: <Calendar size={14} />, active: false, color: "text-gain-medium",
-                badge: null, pulse: false },
-            ]).map((tab) => (
-              <Link
-                key={tab.to}
-                to={tab.to}
-                className={`relative inline-flex items-center gap-1.5 rounded-md px-4 py-2 text-sm font-medium transition-colors ${
-                  tab.active
-                    ? "bg-primary/10 text-primary border-b-2 border-primary"
-                    : `text-muted-foreground hover:bg-accent hover:text-foreground ${tab.color}`
-                }`}
-              >
-                <span className={tab.active ? "text-primary" : tab.color}>{tab.icon}</span>
-                {tab.label}
-                {tab.badge && (
-                  <span className={`inline-flex items-center gap-0.5 rounded-full px-1.5 py-0 text-[9px] font-bold ${
-                    tab.to === "/alerts"
-                      ? "bg-destructive text-destructive-foreground"
-                      : "bg-primary/20 text-primary"
-                  }`}>
-                    {tab.badge}
-                  </span>
-                )}
-                {tab.pulse && (
-                  <span className="h-2 w-2 rounded-full bg-[hsl(40,80%,50%)] animate-pulse" title="EOD not saved today" />
-                )}
-              </Link>
-            ))}
-          </div>
+          {/* Enhanced mode: compact actions row only (timeframes/views moved above cards; tabs go to side rail) */}
+          {enhancedView && (
+            <div className="mt-3 flex items-center justify-end gap-2">
+              {renderHeaderActions()}
+            </div>
+          )}
+
+          {/* Row 3: Tab Navigation — STANDARD MODE ONLY (in enhanced, tabs move to left vertical rail) */}
+          {!enhancedView && (
+            <div className="mt-3 flex items-center gap-1 border-t border-border/50 pt-2.5">
+              {dashboardTabs.map((tab) => (
+                <Link
+                  key={tab.to}
+                  to={tab.to}
+                  className={`relative inline-flex items-center gap-1.5 rounded-md px-4 py-2 text-sm font-medium transition-colors ${
+                    tab.active
+                      ? "bg-primary/10 text-primary border-b-2 border-primary"
+                      : `text-muted-foreground hover:bg-accent hover:text-foreground ${tab.color}`
+                  }`}
+                >
+                  <span className={tab.active ? "text-primary" : tab.color}>{tab.icon}</span>
+                  {tab.label}
+                  {tab.badge && (
+                    <span className={`inline-flex items-center gap-0.5 rounded-full px-1.5 py-0 text-[9px] font-bold ${
+                      tab.to === "/alerts"
+                        ? "bg-destructive text-destructive-foreground"
+                        : "bg-primary/20 text-primary"
+                    }`}>
+                      {tab.badge}
+                    </span>
+                  )}
+                  {tab.pulse && (
+                    <span className="h-2 w-2 rounded-full bg-[hsl(40,80%,50%)] animate-pulse" title="EOD not saved today" />
+                  )}
+                </Link>
+              ))}
+            </div>
+          )}
         </div>
       </header>
 
