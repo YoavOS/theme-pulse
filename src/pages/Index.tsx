@@ -192,24 +192,63 @@ export default function Index() {
   };
 
   return (
-    <div className={`relative min-h-screen bg-background ${enhancedView ? "enhanced-view" : ""}`}>
+    <div className={`relative min-h-screen ${enhancedView ? "enhanced-view" : "bg-background"}`}>
       {/* Enhanced background layer (only visible when toggle ON) */}
       {enhancedView && (
         <>
+          {/* Base deep gradient */}
           <div
             aria-hidden
             className="pointer-events-none fixed inset-0 z-0 animate-fade-in"
             style={{
               background:
-                "radial-gradient(1200px 600px at 15% -10%, hsl(var(--primary) / 0.08), transparent 60%), radial-gradient(900px 500px at 95% 10%, hsl(280 70% 50% / 0.06), transparent 60%), linear-gradient(180deg, hsl(var(--background)) 0%, hsl(220 20% 4%) 100%)",
+                "linear-gradient(180deg, hsl(220 25% 6%) 0%, hsl(222 28% 4%) 45%, hsl(220 30% 3%) 100%)",
             }}
           />
+          {/* Aurora mesh blobs */}
           <div
             aria-hidden
-            className="pointer-events-none fixed inset-0 z-0 opacity-[0.035] mix-blend-overlay animate-fade-in"
+            className="pointer-events-none fixed inset-0 z-0 animate-fade-in"
+            style={{
+              background: [
+                "radial-gradient(900px 700px at 8% -5%, hsl(var(--primary) / 0.18), transparent 55%)",
+                "radial-gradient(800px 600px at 100% 0%, hsl(265 85% 60% / 0.14), transparent 55%)",
+                "radial-gradient(700px 500px at 50% 110%, hsl(190 90% 55% / 0.10), transparent 60%)",
+                "radial-gradient(600px 400px at 95% 85%, hsl(330 80% 60% / 0.07), transparent 60%)",
+              ].join(","),
+              filter: "saturate(1.1)",
+            }}
+          />
+          {/* Subtle grid pattern */}
+          <div
+            aria-hidden
+            className="pointer-events-none fixed inset-0 z-0 opacity-[0.04] animate-fade-in"
             style={{
               backgroundImage:
-                "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 0.6 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>\")",
+                "linear-gradient(hsl(var(--primary)/0.7) 1px, transparent 1px), linear-gradient(90deg, hsl(var(--primary)/0.7) 1px, transparent 1px)",
+              backgroundSize: "56px 56px",
+              maskImage:
+                "radial-gradient(ellipse 90% 70% at 50% 30%, black 40%, transparent 85%)",
+              WebkitMaskImage:
+                "radial-gradient(ellipse 90% 70% at 50% 30%, black 40%, transparent 85%)",
+            }}
+          />
+          {/* Fine noise grain */}
+          <div
+            aria-hidden
+            className="pointer-events-none fixed inset-0 z-0 opacity-[0.05] mix-blend-overlay animate-fade-in"
+            style={{
+              backgroundImage:
+                "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 0.55 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>\")",
+            }}
+          />
+          {/* Vignette for depth */}
+          <div
+            aria-hidden
+            className="pointer-events-none fixed inset-0 z-0 animate-fade-in"
+            style={{
+              background:
+                "radial-gradient(ellipse 100% 80% at 50% 40%, transparent 55%, hsl(220 35% 2% / 0.55) 100%)",
             }}
           />
         </>
@@ -230,7 +269,7 @@ export default function Index() {
         onCancel={() => setShowDemoConfirm(false)}
       />
       {/* ─── ROW 1: Title + Status ──────────────────── */}
-      <header className={`sticky top-0 z-30 border-b border-border backdrop-blur-md transition-all ${enhancedView ? "bg-background/60 shadow-[0_8px_32px_-12px_hsl(var(--primary)/0.15)] backdrop-saturate-150" : "bg-background/80"}`}>
+      <header className={`sticky top-0 z-30 border-b transition-all ${enhancedView ? "border-white/5 bg-[hsl(220_25%_6%/0.55)] shadow-[0_1px_0_0_hsl(var(--primary)/0.18),0_20px_50px_-30px_hsl(var(--primary)/0.35)] backdrop-blur-xl backdrop-saturate-150" : "border-border bg-background/80 backdrop-blur-md"}`}>
         <div className="container py-3">
           {/* Row 1 */}
           <div className="flex items-center justify-between">
@@ -635,7 +674,7 @@ export default function Index() {
         </div>
       )}
 
-      <main className={`container transition-all ${enhancedView ? "py-10 px-6 sm:px-8" : "py-6"}`}>
+      <main className={`container transition-all ${enhancedView ? "py-12 px-6 sm:px-10" : "py-6"}`}>
         {/* Search results banner */}
         {searchResult && (
           <div className="mb-4 flex items-center gap-2 rounded-lg border border-primary/20 bg-primary/5 px-4 py-2.5 text-sm">
@@ -654,9 +693,9 @@ export default function Index() {
         )}
 
         <div
-          className={`transition-opacity duration-200 ${
+          className={`relative transition-opacity duration-200 ${
             enhancedView
-              ? "rounded-2xl border border-border/40 bg-card/20 p-6 shadow-[0_24px_60px_-30px_hsl(var(--primary)/0.25),0_0_0_1px_hsl(var(--border)/0.4)] backdrop-blur-sm sm:p-8"
+              ? "rounded-3xl border border-white/[0.06] bg-gradient-to-b from-white/[0.025] to-white/[0.005] p-6 shadow-[0_40px_80px_-40px_hsl(var(--primary)/0.35),0_0_0_1px_hsl(var(--border)/0.35),inset_0_1px_0_0_hsl(0_0%_100%/0.04)] backdrop-blur-md sm:p-10"
               : ""
           }`}
           key={dashboardView}
