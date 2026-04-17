@@ -192,7 +192,7 @@ export default function Index() {
   };
 
   return (
-    <div className={`relative min-h-screen bg-background ${enhancedView ? "enhanced-view" : ""}`}>
+    <div className={`relative min-h-screen ${enhancedView ? "enhanced-view" : "bg-background"}`}>
       {/* Enhanced background layer (only visible when toggle ON) */}
       {enhancedView && (
         <>
