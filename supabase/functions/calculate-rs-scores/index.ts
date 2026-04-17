@@ -52,13 +52,36 @@ Deno.serve(async (req) => {
       perf1dMap.set(p.symbol, { perf1d: p.perf_1d, price: p.price });
     }
 
-    // 1D for SPY
+    // 1D for SPY: prefer ticker_performance, fall back to Yahoo 5d (last two closes)
     const { data: spyPerf } = await supabase
       .from("ticker_performance")
       .select("perf_1d")
       .eq("symbol", "SPY")
       .maybeSingle();
-    const spy1d = spyPerf?.perf_1d ?? 0;
+    let spy1d: number | null = (spyPerf?.perf_1d ?? null) !== null && spyPerf?.perf_1d !== 0
+      ? Number(spyPerf?.perf_1d)
+      : null;
+    if (spy1d === null) {
+      const spyHist = await getHistoricalData(supabase, "SPY", "5d");
+      const closes = (spyHist.ohlc ?? []).map(b => b.close).filter((c): c is number => c !== null);
+      if (closes.length >= 2) {
+        const prev = closes[closes.length - 2];
+        const last = closes[closes.length - 1];
+        if (prev > 0) spy1d = Math.round(((last - prev) / prev) * 10000) / 100;
+      }
+    }
+    if (spy1d === null) spy1d = 0;
+
+    // Helper: Yahoo 5d fallback for a single symbol's 1D return
+    async function yahoo1dReturn(sym: string, todayPrice: number | null): Promise<number | null> {
+      const hist = await getHistoricalData(supabase, sym, "5d", { todayPrice });
+      const closes = (hist.ohlc ?? []).map(b => b.close).filter((c): c is number => c !== null);
+      if (closes.length < 2) return null;
+      const prev = closes[closes.length - 2];
+      const last = closes[closes.length - 1];
+      if (!prev || prev <= 0) return null;
+      return Math.round(((last - prev) / prev) * 10000) / 100;
+    }
 
     // 4. For each stock: get 1M/3M/6M returns via shared helper (cache → Yahoo)
     const updates: any[] = [];
@@ -71,7 +94,15 @@ Deno.serve(async (req) => {
         periodReturns[period] = r.returnPct;
       }
 
-      const r1d = perf1dMap.get(sym)?.perf1d ?? null;
+      // 1D return: ticker_performance first, Yahoo 5d fallback for missing/zero rows
+      const perfRow = perf1dMap.get(sym);
+      let r1d: number | null = (perfRow?.perf1d ?? null) !== null && perfRow?.perf1d !== 0
+        ? Number(perfRow!.perf1d)
+        : null;
+      if (r1d === null) {
+        r1d = await yahoo1dReturn(sym, u.current_price ?? null);
+      }
+
       const r1m = periodReturns["1mo"];
       const r3m = periodReturns["3mo"];
       const r6m = periodReturns["6mo"];
