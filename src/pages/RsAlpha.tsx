@@ -6,10 +6,14 @@ import { useRsAlpha, RsStock, RS_FILTER_THRESHOLDS } from "@/hooks/useRsAlpha";
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip";
 import { Skeleton } from "@/components/ui/skeleton";
 import HelpButton from "@/components/HelpButton";
+import OverallWeightsPanel, { RsWeights, DEFAULT_RS_WEIGHTS, normalizeWeights } from "@/components/rs/OverallWeightsPanel";
+import RsRatingBadge, { computeRsRatings } from "@/components/rs/RsRatingBadge";
 
 type TabId = "overall" | "1d" | "1m" | "3m" | "6m";
-type SortField = "rank" | "symbol" | "company" | "rs" | "stockReturn" | "spyReturn" | "price";
+type SortField = "rank" | "symbol" | "company" | "rs" | "rating" | "stockReturn" | "spyReturn" | "price";
 type SortDir = "asc" | "desc";
+
+const RS_WEIGHTS_KEY = "rs-overall-weights-v1";
 
 const TABS: { id: TabId; label: string }[] = [
   { id: "overall", label: "Overall" },
@@ -82,9 +86,26 @@ export default function RsAlpha() {
     const saved = typeof window !== "undefined" ? localStorage.getItem("rs-hide-otc") : null;
     return saved === null ? true : saved === "true";
   });
+  const [weights, setWeights] = useState<RsWeights>(() => {
+    if (typeof window === "undefined") return { ...DEFAULT_RS_WEIGHTS };
+    try {
+      const raw = localStorage.getItem(RS_WEIGHTS_KEY);
+      if (!raw) return { ...DEFAULT_RS_WEIGHTS };
+      const parsed = JSON.parse(raw);
+      return {
+        w1d: Number(parsed.w1d ?? DEFAULT_RS_WEIGHTS.w1d),
+        w1m: Number(parsed.w1m ?? DEFAULT_RS_WEIGHTS.w1m),
+        w3m: Number(parsed.w3m ?? DEFAULT_RS_WEIGHTS.w3m),
+        w6m: Number(parsed.w6m ?? DEFAULT_RS_WEIGHTS.w6m),
+      };
+    } catch {
+      return { ...DEFAULT_RS_WEIGHTS };
+    }
+  });
 
   useEffect(() => { setShowAll(false); }, [activeTab]);
   useEffect(() => { localStorage.setItem("rs-hide-otc", String(hideOtc)); }, [hideOtc]);
+  useEffect(() => { localStorage.setItem(RS_WEIGHTS_KEY, JSON.stringify(weights)); }, [weights]);
 
   // Heuristic: 5-letter all-caps tickers ending in 'F' are typically foreign OTC (e.g., FKURF).
   // Also defensively block any symbol with OTC suffixes that may have slipped through historically.
@@ -95,34 +116,62 @@ export default function RsAlpha() {
     return false;
   };
 
+  // Compute custom Overall RS using user-defined weights (auto-rebalance for missing timeframes).
+  const computeCustomOverall = (s: RsStock): number | null => {
+    const parts: { v: number; w: number }[] = [];
+    if (s.rs1d !== null && weights.w1d > 0) parts.push({ v: s.rs1d, w: weights.w1d });
+    if (s.rs1m !== null && weights.w1m > 0) parts.push({ v: s.rs1m, w: weights.w1m });
+    if (s.rs3m !== null && weights.w3m > 0) parts.push({ v: s.rs3m, w: weights.w3m });
+    if (s.rs6m !== null && weights.w6m > 0) parts.push({ v: s.rs6m, w: weights.w6m });
+    if (parts.length === 0) return null;
+    const tw = parts.reduce((sum, p) => sum + p.w, 0);
+    if (tw <= 0) return null;
+    return Math.round(parts.reduce((sum, p) => sum + p.v * (p.w / tw), 0) * 100) / 100;
+  };
+
+  const getRsForTab = (s: RsStock, tab: TabId): number | null => {
+    if (tab === "overall") return computeCustomOverall(s);
+    return getRsField(s, tab);
+  };
+
   const toggleSort = (field: SortField) => {
     if (sortField === field) setSortDir(d => d === "desc" ? "asc" : "desc");
     else { setSortField(field); setSortDir("desc"); }
   };
 
-  const sortedStocks = useMemo(() => {
+  // Filter, then compute RS Rating (1-99) by ranking within the filtered list for the active timeframe.
+  const { sortedStocks, ratingMap } = useMemo(() => {
     const filtered = stocks.filter(s => {
-      if (getRsField(s, activeTab) === null) return false;
+      if (getRsForTab(s, activeTab) === null) return false;
       if (hideOtc && isOtcSymbol(s.symbol)) return false;
       return true;
     });
-    return [...filtered].sort((a, b) => {
+    const rsValues = filtered.map(s => getRsForTab(s, activeTab));
+    const ratings = computeRsRatings(rsValues);
+    const map = new Map<string, number | null>();
+    filtered.forEach((s, i) => map.set(s.symbol, ratings[i]));
+
+    const sorted = [...filtered].sort((a, b) => {
       const mul = sortDir === "desc" ? -1 : 1;
       switch (sortField) {
         case "symbol": return mul * a.symbol.localeCompare(b.symbol);
         case "company": return mul * (a.companyName ?? "").localeCompare(b.companyName ?? "");
-        case "rs": return mul * ((getRsField(a, activeTab) ?? -999) - (getRsField(b, activeTab) ?? -999));
+        case "rs": return mul * ((getRsForTab(a, activeTab) ?? -999) - (getRsForTab(b, activeTab) ?? -999));
+        case "rating": return mul * ((map.get(a.symbol) ?? -1) - (map.get(b.symbol) ?? -1));
         case "stockReturn": return mul * ((getReturnField(a, activeTab) ?? -999) - (getReturnField(b, activeTab) ?? -999));
         case "spyReturn": return mul * ((getSpyField(a, activeTab) ?? -999) - (getSpyField(b, activeTab) ?? -999));
         case "price": return mul * ((a.price ?? 0) - (b.price ?? 0));
         default: return 0;
       }
     });
-  }, [stocks, activeTab, sortField, sortDir, hideOtc]);
+    return { sortedStocks: sorted, ratingMap: map };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stocks, activeTab, sortField, sortDir, hideOtc, weights]);
 
   const otcHiddenCount = useMemo(
-    () => hideOtc ? stocks.filter(s => isOtcSymbol(s.symbol) && getRsField(s, activeTab) !== null).length : 0,
-    [stocks, hideOtc, activeTab]
+    () => hideOtc ? stocks.filter(s => isOtcSymbol(s.symbol) && getRsForTab(s, activeTab) !== null).length : 0,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [stocks, hideOtc, activeTab, weights]
   );
 
   const displayStocks = showAll ? sortedStocks : sortedStocks.slice(0, 25);
@@ -228,6 +277,14 @@ export default function RsAlpha() {
               >
                 <RotateCcw size={12} />
               </button>
+            )}
+
+            {activeTab === "overall" && (
+              <OverallWeightsPanel
+                weights={weights}
+                onChange={setWeights}
+                onReset={() => setWeights({ ...DEFAULT_RS_WEIGHTS })}
+              />
             )}
 
             <button
@@ -369,19 +426,19 @@ export default function RsAlpha() {
               <div className="rounded-lg border border-border bg-card p-3">
                 <div className="text-xs text-muted-foreground">Positive RS</div>
                 <div className="text-xl font-bold text-[hsl(160,70%,50%)]">
-                  {sortedStocks.filter(s => (getRsField(s, activeTab) ?? 0) > 0).length}
+                  {sortedStocks.filter(s => (getRsForTab(s, activeTab) ?? 0) > 0).length}
                 </div>
               </div>
               <div className="rounded-lg border border-border bg-card p-3">
                 <div className="text-xs text-muted-foreground">Negative RS</div>
                 <div className="text-xl font-bold text-destructive">
-                  {sortedStocks.filter(s => (getRsField(s, activeTab) ?? 0) < 0).length}
+                  {sortedStocks.filter(s => (getRsForTab(s, activeTab) ?? 0) < 0).length}
                 </div>
               </div>
               <div className="rounded-lg border border-border bg-card p-3">
                 <div className="text-xs text-muted-foreground">Top RS Score</div>
                 <div className="text-xl font-bold text-[hsl(160,70%,50%)]">
-                  {sortedStocks.length > 0 ? pctDisplay(getRsField(sortedStocks[0], activeTab)) : "—"}
+                  {sortedStocks.length > 0 ? pctDisplay(getRsForTab(sortedStocks[0], activeTab)) : "—"}
                 </div>
               </div>
             </div>
@@ -445,6 +502,7 @@ export default function RsAlpha() {
                     <tr className="border-b border-border bg-muted/30">
                       <th className="px-3 py-2.5 text-left text-xs font-medium text-muted-foreground w-12">#</th>
                       <th className="px-3 py-2.5 text-left"><SortHeader field="symbol" label="Ticker" /></th>
+                      <th className="px-3 py-2.5 text-center"><SortHeader field="rating" label="RS Rating" className="justify-center" /></th>
                       <th className="px-3 py-2.5 text-left"><SortHeader field="company" label="Company" /></th>
                       <th className="px-3 py-2.5 text-right"><SortHeader field="rs" label="RS Score" className="justify-end" /></th>
                       <th className="px-3 py-2.5 text-right"><SortHeader field="stockReturn" label="Stock Return" className="justify-end" /></th>
@@ -454,13 +512,15 @@ export default function RsAlpha() {
                   </thead>
                   <tbody>
                     {displayStocks.map((stock, idx) => {
-                      const rs = getRsField(stock, activeTab);
+                      const rs = getRsForTab(stock, activeTab);
                       const ret = getReturnField(stock, activeTab);
                       const spy = getSpyField(stock, activeTab);
+                      const rating = ratingMap.get(stock.symbol) ?? null;
                       return (
                         <tr key={stock.symbol} className={`border-b border-border/50 transition-colors hover:bg-muted/20 ${rsBg(rs)}`}>
                           <td className="px-3 py-2 text-xs text-muted-foreground">{idx + 1}</td>
                           <td className="px-3 py-2 font-mono font-semibold text-foreground">{stock.symbol}</td>
+                          <td className="px-3 py-2 text-center"><RsRatingBadge rating={rating} /></td>
                           <td className="px-3 py-2 text-muted-foreground max-w-[240px] truncate" title={stock.companyName ?? ""}>
                             {stock.companyName ?? stock.sector ?? "—"}
                           </td>
