@@ -426,19 +426,19 @@ export default function RsAlpha() {
               <div className="rounded-lg border border-border bg-card p-3">
                 <div className="text-xs text-muted-foreground">Positive RS</div>
                 <div className="text-xl font-bold text-[hsl(160,70%,50%)]">
-                  {sortedStocks.filter(s => (getRsField(s, activeTab) ?? 0) > 0).length}
+                  {sortedStocks.filter(s => (getRsForTab(s, activeTab) ?? 0) > 0).length}
                 </div>
               </div>
               <div className="rounded-lg border border-border bg-card p-3">
                 <div className="text-xs text-muted-foreground">Negative RS</div>
                 <div className="text-xl font-bold text-destructive">
-                  {sortedStocks.filter(s => (getRsField(s, activeTab) ?? 0) < 0).length}
+                  {sortedStocks.filter(s => (getRsForTab(s, activeTab) ?? 0) < 0).length}
                 </div>
               </div>
               <div className="rounded-lg border border-border bg-card p-3">
                 <div className="text-xs text-muted-foreground">Top RS Score</div>
                 <div className="text-xl font-bold text-[hsl(160,70%,50%)]">
-                  {sortedStocks.length > 0 ? pctDisplay(getRsField(sortedStocks[0], activeTab)) : "—"}
+                  {sortedStocks.length > 0 ? pctDisplay(getRsForTab(sortedStocks[0], activeTab)) : "—"}
                 </div>
               </div>
             </div>
