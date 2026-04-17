@@ -78,8 +78,22 @@ export default function RsAlpha() {
   const [showAll, setShowAll] = useState(false);
   const [sortField, setSortField] = useState<SortField>("rs");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
+  const [hideOtc, setHideOtc] = useState<boolean>(() => {
+    const saved = typeof window !== "undefined" ? localStorage.getItem("rs-hide-otc") : null;
+    return saved === null ? true : saved === "true";
+  });
 
   useEffect(() => { setShowAll(false); }, [activeTab]);
+  useEffect(() => { localStorage.setItem("rs-hide-otc", String(hideOtc)); }, [hideOtc]);
+
+  // Heuristic: 5-letter all-caps tickers ending in 'F' are typically foreign OTC (e.g., FKURF).
+  // Also defensively block any symbol with OTC suffixes that may have slipped through historically.
+  const isOtcSymbol = (sym: string): boolean => {
+    if (!sym) return false;
+    if (/\.(PK|OTC|OB)$/i.test(sym)) return true;
+    if (/^[A-Z]{5}$/.test(sym) && sym.endsWith("F")) return true;
+    return false;
+  };
 
   const toggleSort = (field: SortField) => {
     if (sortField === field) setSortDir(d => d === "desc" ? "asc" : "desc");
@@ -87,7 +101,11 @@ export default function RsAlpha() {
   };
 
   const sortedStocks = useMemo(() => {
-    const filtered = stocks.filter(s => getRsField(s, activeTab) !== null);
+    const filtered = stocks.filter(s => {
+      if (getRsField(s, activeTab) === null) return false;
+      if (hideOtc && isOtcSymbol(s.symbol)) return false;
+      return true;
+    });
     return [...filtered].sort((a, b) => {
       const mul = sortDir === "desc" ? -1 : 1;
       switch (sortField) {
@@ -100,7 +118,12 @@ export default function RsAlpha() {
         default: return 0;
       }
     });
-  }, [stocks, activeTab, sortField, sortDir]);
+  }, [stocks, activeTab, sortField, sortDir, hideOtc]);
+
+  const otcHiddenCount = useMemo(
+    () => hideOtc ? stocks.filter(s => isOtcSymbol(s.symbol) && getRsField(s, activeTab) !== null).length : 0,
+    [stocks, hideOtc, activeTab]
+  );
 
   const displayStocks = showAll ? sortedStocks : sortedStocks.slice(0, 25);
   const hasMore = sortedStocks.length > 25;
