@@ -3,19 +3,21 @@ import { Settings2, RotateCcw } from "lucide-react";
 
 export interface RsWeights {
   w1d: number;
+  w1w: number;
   w1m: number;
   w3m: number;
   w6m: number;
 }
 
-export const DEFAULT_RS_WEIGHTS: RsWeights = { w1d: 0, w1m: 50, w3m: 30, w6m: 20 };
+export const DEFAULT_RS_WEIGHTS: RsWeights = { w1d: 0, w1w: 0, w1m: 50, w3m: 30, w6m: 20 };
 
 export function normalizeWeights(w: RsWeights): RsWeights {
-  const total = w.w1d + w.w1m + w.w3m + w.w6m;
+  const total = w.w1d + w.w1w + w.w1m + w.w3m + w.w6m;
   if (total <= 0) return { ...DEFAULT_RS_WEIGHTS };
   const f = 100 / total;
   return {
     w1d: Math.round(w.w1d * f),
+    w1w: Math.round(w.w1w * f),
     w1m: Math.round(w.w1m * f),
     w3m: Math.round(w.w3m * f),
     w6m: Math.round(w.w6m * f),
@@ -30,7 +32,7 @@ interface Props {
 
 export default function OverallWeightsPanel({ weights, onChange, onReset }: Props) {
   const [open, setOpen] = useState(false);
-  const total = weights.w1d + weights.w1m + weights.w3m + weights.w6m;
+  const total = weights.w1d + weights.w1w + weights.w1m + weights.w3m + weights.w6m;
   const norm = normalizeWeights(weights);
 
   const update = (key: keyof RsWeights, val: number) => {
@@ -88,6 +90,7 @@ export default function OverallWeightsPanel({ weights, onChange, onReset }: Prop
             </p>
             <div className="space-y-2.5">
               <Row label="1 Day" k="w1d" />
+              <Row label="1 Week" k="w1w" />
               <Row label="1 Month" k="w1m" />
               <Row label="3 Month" k="w3m" />
               <Row label="6 Month" k="w6m" />

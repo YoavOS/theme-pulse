@@ -379,10 +379,12 @@ export type Database = {
           qualified_at: string
           return_1d: number | null
           return_1m: number | null
+          return_1w: number | null
           return_3m: number | null
           return_6m: number | null
           rs_1d: number | null
           rs_1m: number | null
+          rs_1w: number | null
           rs_3m: number | null
           rs_6m: number | null
           rs_calculated_at: string | null
@@ -390,6 +392,7 @@ export type Database = {
           sector: string | null
           spy_return_1d: number | null
           spy_return_1m: number | null
+          spy_return_1w: number | null
           spy_return_3m: number | null
           spy_return_6m: number | null
           symbol: string
@@ -404,10 +407,12 @@ export type Database = {
           qualified_at?: string
           return_1d?: number | null
           return_1m?: number | null
+          return_1w?: number | null
           return_3m?: number | null
           return_6m?: number | null
           rs_1d?: number | null
           rs_1m?: number | null
+          rs_1w?: number | null
           rs_3m?: number | null
           rs_6m?: number | null
           rs_calculated_at?: string | null
@@ -415,6 +420,7 @@ export type Database = {
           sector?: string | null
           spy_return_1d?: number | null
           spy_return_1m?: number | null
+          spy_return_1w?: number | null
           spy_return_3m?: number | null
           spy_return_6m?: number | null
           symbol: string
@@ -429,10 +435,12 @@ export type Database = {
           qualified_at?: string
           return_1d?: number | null
           return_1m?: number | null
+          return_1w?: number | null
           return_3m?: number | null
           return_6m?: number | null
           rs_1d?: number | null
           rs_1m?: number | null
+          rs_1w?: number | null
           rs_3m?: number | null
           rs_6m?: number | null
           rs_calculated_at?: string | null
@@ -440,6 +448,7 @@ export type Database = {
           sector?: string | null
           spy_return_1d?: number | null
           spy_return_1m?: number | null
+          spy_return_1w?: number | null
           spy_return_3m?: number | null
           spy_return_6m?: number | null
           symbol?: string

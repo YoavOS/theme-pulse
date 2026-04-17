@@ -10,15 +10,16 @@ import OverallWeightsPanel, { RsWeights, DEFAULT_RS_WEIGHTS, normalizeWeights } 
 import RsRatingBadge, { computeRsRatings } from "@/components/rs/RsRatingBadge";
 import CustomTradingViewListModal from "@/components/rs/CustomTradingViewListModal";
 
-type TabId = "overall" | "1d" | "1m" | "3m" | "6m";
+type TabId = "overall" | "1d" | "1w" | "1m" | "3m" | "6m";
 type SortField = "rank" | "symbol" | "company" | "rs" | "rating" | "stockReturn" | "spyReturn" | "price";
 type SortDir = "asc" | "desc";
 
-const RS_WEIGHTS_KEY = "rs-overall-weights-v1";
+const RS_WEIGHTS_KEY = "rs-overall-weights-v2";
 
 const TABS: { id: TabId; label: string }[] = [
   { id: "overall", label: "Overall" },
   { id: "1d", label: "1 Day" },
+  { id: "1w", label: "1 Week" },
   { id: "1m", label: "1 Month" },
   { id: "3m", label: "3 Months" },
   { id: "6m", label: "6 Months" },
@@ -27,6 +28,7 @@ const TABS: { id: TabId; label: string }[] = [
 function getRsField(stock: RsStock, tab: TabId): number | null {
   switch (tab) {
     case "1d": return stock.rs1d;
+    case "1w": return stock.rs1w;
     case "1m": return stock.rs1m;
     case "3m": return stock.rs3m;
     case "6m": return stock.rs6m;
@@ -36,6 +38,7 @@ function getRsField(stock: RsStock, tab: TabId): number | null {
 function getReturnField(stock: RsStock, tab: TabId): number | null {
   switch (tab) {
     case "1d": return stock.return1d;
+    case "1w": return stock.return1w;
     case "1m": return stock.return1m;
     case "3m": return stock.return3m;
     case "6m": return stock.return6m;
@@ -45,6 +48,7 @@ function getReturnField(stock: RsStock, tab: TabId): number | null {
 function getSpyField(stock: RsStock, tab: TabId): number | null {
   switch (tab) {
     case "1d": return stock.spyReturn1d;
+    case "1w": return stock.spyReturn1w;
     case "1m": return stock.spyReturn1m;
     case "3m": return stock.spyReturn3m;
     case "6m": return stock.spyReturn6m;
@@ -96,6 +100,7 @@ export default function RsAlpha() {
       const parsed = JSON.parse(raw);
       return {
         w1d: Number(parsed.w1d ?? DEFAULT_RS_WEIGHTS.w1d),
+        w1w: Number(parsed.w1w ?? DEFAULT_RS_WEIGHTS.w1w),
         w1m: Number(parsed.w1m ?? DEFAULT_RS_WEIGHTS.w1m),
         w3m: Number(parsed.w3m ?? DEFAULT_RS_WEIGHTS.w3m),
         w6m: Number(parsed.w6m ?? DEFAULT_RS_WEIGHTS.w6m),
@@ -122,6 +127,7 @@ export default function RsAlpha() {
   const computeCustomOverall = (s: RsStock): number | null => {
     const parts: { v: number; w: number }[] = [];
     if (s.rs1d !== null && weights.w1d > 0) parts.push({ v: s.rs1d, w: weights.w1d });
+    if (s.rs1w !== null && weights.w1w > 0) parts.push({ v: s.rs1w, w: weights.w1w });
     if (s.rs1m !== null && weights.w1m > 0) parts.push({ v: s.rs1m, w: weights.w1m });
     if (s.rs3m !== null && weights.w3m > 0) parts.push({ v: s.rs3m, w: weights.w3m });
     if (s.rs6m !== null && weights.w6m > 0) parts.push({ v: s.rs6m, w: weights.w6m });

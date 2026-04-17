@@ -9,7 +9,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { RsStock } from "@/hooks/useRsAlpha";
 import { ALL_GICS_SECTORS, GICS_SECTORS, expandSelectedToIndustries } from "@/lib/sectorTaxonomy";
 
-export type CustomListTab = "overall" | "1d" | "1m" | "3m" | "6m";
+export type CustomListTab = "overall" | "1d" | "1w" | "1m" | "3m" | "6m";
 type SortBy = "rs" | "rating" | "return";
 const TOPN_MIN = 10;
 const TOPN_MAX = 500; // values >= MAX mean "All"
