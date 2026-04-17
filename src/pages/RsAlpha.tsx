@@ -568,6 +568,18 @@ export default function RsAlpha() {
           </>
         )}
       </main>
+
+      <CustomTradingViewListModal
+        open={customListOpen}
+        onOpenChange={setCustomListOpen}
+        tabId={activeTab}
+        tabLabel={`${TABS.find(t => t.id === activeTab)?.label ?? ""} Best RS`}
+        stocks={sortedStocks}
+        ratingMap={ratingMap}
+        getRsForTab={getRsForTab}
+        getReturnField={getReturnField}
+        isOtcSymbol={isOtcSymbol}
+      />
     </div>
   );
 }
