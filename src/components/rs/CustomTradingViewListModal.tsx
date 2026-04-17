@@ -285,39 +285,73 @@ export default function CustomTradingViewListModal({
               <Popover open={sectorPopoverOpen} onOpenChange={setSectorPopoverOpen}>
                 <PopoverTrigger asChild>
                   <button
-                    disabled={!excludeSectorsOn || allSectors.length === 0}
+                    disabled={!excludeSectorsOn}
                     className="inline-flex items-center gap-1.5 rounded-md border border-border bg-background px-2.5 py-1 text-[11px] font-medium text-foreground hover:bg-accent disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     {excludedSectors.size > 0 ? `${excludedSectors.size} selected` : "Choose sectors"}
                     <ChevronDown size={12} />
                   </button>
                 </PopoverTrigger>
-                <PopoverContent className="w-72 p-0" align="end">
+                <PopoverContent className="w-80 p-0" align="end">
                   <div className="border-b border-border p-2">
                     <Input
                       autoFocus
-                      placeholder="Search sectors…"
+                      placeholder="Search GICS sectors or industries…"
                       value={sectorSearch}
                       onChange={(e) => setSectorSearch(e.target.value)}
                       className="h-7 text-xs"
                     />
                   </div>
-                  <div className="max-h-64 overflow-y-auto py-1">
-                    {filteredSectors.length === 0 ? (
+                  <div className="max-h-72 overflow-y-auto py-1">
+                    {filteredGroups.length === 0 ? (
                       <div className="px-3 py-4 text-center text-[11px] text-muted-foreground">
-                        No sectors found
+                        No matches
                       </div>
-                    ) : filteredSectors.map(sec => {
-                      const checked = excludedSectors.has(sec);
+                    ) : filteredGroups.map(group => {
+                      const gicsChecked = excludedSectors.has(group.gics);
+                      const childCount = group.industries.filter(i => universeIndustries.has(i)).length;
                       return (
-                        <button
-                          key={sec}
-                          onClick={() => toggleSector(sec)}
-                          className="flex w-full items-center justify-between gap-2 px-3 py-1.5 text-left text-xs hover:bg-accent"
-                        >
-                          <span className={checked ? "font-medium text-foreground" : "text-muted-foreground"}>{sec}</span>
-                          {checked && <Check size={12} className="text-primary" />}
-                        </button>
+                        <div key={group.gics} className="border-b border-border/40 last:border-b-0">
+                          {/* GICS sector header — clickable to toggle the whole group */}
+                          <button
+                            onClick={() => toggleSector(group.gics)}
+                            className="flex w-full items-center justify-between gap-2 bg-muted/40 px-3 py-1.5 text-left text-[11px] font-semibold uppercase tracking-wide hover:bg-accent"
+                          >
+                            <span className={gicsChecked ? "text-primary" : "text-foreground"}>
+                              {group.gics}
+                              {childCount > 0 && (
+                                <span className="ml-1.5 font-normal normal-case text-[10px] text-muted-foreground">
+                                  ({childCount} in universe)
+                                </span>
+                              )}
+                            </span>
+                            {gicsChecked && <Check size={12} className="text-primary" />}
+                          </button>
+                          {/* Child industries */}
+                          {group.industries.map(ind => {
+                            const checked = excludedSectors.has(ind);
+                            const inUniverse = universeIndustries.has(ind);
+                            const coveredByGics = gicsChecked;
+                            return (
+                              <button
+                                key={`${group.gics}-${ind}`}
+                                onClick={() => toggleSector(ind)}
+                                disabled={coveredByGics}
+                                className="flex w-full items-center justify-between gap-2 pl-6 pr-3 py-1 text-left text-xs hover:bg-accent disabled:opacity-50 disabled:cursor-not-allowed"
+                              >
+                                <span className={
+                                  checked || coveredByGics
+                                    ? "font-medium text-foreground"
+                                    : inUniverse ? "text-foreground/80" : "text-muted-foreground"
+                                }>
+                                  {ind}
+                                  {!inUniverse && <span className="ml-1 text-[9px] text-muted-foreground">·n/a</span>}
+                                </span>
+                                {(checked || coveredByGics) && <Check size={12} className="text-primary" />}
+                              </button>
+                            );
+                          })}
+                        </div>
                       );
                     })}
                   </div>
