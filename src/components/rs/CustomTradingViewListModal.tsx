@@ -1,5 +1,7 @@
 import { useMemo, useState } from "react";
-import { Copy, Download, Settings2, X } from "lucide-react";
+import { Copy, Download, Settings2, X, Check, ChevronDown } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Slider } from "@/components/ui/slider";
