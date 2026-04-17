@@ -8,7 +8,8 @@ import { RsStock } from "@/hooks/useRsAlpha";
 
 export type CustomListTab = "overall" | "1d" | "1m" | "3m" | "6m";
 type SortBy = "rs" | "rating" | "return";
-type TopN = 10 | 20 | 50 | 100 | -1; // -1 = All
+const TOPN_MIN = 10;
+const TOPN_MAX = 500; // values >= MAX mean "All"
 
 interface Props {
   open: boolean;
@@ -28,7 +29,7 @@ export default function CustomTradingViewListModal({
   getRsForTab, getReturnField, isOtcSymbol,
 }: Props) {
   const [minRating, setMinRating] = useState<number>(60);
-  const [topN, setTopN] = useState<TopN>(50);
+  const [topN, setTopN] = useState<number>(50);
   const [acceleratingOnly, setAcceleratingOnly] = useState<boolean>(false);
   const [minAdr, setMinAdr] = useState<number>(3.0);
   const [excludeOtc, setExcludeOtc] = useState<boolean>(true);
@@ -52,7 +53,7 @@ export default function CustomTradingViewListModal({
       return (getReturnField(b, tabId) ?? -999) - (getReturnField(a, tabId) ?? -999);
     });
 
-    if (topN !== -1) list = list.slice(0, topN);
+    if (topN < TOPN_MAX) list = list.slice(0, topN);
     return list;
   }, [stocks, ratingMap, minRating, minAdr, acceleratingOnly, excludeOtc, sortBy, topN, tabId, getRsForTab, getReturnField, isOtcSymbol]);
 
@@ -85,13 +86,9 @@ export default function CustomTradingViewListModal({
     });
   };
 
-  const topNOptions: { v: TopN; label: string }[] = [
-    { v: 10, label: "Top 10" },
-    { v: 20, label: "Top 20" },
-    { v: 50, label: "Top 50" },
-    { v: 100, label: "Top 100" },
-    { v: -1, label: "All" },
-  ];
+  const isAll = topN >= TOPN_MAX;
+  const topNLabel = isAll ? "All" : `Top ${topN}`;
+  const topNPresets = [10, 25, 50, 100, 200, TOPN_MAX];
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -129,22 +126,36 @@ export default function CustomTradingViewListModal({
           </div>
 
           {/* Top N */}
-          <div className="space-y-1.5">
-            <label className="text-xs font-medium text-foreground">Top N stocks</label>
-            <div className="flex flex-wrap gap-1.5">
-              {topNOptions.map(opt => (
-                <button
-                  key={opt.label}
-                  onClick={() => setTopN(opt.v)}
-                  className={`rounded-md border px-3 py-1 text-xs font-medium transition-colors ${
-                    topN === opt.v
-                      ? "border-primary bg-primary/15 text-primary"
-                      : "border-border text-muted-foreground hover:bg-accent hover:text-foreground"
-                  }`}
-                >
-                  {opt.label}
-                </button>
-              ))}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between text-xs">
+              <label className="font-medium text-foreground">Top N stocks</label>
+              <span className="font-mono text-primary">{topNLabel}</span>
+            </div>
+            <Slider
+              min={TOPN_MIN}
+              max={TOPN_MAX}
+              step={1}
+              value={[topN]}
+              onValueChange={(v) => setTopN(v[0])}
+            />
+            <div className="flex flex-wrap gap-1.5 pt-1">
+              {topNPresets.map(v => {
+                const label = v >= TOPN_MAX ? "All" : `Top ${v}`;
+                const active = topN === v;
+                return (
+                  <button
+                    key={v}
+                    onClick={() => setTopN(v)}
+                    className={`rounded-md border px-2.5 py-0.5 text-[10px] font-medium transition-colors ${
+                      active
+                        ? "border-primary bg-primary/15 text-primary"
+                        : "border-border text-muted-foreground hover:bg-accent hover:text-foreground"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
             </div>
           </div>
 
