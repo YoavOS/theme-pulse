@@ -197,24 +197,67 @@ export function useRsAlpha() {
   }, [rebuildUniverse]);
 
   // ── Recalculate RS scores (Stage 2) ──
+  // Uses raw fetch (not supabase.functions.invoke) so we can set a long
+  // per-batch timeout and continue past transient failures.
   const recalculateRs = useCallback(async () => {
     setError(null);
     setIsRecalculating(true);
     setRecalcStatus("Starting RS recalculation…");
+
+    const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
+    const ANON_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string;
+    const url = `${SUPABASE_URL}/functions/v1/calculate-rs-scores`;
+    const PER_BATCH_TIMEOUT_MS = 120_000; // 2 min per batch
+
+    const callBatch = async (offset: number) => {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData?.session?.access_token ?? ANON_KEY;
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), PER_BATCH_TIMEOUT_MS);
+      try {
+        const res = await fetch(url, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${accessToken}`,
+            apikey: ANON_KEY,
+          },
+          body: JSON.stringify({ offset }),
+          signal: ctrl.signal,
+        });
+        const text = await res.text();
+        let json: any = null;
+        try { json = text ? JSON.parse(text) : null; } catch { /* ignore */ }
+        if (!res.ok) throw new Error(json?.error || `HTTP ${res.status}: ${text.slice(0, 200)}`);
+        if (json?.error) throw new Error(json.error);
+        return json;
+      } finally {
+        clearTimeout(timer);
+      }
+    };
+
     try {
       let offset = 0;
       let done = false;
+      let consecutiveFailures = 0;
       while (!done) {
-        const { data, error: fnErr } = await supabase.functions.invoke("calculate-rs-scores", {
-          body: { offset },
-        });
-        if (fnErr) throw new Error(fnErr.message);
-        if (data?.error) throw new Error(data.error);
-
-        done = data?.done ?? true;
-        offset = data?.next_offset ?? offset;
-        const total = data?.total ?? 0;
-        setRecalcStatus(`Calculated ${data?.processed ?? offset} / ${total} stocks…`);
+        try {
+          const data = await callBatch(offset);
+          consecutiveFailures = 0;
+          done = data?.done ?? true;
+          const nextOffset = data?.next_offset ?? null;
+          const total = data?.total ?? 0;
+          const processed = data?.processed ?? offset;
+          setRecalcStatus(`Calculated ${processed} / ${total} stocks…`);
+          if (done || nextOffset === null) break;
+          offset = nextOffset;
+        } catch (batchErr) {
+          consecutiveFailures++;
+          console.warn(`Batch at offset ${offset} failed (attempt ${consecutiveFailures}):`, batchErr);
+          if (consecutiveFailures >= 3) throw batchErr;
+          setRecalcStatus(`Retrying batch at ${offset} (attempt ${consecutiveFailures + 1})…`);
+          await new Promise((r) => setTimeout(r, 2000 * consecutiveFailures));
+        }
       }
       setRecalcStatus("Reloading…");
       await loadStocks();
