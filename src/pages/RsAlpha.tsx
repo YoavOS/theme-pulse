@@ -279,6 +279,14 @@ export default function RsAlpha() {
               </button>
             )}
 
+            {activeTab === "overall" && (
+              <OverallWeightsPanel
+                weights={weights}
+                onChange={setWeights}
+                onReset={() => setWeights({ ...DEFAULT_RS_WEIGHTS })}
+              />
+            )}
+
             <button
               onClick={recalculateRs}
               disabled={isRecalculating || isRebuilding || stocks.length === 0}
