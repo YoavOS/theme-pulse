@@ -237,14 +237,23 @@ export async function getHistoricalBatch(
   sb: SupabaseClient,
   symbols: string[],
   period: YahooPeriod,
-  opts: { batchSize?: number; todayPrices?: Record<string, number | null> } = {}
+  opts: {
+    batchSize?: number;
+    todayPrices?: Record<string, number | null>;
+    skipCache?: boolean;
+    skipEod?: boolean;
+  } = {}
 ): Promise<Record<string, HistoricalResult>> {
   const batchSize = opts.batchSize ?? 5;
   const out: Record<string, HistoricalResult> = {};
   for (let i = 0; i < symbols.length; i += batchSize) {
     const slice = symbols.slice(i, i + batchSize);
     const results = await Promise.all(
-      slice.map((s) => getHistoricalData(sb, s, period, { todayPrice: opts.todayPrices?.[s] ?? null }))
+      slice.map((s) => getHistoricalData(sb, s, period, {
+        todayPrice: opts.todayPrices?.[s] ?? null,
+        skipCache: opts.skipCache,
+        skipEod: opts.skipEod,
+      }))
     );
     for (const r of results) out[r.symbol] = r;
   }

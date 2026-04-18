@@ -11,9 +11,17 @@ export const RS_FILTER_THRESHOLDS = {
 
 const SUPABASE_PAGE_SIZE = 1000;
 const PERF_CHUNK_SIZE = 500;
+const LIVE_SCAN_MAX_AGE_MS = 18 * 60 * 60 * 1000;
 
 const toNumberOrNull = (value: unknown): number | null =>
   value === null || value === undefined ? null : Number(value);
+
+const isFreshScan = (lastScanned: string | null | undefined): boolean => {
+  if (!lastScanned) return false;
+  const scannedAt = new Date(lastScanned).getTime();
+  if (!Number.isFinite(scannedAt)) return false;
+  return Date.now() - scannedAt <= LIVE_SCAN_MAX_AGE_MS;
+};
 
 function chunkArray<T>(items: T[], chunkSize: number): T[][] {
   const chunks: T[][] = [];
@@ -104,20 +112,21 @@ export function useRsAlpha() {
         ...perfChunks.map((chunk) =>
           supabase
             .from("ticker_performance")
-            .select("symbol, perf_1d, price")
+            .select("symbol, perf_1d, price, last_scanned")
             .in("symbol", chunk)
         ),
       ]);
 
       if (spyPerfResult.error) throw spyPerfResult.error;
 
-      const livePerfMap = new Map<string, { perf1d: number | null; price: number | null }>();
+      const livePerfMap = new Map<string, { perf1d: number | null; price: number | null; lastScanned: string | null }>();
       for (const result of perfResults) {
         if (result.error) throw result.error;
         for (const row of result.data ?? []) {
           livePerfMap.set(row.symbol, {
             perf1d: toNumberOrNull(row.perf_1d),
             price: toNumberOrNull(row.price),
+            lastScanned: row.last_scanned,
           });
         }
       }
@@ -125,7 +134,8 @@ export function useRsAlpha() {
       const spyReturn1d = toNumberOrNull(spyPerfResult.data?.perf_1d);
       const mapped: RsStock[] = qualifiedRows.map((r) => {
         const livePerf = livePerfMap.get(r.symbol);
-        const return1d = livePerf?.perf1d ?? toNumberOrNull(r.return_1d);
+        const useLive1d = isFreshScan(livePerf?.lastScanned);
+        const return1d = useLive1d ? livePerf?.perf1d ?? toNumberOrNull(r.return_1d) : toNumberOrNull(r.return_1d);
         const effectiveSpyReturn1d = spyReturn1d ?? toNumberOrNull(r.spy_return_1d);
         const rs1d =
           return1d !== null && effectiveSpyReturn1d !== null
@@ -136,7 +146,7 @@ export function useRsAlpha() {
         symbol: r.symbol,
         companyName: r.company_name,
         sector: r.sector,
-        price: livePerf?.price ?? toNumberOrNull(r.current_price),
+        price: useLive1d ? livePerf?.price ?? toNumberOrNull(r.current_price) : toNumberOrNull(r.current_price),
         marketCap: toNumberOrNull(r.market_cap),
         avgDollarVolume: toNumberOrNull(r.avg_dollar_volume),
         adrPercent: toNumberOrNull(r.adr_percent),
