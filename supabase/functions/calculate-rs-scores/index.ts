@@ -1,5 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
-import { getHistoricalBatch, HistoricalResult, YahooPeriod } from "../_shared/yahooHistory.ts";
+import { getHistoricalBatch, getHistoricalData, HistoricalResult, YahooPeriod } from "../_shared/yahooHistory.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -82,26 +82,39 @@ Deno.serve(async (req) => {
       });
     }
 
-    const history5d = await getHistoricalBatch(supabase, historySymbols, "5d", {
-      batchSize: HISTORY_BATCH_SIZE,
-      skipCache: true,
-      skipEod: true,
-    });
-    const history1m = await getHistoricalBatch(supabase, historySymbols, "1mo", {
-      batchSize: HISTORY_BATCH_SIZE,
-      skipCache: true,
-      skipEod: true,
-    });
-    const history3m = await getHistoricalBatch(supabase, historySymbols, "3mo", {
-      batchSize: HISTORY_BATCH_SIZE,
-      skipCache: true,
-      skipEod: true,
-    });
-    const history6m = await getHistoricalBatch(supabase, historySymbols, "6mo", {
-      batchSize: HISTORY_BATCH_SIZE,
-      skipCache: true,
-      skipEod: true,
-    });
+    const historyBySymbol = new Map<string, Record<YahooPeriod, HistoricalResult>>();
+    for (const sym of historySymbols) {
+      historyBySymbol.set(sym, {} as Record<YahooPeriod, HistoricalResult>);
+    }
+
+    for (let i = 0; i < historySymbols.length; i += HISTORY_BATCH_SIZE) {
+      const slice = historySymbols.slice(i, i + HISTORY_BATCH_SIZE);
+      const periodResults = await Promise.all(
+        PERIODS.map((period) =>
+          Promise.all(
+            slice.map(async (sym) => ({
+              sym,
+              period,
+              result: await getHistoricalData(supabase, sym, period, {
+                skipCache: true,
+                skipEod: true,
+              }),
+            })),
+          ),
+        ),
+      );
+
+      for (const periodGroup of periodResults) {
+        for (const { sym, period, result } of periodGroup) {
+          historyBySymbol.get(sym)![period] = result;
+        }
+      }
+    }
+
+    const history5d = Object.fromEntries(historySymbols.map((sym) => [sym, historyBySymbol.get(sym)?.["5d"]])) as Record<string, HistoricalResult | undefined>;
+    const history1m = Object.fromEntries(historySymbols.map((sym) => [sym, historyBySymbol.get(sym)?.["1mo"]])) as Record<string, HistoricalResult | undefined>;
+    const history3m = Object.fromEntries(historySymbols.map((sym) => [sym, historyBySymbol.get(sym)?.["3mo"]])) as Record<string, HistoricalResult | undefined>;
+    const history6m = Object.fromEntries(historySymbols.map((sym) => [sym, historyBySymbol.get(sym)?.["6mo"]])) as Record<string, HistoricalResult | undefined>;
 
     const spyPerf = perfMap.get("SPY");
     const spyFresh1d = isFreshScan(spyPerf?.lastScanned)
