@@ -1,5 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
-import { getHistoricalBatch, getHistoricalData, HistoricalResult, YahooPeriod } from "../_shared/yahooHistory.ts";
+import { getHistoricalData, HistoricalResult, YahooPeriod } from "../_shared/yahooHistory.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
