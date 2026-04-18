@@ -63,7 +63,11 @@ async function fetchTickerData(
   // 2. Fetch YTD historical via shared Yahoo helper (cache → EOD → Yahoo).
   //    One call covers 1W/1M/3M/YTD by walking the OHLC array.
   try {
-    const hist = await getHistoricalData(sb, symbol, "ytd", { todayPrice: result.price });
+    const hist = await getHistoricalData(sb, symbol, "ytd", {
+      todayPrice: result.price,
+      skipCache: true,
+      skipEod: true,
+    });
     if (hist.ohlc && hist.ohlc.length > 1) {
       const ohlc = hist.ohlc;
       const lastClose = (ohlc[ohlc.length - 1].close as number) ?? result.price;
