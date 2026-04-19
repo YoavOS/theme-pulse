@@ -143,11 +143,19 @@ export default function VolumeLeaders({ themes, onSelectTheme, onDrilldownOpen }
               period={tf}
               onSelectTheme={onSelectTheme}
               onDrilldownOpen={onDrilldownOpen}
+              onOpenDashboard={setDashTheme}
               smart={smart}
             />
           ))
         )}
       </div>
+
+      <ThemeVolumeDashboard
+        open={dashTheme !== null}
+        onOpenChange={(o) => { if (!o) setDashTheme(null); }}
+        theme={dashTheme}
+        smartVolumeData={smart.data}
+      />
     </div>
   );
 }
