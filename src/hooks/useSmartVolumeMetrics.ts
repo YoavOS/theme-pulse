@@ -17,6 +17,8 @@ export interface ThemeSmartVolume {
   volTrendPct: number | null;
   volConsistency: number | null;
   sustainedScore: number | null;
+  /** Theme-level sparkline: average normalized volume per day across constituents (last 30 sessions). */
+  sparkline: number[];
   loading: boolean;
 }
 
