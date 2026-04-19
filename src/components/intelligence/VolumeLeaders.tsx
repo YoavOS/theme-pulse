@@ -180,38 +180,70 @@ function SmartVolumeRow({
         </button>
 
         {/* Sparkline */}
-        <div className="w-[88px] flex justify-center shrink-0">
-          {isLoading ? (
-            <div className="h-[24px] w-[80px] rounded bg-white/5 animate-pulse" />
-          ) : metrics.sparkline.length > 1 ? (
-            <VolumeSparkline series={metrics.sparkline} trendPct={metrics.volTrendPct} variant="bars" width={80} height={24} />
-          ) : (
-            <span className="text-[12px] text-muted-foreground">—</span>
-          )}
-        </div>
+        <Tooltip delayDuration={150}>
+          <TooltipTrigger asChild>
+            <div className="w-[88px] flex justify-center shrink-0 cursor-help">
+              {isLoading ? (
+                <div className="h-[24px] w-[80px] rounded bg-white/5 animate-pulse" />
+              ) : metrics.sparkline.length > 1 ? (
+                <VolumeSparkline series={metrics.sparkline} trendPct={metrics.volTrendPct} variant="bars" width={80} height={24} />
+              ) : (
+                <span className="text-[12px] text-muted-foreground">—</span>
+              )}
+            </div>
+          </TooltipTrigger>
+          <TooltipContent side="top" className="max-w-[260px] text-xs leading-snug">
+            <div className="font-semibold mb-0.5">Volume Trend (30 days)</div>
+            <div className="text-muted-foreground">Daily volume bars normalized across the theme's tickers. Color reflects trend direction — teal/green rising, yellow flat, red falling.</div>
+          </TooltipContent>
+        </Tooltip>
 
         {/* Strength bar + numeric Rel Vol */}
-        <div className="w-[130px] flex items-center gap-2.5 shrink-0">
-          <StrengthBar value={metrics.relVol} width={70} height={7} />
-          <span className="text-[12px] font-bold tabular-nums text-foreground w-[44px] text-right" style={{ fontFamily: DM_MONO }}>
-            {isLoading ? "…" : fmtX(metrics.relVol)}
-          </span>
-        </div>
+        <Tooltip delayDuration={150}>
+          <TooltipTrigger asChild>
+            <div className="w-[130px] flex items-center gap-2.5 shrink-0 cursor-help">
+              <StrengthBar value={metrics.relVol} width={70} height={7} />
+              <span className="text-[12px] font-bold tabular-nums text-foreground w-[44px] text-right" style={{ fontFamily: DM_MONO }}>
+                {isLoading ? "…" : fmtX(metrics.relVol)}
+              </span>
+            </div>
+          </TooltipTrigger>
+          <TooltipContent side="top" className="max-w-[260px] text-xs leading-snug">
+            <div className="font-semibold mb-0.5">Strength · Rel Vol</div>
+            <div className="text-muted-foreground">Today's volume ÷ average volume for the selected timeframe. <b className="text-foreground">1.0×</b> = normal · <b className="text-foreground">&gt;1.4×</b> elevated · <b className="text-foreground">&gt;1.8×</b> strong surge.</div>
+          </TooltipContent>
+        </Tooltip>
 
         {/* Vol trend % */}
-        <div className="w-16 text-right shrink-0">
-          <span className="text-[12.5px] font-bold tabular-nums" style={{ fontFamily: DM_MONO, color: trendColor(metrics.volTrendPct) }}>
-            {isLoading ? "…" : fmtPct(metrics.volTrendPct)}
-          </span>
-        </div>
+        <Tooltip delayDuration={150}>
+          <TooltipTrigger asChild>
+            <div className="w-16 text-right shrink-0 cursor-help">
+              <span className="text-[12.5px] font-bold tabular-nums" style={{ fontFamily: DM_MONO, color: trendColor(metrics.volTrendPct) }}>
+                {isLoading ? "…" : fmtPct(metrics.volTrendPct)}
+              </span>
+            </div>
+          </TooltipTrigger>
+          <TooltipContent side="top" className="max-w-[260px] text-xs leading-snug">
+            <div className="font-semibold mb-0.5">Volume Δ %</div>
+            <div className="text-muted-foreground">Change in average daily volume across the period: <b className="text-foreground">(2nd half avg ÷ 1st half avg − 1)</b>. Positive = accelerating demand.</div>
+          </TooltipContent>
+        </Tooltip>
 
         {/* Sustained gauge */}
-        <div className="w-[88px] flex flex-col items-center gap-1 shrink-0">
-          <SustainedGauge score={metrics.sustainedScore} width={72} />
-          <span className="text-[11px] font-semibold tabular-nums text-foreground/80" style={{ fontFamily: DM_MONO }}>
-            {isLoading ? "…" : metrics.sustainedScore != null ? metrics.sustainedScore.toFixed(2) : "—"}
-          </span>
-        </div>
+        <Tooltip delayDuration={150}>
+          <TooltipTrigger asChild>
+            <div className="w-[88px] flex flex-col items-center gap-1 shrink-0 cursor-help">
+              <SustainedGauge score={metrics.sustainedScore} width={72} />
+              <span className="text-[11px] font-semibold tabular-nums text-foreground/80" style={{ fontFamily: DM_MONO }}>
+                {isLoading ? "…" : metrics.sustainedScore != null ? metrics.sustainedScore.toFixed(2) : "—"}
+              </span>
+            </div>
+          </TooltipTrigger>
+          <TooltipContent side="top" className="max-w-[260px] text-xs leading-snug">
+            <div className="font-semibold mb-0.5">Sustained Score</div>
+            <div className="text-muted-foreground"><b className="text-foreground">(10d avg ÷ 30d avg) × (20d avg ÷ 60d avg)</b>. &gt;1.2 = strong multi-window accumulation · ~1.0 = stable · &lt;0.9 = drying up.</div>
+          </TooltipContent>
+        </Tooltip>
 
         {/* Heat badge */}
         <div className="w-[120px] flex justify-end shrink-0">
