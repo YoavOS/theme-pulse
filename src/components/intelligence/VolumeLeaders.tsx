@@ -56,6 +56,7 @@ export default function VolumeLeaders({ themes, onSelectTheme, onDrilldownOpen }
   const [tf, setTf] = useState<Timeframe>(() => {
     try { return (localStorage.getItem(LS_KEY) as Timeframe) || "today"; } catch { return "today"; }
   });
+  const [dashTheme, setDashTheme] = useState<ThemeIntelData | null>(null);
 
   const smart = useSmartVolumeMetrics(tf);
 
