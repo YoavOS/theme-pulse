@@ -130,12 +130,12 @@ export default function ThemeVolumeDashboard({ open, onOpenChange, theme, smartV
 
     // Use the date set from the longest series as the canonical timeline.
     const longest = validRows.reduce((a, b) => (b.ohlc.length > a.ohlc.length ? b : a));
-    const dates = longest.ohlc.map(p => p.date);
+    const dates = longest.ohlc.map(p => tsToDate(p.ts));
 
     // Build per-symbol close maps (date → close) and base close (first non-null).
     const symbolMaps = validRows.map(r => {
       const m = new Map<string, number>();
-      r.ohlc.forEach(p => { if (p.close > 0) m.set(p.date, p.close); });
+      r.ohlc.forEach(p => { if (p.close > 0) m.set(tsToDate(p.ts), p.close); });
       const base = r.ohlc.find(p => p.close > 0)?.close ?? null;
       return { symbol: r.symbol, m, base };
     });
@@ -143,7 +143,7 @@ export default function ThemeVolumeDashboard({ open, onOpenChange, theme, smartV
     const spyMap = new Map<string, number>();
     let spyBase: number | null = null;
     if (spyHistory) {
-      spyHistory.forEach(p => { if (p.close > 0) spyMap.set(p.date, p.close); });
+      spyHistory.forEach(p => { if (p.close > 0) spyMap.set(tsToDate(p.ts), p.close); });
       spyBase = spyHistory.find(p => p.close > 0)?.close ?? null;
     }
 
@@ -151,7 +151,8 @@ export default function ThemeVolumeDashboard({ open, onOpenChange, theme, smartV
     const volByDate = new Map<string, number>();
     validRows.forEach(r => {
       r.ohlc.forEach(p => {
-        if (p.volume != null) volByDate.set(p.date, (volByDate.get(p.date) ?? 0) + p.volume);
+        const d = tsToDate(p.ts);
+        if (p.volume != null) volByDate.set(d, (volByDate.get(d) ?? 0) + p.volume);
       });
     });
 
