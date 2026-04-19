@@ -21,9 +21,14 @@ const TF_TO_PERIOD: Record<ChartTf, string> = { "1W": "5d", "1M": "1mo", "3M": "
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
 const anonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string;
 
-interface OHLC { date: string; open?: number; high?: number; low?: number; close: number; volume?: number }
+interface OHLC { ts: number; open?: number; high?: number; low?: number; close: number; volume?: number }
 
 interface HistRow { symbol: string; ohlc?: OHLC[]; error?: string }
+
+/** Convert unix seconds to YYYY-MM-DD (UTC) for stable date keys. */
+function tsToDate(ts: number): string {
+  return new Date(ts * 1000).toISOString().slice(0, 10);
+}
 
 interface ChartPoint {
   date: string;
