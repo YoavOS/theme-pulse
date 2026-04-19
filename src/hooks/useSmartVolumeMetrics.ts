@@ -7,6 +7,7 @@ export interface SmartVolumeMetrics {
   vol_trend_pct: number | null;
   vol_consistency: number | null;
   sustained_score: number | null;
+  vol_sparkline?: number[];
   today_vol_estimated?: boolean;
   error?: string;
 }
