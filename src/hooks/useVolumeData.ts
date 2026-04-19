@@ -75,7 +75,7 @@ export function useVolumeData() {
       const batch = symbols.slice(i, i + batchSize);
       try {
         const res = await fetch(
-          `${supabaseUrl}/functions/v1/fetch-volume?refresh=1&symbols=${batch.join(",")}`,
+          `${supabaseUrl}/functions/v1/fetch-volume?symbols=${batch.join(",")}`,
           { headers: { apikey: anonKey, Authorization: `Bearer ${anonKey}` } }
         );
         if (res.ok) {
