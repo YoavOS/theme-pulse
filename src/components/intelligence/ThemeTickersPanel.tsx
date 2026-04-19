@@ -1,14 +1,17 @@
 import { useMemo } from "react";
 import { ThemeIntelData } from "@/hooks/useThemeIntelligence";
 import { useSpyBenchmark } from "@/hooks/useSpyBenchmark";
+import type { SmartVolumeMetrics } from "@/hooks/useSmartVolumeMetrics";
+import type { Timeframe } from "@/hooks/useTimeframeAvailability";
 
 const DM_MONO = "'DM Mono', monospace";
 
 interface Props {
-  /** Pass either the full ThemeIntelData (preferred) or just the name + a lookup */
   theme: ThemeIntelData;
-  /** Compact mode trims columns for narrow contexts */
   compact?: boolean;
+  /** When provided, ticker rows display per-symbol smart volume columns. */
+  smartVolumeData?: Record<string, SmartVolumeMetrics>;
+  smartVolumePeriod?: Timeframe;
 }
 
 function perfClass(v: number): string {
@@ -21,12 +24,41 @@ function fmt(v: number | null | undefined, suffix = "%"): string {
   return `${sign}${v.toFixed(2)}${suffix}`;
 }
 
-export default function ThemeTickersPanel({ theme, compact = false }: Props) {
+function relVolColor(v: number | null): string {
+  if (v === null) return "var(--muted-foreground)";
+  if (v > 1.8) return "#00f5c4";
+  if (v > 1.4) return "#4ade80";
+  if (v >= 1.1) return "#facc15";
+  if (v < 0.9) return "#f87171";
+  return "currentColor";
+}
+function trendColor(v: number | null): string {
+  if (v === null) return "var(--muted-foreground)";
+  if (v > 25) return "#00f5c4";
+  if (v > 5) return "#4ade80";
+  if (v < -10) return "#f87171";
+  return "currentColor";
+}
+function consistencyColor(v: number | null): string {
+  if (v === null) return "var(--muted-foreground)";
+  if (v >= 70) return "#00f5c4";
+  if (v >= 50) return "#4ade80";
+  if (v < 30) return "#f87171";
+  return "currentColor";
+}
+function sustainedColor(v: number | null): string {
+  if (v === null) return "var(--muted-foreground)";
+  if (v >= 1.2) return "#00f5c4";
+  if (v >= 1.05) return "#4ade80";
+  if (v < 0.9) return "#f87171";
+  return "currentColor";
+}
+
+export default function ThemeTickersPanel({ theme, compact = false, smartVolumeData, smartVolumePeriod }: Props) {
   const { spy } = useSpyBenchmark();
+  const showVolume = !!smartVolumeData;
 
   const rows = useMemo(() => {
-    // Show ALL tickers belonging to the theme. Sort done tickers by 1D perf (desc),
-    // then append any pending/error tickers at the bottom so nothing is hidden.
     const done = theme.tickers
       .filter(tk => tk.status === "done")
       .sort((a, b) => b.perf_1d - a.perf_1d);
@@ -46,14 +78,14 @@ export default function ThemeTickersPanel({ theme, compact = false }: Props) {
   return (
     <div
       className="overflow-hidden rounded-md"
-      style={{
-        background: "rgba(0,0,0,0.25)",
-        border: "1px solid rgba(255,255,255,0.06)",
-      }}
+      style={{ background: "rgba(0,0,0,0.25)", border: "1px solid rgba(255,255,255,0.06)" }}
     >
       <div className="max-h-[480px] overflow-auto">
         <div className="px-2.5 py-1 text-[10px] text-muted-foreground border-b border-[rgba(255,255,255,0.06)] bg-[rgba(255,255,255,0.02)]" style={{ fontFamily: DM_MONO }}>
           {rows.length} ticker{rows.length === 1 ? "" : "s"}
+          {showVolume && smartVolumePeriod && (
+            <span className="ml-2 opacity-70">· volume metrics: {smartVolumePeriod === "today" ? "Today" : smartVolumePeriod}</span>
+          )}
         </div>
         <table className="w-full text-[11px]" style={{ fontFamily: DM_MONO }}>
           <thead className="sticky top-0 z-10" style={{ background: "rgba(15,18,25,0.95)" }}>
@@ -62,10 +94,14 @@ export default function ThemeTickersPanel({ theme, compact = false }: Props) {
               <th className="px-2.5 py-1.5 text-right font-medium">Price</th>
               <th className="px-2.5 py-1.5 text-right font-medium">1D</th>
               <th className="px-2.5 py-1.5 text-right font-medium">vs SPY</th>
-              {!compact && <th className="px-2.5 py-1.5 text-right font-medium">1W</th>}
-              {!compact && <th className="px-2.5 py-1.5 text-right font-medium">1M</th>}
-              {!compact && <th className="px-2.5 py-1.5 text-right font-medium">3M</th>}
-              {!compact && <th className="px-2.5 py-1.5 text-right font-medium">YTD</th>}
+              {!compact && !showVolume && <th className="px-2.5 py-1.5 text-right font-medium">1W</th>}
+              {!compact && !showVolume && <th className="px-2.5 py-1.5 text-right font-medium">1M</th>}
+              {!compact && !showVolume && <th className="px-2.5 py-1.5 text-right font-medium">3M</th>}
+              {!compact && !showVolume && <th className="px-2.5 py-1.5 text-right font-medium">YTD</th>}
+              {showVolume && <th className="px-2.5 py-1.5 text-right font-medium" title="Today's vol vs avg for the selected period">Rel Vol</th>}
+              {showVolume && <th className="px-2.5 py-1.5 text-right font-medium" title="% change in avg daily volume across the selected period">Vol Trend</th>}
+              {showVolume && <th className="px-2.5 py-1.5 text-right font-medium" title="% of days in window above 60d average">Consist.</th>}
+              {showVolume && <th className="px-2.5 py-1.5 text-right font-medium" title="(10d/30d) × (20d/60d) — >1.2 = strong sustained demand">Sustained</th>}
             </tr>
           </thead>
           <tbody>
@@ -74,6 +110,7 @@ export default function ThemeTickersPanel({ theme, compact = false }: Props) {
               const rs = isDone && spy.perf_1d !== null
                 ? Math.round((tk.perf_1d - spy.perf_1d) * 100) / 100
                 : null;
+              const vol = showVolume ? smartVolumeData?.[tk.symbol] : undefined;
               return (
                 <tr
                   key={tk.symbol}
@@ -92,10 +129,26 @@ export default function ThemeTickersPanel({ theme, compact = false }: Props) {
                   <td className={`px-2.5 py-1.5 text-right ${rs === null ? "text-muted-foreground" : perfClass(rs)}`}>
                     {rs === null ? "--" : fmt(rs)}
                   </td>
-                  {!compact && <td className={`px-2.5 py-1.5 text-right ${isDone ? perfClass(tk.perf_1w) : "text-muted-foreground"}`}>{isDone ? fmt(tk.perf_1w) : "--"}</td>}
-                  {!compact && <td className={`px-2.5 py-1.5 text-right ${isDone ? perfClass(tk.perf_1m) : "text-muted-foreground"}`}>{isDone ? fmt(tk.perf_1m) : "--"}</td>}
-                  {!compact && <td className={`px-2.5 py-1.5 text-right ${isDone ? perfClass(tk.perf_3m) : "text-muted-foreground"}`}>{isDone ? fmt(tk.perf_3m) : "--"}</td>}
-                  {!compact && <td className={`px-2.5 py-1.5 text-right ${isDone ? perfClass(tk.perf_ytd) : "text-muted-foreground"}`}>{isDone ? fmt(tk.perf_ytd) : "--"}</td>}
+                  {!compact && !showVolume && <td className={`px-2.5 py-1.5 text-right ${isDone ? perfClass(tk.perf_1w) : "text-muted-foreground"}`}>{isDone ? fmt(tk.perf_1w) : "--"}</td>}
+                  {!compact && !showVolume && <td className={`px-2.5 py-1.5 text-right ${isDone ? perfClass(tk.perf_1m) : "text-muted-foreground"}`}>{isDone ? fmt(tk.perf_1m) : "--"}</td>}
+                  {!compact && !showVolume && <td className={`px-2.5 py-1.5 text-right ${isDone ? perfClass(tk.perf_3m) : "text-muted-foreground"}`}>{isDone ? fmt(tk.perf_3m) : "--"}</td>}
+                  {!compact && !showVolume && <td className={`px-2.5 py-1.5 text-right ${isDone ? perfClass(tk.perf_ytd) : "text-muted-foreground"}`}>{isDone ? fmt(tk.perf_ytd) : "--"}</td>}
+                  {showVolume && (
+                    <>
+                      <td className="px-2.5 py-1.5 text-right" style={{ color: relVolColor(vol?.rel_vol ?? null) }}>
+                        {vol?.rel_vol != null ? `${vol.rel_vol.toFixed(2)}×` : "--"}
+                      </td>
+                      <td className="px-2.5 py-1.5 text-right" style={{ color: trendColor(vol?.vol_trend_pct ?? null) }}>
+                        {vol?.vol_trend_pct != null ? `${vol.vol_trend_pct > 0 ? "+" : ""}${vol.vol_trend_pct.toFixed(1)}%` : "--"}
+                      </td>
+                      <td className="px-2.5 py-1.5 text-right" style={{ color: consistencyColor(vol?.vol_consistency ?? null) }}>
+                        {vol?.vol_consistency != null ? `${vol.vol_consistency}%` : "--"}
+                      </td>
+                      <td className="px-2.5 py-1.5 text-right font-bold" style={{ color: sustainedColor(vol?.sustained_score ?? null) }}>
+                        {vol?.sustained_score != null ? vol.sustained_score.toFixed(2) : "--"}
+                      </td>
+                    </>
+                  )}
                 </tr>
               );
             })}
