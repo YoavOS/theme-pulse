@@ -9,6 +9,19 @@ import ThemeTickersPanel from "./ThemeTickersPanel";
 import {
   VolumeSparkline, StrengthBar, SustainedGauge, VolumeHeatBadge, classifyVolumeHeat,
 } from "./volume/VolumeVisuals";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+
+function HeaderCell({ label, tip, className, align = "center" }: { label: string; tip: string; className?: string; align?: "left" | "center" | "right" }) {
+  const alignCls = align === "right" ? "text-right" : align === "left" ? "text-left" : "text-center";
+  return (
+    <Tooltip delayDuration={150}>
+      <TooltipTrigger asChild>
+        <span className={`${className ?? ""} ${alignCls} cursor-help underline decoration-dotted decoration-white/20 underline-offset-2`}>{label}</span>
+      </TooltipTrigger>
+      <TooltipContent side="top" className="max-w-[260px] text-xs leading-snug">{tip}</TooltipContent>
+    </Tooltip>
+  );
+}
 
 const DM_MONO = "'DM Mono', monospace";
 const LS_KEY = "volumeLeaders_tf";
