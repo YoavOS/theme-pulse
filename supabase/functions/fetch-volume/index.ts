@@ -101,6 +101,9 @@ async function fetchVolumeForSymbol(symbol: string, sb: any, period: Period): Pr
   const avg_60d = meanVolume(vols.slice(-60));
   result.avg_3m  = meanVolume(vols);
 
+  // Sparkline: last 30 daily volumes (oldest → newest), zero-filled if missing
+  result.vol_sparkline = vols.slice(-30).map(v => (typeof v === "number" && v > 0 ? v : 0));
+
   // ── Smart metrics ──────────────────────────────────────────────
   // Rel Vol for the selected period
   const denomKey = periodAvgKey(period);
