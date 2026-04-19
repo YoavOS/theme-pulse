@@ -40,6 +40,7 @@ interface VolumeResult {
   vol_trend_pct: number | null;  // % change of avg daily volume across window
   vol_consistency: number | null;// % of days in window above avg_60d
   sustained_score: number | null;// (avg_10/avg_30)*(avg_20/avg_60)
+  vol_sparkline: number[];       // last 30 daily volumes (raw, oldest→newest)
   error?: string;
 }
 
@@ -67,6 +68,7 @@ async function fetchVolumeForSymbol(symbol: string, sb: any, period: Period): Pr
     symbol, today_vol: 0, avg_20d: 0, avg_10d: 0, avg_3m: 0,
     today_vol_estimated: false, vol_data_points: 0,
     rel_vol: null, vol_trend_pct: null, vol_consistency: null, sustained_score: null,
+    vol_sparkline: [],
   };
 
   // Pull 6-month daily OHLC from Yahoo (cached for 24h by helper) — gives us
@@ -98,6 +100,9 @@ async function fetchVolumeForSymbol(symbol: string, sb: any, period: Period): Pr
   const avg_30d = meanVolume(vols.slice(-30));
   const avg_60d = meanVolume(vols.slice(-60));
   result.avg_3m  = meanVolume(vols);
+
+  // Sparkline: last 30 daily volumes (oldest → newest), zero-filled if missing
+  result.vol_sparkline = vols.slice(-30).map(v => (typeof v === "number" && v > 0 ? v : 0));
 
   // ── Smart metrics ──────────────────────────────────────────────
   // Rel Vol for the selected period

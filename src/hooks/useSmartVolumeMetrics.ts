@@ -7,6 +7,7 @@ export interface SmartVolumeMetrics {
   vol_trend_pct: number | null;
   vol_consistency: number | null;
   sustained_score: number | null;
+  vol_sparkline?: number[];
   today_vol_estimated?: boolean;
   error?: string;
 }
@@ -16,6 +17,8 @@ export interface ThemeSmartVolume {
   volTrendPct: number | null;
   volConsistency: number | null;
   sustainedScore: number | null;
+  /** Theme-level sparkline: average normalized volume per day across constituents (last 30 sessions). */
+  sparkline: number[];
   loading: boolean;
 }
 
@@ -97,17 +100,37 @@ export function useSmartVolumeMetrics(period: Timeframe) {
     const loading = symbols.some(s => loadingSymbols.has(s));
     const rows = symbols.map(s => data[s]).filter(Boolean).filter(r => !r.error);
     if (rows.length === 0) {
-      return { relVol: null, volTrendPct: null, volConsistency: null, sustainedScore: null, loading };
+      return { relVol: null, volTrendPct: null, volConsistency: null, sustainedScore: null, sparkline: [], loading };
     }
     const relVol = avgOrNull(rows.map(r => r.rel_vol));
     const volTrendPct = avgOrNull(rows.map(r => r.vol_trend_pct));
     const volConsistency = avgOrNull(rows.map(r => r.vol_consistency));
     const sustainedScore = avgOrNull(rows.map(r => r.sustained_score));
+
+    // Aggregate sparkline: normalize each ticker's sparkline to its own max,
+    // then average per-day across all tickers. Yields a 0..1 series of "relative
+    // daily participation" — robust to symbols of wildly different volume scales.
+    let sparkline: number[] = [];
+    const sparkSeries = rows.map(r => r.vol_sparkline).filter((s): s is number[] => Array.isArray(s) && s.length > 0);
+    if (sparkSeries.length > 0) {
+      const len = Math.min(...sparkSeries.map(s => s.length));
+      const trimmed = sparkSeries.map(s => s.slice(-len));
+      const normalized = trimmed.map(s => {
+        const max = Math.max(...s, 1);
+        return s.map(v => v / max);
+      });
+      sparkline = Array.from({ length: len }, (_, i) => {
+        const day = normalized.map(s => s[i]);
+        return day.reduce((a, b) => a + b, 0) / day.length;
+      });
+    }
+
     return {
       relVol: relVol !== null ? Math.round(relVol * 100) / 100 : null,
       volTrendPct: volTrendPct !== null ? Math.round(volTrendPct * 10) / 10 : null,
       volConsistency: volConsistency !== null ? Math.round(volConsistency) : null,
       sustainedScore: sustainedScore !== null ? Math.round(sustainedScore * 100) / 100 : null,
+      sparkline,
       loading,
     };
   }, [data, loadingSymbols]);
