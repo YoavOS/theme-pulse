@@ -87,7 +87,13 @@ export default function ThemeVolumeDashboard({ open, onOpenChange, theme, smartV
           }).then(r => r.json()),
         ]);
         if (cancelled) return;
-        setHistory(Array.isArray(themeRes?.results) ? themeRes.results : []);
+        // Edge function POST returns { results: { SYMBOL: { ohlc: [...] } } }
+        const resultsObj = themeRes?.results ?? {};
+        const rows: HistRow[] = Object.entries(resultsObj).map(([symbol, v]) => {
+          const r = v as { ohlc?: OHLC[]; error?: string };
+          return { symbol, ohlc: r.ohlc, error: r.error };
+        });
+        setHistory(rows);
         setSpyHistory(Array.isArray(spyRes?.ohlc) ? spyRes.ohlc : null);
       } catch (e) {
         console.error("ThemeVolumeDashboard hist fetch error:", e);
