@@ -1,3 +1,16 @@
+// Volume data fetcher — uses Yahoo Finance via shared yahooHistory helper.
+// Computes:
+//   today_vol  = most recent daily volume (last bar of 3mo window)
+//   avg_10d    = mean of last 10 daily volumes
+//   avg_20d    = mean of last 20 daily volumes  (TRUE 20-day, not interpolated)
+//   avg_3m     = mean of last ~63 daily volumes (entire 3mo window)
+//
+// Definitions:
+//   Avg Rel Vol  = today_vol / avg_20d
+//   Sustained    = (avg_10d / avg_3m - 1) * 100
+//
+// 4-hour cache via ticker_volume_cache.
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
@@ -5,13 +18,9 @@ const corsHeaders = {
 };
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { getHistoricalData } from "../_shared/yahooHistory.ts";
 
-const FINNHUB_KEY = Deno.env.get("FINNHUB_API_KEY") || "";
-const CACHE_MAX_AGE_MS = 4 * 60 * 60 * 1000; // 4 hours
-
-function delay(ms: number) {
-  return new Promise((r) => setTimeout(r, ms));
-}
+const CACHE_MAX_AGE_MS = 4 * 60 * 60 * 1000; // 4h
 
 interface VolumeResult {
   symbol: string;
@@ -19,195 +28,123 @@ interface VolumeResult {
   avg_20d: number;
   avg_10d: number;
   avg_3m: number;
-  today_vol_estimated?: boolean;   // true if today_vol is a proxy, not live
-  vol_data_points?: number;        // how many EOD rows had volume data
+  today_vol_estimated?: boolean;
+  vol_data_points?: number;
   error?: string;
 }
 
+function meanVolume(volumes: (number | null)[]): number {
+  const valid = volumes.filter((v): v is number => typeof v === "number" && v > 0);
+  if (valid.length === 0) return 0;
+  return Math.round(valid.reduce((a, b) => a + b, 0) / valid.length);
+}
+
 async function fetchVolumeForSymbol(symbol: string, sb: any): Promise<VolumeResult> {
-  const result: VolumeResult = { symbol, today_vol: 0, avg_20d: 0, avg_10d: 0, avg_3m: 0, today_vol_estimated: false, vol_data_points: 0 };
+  const result: VolumeResult = {
+    symbol, today_vol: 0, avg_20d: 0, avg_10d: 0, avg_3m: 0,
+    today_vol_estimated: false, vol_data_points: 0,
+  };
 
-  // 1. Fetch /quote for today's volume
-  try {
-    const quoteRes = await fetch(
-      `https://finnhub.io/api/v1/quote?symbol=${encodeURIComponent(symbol)}&token=${FINNHUB_KEY}`
-    );
-    if (quoteRes.status === 429) {
-      return { ...result, error: "rate_limited" };
-    }
-    if (quoteRes.ok) {
-      const q = await quoteRes.json();
-      if (q && typeof q.v === 'number' && q.v > 0) {
-        result.today_vol = q.v;
-      }
-    }
-  } catch (e) {
-    console.log(`Quote error for ${symbol}: ${e}`);
+  // Pull 3-month daily OHLC from Yahoo (cached for 24h by helper).
+  const hist = await getHistoricalData(sb, symbol, "3mo", { skipEod: true });
+  if (!hist || hist.ohlc.length === 0) {
+    return { ...result, error: "no_data" };
   }
 
-  await delay(280);
+  // Volume series, oldest -> newest
+  const vols = hist.ohlc.map(b => b.volume);
+  const validCount = vols.filter(v => typeof v === "number" && v > 0).length;
+  result.vol_data_points = validCount;
 
-  // 2. Fetch /stock/metric for volume averages
-  try {
-    const metricRes = await fetch(
-      `https://finnhub.io/api/v1/stock/metric?symbol=${encodeURIComponent(symbol)}&metric=all&token=${FINNHUB_KEY}`
-    );
-    if (metricRes.status === 429) {
-      console.log(`Metric rate-limited for ${symbol}`);
-      return result;
-    }
-    if (metricRes.ok) {
-      const data = await metricRes.json();
-      const m = data?.metric;
-      if (m) {
-        if (typeof m["10DayAverageTradingVolume"] === "number") {
-          result.avg_10d = Math.round(m["10DayAverageTradingVolume"] * 1_000_000);
-        }
-        if (typeof m["3MonthAverageTradingVolume"] === "number") {
-          result.avg_3m = Math.round(m["3MonthAverageTradingVolume"] * 1_000_000);
-        }
-        // Interpolate 20-day from 10-day and 3-month
-        if (result.avg_10d > 0 && result.avg_3m > 0) {
-          result.avg_20d = Math.round((result.avg_10d + result.avg_3m) / 2);
-        } else if (result.avg_10d > 0) {
-          result.avg_20d = result.avg_10d;
-        } else if (result.avg_3m > 0) {
-          result.avg_20d = result.avg_3m;
-        }
-      }
-    }
-  } catch (e) {
-    console.log(`Metric error for ${symbol}: ${e}`);
-  }
+  if (validCount === 0) return { ...result, error: "no_volume" };
 
-  // 3. If today_vol is still 0 (weekend/after hours), try eod_prices fallback
-  if (result.today_vol === 0) {
-    try {
-      const { data: recentEod } = await sb
-        .from("eod_prices")
-        .select("volume, date")
-        .eq("symbol", symbol)
-        .not("volume", "is", null)
-        .gt("volume", 0)
-        .order("date", { ascending: false })
-        .limit(1);
-
-      if (recentEod && recentEod.length > 0 && recentEod[0].volume > 0) {
-        result.today_vol = recentEod[0].volume;
-        result.today_vol_estimated = true;
-        console.log(`${symbol}: using eod_prices volume from ${recentEod[0].date} = ${recentEod[0].volume}`);
-      }
-    } catch (e) {
-      console.log(`EOD fallback error for ${symbol}: ${e}`);
+  // today_vol = last bar with positive volume
+  for (let i = vols.length - 1; i >= 0; i--) {
+    const v = vols[i];
+    if (typeof v === "number" && v > 0) {
+      result.today_vol = v;
+      // If the last bar is older than 1 trading day, mark as estimated
+      const lastTs = hist.ohlc[i].ts;
+      const ageMs = Date.now() - lastTs * 1000;
+      if (ageMs > 36 * 60 * 60 * 1000) result.today_vol_estimated = true;
+      break;
     }
   }
 
-  // 4. If still no today_vol, use avg_10d as proxy (recent daily average)
-  if (result.today_vol === 0 && result.avg_10d > 0) {
-    result.today_vol = result.avg_10d;
-    result.today_vol_estimated = true;
-  }
-
-  // 5. Check how many EOD data points we have with volume for this symbol
-  try {
-    const { count } = await sb
-      .from("eod_prices")
-      .select("*", { count: "exact", head: true })
-      .eq("symbol", symbol)
-      .not("volume", "is", null)
-      .gt("volume", 0);
-
-    result.vol_data_points = count || 0;
-  } catch (e) {
-    // Non-critical, leave as 0
-  }
+  // Sliding window means (excluding today_vol from the window so today vs avg is meaningful).
+  // Actually: standard convention is that "20-day avg" includes today. We follow that.
+  result.avg_10d = meanVolume(vols.slice(-10));
+  result.avg_20d = meanVolume(vols.slice(-20));
+  result.avg_3m  = meanVolume(vols);
 
   return result;
 }
 
 Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
+  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const sb = createClient(supabaseUrl, supabaseKey);
+    const sb = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    );
 
     const url = new URL(req.url);
     const symbolsParam = url.searchParams.get("symbols");
+    const forceRefresh = url.searchParams.get("refresh") === "1";
 
     if (!symbolsParam) {
       return new Response(JSON.stringify({ error: "Missing symbols param" }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
     const symbols = symbolsParam.split(",").map(s => s.trim()).filter(Boolean);
     if (symbols.length === 0) {
       return new Response(JSON.stringify({ error: "Empty symbols" }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // Check cache first
-    const cutoff = new Date(Date.now() - CACHE_MAX_AGE_MS).toISOString();
-    const { data: cached } = await sb
-      .from("ticker_volume_cache")
-      .select("*")
-      .in("symbol", symbols)
-      .gte("last_updated", cutoff);
-
     const cachedMap = new Map<string, VolumeResult>();
-    if (cached) {
-      for (const c of cached) {
-        cachedMap.set(c.symbol, {
-          symbol: c.symbol,
-          today_vol: c.today_vol || 0,
-          avg_20d: c.avg_20d || 0,
-          avg_10d: c.avg_10d || 0,
-          avg_3m: c.avg_3m || 0,
-          today_vol_estimated: (c as any).today_vol_estimated ?? false,
-          vol_data_points: (c as any).vol_data_points ?? 0,
-        });
+    if (!forceRefresh) {
+      const cutoff = new Date(Date.now() - CACHE_MAX_AGE_MS).toISOString();
+      const { data: cached } = await sb
+        .from("ticker_volume_cache").select("*")
+        .in("symbol", symbols).gte("last_updated", cutoff);
+      if (cached) {
+        for (const c of cached) {
+          cachedMap.set(c.symbol, {
+            symbol: c.symbol,
+            today_vol: c.today_vol || 0,
+            avg_20d: c.avg_20d || 0,
+            avg_10d: c.avg_10d || 0,
+            avg_3m: c.avg_3m || 0,
+          });
+        }
       }
     }
 
     const uncached = symbols.filter(s => !cachedMap.has(s));
     const results: VolumeResult[] = [...cachedMap.values()];
 
-    // Fetch uncached symbols sequentially with rate limiting
-    for (let i = 0; i < uncached.length; i++) {
-      const vol = await fetchVolumeForSymbol(uncached[i], sb);
-
-      if (vol.error === "rate_limited") {
-        console.log(`Rate limited on ${uncached[i]}, waiting 60s...`);
-        await delay(60000);
-        const retry = await fetchVolumeForSymbol(uncached[i], sb);
-        results.push(retry);
-        if (!retry.error && (retry.avg_10d > 0 || retry.avg_3m > 0)) {
+    // Fetch in parallel batches of 5 (Yahoo can handle this comfortably)
+    const BATCH = 5;
+    for (let i = 0; i < uncached.length; i += BATCH) {
+      const slice = uncached.slice(i, i + BATCH);
+      const settled = await Promise.all(slice.map(s => fetchVolumeForSymbol(s, sb)));
+      for (const vol of settled) {
+        results.push(vol);
+        if (!vol.error && (vol.avg_10d > 0 || vol.avg_3m > 0 || vol.today_vol > 0)) {
           await sb.from("ticker_volume_cache").upsert({
-            symbol: retry.symbol, today_vol: retry.today_vol,
-            avg_20d: retry.avg_20d, avg_10d: retry.avg_10d, avg_3m: retry.avg_3m,
+            symbol: vol.symbol,
+            today_vol: vol.today_vol,
+            avg_20d: vol.avg_20d,
+            avg_10d: vol.avg_10d,
+            avg_3m: vol.avg_3m,
             last_updated: new Date().toISOString(),
           }, { onConflict: "symbol" });
         }
-      } else if (vol.avg_10d > 0 || vol.avg_3m > 0 || vol.today_vol > 0) {
-        results.push(vol);
-        await sb.from("ticker_volume_cache").upsert({
-          symbol: vol.symbol, today_vol: vol.today_vol,
-          avg_20d: vol.avg_20d, avg_10d: vol.avg_10d, avg_3m: vol.avg_3m,
-          last_updated: new Date().toISOString(),
-        }, { onConflict: "symbol" });
-      } else {
-        results.push(vol);
-      }
-
-      if (i < uncached.length - 1) {
-        await delay(280);
       }
     }
 
@@ -217,8 +154,7 @@ Deno.serve(async (req) => {
   } catch (error) {
     console.error("fetch-volume error:", error);
     return new Response(JSON.stringify({ error: String(error) }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
 });

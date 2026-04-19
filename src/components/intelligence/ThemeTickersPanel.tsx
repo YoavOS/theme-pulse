@@ -25,9 +25,13 @@ export default function ThemeTickersPanel({ theme, compact = false }: Props) {
   const { spy } = useSpyBenchmark();
 
   const rows = useMemo(() => {
-    return [...theme.tickers]
+    // Show ALL tickers belonging to the theme. Sort done tickers by 1D perf (desc),
+    // then append any pending/error tickers at the bottom so nothing is hidden.
+    const done = theme.tickers
       .filter(tk => tk.status === "done")
       .sort((a, b) => b.perf_1d - a.perf_1d);
+    const others = theme.tickers.filter(tk => tk.status !== "done");
+    return [...done, ...others];
   }, [theme.tickers]);
 
   if (rows.length === 0) {
@@ -47,7 +51,10 @@ export default function ThemeTickersPanel({ theme, compact = false }: Props) {
         border: "1px solid rgba(255,255,255,0.06)",
       }}
     >
-      <div className="max-h-[280px] overflow-auto">
+      <div className="max-h-[480px] overflow-auto">
+        <div className="px-2.5 py-1 text-[10px] text-muted-foreground border-b border-[rgba(255,255,255,0.06)] bg-[rgba(255,255,255,0.02)]" style={{ fontFamily: DM_MONO }}>
+          {rows.length} ticker{rows.length === 1 ? "" : "s"}
+        </div>
         <table className="w-full text-[11px]" style={{ fontFamily: DM_MONO }}>
           <thead className="sticky top-0 z-10" style={{ background: "rgba(15,18,25,0.95)" }}>
             <tr className="text-[10px] text-muted-foreground border-b border-[rgba(255,255,255,0.06)]">
@@ -63,24 +70,32 @@ export default function ThemeTickersPanel({ theme, compact = false }: Props) {
           </thead>
           <tbody>
             {rows.map(tk => {
-              const rs = spy.perf_1d !== null ? Math.round((tk.perf_1d - spy.perf_1d) * 100) / 100 : null;
+              const isDone = tk.status === "done";
+              const rs = isDone && spy.perf_1d !== null
+                ? Math.round((tk.perf_1d - spy.perf_1d) * 100) / 100
+                : null;
               return (
                 <tr
                   key={tk.symbol}
-                  className="border-b border-[rgba(255,255,255,0.04)] hover:bg-[rgba(255,255,255,0.03)]"
+                  className={`border-b border-[rgba(255,255,255,0.04)] hover:bg-[rgba(255,255,255,0.03)] ${isDone ? "" : "opacity-60"}`}
                 >
-                  <td className="px-2.5 py-1.5 font-semibold text-foreground">{tk.symbol}</td>
+                  <td className="px-2.5 py-1.5 font-semibold text-foreground">
+                    {tk.symbol}
+                    {!isDone && <span className="ml-1.5 text-[9px] uppercase tracking-wider text-muted-foreground">{tk.status}</span>}
+                  </td>
                   <td className="px-2.5 py-1.5 text-right text-muted-foreground">
                     {tk.price > 0 ? `$${tk.price.toFixed(2)}` : "--"}
                   </td>
-                  <td className={`px-2.5 py-1.5 text-right ${perfClass(tk.perf_1d)}`}>{fmt(tk.perf_1d)}</td>
+                  <td className={`px-2.5 py-1.5 text-right ${isDone ? perfClass(tk.perf_1d) : "text-muted-foreground"}`}>
+                    {isDone ? fmt(tk.perf_1d) : "--"}
+                  </td>
                   <td className={`px-2.5 py-1.5 text-right ${rs === null ? "text-muted-foreground" : perfClass(rs)}`}>
                     {rs === null ? "--" : fmt(rs)}
                   </td>
-                  {!compact && <td className={`px-2.5 py-1.5 text-right ${perfClass(tk.perf_1w)}`}>{fmt(tk.perf_1w)}</td>}
-                  {!compact && <td className={`px-2.5 py-1.5 text-right ${perfClass(tk.perf_1m)}`}>{fmt(tk.perf_1m)}</td>}
-                  {!compact && <td className={`px-2.5 py-1.5 text-right ${perfClass(tk.perf_3m)}`}>{fmt(tk.perf_3m)}</td>}
-                  {!compact && <td className={`px-2.5 py-1.5 text-right ${perfClass(tk.perf_ytd)}`}>{fmt(tk.perf_ytd)}</td>}
+                  {!compact && <td className={`px-2.5 py-1.5 text-right ${isDone ? perfClass(tk.perf_1w) : "text-muted-foreground"}`}>{isDone ? fmt(tk.perf_1w) : "--"}</td>}
+                  {!compact && <td className={`px-2.5 py-1.5 text-right ${isDone ? perfClass(tk.perf_1m) : "text-muted-foreground"}`}>{isDone ? fmt(tk.perf_1m) : "--"}</td>}
+                  {!compact && <td className={`px-2.5 py-1.5 text-right ${isDone ? perfClass(tk.perf_3m) : "text-muted-foreground"}`}>{isDone ? fmt(tk.perf_3m) : "--"}</td>}
+                  {!compact && <td className={`px-2.5 py-1.5 text-right ${isDone ? perfClass(tk.perf_ytd) : "text-muted-foreground"}`}>{isDone ? fmt(tk.perf_ytd) : "--"}</td>}
                 </tr>
               );
             })}
