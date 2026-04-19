@@ -35,12 +35,12 @@ function trendColor(v: number | null): string {
 }
 
 function fmtPct(v: number | null, digits = 1): string {
-  if (v === null) return "--";
+  if (v === null || v === undefined || Number.isNaN(v)) return "—";
   const s = v > 0 ? "+" : "";
   return `${s}${v.toFixed(digits)}%`;
 }
 function fmtX(v: number | null): string {
-  if (v === null) return "--";
+  if (v === null || v === undefined || Number.isNaN(v)) return "—";
   return `${v.toFixed(2)}×`;
 }
 
