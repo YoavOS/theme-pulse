@@ -68,6 +68,7 @@ async function fetchVolumeForSymbol(symbol: string, sb: any, period: Period): Pr
     symbol, today_vol: 0, avg_20d: 0, avg_10d: 0, avg_3m: 0,
     today_vol_estimated: false, vol_data_points: 0,
     rel_vol: null, vol_trend_pct: null, vol_consistency: null, sustained_score: null,
+    vol_sparkline: [],
   };
 
   // Pull 6-month daily OHLC from Yahoo (cached for 24h by helper) — gives us
