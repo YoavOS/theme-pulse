@@ -25,9 +25,13 @@ export default function ThemeTickersPanel({ theme, compact = false }: Props) {
   const { spy } = useSpyBenchmark();
 
   const rows = useMemo(() => {
-    return [...theme.tickers]
+    // Show ALL tickers belonging to the theme. Sort done tickers by 1D perf (desc),
+    // then append any pending/error tickers at the bottom so nothing is hidden.
+    const done = theme.tickers
       .filter(tk => tk.status === "done")
       .sort((a, b) => b.perf_1d - a.perf_1d);
+    const others = theme.tickers.filter(tk => tk.status !== "done");
+    return [...done, ...others];
   }, [theme.tickers]);
 
   if (rows.length === 0) {
@@ -47,7 +51,10 @@ export default function ThemeTickersPanel({ theme, compact = false }: Props) {
         border: "1px solid rgba(255,255,255,0.06)",
       }}
     >
-      <div className="max-h-[280px] overflow-auto">
+      <div className="max-h-[480px] overflow-auto">
+        <div className="px-2.5 py-1 text-[10px] text-muted-foreground border-b border-[rgba(255,255,255,0.06)] bg-[rgba(255,255,255,0.02)]" style={{ fontFamily: DM_MONO }}>
+          {rows.length} ticker{rows.length === 1 ? "" : "s"}
+        </div>
         <table className="w-full text-[11px]" style={{ fontFamily: DM_MONO }}>
           <thead className="sticky top-0 z-10" style={{ background: "rgba(15,18,25,0.95)" }}>
             <tr className="text-[10px] text-muted-foreground border-b border-[rgba(255,255,255,0.06)]">
