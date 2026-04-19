@@ -1,4 +1,5 @@
 import { useId } from "react";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 /* ─────────────────────────────────────────────────────────────
    Reusable visuals for the Volume Leaders section.
@@ -190,37 +191,46 @@ export function classifyVolumeHeat(
   return "steady";
 }
 
-const HEAT_STYLES: Record<VolumeHeat, { label: string; fg: string; bg: string; dot: string }> = {
-  surge:   { label: "Volume Surge", fg: "#022c1f", bg: "linear-gradient(90deg, #00f5c4, #34d399)", dot: "#022c1f" },
-  build:   { label: "Steady Build", fg: "#052e16", bg: "rgba(74,222,128,0.18)",                    dot: "#4ade80" },
-  steady:  { label: "Steady",       fg: "#fef9c3", bg: "rgba(250,204,21,0.14)",                    dot: "#facc15" },
-  fading:  { label: "Fading",       fg: "#fee2e2", bg: "rgba(248,113,113,0.18)",                   dot: "#f87171" },
-  weak:    { label: "Weak",         fg: "#cbd5e1", bg: "rgba(148,163,184,0.18)",                   dot: "#94a3b8" },
-  neutral: { label: "—",            fg: "#94a3b8", bg: "rgba(255,255,255,0.04)",                   dot: "#475569" },
+interface HeatStyle { label: string; tip: string; fg: string; bg: string; dot: string; }
+const HEAT_STYLES: Record<VolumeHeat, HeatStyle> = {
+  surge:   { label: "Volume Surge", tip: "Strong recent volume spike — Rel Vol > 1.6×, trend > +15%, sustained > 1.15. Likely institutional accumulation.", fg: "#022c1f", bg: "linear-gradient(90deg, #00f5c4, #34d399)", dot: "#022c1f" },
+  build:   { label: "Steady Build", tip: "Consistent and growing volume — sustained ≥ 1.05 with positive trend. Healthy accumulation pattern.",            fg: "#052e16", bg: "rgba(74,222,128,0.18)",                    dot: "#4ade80" },
+  steady:  { label: "Steady",       tip: "Stable volume with no clear directional trend. Neither accumulating nor distributing.",                          fg: "#fef9c3", bg: "rgba(250,204,21,0.14)",                    dot: "#facc15" },
+  fading:  { label: "Fading",       tip: "Volume is declining — sustained < 0.9 or trend < -15%. Demand is drying up.",                                    fg: "#fee2e2", bg: "rgba(248,113,113,0.18)",                   dot: "#f87171" },
+  weak:    { label: "Weak",         tip: "Below-average activity — Rel Vol < 0.8× and negative trend. Low participation.",                                 fg: "#cbd5e1", bg: "rgba(148,163,184,0.18)",                   dot: "#94a3b8" },
+  neutral: { label: "No data",      tip: "Volume metrics unavailable for this row.",                                                                       fg: "#94a3b8", bg: "rgba(255,255,255,0.04)",                   dot: "#475569" },
 };
 
 export function VolumeHeatBadge({ heat, compact = false }: { heat: VolumeHeat; compact?: boolean }) {
   const s = HEAT_STYLES[heat];
   const isStrong = heat === "surge";
   return (
-    <span
-      className={`inline-flex items-center gap-1 rounded-full font-semibold uppercase tracking-wider whitespace-nowrap ${compact ? "px-1.5 py-[1px] text-[8.5px]" : "px-2 py-[2px] text-[9px]"}`}
-      style={{
-        background: s.bg,
-        color: isStrong ? s.fg : s.dot,
-        border: isStrong ? "none" : `1px solid ${s.dot}40`,
-        fontFamily: "'DM Mono', monospace",
-      }}
-    >
-      <span
-        className="inline-block rounded-full"
-        style={{
-          width: 5, height: 5, background: s.dot,
-          boxShadow: isStrong ? `0 0 4px ${s.dot}` : undefined,
-          animation: isStrong ? "pulse 1.6s ease-in-out infinite" : undefined,
-        }}
-      />
-      {s.label}
-    </span>
+    <Tooltip delayDuration={150}>
+      <TooltipTrigger asChild>
+        <span
+          className={`inline-flex items-center gap-1.5 rounded-full font-semibold uppercase whitespace-nowrap cursor-help ${compact ? "px-2 py-[2px] text-[10px] tracking-wide" : "px-2.5 py-[3px] text-[10.5px] tracking-wide"}`}
+          style={{
+            background: s.bg,
+            color: isStrong ? s.fg : s.dot,
+            border: isStrong ? "none" : `1px solid ${s.dot}55`,
+            fontFamily: "'DM Mono', monospace",
+          }}
+        >
+          <span
+            className="inline-block rounded-full"
+            style={{
+              width: 6, height: 6, background: s.dot,
+              boxShadow: isStrong ? `0 0 5px ${s.dot}` : undefined,
+              animation: isStrong ? "pulse 1.6s ease-in-out infinite" : undefined,
+            }}
+          />
+          {s.label}
+        </span>
+      </TooltipTrigger>
+      <TooltipContent side="left" className="max-w-[240px] text-xs leading-snug">
+        <div className="font-semibold mb-0.5" style={{ color: s.dot }}>{s.label}</div>
+        <div className="text-muted-foreground">{s.tip}</div>
+      </TooltipContent>
+    </Tooltip>
   );
 }
