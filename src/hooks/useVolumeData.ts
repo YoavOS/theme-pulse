@@ -21,7 +21,7 @@ export interface ThemeDemandSignals {
   loading: boolean;
 }
 
-const LOCAL_CACHE_KEY = "volume_cache_v4"; // bumped to force refetch from fixed edge function
+const LOCAL_CACHE_KEY = "volume_cache_v5"; // bumped: switched to Yahoo source w/ true 20d avg
 const CACHE_MAX_AGE = 4 * 60 * 60 * 1000;
 
 interface LocalCache {
@@ -75,7 +75,7 @@ export function useVolumeData() {
       const batch = symbols.slice(i, i + batchSize);
       try {
         const res = await fetch(
-          `${supabaseUrl}/functions/v1/fetch-volume?symbols=${batch.join(",")}`,
+          `${supabaseUrl}/functions/v1/fetch-volume?refresh=1&symbols=${batch.join(",")}`,
           { headers: { apikey: anonKey, Authorization: `Bearer ${anonKey}` } }
         );
         if (res.ok) {
