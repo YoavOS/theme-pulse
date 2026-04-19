@@ -95,16 +95,16 @@ export default function VolumeLeaders({ themes, onSelectTheme, onDrilldownOpen }
       >
         {/* Header */}
         <div
-          className="sticky top-0 z-10 flex items-center gap-3 px-3.5 py-2 text-[10px] uppercase tracking-wider text-muted-foreground border-b border-[rgba(255,255,255,0.08)]"
+          className="sticky top-0 z-10 flex items-center gap-4 px-4 py-2.5 text-[11px] uppercase tracking-wider text-muted-foreground border-b border-[rgba(255,255,255,0.08)]"
           style={{ fontFamily: DM_MONO, background: "rgba(15,18,25,0.95)" }}
         >
           <span className="w-3 shrink-0" />
           <span className="flex-1 min-w-0">Theme</span>
-          <span className="w-[78px] text-center" title="30-day volume sparkline (color = trend direction)">Trend</span>
-          <span className="w-[110px] text-center" title="Today's volume vs the period average">Strength</span>
-          <span className="w-14 text-right" title="% change in average daily volume across the selected period">Vol Δ</span>
-          <span className="w-[78px] text-center" title="(10d/30d) × (20d/60d) — values >1.2 = accelerating sustained demand">Sustained</span>
-          <span className="w-[100px] text-right" title="Quick regime classification">Regime</span>
+          <HeaderCell className="w-[88px]" label="Trend" tip="30-day volume sparkline. Color reflects trend direction: teal/green = increasing, yellow = flat, red = decreasing." />
+          <HeaderCell className="w-[130px]" label="Strength" tip="Today's volume divided by the average for the selected timeframe (Rel Vol). Bar fills 0×–2.5×; tick marks 1.0× baseline." />
+          <HeaderCell className="w-16" label="Vol Δ" align="right" tip="Percent change in average daily volume across the selected period (second half vs first half). Positive = accelerating demand." />
+          <HeaderCell className="w-[88px]" label="Sustained" tip="(10d avg / 30d avg) × (20d avg / 60d avg). Values > 1.2 indicate strong, multi-window sustained accumulation." />
+          <HeaderCell className="w-[120px]" label="Regime" align="right" tip="Quick classification combining Rel Vol, Trend %, and Sustained score. Hover any badge for the full definition." />
         </div>
 
         {rows.length === 0 ? (
@@ -145,60 +145,62 @@ function SmartVolumeRow({
     <div className="border-b border-[rgba(255,255,255,0.04)]">
       <div
         onClick={(e) => { e.stopPropagation(); toggle(); }}
-        className="relative flex w-full items-center gap-3 px-3.5 py-2.5 text-left transition-all duration-150 cursor-pointer hover:bg-[rgba(255,255,255,0.04)]"
+        className="relative flex w-full items-center gap-4 px-4 py-3 text-left transition-all duration-150 cursor-pointer hover:bg-[rgba(255,255,255,0.04)]"
       >
-        <ChevronRight size={11} className="text-muted-foreground transition-transform duration-200 shrink-0" style={{ transform: open ? "rotate(90deg)" : "rotate(0deg)" }} />
+        <ChevronRight size={12} className="text-muted-foreground transition-transform duration-200 shrink-0" style={{ transform: open ? "rotate(90deg)" : "rotate(0deg)" }} />
         <button
           onClick={(e) => { e.stopPropagation(); onSelectTheme(t.themeId); onDrilldownOpen?.(t.themeName); }}
-          className="font-semibold text-[12px] leading-tight truncate min-w-0 flex-1 text-left text-foreground hover:text-[#00f5c4]"
-          style={{ fontFamily: "'Syne', sans-serif", maxWidth: "220px" }}
+          className="font-semibold text-[13.5px] leading-tight truncate min-w-0 flex-1 text-left text-foreground hover:text-[#00f5c4]"
+          style={{ fontFamily: "'Syne', sans-serif", maxWidth: "240px" }}
         >
           {t.themeName}
         </button>
 
         {/* Sparkline */}
-        <div className="w-[78px] flex justify-center shrink-0">
+        <div className="w-[88px] flex justify-center shrink-0">
           {isLoading ? (
-            <div className="h-[22px] w-[70px] rounded bg-white/5 animate-pulse" />
+            <div className="h-[24px] w-[80px] rounded bg-white/5 animate-pulse" />
+          ) : metrics.sparkline.length > 1 ? (
+            <VolumeSparkline series={metrics.sparkline} trendPct={metrics.volTrendPct} variant="bars" width={80} height={24} />
           ) : (
-            <VolumeSparkline series={metrics.sparkline} trendPct={metrics.volTrendPct} variant="bars" />
+            <span className="text-[12px] text-muted-foreground">—</span>
           )}
         </div>
 
         {/* Strength bar + numeric Rel Vol */}
-        <div className="w-[110px] flex items-center gap-2 shrink-0">
-          <StrengthBar value={metrics.relVol} />
-          <span className="text-[10.5px] tabular-nums text-muted-foreground w-9 text-right" style={{ fontFamily: DM_MONO }}>
+        <div className="w-[130px] flex items-center gap-2.5 shrink-0">
+          <StrengthBar value={metrics.relVol} width={70} height={7} />
+          <span className="text-[12px] font-bold tabular-nums text-foreground w-[44px] text-right" style={{ fontFamily: DM_MONO }}>
             {isLoading ? "…" : fmtX(metrics.relVol)}
           </span>
         </div>
 
         {/* Vol trend % */}
-        <div className="w-14 text-right shrink-0">
-          <span className="text-[11px] font-medium" style={{ fontFamily: DM_MONO, color: trendColor(metrics.volTrendPct) }}>
+        <div className="w-16 text-right shrink-0">
+          <span className="text-[12.5px] font-bold tabular-nums" style={{ fontFamily: DM_MONO, color: trendColor(metrics.volTrendPct) }}>
             {isLoading ? "…" : fmtPct(metrics.volTrendPct)}
           </span>
         </div>
 
         {/* Sustained gauge */}
-        <div className="w-[78px] flex flex-col items-center gap-0.5 shrink-0">
-          <SustainedGauge score={metrics.sustainedScore} width={64} />
-          <span className="text-[9.5px] tabular-nums text-muted-foreground" style={{ fontFamily: DM_MONO }}>
-            {isLoading ? "…" : metrics.sustainedScore != null ? metrics.sustainedScore.toFixed(2) : "--"}
+        <div className="w-[88px] flex flex-col items-center gap-1 shrink-0">
+          <SustainedGauge score={metrics.sustainedScore} width={72} />
+          <span className="text-[11px] font-semibold tabular-nums text-foreground/80" style={{ fontFamily: DM_MONO }}>
+            {isLoading ? "…" : metrics.sustainedScore != null ? metrics.sustainedScore.toFixed(2) : "—"}
           </span>
         </div>
 
         {/* Heat badge */}
-        <div className="w-[100px] flex justify-end shrink-0">
+        <div className="w-[120px] flex justify-end shrink-0">
           {isLoading ? (
-            <div className="h-[16px] w-[70px] rounded-full bg-white/5 animate-pulse" />
+            <div className="h-[18px] w-[88px] rounded-full bg-white/5 animate-pulse" />
           ) : (
             <VolumeHeatBadge heat={heat} />
           )}
         </div>
       </div>
       {open && (
-        <div className="px-3.5 pb-3" style={{ background: "rgba(0,0,0,0.2)" }}>
+        <div className="px-4 pb-3" style={{ background: "rgba(0,0,0,0.2)" }}>
           <ThemeTickersPanel theme={t} smartVolumeData={smart.data} smartVolumePeriod={period} />
         </div>
       )}
