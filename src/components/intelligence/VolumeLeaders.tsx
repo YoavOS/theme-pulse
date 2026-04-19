@@ -10,6 +10,7 @@ import {
   VolumeSparkline, StrengthBar, SustainedGauge, VolumeHeatBadge, classifyVolumeHeat,
 } from "./volume/VolumeVisuals";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import ThemeVolumeDashboard from "./volume/ThemeVolumeDashboard";
 
 function HeaderCell({ label, tip, className, align = "center" }: { label: string; tip: string; className?: string; align?: "left" | "center" | "right" }) {
   const alignCls = align === "right" ? "text-right" : align === "left" ? "text-left" : "text-center";
@@ -55,6 +56,7 @@ export default function VolumeLeaders({ themes, onSelectTheme, onDrilldownOpen }
   const [tf, setTf] = useState<Timeframe>(() => {
     try { return (localStorage.getItem(LS_KEY) as Timeframe) || "today"; } catch { return "today"; }
   });
+  const [dashTheme, setDashTheme] = useState<ThemeIntelData | null>(null);
 
   const smart = useSmartVolumeMetrics(tf);
 
@@ -141,23 +143,32 @@ export default function VolumeLeaders({ themes, onSelectTheme, onDrilldownOpen }
               period={tf}
               onSelectTheme={onSelectTheme}
               onDrilldownOpen={onDrilldownOpen}
+              onOpenDashboard={setDashTheme}
               smart={smart}
             />
           ))
         )}
       </div>
+
+      <ThemeVolumeDashboard
+        open={dashTheme !== null}
+        onOpenChange={(o) => { if (!o) setDashTheme(null); }}
+        theme={dashTheme}
+        smartVolumeData={smart.data}
+      />
     </div>
   );
 }
 
 function SmartVolumeRow({
-  theme: t, metrics, period, onSelectTheme, onDrilldownOpen, smart,
+  theme: t, metrics, period, onSelectTheme, onDrilldownOpen, onOpenDashboard, smart,
 }: {
   theme: ThemeIntelData;
   metrics: ThemeSmartVolume;
   period: Timeframe;
   onSelectTheme: (id: string) => void;
   onDrilldownOpen?: (name: string) => void;
+  onOpenDashboard: (theme: ThemeIntelData) => void;
   smart: ReturnType<typeof useSmartVolumeMetrics>;
 }) {
   const { open, toggle } = useThemeRowToggle(`volleaders-smart-${period}-${t.themeId}`);
@@ -172,9 +183,10 @@ function SmartVolumeRow({
       >
         <ChevronRight size={12} className="text-muted-foreground transition-transform duration-200 shrink-0" style={{ transform: open ? "rotate(90deg)" : "rotate(0deg)" }} />
         <button
-          onClick={(e) => { e.stopPropagation(); onSelectTheme(t.themeId); onDrilldownOpen?.(t.themeName); }}
+          onClick={(e) => { e.stopPropagation(); onOpenDashboard(t); onSelectTheme(t.themeId); onDrilldownOpen?.(t.themeName); }}
           className="font-semibold text-[13.5px] leading-tight truncate min-w-0 flex-1 text-left text-foreground hover:text-[#00f5c4]"
           style={{ fontFamily: "'Syne', sans-serif", maxWidth: "240px" }}
+          title="Open theme dashboard"
         >
           {t.themeName}
         </button>
