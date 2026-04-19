@@ -40,6 +40,7 @@ interface VolumeResult {
   vol_trend_pct: number | null;  // % change of avg daily volume across window
   vol_consistency: number | null;// % of days in window above avg_60d
   sustained_score: number | null;// (avg_10/avg_30)*(avg_20/avg_60)
+  vol_sparkline: number[];       // last 30 daily volumes (raw, oldest→newest)
   error?: string;
 }
 
