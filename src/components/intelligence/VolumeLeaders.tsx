@@ -183,7 +183,7 @@ function SmartVolumeRow({
       >
         <ChevronRight size={12} className="text-muted-foreground transition-transform duration-200 shrink-0" style={{ transform: open ? "rotate(90deg)" : "rotate(0deg)" }} />
         <button
-          onClick={(e) => { e.stopPropagation(); onOpenDashboard(t); onSelectTheme(t.themeId); onDrilldownOpen?.(t.themeName); }}
+          onClick={(e) => { e.stopPropagation(); onOpenDashboard(t); }}
           className="font-semibold text-[13.5px] leading-tight truncate min-w-0 flex-1 text-left text-foreground hover:text-[#00f5c4]"
           style={{ fontFamily: "'Syne', sans-serif", maxWidth: "240px" }}
           title="Open theme dashboard"
