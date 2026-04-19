@@ -64,15 +64,38 @@ export default function VolumeLeaders({ themes, onSelectTheme, onDrilldownOpen }
     if (allSymbols.length > 0) smart.fetchMetrics(allSymbols);
   }, [tf, themes, smart]);
 
+  // Composite "Volume Action Score" — blends all four smart-volume metrics into a
+  // single 0..1 ranking signal. Each component is normalized to 0..1 then weighted.
+  // Weights tilt by timeframe: shorter = lean on Rel Vol + Trend; longer = lean on
+  // Consistency + Sustained.
   const rows = useMemo(() => {
+    const W: Record<Timeframe, { rv: number; tr: number; co: number; su: number }> = {
+      today: { rv: 0.40, tr: 0.20, co: 0.10, su: 0.30 },
+      "1W":  { rv: 0.30, tr: 0.30, co: 0.15, su: 0.25 },
+      "1M":  { rv: 0.20, tr: 0.30, co: 0.20, su: 0.30 },
+      "3M":  { rv: 0.15, tr: 0.25, co: 0.25, su: 0.35 },
+    };
+    const w = W[tf];
+    const norm = {
+      relVol:    (v: number | null) => v == null ? 0 : Math.max(0, Math.min(1, (v - 0.5) / 2.0)),    // 0.5×→0, 2.5×→1
+      trend:     (v: number | null) => v == null ? 0 : Math.max(0, Math.min(1, (v + 20) / 70)),       // -20%→0, +50%→1
+      cons:      (v: number | null) => v == null ? 0 : Math.max(0, Math.min(1, v / 100)),             // 0..100% direct
+      sustained: (v: number | null) => v == null ? 0 : Math.max(0, Math.min(1, (v - 0.7) / 0.8)),    // 0.7→0, 1.5→1
+    };
     return themes
-      .map(t => ({ theme: t, metrics: smart.getThemeMetrics(t.symbols) }))
-      .sort((a, b) => {
-        const aScore = (a.metrics.sustainedScore ?? 0) * 1.5 + (a.metrics.relVol ?? 0);
-        const bScore = (b.metrics.sustainedScore ?? 0) * 1.5 + (b.metrics.relVol ?? 0);
-        return bScore - aScore;
-      });
-  }, [themes, smart]);
+      .map(t => {
+        const m = smart.getThemeMetrics(t.symbols);
+        const score =
+          norm.relVol(m.relVol)       * w.rv +
+          norm.trend(m.volTrendPct)   * w.tr +
+          norm.cons(m.volConsistency) * w.co +
+          norm.sustained(m.sustainedScore) * w.su;
+        // Demote rows with no data so they sink to the bottom
+        const hasData = m.relVol != null || m.volTrendPct != null || m.sustainedScore != null;
+        return { theme: t, metrics: m, score: hasData ? score : -1 };
+      })
+      .sort((a, b) => b.score - a.score);
+  }, [themes, smart, tf]);
 
   return (
     <div className="mb-5">
