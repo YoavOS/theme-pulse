@@ -67,6 +67,14 @@ export default function ThemeVolumeDashboard({ open, onOpenChange, theme, smartV
   const [spyHistory, setSpyHistory] = useState<OHLC[] | null>(null);
   const [rsMap, setRsMap] = useState<Record<string, number>>({});
 
+  // Per-panel smart volume metrics tied to the panel's own tf selector.
+  const localSmart = useSmartVolumeMetrics(TF_TO_METRIC_TF[tf]);
+  useEffect(() => {
+    if (open && theme && theme.symbols.length > 0) {
+      localSmart.fetchMetrics(theme.symbols);
+    }
+  }, [open, theme?.themeId, tf]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Reset on theme change
   useEffect(() => { if (theme) { setHistory([]); setSpyHistory(null); } }, [theme?.themeId]);
 
