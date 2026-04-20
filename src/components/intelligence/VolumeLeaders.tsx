@@ -59,12 +59,14 @@ export default function VolumeLeaders({ themes, onSelectTheme, onDrilldownOpen }
   const [dashTheme, setDashTheme] = useState<ThemeIntelData | null>(null);
 
   const smart = useSmartVolumeMetrics(tf);
+  const fetchMetricsRef = useRef(smart.fetchMetrics);
+  fetchMetricsRef.current = smart.fetchMetrics;
 
   useEffect(() => {
     try { localStorage.setItem(LS_KEY, tf); } catch {}
     const allSymbols = Array.from(new Set(themes.flatMap(t => t.symbols)));
-    if (allSymbols.length > 0) smart.fetchMetrics(allSymbols);
-  }, [tf, themes, smart]);
+    if (allSymbols.length > 0) fetchMetricsRef.current(allSymbols);
+  }, [tf, themes]);
 
   // Composite "Volume Action Score" — blends all four smart-volume metrics into a
   // single 0..1 ranking signal. Each component is normalized to 0..1 then weighted.
