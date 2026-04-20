@@ -8,7 +8,8 @@ import {
 } from "recharts";
 import { supabase } from "@/integrations/supabase/client";
 import { ThemeIntelData } from "@/hooks/useThemeIntelligence";
-import type { SmartVolumeMetrics } from "@/hooks/useSmartVolumeMetrics";
+import { useSmartVolumeMetrics, type SmartVolumeMetrics } from "@/hooks/useSmartVolumeMetrics";
+import type { Timeframe } from "@/hooks/useTimeframeAvailability";
 import { Activity, BarChart3, Layers, TrendingUp, Users } from "lucide-react";
 import { VolumeHeatBadge, classifyVolumeHeat } from "./VolumeVisuals";
 
@@ -17,6 +18,8 @@ const SYNE = "'Syne', sans-serif";
 
 type ChartTf = "1W" | "1M" | "3M" | "6M";
 const TF_TO_PERIOD: Record<ChartTf, string> = { "1W": "5d", "1M": "1mo", "3M": "3mo", "6M": "6mo" };
+// Smart-volume metrics support today/1W/1M/3M; map 6M → 3M for the metric cards.
+const TF_TO_METRIC_TF: Record<ChartTf, Timeframe> = { "1W": "1W", "1M": "1M", "3M": "3M", "6M": "3M" };
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
 const anonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string;
@@ -63,6 +66,14 @@ export default function ThemeVolumeDashboard({ open, onOpenChange, theme, smartV
   const [history, setHistory] = useState<HistRow[]>([]);
   const [spyHistory, setSpyHistory] = useState<OHLC[] | null>(null);
   const [rsMap, setRsMap] = useState<Record<string, number>>({});
+
+  // Per-panel smart volume metrics tied to the panel's own tf selector.
+  const localSmart = useSmartVolumeMetrics(TF_TO_METRIC_TF[tf]);
+  useEffect(() => {
+    if (open && theme && theme.symbols.length > 0) {
+      localSmart.fetchMetrics(theme.symbols);
+    }
+  }, [open, theme?.themeId, tf]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Reset on theme change
   useEffect(() => { if (theme) { setHistory([]); setSpyHistory(null); } }, [theme?.themeId]);
@@ -174,12 +185,18 @@ export default function ThemeVolumeDashboard({ open, onOpenChange, theme, smartV
     });
   }, [theme, history, spyHistory]);
 
-  // Theme-level metrics from smartVolumeData
+  // Theme-level metrics from the panel-local hook (period-aware via tf).
+  // Falls back to the parent-supplied snapshot only if the local hook hasn't loaded yet.
+  const volSource: Record<string, SmartVolumeMetrics> = useMemo(() => {
+    if (Object.keys(localSmart.data).length > 0) return localSmart.data;
+    return smartVolumeData ?? {};
+  }, [localSmart.data, smartVolumeData]);
+
   const aggregate = useMemo(() => {
-    if (!theme || !smartVolumeData) return null;
-    const rows = theme.symbols.map(s => smartVolumeData[s]).filter(Boolean).filter(r => !r.error);
+    if (!theme) return null;
+    const rows = theme.symbols.map(s => volSource[s]).filter(Boolean).filter(r => !r.error);
     if (rows.length === 0) return null;
-    const avg = (xs: (number | null)[]) => {
+    const avg = (xs: (number | null | undefined)[]) => {
       const v = xs.filter((n): n is number => typeof n === "number" && Number.isFinite(n));
       return v.length === 0 ? null : v.reduce((a, b) => a + b, 0) / v.length;
     };
@@ -189,7 +206,7 @@ export default function ThemeVolumeDashboard({ open, onOpenChange, theme, smartV
       consistency: avg(rows.map(r => r.vol_consistency)),
       trendPct: avg(rows.map(r => r.vol_trend_pct)),
     };
-  }, [theme, smartVolumeData]);
+  }, [theme, volSource]);
 
   const top3 = useMemo(() => {
     if (!theme) return [];
@@ -207,14 +224,14 @@ export default function ThemeVolumeDashboard({ open, onOpenChange, theme, smartV
   const tickerRows = useMemo(() => {
     if (!theme) return [];
     return [...theme.tickers]
-      .map(t => ({ ...t, rs: rsMap[t.symbol] ?? null, vol: smartVolumeData?.[t.symbol] }))
+      .map(t => ({ ...t, rs: rsMap[t.symbol] ?? null, vol: volSource[t.symbol] }))
       .sort((a, b) => {
         const av = a.status === "done" ? 0 : 1;
         const bv = b.status === "done" ? 0 : 1;
         if (av !== bv) return av - bv;
         return (b.rs ?? -Infinity) - (a.rs ?? -Infinity);
       });
-  }, [theme, rsMap, smartVolumeData]);
+  }, [theme, rsMap, volSource]);
 
   const heat = aggregate
     ? classifyVolumeHeat(aggregate.relVol, aggregate.trendPct, aggregate.sustained)
