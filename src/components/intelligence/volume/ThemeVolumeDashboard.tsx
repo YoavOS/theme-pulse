@@ -185,12 +185,18 @@ export default function ThemeVolumeDashboard({ open, onOpenChange, theme, smartV
     });
   }, [theme, history, spyHistory]);
 
-  // Theme-level metrics from smartVolumeData
+  // Theme-level metrics from the panel-local hook (period-aware via tf).
+  // Falls back to the parent-supplied snapshot only if the local hook hasn't loaded yet.
+  const volSource: Record<string, SmartVolumeMetrics> = useMemo(() => {
+    if (Object.keys(localSmart.data).length > 0) return localSmart.data;
+    return smartVolumeData ?? {};
+  }, [localSmart.data, smartVolumeData]);
+
   const aggregate = useMemo(() => {
-    if (!theme || !smartVolumeData) return null;
-    const rows = theme.symbols.map(s => smartVolumeData[s]).filter(Boolean).filter(r => !r.error);
+    if (!theme) return null;
+    const rows = theme.symbols.map(s => volSource[s]).filter(Boolean).filter(r => !r.error);
     if (rows.length === 0) return null;
-    const avg = (xs: (number | null)[]) => {
+    const avg = (xs: (number | null | undefined)[]) => {
       const v = xs.filter((n): n is number => typeof n === "number" && Number.isFinite(n));
       return v.length === 0 ? null : v.reduce((a, b) => a + b, 0) / v.length;
     };
@@ -200,7 +206,7 @@ export default function ThemeVolumeDashboard({ open, onOpenChange, theme, smartV
       consistency: avg(rows.map(r => r.vol_consistency)),
       trendPct: avg(rows.map(r => r.vol_trend_pct)),
     };
-  }, [theme, smartVolumeData]);
+  }, [theme, volSource]);
 
   const top3 = useMemo(() => {
     if (!theme) return [];
@@ -218,14 +224,14 @@ export default function ThemeVolumeDashboard({ open, onOpenChange, theme, smartV
   const tickerRows = useMemo(() => {
     if (!theme) return [];
     return [...theme.tickers]
-      .map(t => ({ ...t, rs: rsMap[t.symbol] ?? null, vol: smartVolumeData?.[t.symbol] }))
+      .map(t => ({ ...t, rs: rsMap[t.symbol] ?? null, vol: volSource[t.symbol] }))
       .sort((a, b) => {
         const av = a.status === "done" ? 0 : 1;
         const bv = b.status === "done" ? 0 : 1;
         if (av !== bv) return av - bv;
         return (b.rs ?? -Infinity) - (a.rs ?? -Infinity);
       });
-  }, [theme, rsMap, smartVolumeData]);
+  }, [theme, rsMap, volSource]);
 
   const heat = aggregate
     ? classifyVolumeHeat(aggregate.relVol, aggregate.trendPct, aggregate.sustained)
