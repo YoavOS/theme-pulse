@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
 import { ThemeIntelData } from "@/hooks/useThemeIntelligence";
 import { Zap, ChevronRight } from "lucide-react";
 import TimeframeTabs from "./TimeframeTabs";
