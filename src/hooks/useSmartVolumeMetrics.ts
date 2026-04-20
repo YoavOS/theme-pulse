@@ -33,68 +33,107 @@ function avgOrNull(nums: (number | null | undefined)[]): number | null {
 
 /**
  * Fetches per-period smart volume metrics from the `fetch-volume` edge function.
- * Caches results in-memory keyed by `${period}:${symbol}` so switching tabs
- * doesn't re-fetch. Batches queued symbols with a 200ms debounce.
+ * Caches results in-memory keyed by period so switching tabs doesn't re-fetch.
+ *
+ * Critical: every async write to React state checks the *current* period via a ref
+ * before committing, so a flight in progress for an old period cannot overwrite
+ * the displayed data for a newly selected period.
  */
 export function useSmartVolumeMetrics(period: Timeframe) {
   const [data, setData] = useState<Record<string, SmartVolumeMetrics>>({});
   const [loadingSymbols, setLoadingSymbols] = useState<Set<string>>(() => new Set());
 
+  // Cache slices keyed by period; queues keyed by period too.
   const cacheRef = useRef<Map<string, Record<string, SmartVolumeMetrics>>>(new Map());
-  const queueRef = useRef<Set<string>>(new Set());
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const queueRef = useRef<Map<string, Set<string>>>(new Map());
+  const timerRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  const inflightRef = useRef<Map<string, Set<string>>>(new Map());
+
+  // Track the *current* period the user is viewing — async writes guard against this.
+  const currentPeriodRef = useRef<Timeframe>(period);
 
   // When period changes, swap to the cache slice for that period
   useEffect(() => {
+    currentPeriodRef.current = period;
     const slice = cacheRef.current.get(period) || {};
-    setData(slice);
+    setData({ ...slice });
+    // Recompute loading set: any symbols in flight for THIS period are loading.
+    const inflight = inflightRef.current.get(period) || new Set();
+    setLoadingSymbols(new Set(inflight));
   }, [period]);
 
-  const flush = useCallback(async () => {
-    const symbols = [...queueRef.current];
-    queueRef.current.clear();
-    if (symbols.length === 0) return;
+  const flushFor = useCallback(async (p: Timeframe) => {
+    const queue = queueRef.current.get(p);
+    if (!queue || queue.size === 0) return;
+    const symbols = [...queue];
+    queue.clear();
 
-    setLoadingSymbols(prev => new Set([...prev, ...symbols]));
+    const inflight = inflightRef.current.get(p) ?? new Set<string>();
+    symbols.forEach(s => inflight.add(s));
+    inflightRef.current.set(p, inflight);
+
+    if (currentPeriodRef.current === p) {
+      setLoadingSymbols(prev => new Set([...prev, ...symbols]));
+    }
 
     const BATCH = 15;
     for (let i = 0; i < symbols.length; i += BATCH) {
       const batch = symbols.slice(i, i + BATCH);
       try {
         const res = await fetch(
-          `${supabaseUrl}/functions/v1/fetch-volume?period=${period}&symbols=${batch.join(",")}`,
+          `${supabaseUrl}/functions/v1/fetch-volume?period=${p}&symbols=${batch.join(",")}`,
           { headers: { apikey: anonKey, Authorization: `Bearer ${anonKey}` } }
         );
         if (!res.ok) continue;
         const payload = await res.json();
         if (!payload?.results) continue;
 
-        const slice = cacheRef.current.get(period) || {};
+        const slice = cacheRef.current.get(p) || {};
         for (const r of payload.results as SmartVolumeMetrics[]) {
           slice[r.symbol] = r;
         }
-        cacheRef.current.set(period, slice);
-        setData({ ...slice });
+        cacheRef.current.set(p, slice);
+
+        // Only push to React state if the user is STILL viewing this period.
+        if (currentPeriodRef.current === p) {
+          setData({ ...slice });
+        }
       } catch (e) {
         console.error("smart volume fetch error:", e);
+      } finally {
+        batch.forEach(s => inflight.delete(s));
+        if (currentPeriodRef.current === p) {
+          setLoadingSymbols(prev => {
+            const next = new Set(prev);
+            batch.forEach(s => next.delete(s));
+            return next;
+          });
+        }
       }
     }
-
-    setLoadingSymbols(prev => {
-      const next = new Set(prev);
-      symbols.forEach(s => next.delete(s));
-      return next;
-    });
-  }, [period]);
+  }, []);
 
   const fetchMetrics = useCallback((symbols: string[]) => {
-    const slice = cacheRef.current.get(period) || {};
-    const needed = symbols.filter(s => !slice[s] && !queueRef.current.has(s));
+    const p = period;
+    const slice = cacheRef.current.get(p) || {};
+    const inflight = inflightRef.current.get(p) || new Set();
+    let queue = queueRef.current.get(p);
+    if (!queue) {
+      queue = new Set();
+      queueRef.current.set(p, queue);
+    }
+    const needed = symbols.filter(s => !slice[s] && !queue!.has(s) && !inflight.has(s));
     if (needed.length === 0) return;
-    needed.forEach(s => queueRef.current.add(s));
-    if (timerRef.current) clearTimeout(timerRef.current);
-    timerRef.current = setTimeout(flush, 200);
-  }, [period, flush]);
+    needed.forEach(s => queue!.add(s));
+
+    const existing = timerRef.current.get(p);
+    if (existing) clearTimeout(existing);
+    const t = setTimeout(() => {
+      timerRef.current.delete(p);
+      flushFor(p);
+    }, 200);
+    timerRef.current.set(p, t);
+  }, [period, flushFor]);
 
   const getThemeMetrics = useCallback((symbols: string[]): ThemeSmartVolume => {
     const loading = symbols.some(s => loadingSymbols.has(s));
