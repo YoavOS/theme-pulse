@@ -177,16 +177,23 @@ function SmartVolumeRow({
 
   return (
     <div className="border-b border-[rgba(255,255,255,0.04)]">
-      <div
-        onClick={(e) => { e.stopPropagation(); toggle(); }}
-        className="relative flex w-full items-center gap-4 px-4 py-3 text-left transition-all duration-150 cursor-pointer hover:bg-[rgba(255,255,255,0.04)]"
-      >
-        <ChevronRight size={12} className="text-muted-foreground transition-transform duration-200 shrink-0" style={{ transform: open ? "rotate(90deg)" : "rotate(0deg)" }} />
+      <div className="relative flex w-full items-center gap-4 px-4 py-3 text-left transition-all duration-150 hover:bg-[rgba(255,255,255,0.04)]">
         <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); toggle(); }}
+          className="flex shrink-0 items-center justify-center rounded-sm p-0.5 text-muted-foreground transition-colors hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+          aria-label={open ? `Collapse ${t.themeName} inline ticker list` : `Expand ${t.themeName} inline ticker list`}
+          title={open ? "Hide inline ticker list" : "Show inline ticker list"}
+        >
+          <ChevronRight size={12} className="transition-transform duration-200" style={{ transform: open ? "rotate(90deg)" : "rotate(0deg)" }} />
+        </button>
+        <button
+          type="button"
           onClick={(e) => { e.stopPropagation(); onOpenDashboard(t); }}
           className="font-semibold text-[13.5px] leading-tight truncate min-w-0 flex-1 text-left text-foreground hover:text-[#00f5c4]"
           style={{ fontFamily: "'Syne', sans-serif", maxWidth: "240px" }}
-          title="Open theme dashboard"
+          aria-label={`Open ${t.themeName} volume dashboard`}
+          title={`Open ${t.themeName} volume dashboard`}
         >
           {t.themeName}
         </button>
