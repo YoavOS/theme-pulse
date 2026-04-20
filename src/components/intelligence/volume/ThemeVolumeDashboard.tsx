@@ -8,7 +8,8 @@ import {
 } from "recharts";
 import { supabase } from "@/integrations/supabase/client";
 import { ThemeIntelData } from "@/hooks/useThemeIntelligence";
-import type { SmartVolumeMetrics } from "@/hooks/useSmartVolumeMetrics";
+import { useSmartVolumeMetrics, type SmartVolumeMetrics } from "@/hooks/useSmartVolumeMetrics";
+import type { Timeframe } from "@/hooks/useTimeframeAvailability";
 import { Activity, BarChart3, Layers, TrendingUp, Users } from "lucide-react";
 import { VolumeHeatBadge, classifyVolumeHeat } from "./VolumeVisuals";
 
@@ -17,6 +18,8 @@ const SYNE = "'Syne', sans-serif";
 
 type ChartTf = "1W" | "1M" | "3M" | "6M";
 const TF_TO_PERIOD: Record<ChartTf, string> = { "1W": "5d", "1M": "1mo", "3M": "3mo", "6M": "6mo" };
+// Smart-volume metrics support today/1W/1M/3M; map 6M → 3M for the metric cards.
+const TF_TO_METRIC_TF: Record<ChartTf, Timeframe> = { "1W": "1W", "1M": "1M", "3M": "3M", "6M": "3M" };
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
 const anonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string;
