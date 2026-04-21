@@ -241,7 +241,7 @@ export default function ThemeVolumeDashboard({ open, onOpenChange, theme, smartV
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
         side="right"
-        className="z-[80] p-0 border-l border-[rgba(255,255,255,0.08)] flex flex-col gap-0"
+        className="z-[80] p-0 border-l border-[rgba(255,255,255,0.08)] flex flex-col gap-0 w-full sm:max-w-[720px]"
         style={{ width: "min(720px, 96vw)", maxWidth: "none", background: "linear-gradient(180deg, #0b0e12 0%, #11151c 100%)" }}
       >
         {theme && (
@@ -364,6 +364,14 @@ export default function ThemeVolumeDashboard({ open, onOpenChange, theme, smartV
                 <MetricCard icon={<TrendingUp size={12} />} label="Vol Consistency" value={aggregate?.consistency != null ? `${aggregate.consistency.toFixed(0)}%` : "—"} accent="#facc15" />
                 <MetricCard icon={<Users size={12} />} label="Tickers" value={String(theme.symbols.length)} accent="#94a3b8" />
               </div>
+              <div
+                className="text-[10.5px] text-muted-foreground leading-relaxed -mt-1"
+                style={{ fontFamily: DM_MONO }}
+              >
+                <span className="text-[#00f5c4]">Rel Vol</span> = today vs 20d avg ·{" "}
+                <span className="text-[#4ade80]">Sustained</span> = 10d vs 3m baseline ·{" "}
+                <span className="text-[#facc15]">Consistency</span> = % of days with above-avg volume
+              </div>
 
               {/* Top 3 strongest */}
               <div>
@@ -395,57 +403,76 @@ export default function ThemeVolumeDashboard({ open, onOpenChange, theme, smartV
                 </div>
               </div>
 
-              {/* Ticker list */}
-              <div>
-                <div className="text-[10.5px] uppercase tracking-widest text-muted-foreground mb-1.5" style={{ fontFamily: DM_MONO }}>
-                  All tickers
-                </div>
-                <div
-                  className="rounded-md overflow-hidden"
-                  style={{ background: "rgba(0,0,0,0.25)", border: "1px solid rgba(255,255,255,0.06)" }}
-                >
-                  <div className="max-h-[320px] overflow-auto">
-                    <table className="w-full text-[12px]" style={{ fontFamily: DM_MONO }}>
-                      <thead className="sticky top-0 z-10" style={{ background: "rgba(15,18,25,0.95)" }}>
-                        <tr className="text-[10.5px] text-muted-foreground border-b border-[rgba(255,255,255,0.06)]">
-                          <th className="px-2.5 py-2 text-left font-medium">Ticker</th>
-                          <th className="px-2.5 py-2 text-right font-medium">Price</th>
-                          <th className="px-2.5 py-2 text-right font-medium">1D</th>
-                          <th className="px-2.5 py-2 text-right font-medium">1M</th>
-                          <th className="px-2.5 py-2 text-right font-medium">3M</th>
-                          <th className="px-2.5 py-2 text-right font-medium">RS</th>
-                          <th className="px-2.5 py-2 text-right font-medium">Vol Δ</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {tickerRows.map(t => {
-                          const isDone = t.status === "done";
-                          return (
-                            <tr key={t.symbol} className={`border-b border-[rgba(255,255,255,0.04)] hover:bg-[rgba(255,255,255,0.03)] ${isDone ? "" : "opacity-60"}`}>
-                              <td className="px-2.5 py-2 font-bold text-foreground">{t.symbol}</td>
-                              <td className="px-2.5 py-2 text-right text-muted-foreground tabular-nums">{t.price > 0 ? `$${t.price.toFixed(2)}` : "—"}</td>
-                              <td className="px-2.5 py-2 text-right tabular-nums" style={{ color: perfColor(isDone ? t.perf_1d : null) }}>{isDone ? fmtPct(t.perf_1d, 2) : "—"}</td>
-                              <td className="px-2.5 py-2 text-right tabular-nums" style={{ color: perfColor(isDone ? t.perf_1m : null) }}>{isDone ? fmtPct(t.perf_1m, 1) : "—"}</td>
-                              <td className="px-2.5 py-2 text-right tabular-nums" style={{ color: perfColor(isDone ? t.perf_3m : null) }}>{isDone ? fmtPct(t.perf_3m, 1) : "—"}</td>
-                              <td className="px-2.5 py-2 text-right font-bold tabular-nums" style={{ color: t.rs != null && t.rs >= 80 ? "#00f5c4" : t.rs != null && t.rs >= 60 ? "#4ade80" : "hsl(var(--muted-foreground))" }}>
-                                {t.rs != null ? t.rs.toFixed(0) : "—"}
-                              </td>
-                              <td className="px-2.5 py-2 text-right font-semibold tabular-nums" style={{ color: perfColor(t.vol?.vol_trend_pct ?? null) }}>
-                                {t.vol?.vol_trend_pct != null ? fmtPct(t.vol.vol_trend_pct, 1) : "—"}
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              </div>
+              {/* Ticker list — fully expanded by default */}
+              <TickerListSection rows={tickerRows} />
             </div>
           </>
         )}
       </SheetContent>
     </Sheet>
+  );
+}
+
+function TickerListSection({ rows }: { rows: any[] }) {
+  const [showAll, setShowAll] = useState(false);
+  const INITIAL = 15;
+  const visible = showAll ? rows : rows.slice(0, INITIAL);
+  const hasMore = rows.length > INITIAL;
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-1.5">
+        <div className="text-[10.5px] uppercase tracking-widest text-muted-foreground" style={{ fontFamily: DM_MONO }}>
+          {showAll || !hasMore ? `All tickers (${rows.length})` : `Top ${INITIAL} of ${rows.length} tickers`}
+        </div>
+        {hasMore && (
+          <button
+            onClick={() => setShowAll(s => !s)}
+            className="text-[10.5px] font-semibold text-[#00f5c4] hover:text-[#00f5c4]/80 transition-colors"
+            style={{ fontFamily: DM_MONO }}
+          >
+            {showAll ? "Show top 15" : `Show all (${rows.length})`}
+          </button>
+        )}
+      </div>
+      <div
+        className="rounded-md overflow-hidden"
+        style={{ background: "rgba(0,0,0,0.25)", border: "1px solid rgba(255,255,255,0.06)" }}
+      >
+        <table className="w-full text-[12px]" style={{ fontFamily: DM_MONO }}>
+          <thead className="sticky top-0 z-10" style={{ background: "rgba(15,18,25,0.95)" }}>
+            <tr className="text-[10.5px] text-muted-foreground border-b border-[rgba(255,255,255,0.06)]">
+              <th className="px-2.5 py-2 text-left font-medium">Ticker</th>
+              <th className="px-2.5 py-2 text-right font-medium">Price</th>
+              <th className="px-2.5 py-2 text-right font-medium">1D</th>
+              <th className="px-2.5 py-2 text-right font-medium">1M</th>
+              <th className="px-2.5 py-2 text-right font-medium">3M</th>
+              <th className="px-2.5 py-2 text-right font-medium">RS</th>
+              <th className="px-2.5 py-2 text-right font-medium">Vol Δ</th>
+            </tr>
+          </thead>
+          <tbody>
+            {visible.map(t => {
+              const isDone = t.status === "done";
+              return (
+                <tr key={t.symbol} className={`border-b border-[rgba(255,255,255,0.04)] hover:bg-[rgba(255,255,255,0.03)] ${isDone ? "" : "opacity-60"}`}>
+                  <td className="px-2.5 py-2 font-bold text-foreground">{t.symbol}</td>
+                  <td className="px-2.5 py-2 text-right text-muted-foreground tabular-nums">{t.price > 0 ? `$${t.price.toFixed(2)}` : "—"}</td>
+                  <td className="px-2.5 py-2 text-right tabular-nums" style={{ color: perfColor(isDone ? t.perf_1d : null) }}>{isDone ? fmtPct(t.perf_1d, 2) : "—"}</td>
+                  <td className="px-2.5 py-2 text-right tabular-nums" style={{ color: perfColor(isDone ? t.perf_1m : null) }}>{isDone ? fmtPct(t.perf_1m, 1) : "—"}</td>
+                  <td className="px-2.5 py-2 text-right tabular-nums" style={{ color: perfColor(isDone ? t.perf_3m : null) }}>{isDone ? fmtPct(t.perf_3m, 1) : "—"}</td>
+                  <td className="px-2.5 py-2 text-right font-bold tabular-nums" style={{ color: t.rs != null && t.rs >= 80 ? "#00f5c4" : t.rs != null && t.rs >= 60 ? "#4ade80" : "hsl(var(--muted-foreground))" }}>
+                    {t.rs != null ? t.rs.toFixed(0) : "—"}
+                  </td>
+                  <td className="px-2.5 py-2 text-right font-semibold tabular-nums" style={{ color: perfColor(t.vol?.vol_trend_pct ?? null) }}>
+                    {t.vol?.vol_trend_pct != null ? fmtPct(t.vol.vol_trend_pct, 1) : "—"}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
   );
 }
 
