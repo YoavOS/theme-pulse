@@ -56,58 +56,106 @@ function ratingClass(r: number | null): string {
   return "text-destructive";
 }
 
+interface VerdictFactor {
+  label: string;
+  status: "pos" | "neg" | "neu" | "na";
+  note: string;
+}
 interface Verdict {
-  label: "Good Momentum Entry" | "Watch Carefully" | "Avoid / High Risk";
+  label:
+    | "Constructive Setup"
+    | "Mixed — Watch & Wait"
+    | "Weak Setup"
+    | "Insufficient Data";
   color: string;
   bg: string;
   border: string;
   icon: typeof CheckCircle2;
   reason: string;
+  factors: VerdictFactor[];
 }
 
-function buildVerdict(rating: number | null, accel: number | null, relVol: number | null): Verdict {
+function buildVerdict(
+  rating: number | null,
+  accel: number | null,
+  relVol: number | null,
+  return1w: number | null,
+): Verdict {
+  // Multi-factor, explainable verdict. Each factor is scored independently and
+  // shown to the user so the verdict isn't a black-box.
+  const factors: VerdictFactor[] = [];
+
+  if (rating === null) factors.push({ label: "RS Rating", status: "na", note: "Not in qualified universe" });
+  else if (rating >= 70) factors.push({ label: "RS Rating", status: "pos", note: `Leader (RS ${rating})` });
+  else if (rating < 40) factors.push({ label: "RS Rating", status: "neg", note: `Lagging (RS ${rating})` });
+  else factors.push({ label: "RS Rating", status: "neu", note: `Average (RS ${rating})` });
+
+  if (accel === null) factors.push({ label: "Acceleration", status: "na", note: "Insufficient history" });
+  else if (accel >= 5) factors.push({ label: "Acceleration", status: "pos", note: `Improving (+${accel.toFixed(1)} pts)` });
+  else if (accel <= -10) factors.push({ label: "Acceleration", status: "neg", note: `Decelerating (${accel.toFixed(1)} pts)` });
+  else factors.push({ label: "Acceleration", status: "neu", note: `Stable (${accel >= 0 ? "+" : ""}${accel.toFixed(1)} pts)` });
+
+  if (relVol === null) factors.push({ label: "Volume", status: "na", note: "No live volume" });
+  else if (relVol >= 1.3) factors.push({ label: "Volume", status: "pos", note: `Above avg (${relVol.toFixed(2)}×)` });
+  else if (relVol < 0.7) factors.push({ label: "Volume", status: "neg", note: `Below avg (${relVol.toFixed(2)}×)` });
+  else factors.push({ label: "Volume", status: "neu", note: `Normal (${relVol.toFixed(2)}×)` });
+
+  if (return1w === null) factors.push({ label: "Recent Action", status: "na", note: "—" });
+  else if (return1w >= 15) factors.push({ label: "Recent Action", status: "neu", note: `Extended (+${return1w.toFixed(1)}% / 1W)` });
+  else if (return1w <= -10) factors.push({ label: "Recent Action", status: "neg", note: `Sharp drop (${return1w.toFixed(1)}% / 1W)` });
+  else factors.push({ label: "Recent Action", status: "neu", note: `${return1w >= 0 ? "+" : ""}${return1w.toFixed(1)}% / 1W` });
+
   if (rating === null) {
     return {
-      label: "Watch Carefully",
-      color: "text-[hsl(40,85%,55%)]",
-      bg: "bg-[hsl(40,85%,55%)]/10",
-      border: "border-[hsl(40,85%,55%)]/30",
-      icon: AlertTriangle,
-      reason: "This ticker isn't in the qualified RS universe — limited context available.",
+      label: "Insufficient Data",
+      color: "text-muted-foreground",
+      bg: "bg-muted/20",
+      border: "border-border/40",
+      icon: Info,
+      reason:
+        "This ticker isn't in the qualified RS universe, so we can't generate a confident multi-factor read. Treat anything shown here as preliminary context, not a recommendation.",
+      factors,
     };
   }
-  // Good entry: strong RS (>=70), positive accel, supportive volume
-  if (rating >= 70 && (accel ?? 0) >= 0 && (relVol ?? 1) >= 0.9) {
+
+  const posCount = factors.filter((f) => f.status === "pos").length;
+  const negCount = factors.filter((f) => f.status === "neg").length;
+
+  if (rating >= 70 && posCount >= 2 && negCount === 0) {
     return {
-      label: "Good Momentum Entry",
+      label: "Constructive Setup",
       color: "text-[hsl(160,80%,45%)]",
       bg: "bg-[hsl(160,80%,45%)]/10",
       border: "border-[hsl(160,80%,45%)]/30",
       icon: CheckCircle2,
-      reason: `Strong leader (RS ${rating}) with momentum still accelerating and supportive volume — quality entry candidate.`,
+      reason:
+        "Multiple factors line up favourably (relative strength, momentum, and volume). Worth deeper review — not an automatic buy. Confirm with your own entry rules.",
+      factors,
     };
   }
-  // Avoid: weak RS or sharp deceleration
-  if (rating < 40 || (accel ?? 0) < -15) {
+
+  if (rating < 40 || negCount >= 2 || (accel !== null && accel <= -15)) {
     return {
-      label: "Avoid / High Risk",
+      label: "Weak Setup",
       color: "text-destructive",
       bg: "bg-destructive/10",
       border: "border-destructive/30",
       icon: XCircle,
       reason:
-        rating < 40
-          ? `Lagging the market (RS ${rating}). Better setups exist — wait for relative strength to improve.`
-          : `Momentum is fading fast. Trend may be breaking — avoid chasing.`,
+        "Several factors are working against this name right now (lagging RS, fading momentum, or weak volume). Stronger setups usually exist elsewhere.",
+      factors,
     };
   }
+
   return {
-    label: "Watch Carefully",
+    label: "Mixed — Watch & Wait",
     color: "text-[hsl(40,85%,55%)]",
     bg: "bg-[hsl(40,85%,55%)]/10",
     border: "border-[hsl(40,85%,55%)]/30",
     icon: ShieldAlert,
-    reason: `Mixed signals (RS ${rating}). Wait for confirmation — ideally a volume-backed RS line breakout.`,
+    reason:
+      "Signals are mixed — some constructive, some not. Wait for clearer confirmation (e.g. RS line breakout on rising volume) before committing.",
+    factors,
   };
 }
 
@@ -120,16 +168,16 @@ function buildEntrySignals(stock: RsStock | null, snapshot: LiveSnapshot | null)
   if (stock.rs1d !== null && stock.rs1d > 1) out.push("⚡ Outperforming SPY today (positive intraday RS).");
   if (stock.rs1d !== null && stock.rs1d < -1) out.push("🔻 Underperforming SPY today.");
   if (stock.adrPercent !== null && stock.adrPercent >= 5)
-    out.push(`🎯 High range stock (ADR ${stock.adrPercent.toFixed(1)}%) — large daily moves expected.`);
+    out.push(`🎯 High range stock (ADR ${stock.adrPercent.toFixed(1)}%) — expect larger daily swings.`);
   if (snapshot?.quote.volume && snapshot.quote.avgVolume) {
     const rv = snapshot.quote.volume / snapshot.quote.avgVolume;
     if (rv >= 1.5) out.push(`🔊 Volume confirming move — ${rv.toFixed(1)}× the 3-month average.`);
-    else if (rv < 0.6) out.push("🔉 Volume below average — lacks conviction.");
+    else if (rv < 0.6) out.push("🔉 Volume below average — move lacks conviction.");
   }
   if (stock.rsOverall !== null && stock.rsOverall > 5 && (accel ?? 0) >= 0)
     out.push("🚀 Trending leader holding above benchmark — RS line near new highs.");
   if (stock.return1w !== null && stock.return1w < -3 && stock.rsOverall !== null && stock.rsOverall > 5)
-    out.push("🟢 Pullback in a strong RS stock — potential entry opportunity.");
+    out.push("🟢 Pullback within a strong RS name — possible entry zone, confirm with price action.");
   return out;
 }
 
@@ -214,7 +262,7 @@ export default function LiveExecution() {
     return Math.round(rsPart * 0.5 + accelPart * 0.25 + volPart * 0.25);
   }, [overallRating, accelDelta, relVol]);
 
-  const verdict = buildVerdict(overallRating, accelDelta, relVol);
+  const verdict = buildVerdict(overallRating, accelDelta, relVol, activeStock?.return1w ?? null);
   const VerdictIcon = verdict.icon;
   const signals = buildEntrySignals(activeStock, snapshot);
 
@@ -349,10 +397,41 @@ export default function LiveExecution() {
                 >
                   <VerdictIcon size={22} className={`shrink-0 ${verdict.color}`} />
                   <div className="flex-1">
-                    <div className={`font-['Syne',sans-serif] text-base font-bold ${verdict.color}`}>
-                      {verdict.label}
+                    <div className="flex items-center gap-2">
+                      <div className={`font-['Syne',sans-serif] text-base font-bold ${verdict.color}`}>
+                        {verdict.label}
+                      </div>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span className="inline-flex cursor-help"><Info size={11} className="text-muted-foreground" /></span>
+                        </TooltipTrigger>
+                        <TooltipContent className="max-w-xs text-xs">
+                          A descriptive read of the current setup based on multiple factors. This is context, not a buy/sell recommendation — always confirm with your own rules.
+                        </TooltipContent>
+                      </Tooltip>
                     </div>
                     <p className="mt-1 text-xs leading-relaxed text-foreground/80">{verdict.reason}</p>
+                    {/* Factor breakdown chips */}
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {verdict.factors.map((f) => {
+                        const cls =
+                          f.status === "pos"
+                            ? "border-[hsl(160,80%,45%)]/40 bg-[hsl(160,80%,45%)]/10 text-[hsl(160,80%,45%)]"
+                            : f.status === "neg"
+                            ? "border-destructive/40 bg-destructive/10 text-destructive"
+                            : f.status === "na"
+                            ? "border-border/40 bg-muted/20 text-muted-foreground"
+                            : "border-border/40 bg-background/40 text-foreground/80";
+                        return (
+                          <span
+                            key={f.label}
+                            className={`rounded border px-1.5 py-0.5 text-[10px] ${cls}`}
+                          >
+                            <span className="font-semibold">{f.label}:</span> {f.note}
+                          </span>
+                        );
+                      })}
+                    </div>
                   </div>
                   <button
                     onClick={() =>
@@ -429,10 +508,23 @@ export default function LiveExecution() {
 
                 {/* RS trend across timeframes */}
                 {activeStock && (
-                  <div className="grid grid-cols-3 gap-2">
-                    <RsTrendCell label="1D" value={activeStock.rs1d} />
-                    <RsTrendCell label="1W" value={activeStock.rs1w} />
-                    <RsTrendCell label="1M" value={activeStock.rs1m} />
+                  <div>
+                    <div className="mb-1.5 flex items-center gap-1 text-[10px] uppercase tracking-wider text-muted-foreground">
+                      <span>RS vs SPY (% outperformance)</span>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span className="inline-flex cursor-help"><Info size={10} /></span>
+                        </TooltipTrigger>
+                        <TooltipContent className="max-w-xs text-xs">
+                          How much the stock outperformed (or underperformed) SPY over each window. Positive = stronger than the market; negative = weaker.
+                        </TooltipContent>
+                      </Tooltip>
+                    </div>
+                    <div className="grid grid-cols-3 gap-2">
+                      <RsTrendCell label="1D" value={activeStock.rs1d} />
+                      <RsTrendCell label="1W" value={activeStock.rs1w} />
+                      <RsTrendCell label="1M" value={activeStock.rs1m} />
+                    </div>
                   </div>
                 )}
 
@@ -458,6 +550,14 @@ export default function LiveExecution() {
                   <div className="rounded-lg border border-border/40 bg-muted/10 p-3">
                     <div className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                       <Activity size={11} /> Entry & Rotation Signals
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span className="inline-flex cursor-help"><Info size={10} /></span>
+                        </TooltipTrigger>
+                        <TooltipContent className="max-w-xs text-xs">
+                          Pattern flags derived from RS, volume, and recent price action. They highlight conditions historically associated with good (or risky) entries — they are not buy/sell signals on their own.
+                        </TooltipContent>
+                      </Tooltip>
                     </div>
                     <ul className="space-y-1 text-xs text-foreground/85">
                       {signals.map((s, i) => (
@@ -546,25 +646,28 @@ export default function LiveExecution() {
                   <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
                     <OptionsTile
                       label="Put / Call Ratio"
+                      tooltip="Total put-contract volume divided by total call-contract volume on the nearest expiration. Below ~0.7 leans bullish, above ~1.3 leans bearish, in between is balanced."
                       value={snapshot.options.put_call_ratio !== null ? snapshot.options.put_call_ratio.toFixed(2) : "—"}
                       explain={
                         snapshot.options.put_call_ratio === null
-                          ? "Not enough volume to calculate."
+                          ? "Not enough volume to calculate reliably."
                           : snapshot.options.put_call_ratio < 0.7
-                          ? `${snapshot.options.put_call_ratio.toFixed(2)} → More calls than puts being traded (bullish lean).`
+                          ? `${snapshot.options.put_call_ratio.toFixed(2)} → More calls than puts being traded (mild bullish lean).`
                           : snapshot.options.put_call_ratio > 1.3
-                          ? `${snapshot.options.put_call_ratio.toFixed(2)} → More puts than calls (bearish lean).`
+                          ? `${snapshot.options.put_call_ratio.toFixed(2)} → More puts than calls (mild bearish / hedging lean).`
                           : `${snapshot.options.put_call_ratio.toFixed(2)} → Calls and puts roughly balanced.`
                       }
                     />
                     <OptionsTile
                       label="Implied Volatility"
+                      tooltip="The market's expectation of future price swings, priced into options. Higher IV = more expensive options and bigger expected moves. Above ~60% is elevated."
                       value={snapshot.options.avg_iv !== null ? `${(snapshot.options.avg_iv * 100).toFixed(0)}%` : "—"}
-                      explain={snapshot.options.iv_explanation || "Measures expected price movement."}
+                      explain={snapshot.options.iv_explanation || "Not enough data to estimate expected movement."}
                       highlight={snapshot.options.high_iv_alert}
                     />
                     <OptionsTile
-                      label="Volume Today"
+                      label="Calls / Puts Volume"
+                      tooltip="Total contracts traded today on the nearest expiration. Higher activity generally means stronger directional interest from options traders."
                       value={`${compactNum(snapshot.options.total_call_volume)} / ${compactNum(snapshot.options.total_put_volume)}`}
                       explain={`${compactNum(snapshot.options.total_call_volume)} call contracts vs ${compactNum(snapshot.options.total_put_volume)} put contracts traded today.`}
                     />
@@ -601,17 +704,28 @@ export default function LiveExecution() {
               className="rounded-xl border border-border/60 p-4"
               style={{ background: "rgba(255,255,255,0.03)" }}
             >
-              <h2 className="mb-3 font-['Syne',sans-serif] text-sm font-semibold uppercase tracking-wider text-foreground">
-                Peers in {activeStock?.sector}
-              </h2>
+              <div className="mb-3 flex items-center gap-2">
+                <h2 className="font-['Syne',sans-serif] text-sm font-semibold uppercase tracking-wider text-foreground">
+                  Peers in {activeStock?.sector}
+                </h2>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="inline-flex cursor-help"><Info size={12} className="text-muted-foreground" /></span>
+                  </TooltipTrigger>
+                  <TooltipContent className="max-w-xs text-xs">
+                    Top names in the same sector by RS Overall. Useful to compare relative strength against direct competitors and spot the actual sector leader.
+                  </TooltipContent>
+                </Tooltip>
+                <span className="ml-auto text-[10px] text-muted-foreground">Click a symbol to evaluate it</span>
+              </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-xs">
                   <thead>
                     <tr className="border-b border-border/40 text-[10px] uppercase tracking-wider text-muted-foreground">
                       <th className="py-2 text-left">Symbol</th>
                       <th className="py-2 text-left">Company</th>
-                      <th className="py-2 text-right">RS Rating</th>
-                      <th className="py-2 text-right">RS Overall</th>
+                      <th className="py-2 text-right" title="1–99 rank within the qualified universe (higher = stronger)">RS Rating</th>
+                      <th className="py-2 text-right" title="Raw composite RS score (used to derive RS Rating)">RS Overall</th>
                       <th className="py-2 text-right">1M Return</th>
                     </tr>
                   </thead>
@@ -658,9 +772,19 @@ export default function LiveExecution() {
             style={{ background: "rgba(255,255,255,0.03)" }}
           >
             <div className="mb-3 flex items-center justify-between">
-              <h2 className="font-['Syne',sans-serif] text-sm font-semibold uppercase tracking-wider text-foreground">
-                Live Watchlist
-              </h2>
+              <div className="flex items-center gap-2">
+                <h2 className="font-['Syne',sans-serif] text-sm font-semibold uppercase tracking-wider text-foreground">
+                  Live Watchlist
+                </h2>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="inline-flex cursor-help"><Info size={12} className="text-muted-foreground" /></span>
+                  </TooltipTrigger>
+                  <TooltipContent className="max-w-xs text-xs">
+                    Tickers you've pinned for quick re-evaluation. RS Rating and other metrics update from the qualified RS universe each scan.
+                  </TooltipContent>
+                </Tooltip>
+              </div>
               <span className="text-[10px] text-muted-foreground">
                 {watchTickers.length} pinned · click symbol to evaluate
               </span>
@@ -781,11 +905,13 @@ function OptionsTile({
   label,
   value,
   explain,
+  tooltip,
   highlight = false,
 }: {
   label: string;
   value: string;
   explain: string;
+  tooltip?: string;
   highlight?: boolean;
 }) {
   return (
@@ -794,7 +920,17 @@ function OptionsTile({
         highlight ? "border-[hsl(40,85%,55%)]/40 bg-[hsl(40,85%,55%)]/5" : "border-border/40 bg-background/40"
       }`}
     >
-      <div className="mb-1 text-[10px] uppercase tracking-wider text-muted-foreground">{label}</div>
+      <div className="mb-1 flex items-center gap-1 text-[10px] uppercase tracking-wider text-muted-foreground">
+        <span>{label}</span>
+        {tooltip && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className="inline-flex cursor-help"><Info size={10} /></span>
+            </TooltipTrigger>
+            <TooltipContent className="max-w-xs text-xs">{tooltip}</TooltipContent>
+          </Tooltip>
+        )}
+      </div>
       <div className={`font-mono text-lg font-bold ${highlight ? "text-[hsl(40,85%,55%)]" : "text-foreground"}`}>
         {value}
       </div>

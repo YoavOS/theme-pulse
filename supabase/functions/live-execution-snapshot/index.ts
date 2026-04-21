@@ -174,16 +174,26 @@ function parseOptionsResponse(json: any, empty: OptionsSnapshot): OptionsSnapsho
       ivValues.length > 0 ? ivValues.reduce((s, v) => s + v, 0) / ivValues.length : null;
 
     const pcr = totalCallVol > 0 ? totalPutVol / totalCallVol : null;
+    const totalContractVol = totalCallVol + totalPutVol;
+    // Require a minimum sample size before drawing any directional conclusion.
+    // Below this, sentiment is unreliable noise.
+    const MIN_VOL_FOR_SENTIMENT = 500;
 
     let sentiment: "Bullish" | "Bearish" | "Neutral" = "Neutral";
-    let sentimentExp = "Calls and puts are roughly balanced — no strong directional bet.";
-    if (pcr !== null) {
+    let sentimentExp =
+      "Calls and puts are roughly balanced — no clear directional lean from today's flow.";
+    if (totalContractVol < MIN_VOL_FOR_SENTIMENT) {
+      sentimentExp =
+        "Today's options volume is too low to draw a reliable directional read.";
+    } else if (pcr !== null) {
       if (pcr < 0.7) {
         sentiment = "Bullish";
-        sentimentExp = "More traders are buying calls than puts — leaning optimistic.";
+        sentimentExp =
+          "Today's flow leans toward calls (bullish bets) more than puts — a mildly optimistic tilt, not a guarantee of direction.";
       } else if (pcr > 1.3) {
         sentiment = "Bearish";
-        sentimentExp = "More traders are buying puts than calls — leaning cautious.";
+        sentimentExp =
+          "Today's flow leans toward puts (bearish bets / hedges) more than calls — a mildly cautious tilt, not a guarantee of direction.";
       }
     }
 
@@ -211,10 +221,10 @@ function parseOptionsResponse(json: any, empty: OptionsSnapshot): OptionsSnapsho
     const highIv = avgIv !== null && avgIv > 0.6;
     const ivExp =
       avgIv === null
-        ? ""
+        ? "Not enough data to estimate expected movement."
         : highIv
-        ? `High options premium today — traders expect big movement (avg IV ${(avgIv * 100).toFixed(0)}%).`
-        : `Options premiums look normal (avg IV ${(avgIv * 100).toFixed(0)}%).`;
+        ? `Options are pricing in larger-than-usual moves (avg IV ${(avgIv * 100).toFixed(0)}%) — premiums are expensive.`
+        : `Options premiums look normal (avg IV ${(avgIv * 100).toFixed(0)}%) — market expects typical movement.`;
 
     return {
       available: true,
