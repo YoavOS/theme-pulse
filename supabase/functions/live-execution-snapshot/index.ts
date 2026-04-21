@@ -76,6 +76,40 @@ async function fetchYahooQuote(symbol: string): Promise<QuoteSnapshot | null> {
   }
 }
 
+// Cache the Yahoo (cookie, crumb) pair across invocations within the same warm container.
+let cachedAuth: { cookie: string; crumb: string; ts: number } | null = null;
+const AUTH_TTL_MS = 30 * 60 * 1000; // 30 min
+
+async function getYahooAuth(): Promise<{ cookie: string; crumb: string } | null> {
+  if (cachedAuth && Date.now() - cachedAuth.ts < AUTH_TTL_MS) {
+    return { cookie: cachedAuth.cookie, crumb: cachedAuth.crumb };
+  }
+  try {
+    // Step 1: hit fc.yahoo.com to get the A3 consent cookie
+    const cookieRes = await fetch("https://fc.yahoo.com", {
+      headers: { "User-Agent": UA, Accept: "*/*" },
+      redirect: "manual",
+    });
+    const setCookie = cookieRes.headers.get("set-cookie") ?? "";
+    const a3Match = setCookie.match(/A3=([^;]+)/);
+    if (!a3Match) return null;
+    const cookie = `A3=${a3Match[1]}`;
+
+    // Step 2: exchange the cookie for a crumb
+    const crumbRes = await fetch("https://query2.finance.yahoo.com/v1/test/getcrumb", {
+      headers: { "User-Agent": UA, Cookie: cookie, Accept: "text/plain" },
+    });
+    if (!crumbRes.ok) return null;
+    const crumb = (await crumbRes.text()).trim();
+    if (!crumb || crumb.length > 64) return null;
+
+    cachedAuth = { cookie, crumb, ts: Date.now() };
+    return { cookie, crumb };
+  } catch {
+    return null;
+  }
+}
+
 async function fetchYahooOptions(symbol: string): Promise<OptionsSnapshot> {
   const empty: OptionsSnapshot = {
     available: false,
@@ -84,6 +118,46 @@ async function fetchYahooOptions(symbol: string): Promise<OptionsSnapshot> {
     total_put_volume: 0,
     total_call_oi: 0,
     total_put_oi: 0,
+    put_call_ratio: null,
+    avg_iv: null,
+    sentiment: "Neutral",
+    sentiment_explanation: "Options data not available for this ticker.",
+    unusual_activity: [],
+    high_iv_alert: false,
+    iv_explanation: "",
+  };
+
+  const auth = await getYahooAuth();
+  if (!auth) return empty;
+
+  const url = `https://query2.finance.yahoo.com/v7/finance/options/${encodeURIComponent(symbol)}?crumb=${encodeURIComponent(auth.crumb)}`;
+  try {
+    const res = await fetch(url, {
+      headers: { "User-Agent": UA, Cookie: auth.cookie, Accept: "application/json" },
+    });
+    if (res.status === 401 || res.status === 403) {
+      // crumb stale — clear cache and retry once
+      cachedAuth = null;
+      const fresh = await getYahooAuth();
+      if (!fresh) return empty;
+      const retryUrl = `https://query2.finance.yahoo.com/v7/finance/options/${encodeURIComponent(symbol)}?crumb=${encodeURIComponent(fresh.crumb)}`;
+      const retry = await fetch(retryUrl, {
+        headers: { "User-Agent": UA, Cookie: fresh.cookie, Accept: "application/json" },
+      });
+      if (!retry.ok) return empty;
+      return parseOptionsResponse(await retry.json(), empty);
+    }
+    if (!res.ok) return empty;
+    return parseOptionsResponse(await res.json(), empty);
+  } catch {
+    return empty;
+  }
+}
+
+function parseOptionsResponse(json: any, empty: OptionsSnapshot): OptionsSnapshot {
+  try {
+    const result = json?.optionChain?.result?.[0];
+    if (!result) return empty;
     put_call_ratio: null,
     avg_iv: null,
     sentiment: "Neutral",
