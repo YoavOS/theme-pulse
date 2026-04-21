@@ -220,7 +220,8 @@ export default function LiveExecution() {
     const sym = raw.trim().toUpperCase();
     if (!sym) return;
     setActiveSymbol(sym);
-    fetchSnapshot(sym, benchmark);
+    const sector = stockMap.get(sym)?.sector ?? null;
+    fetchSnapshot(sym, benchmark, sector);
   };
 
   // Debounce input → auto-submit after 600ms when length >= 1
@@ -236,7 +237,10 @@ export default function LiveExecution() {
 
   // Re-fetch snapshot when benchmark toggle changes (so RS values use the new baseline).
   useEffect(() => {
-    if (activeSymbol) fetchSnapshot(activeSymbol, benchmark);
+    if (activeSymbol) {
+      const sector = stockMap.get(activeSymbol)?.sector ?? null;
+      fetchSnapshot(activeSymbol, benchmark, sector);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [benchmark]);
 
