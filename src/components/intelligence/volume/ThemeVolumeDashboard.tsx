@@ -241,7 +241,7 @@ export default function ThemeVolumeDashboard({ open, onOpenChange, theme, smartV
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
         side="right"
-        className="z-[80] p-0 border-l border-[rgba(255,255,255,0.08)] flex flex-col gap-0"
+        className="z-[80] p-0 border-l border-[rgba(255,255,255,0.08)] flex flex-col gap-0 w-full sm:max-w-[720px]"
         style={{ width: "min(720px, 96vw)", maxWidth: "none", background: "linear-gradient(180deg, #0b0e12 0%, #11151c 100%)" }}
       >
         {theme && (
