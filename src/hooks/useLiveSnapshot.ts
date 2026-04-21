@@ -46,12 +46,35 @@ export interface LiveTickerHistory {
   return3m: number | null;
 }
 
+export interface LiveFundamentals {
+  available: boolean;
+  pe: number | null;
+  forwardPe: number | null;
+  pegRatio: number | null;
+  epsGrowth: number | null;       // decimal (e.g. 0.25 = +25%)
+  revenueGrowth: number | null;   // decimal
+  profitMargin: number | null;    // decimal
+  source: string;
+}
+
+export interface LiveIndustry {
+  available: boolean;
+  etfSymbol: string | null;
+  sectorName: string | null;
+  changePct: number | null;
+  return1w: number | null;
+  return1m: number | null;
+  return3m: number | null;
+}
+
 export interface LiveSnapshot {
   symbol: string;
   quote: LiveQuote;
   options: LiveOptions;
   benchmark: LiveBenchmark;
   tickerHistory: LiveTickerHistory;
+  fundamentals?: LiveFundamentals;
+  industry?: LiveIndustry;
   fetchedAt: string;
 }
 
@@ -61,16 +84,20 @@ export function useLiveSnapshot() {
   const [error, setError] = useState<string | null>(null);
   const lastKeyRef = useRef<string | null>(null);
 
-  const fetchSnapshot = useCallback(async (symbol: string, benchmark: BenchmarkSymbol = "SPY") => {
+  const fetchSnapshot = useCallback(async (
+    symbol: string,
+    benchmark: BenchmarkSymbol = "SPY",
+    sector?: string | null,
+  ) => {
     const sym = symbol.trim().toUpperCase();
     if (!sym) return;
-    const key = `${sym}|${benchmark}`;
+    const key = `${sym}|${benchmark}|${sector ?? ""}`;
     lastKeyRef.current = key;
     setIsLoading(true);
     setError(null);
     try {
       const { data, error: fnErr } = await supabase.functions.invoke("live-execution-snapshot", {
-        body: { symbol: sym, benchmark },
+        body: { symbol: sym, benchmark, sector: sector ?? null },
       });
       if (fnErr) throw new Error(fnErr.message);
       if (data?.error) throw new Error(data.error);

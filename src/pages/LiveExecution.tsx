@@ -220,7 +220,8 @@ export default function LiveExecution() {
     const sym = raw.trim().toUpperCase();
     if (!sym) return;
     setActiveSymbol(sym);
-    fetchSnapshot(sym, benchmark);
+    const sector = stockMap.get(sym)?.sector ?? null;
+    fetchSnapshot(sym, benchmark, sector);
   };
 
   // Debounce input → auto-submit after 600ms when length >= 1
@@ -236,7 +237,10 @@ export default function LiveExecution() {
 
   // Re-fetch snapshot when benchmark toggle changes (so RS values use the new baseline).
   useEffect(() => {
-    if (activeSymbol) fetchSnapshot(activeSymbol, benchmark);
+    if (activeSymbol) {
+      const sector = stockMap.get(activeSymbol)?.sector ?? null;
+      fetchSnapshot(activeSymbol, benchmark, sector);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [benchmark]);
 
@@ -283,14 +287,170 @@ export default function LiveExecution() {
 
   const overallRating = activeSymbol ? ratingOverall.get(activeSymbol) ?? null : null;
 
-  // Conviction Score 0-100: 50% RS rating + 25% acceleration + 25% volume
+  // ── O'Neil weighted Conviction Score (0-100): 50% Market + 37% Industry + 13% Stock ──
   const conviction = useMemo(() => {
+    const bh = snapshot?.benchmark;
+    const scoreReturn = (r: number | null | undefined, perPctPoint = 5) => {
+      if (r === null || r === undefined || !Number.isFinite(r)) return null;
+      return Math.max(0, Math.min(100, 50 + (r as number) * perPctPoint));
+    };
+    const mDay = scoreReturn(bh?.changePct, 10);
+    const mWeek = scoreReturn(bh?.return1w, 5);
+    const mMonth = scoreReturn(bh?.return1m, 3);
+    const mParts = [mDay, mWeek, mMonth].filter((v): v is number => v !== null);
+    const marketScore = mParts.length > 0 ? mParts.reduce((a, b) => a + b, 0) / mParts.length : 50;
+
+    const ih = snapshot?.industry;
+    const iDay = scoreReturn(ih?.changePct, 10);
+    const iWeek = scoreReturn(ih?.return1w, 5);
+    const iMonth = scoreReturn(ih?.return1m, 3);
+    const iParts = [iDay, iWeek, iMonth].filter((v): v is number => v !== null);
+    const industryScore = iParts.length > 0
+      ? iParts.reduce((a, b) => a + b, 0) / iParts.length
+      : (ih?.available ? 50 : marketScore);
+
+    let rsPart: number | null = overallRating;
+    const accelPart = accelDelta === null ? null : Math.max(0, Math.min(100, 50 + accelDelta * 2));
+    const volPart = relVol === null ? null : Math.max(0, Math.min(100, relVol * 50));
+    const fd = snapshot?.fundamentals;
+    let fundPart: number | null = null;
+    if (fd?.available) {
+      const pe = fd.forwardPe ?? fd.pe;
+      let peScore: number | null = null;
+      if (pe !== null && pe > 0) {
+        if (pe < 15) peScore = 90;
+        else if (pe < 25) peScore = 75;
+        else if (pe < 40) peScore = 60;
+        else if (pe < 60) peScore = 45;
+        else peScore = 30;
+      }
+      let epsScore: number | null = null;
+      const eg = fd.epsGrowth;
+      if (eg !== null) {
+        if (eg >= 0.5) epsScore = 95;
+        else if (eg >= 0.25) epsScore = 80;
+        else if (eg >= 0.10) epsScore = 65;
+        else if (eg >= 0) epsScore = 55;
+        else if (eg >= -0.15) epsScore = 40;
+        else epsScore = 25;
+      }
+      let revScore: number | null = null;
+      const rg = fd.revenueGrowth;
+      if (rg !== null) {
+        if (rg >= 0.30) revScore = 90;
+        else if (rg >= 0.15) revScore = 75;
+        else if (rg >= 0.05) revScore = 60;
+        else if (rg >= 0) revScore = 50;
+        else revScore = 30;
+      }
+      const parts = [peScore, epsScore, revScore].filter((v): v is number => v !== null);
+      if (parts.length > 0) fundPart = parts.reduce((a, b) => a + b, 0) / parts.length;
+    }
+
+    const techParts = [rsPart, accelPart, volPart].filter((v): v is number => v !== null);
+    const techScore = techParts.length > 0 ? techParts.reduce((a, b) => a + b, 0) / techParts.length : null;
+    const stockScore =
+      techScore === null && fundPart === null
+        ? null
+        : fundPart === null
+        ? techScore!
+        : techScore === null
+        ? fundPart
+        : techScore * 0.6 + fundPart * 0.4;
+
+    if (stockScore === null) return null;
+
+    const final = marketScore * 0.50 + industryScore * 0.37 + stockScore * 0.13;
+    return {
+      total: Math.round(final),
+      market: Math.round(marketScore),
+      industry: Math.round(industryScore),
+      stock: Math.round(stockScore),
+      hasFund: fundPart !== null,
+      hasIndustry: ih?.available ?? false,
+    };
+  }, [snapshot, overallRating, accelDelta, relVol]);
+
+  // ── Setup Quality Score (0-100) ──
+  const setupQuality = useMemo(() => {
     if (overallRating === null) return null;
-    const rsPart = overallRating; // 0-99
-    const accelPart = accelDelta === null ? 50 : Math.max(0, Math.min(100, 50 + accelDelta * 2));
-    const volPart = relVol === null ? 50 : Math.max(0, Math.min(100, relVol * 50));
-    return Math.round(rsPart * 0.5 + accelPart * 0.25 + volPart * 0.25);
-  }, [overallRating, accelDelta, relVol]);
+    let score = 0;
+    let weight = 0;
+    if (accelDelta !== null) {
+      score += Math.max(0, Math.min(100, 50 + accelDelta * 4)) * 0.30;
+      weight += 0.30;
+    }
+    if (relVol !== null) {
+      score += Math.max(0, Math.min(100, relVol * 55)) * 0.25;
+      weight += 0.25;
+    }
+    const r1w = activeStock?.return1w ?? null;
+    if (r1w !== null && overallRating >= 70) {
+      let pullScore = 50;
+      if (r1w >= -8 && r1w <= -2) pullScore = 90;
+      else if (r1w > -2 && r1w <= 5) pullScore = 70;
+      else if (r1w > 5 && r1w <= 15) pullScore = 55;
+      else if (r1w < -8 && r1w >= -15) pullScore = 45;
+      else pullScore = 25;
+      score += pullScore * 0.25;
+      weight += 0.25;
+    } else if (r1w !== null) {
+      score += 50 * 0.20;
+      weight += 0.20;
+    }
+    const ih = snapshot?.industry;
+    if (ih?.available && ih.return1m !== null) {
+      const align = ih.return1m >= 0 ? 80 : 35;
+      score += align * 0.20;
+      weight += 0.20;
+    }
+    if (weight === 0) return null;
+    return Math.round(score / weight);
+  }, [overallRating, accelDelta, relVol, activeStock, snapshot]);
+
+  // ── Pullback Quality Detector ──
+  const pullback = useMemo(() => {
+    if (overallRating === null) return null;
+    const r1w = activeStock?.return1w ?? null;
+    const r1m = activeStock?.return1m ?? null;
+    if (r1w === null) return null;
+    const inUptrend = overallRating >= 65 && (r1m === null || r1m > 0);
+    const isPullback = r1w <= -1 && r1w >= -10;
+    const isBreakdown = r1w < -10 || (r1w < -3 && accelDelta !== null && accelDelta <= -10);
+    if (isBreakdown && overallRating < 70) {
+      return {
+        kind: "breakdown" as const,
+        label: "Unhealthy breakdown — momentum failing",
+        note: `1W ${r1w.toFixed(1)}%, RS ${overallRating}${accelDelta !== null ? `, accel ${accelDelta.toFixed(0)} pts` : ""}. Wait for the structure to repair.`,
+      };
+    }
+    if (inUptrend && isPullback && (relVol === null || relVol < 1.2)) {
+      return {
+        kind: "healthy" as const,
+        label: "Healthy pullback in a strong trend — potential dip-buy",
+        note: `1W ${r1w.toFixed(1)}% inside an RS ${overallRating} uptrend on quiet volume (${relVol !== null ? `${relVol.toFixed(2)}× avg` : "n/a"}). Confirm with a reversal candle on rising volume.`,
+      };
+    }
+    return null;
+  }, [overallRating, accelDelta, relVol, activeStock]);
+
+  // ── Rotation Risk: strong stock inside a fading sector ──
+  const rotationRisk = useMemo(() => {
+    if (overallRating === null) return null;
+    const ih = snapshot?.industry;
+    if (!ih?.available) return null;
+    if (ih.return1w === null || ih.return1m === null) return null;
+    const sectorWeak = ih.return1w < -1 && ih.return1w < ih.return1m;
+    if (overallRating >= 75 && sectorWeak) {
+      return {
+        sector: ih.sectorName ?? "sector",
+        etf: ih.etfSymbol,
+        sectorR1w: ih.return1w,
+        sectorR1m: ih.return1m,
+      };
+    }
+    return null;
+  }, [overallRating, snapshot]);
 
   const verdict = buildVerdict(overallRating, accelDelta, relVol, activeStock?.return1w ?? null);
   const VerdictIcon = verdict.icon;
@@ -309,6 +469,32 @@ export default function LiveExecution() {
       .sort((a, b) => (b.rsOverall ?? -Infinity) - (a.rsOverall ?? -Infinity))
       .slice(0, 5);
   }, [activeStock, stocks]);
+
+  // Watchlist split-view mode
+  const [watchMode, setWatchMode] = useState<"all" | "leaders" | "rotation">("all");
+  const watchRows = useMemo(() => {
+    const rows = watchTickers.map((sym) => {
+      const s = stockMap.get(sym);
+      return {
+        sym,
+        s,
+        rating: ratingOverall.get(sym) ?? null,
+        r1w: s?.return1w ?? null,
+        r1m: s?.return1m ?? null,
+      };
+    });
+    if (watchMode === "leaders") {
+      return rows.filter((r) => r.rating !== null && r.rating >= 80);
+    }
+    if (watchMode === "rotation") {
+      return rows.filter((r) => {
+        if (r.rating === null || r.rating >= 80 || r.rating < 50) return false;
+        if (r.r1w === null || r.r1m === null) return false;
+        return r.r1w > r.r1m;
+      });
+    }
+    return rows;
+  }, [watchTickers, stockMap, ratingOverall, watchMode]);
 
   return (
     <TooltipProvider delayDuration={150}>
@@ -508,10 +694,10 @@ export default function LiveExecution() {
                 </div>
 
                 {/* Metric grid */}
-                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
                   <MetricCard
                     label="RS Rating"
-                    tooltip="Relative Strength rank from 1–99 within the qualified universe."
+                    tooltip="Relative Strength rank from 1–99 within the qualified universe. 80+ = leader, 40-79 = average, <40 = laggard."
                     value={overallRating !== null ? `${overallRating}` : "N/A"}
                     sub={
                       universeRank
@@ -522,10 +708,33 @@ export default function LiveExecution() {
                   />
                   <MetricCard
                     label="Conviction"
-                    tooltip="Composite 0–100 score: RS rating (50%) + acceleration (25%) + volume (25%)."
-                    value={conviction !== null ? `${conviction}` : "—"}
-                    sub={conviction === null ? "Need RS data" : conviction >= 70 ? "High" : conviction >= 50 ? "Medium" : "Low"}
-                    valueClass={ratingClass(conviction)}
+                    tooltip="O'Neil-weighted score (0-100): 50% Market strength + 37% Industry/sector strength + 13% Individual stock (RS, accel, volume, P/E and growth)."
+                    value={conviction !== null ? `${conviction.total}` : "—"}
+                    sub={
+                      conviction === null
+                        ? "Need RS data"
+                        : conviction.total >= 70
+                        ? "High conviction"
+                        : conviction.total >= 50
+                        ? "Medium"
+                        : "Low conviction"
+                    }
+                    valueClass={ratingClass(conviction?.total ?? null)}
+                  />
+                  <MetricCard
+                    label="Setup Quality"
+                    tooltip="0-100 score for how clean the entry is RIGHT NOW: RS acceleration, volume confirmation, pullback depth in a strong trend, and theme alignment."
+                    value={setupQuality !== null ? `${setupQuality}` : "—"}
+                    sub={
+                      setupQuality === null
+                        ? "Need RS data"
+                        : setupQuality >= 70
+                        ? "Clean setup"
+                        : setupQuality >= 50
+                        ? "Acceptable"
+                        : "Poor setup"
+                    }
+                    valueClass={ratingClass(setupQuality)}
                   />
                   <MetricCard
                     label="Rel Volume"
@@ -552,7 +761,7 @@ export default function LiveExecution() {
                   />
                   <MetricCard
                     label="ADR%"
-                    tooltip="Average Daily Range — typical % move per day. Higher ADR = bigger swings."
+                    tooltip="Average Daily Range — typical % move per day. Higher ADR = bigger swings, requires wider stops."
                     value={activeStock?.adrPercent !== null && activeStock?.adrPercent !== undefined ? `${activeStock.adrPercent.toFixed(1)}%` : "—"}
                     sub={
                       activeStock?.adrPercent && activeStock.adrPercent >= 5
@@ -562,6 +771,61 @@ export default function LiveExecution() {
                     valueClass="text-foreground"
                   />
                 </div>
+
+                {/* Conviction Breakdown */}
+                {conviction && (
+                  <ConvictionBreakdown
+                    total={conviction.total}
+                    market={conviction.market}
+                    industry={conviction.industry}
+                    stock={conviction.stock}
+                    benchmarkLabel={benchmark}
+                    sectorName={snapshot?.industry?.sectorName ?? null}
+                    sectorEtf={snapshot?.industry?.etfSymbol ?? null}
+                    fundamentals={snapshot?.fundamentals ?? null}
+                    hasIndustry={conviction.hasIndustry}
+                    hasFund={conviction.hasFund}
+                  />
+                )}
+
+                {/* Pullback / Breakdown callout */}
+                {pullback && (
+                  <div
+                    className={`flex items-start gap-2 rounded-lg border p-3 text-xs ${
+                      pullback.kind === "healthy"
+                        ? "border-[hsl(160,80%,45%)]/30 bg-[hsl(160,80%,45%)]/10"
+                        : "border-destructive/30 bg-destructive/10"
+                    }`}
+                  >
+                    {pullback.kind === "healthy" ? (
+                      <TrendingDown size={14} className="mt-0.5 shrink-0 text-[hsl(160,80%,45%)]" />
+                    ) : (
+                      <XCircle size={14} className="mt-0.5 shrink-0 text-destructive" />
+                    )}
+                    <div>
+                      <div className={`font-semibold ${pullback.kind === "healthy" ? "text-[hsl(160,80%,45%)]" : "text-destructive"}`}>
+                        {pullback.label}
+                      </div>
+                      <div className="mt-0.5 text-foreground/80">{pullback.note}</div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Rotation Risk warning */}
+                {rotationRisk && (
+                  <div className="flex items-start gap-2 rounded-lg border border-[hsl(40,85%,55%)]/30 bg-[hsl(40,85%,55%)]/10 p-3 text-xs">
+                    <AlertTriangle size={14} className="mt-0.5 shrink-0 text-[hsl(40,85%,55%)]" />
+                    <div>
+                      <div className="font-semibold text-[hsl(40,85%,55%)]">
+                        Rotation Risk — strong stock, weakening sector
+                      </div>
+                      <div className="mt-0.5 text-foreground/80">
+                        {rotationRisk.sector} ({rotationRisk.etf}) is fading: 1W {pct(rotationRisk.sectorR1w)} vs 1M {pct(rotationRisk.sectorR1m)}.
+                        Leaders inside fading sectors often roll over next. Tighten stops or wait for sector to stabilise.
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 {/* RS trend across timeframes — recomputed live against the chosen benchmark */}
                 {snapshot && (
@@ -834,7 +1098,7 @@ export default function LiveExecution() {
             className="rounded-xl border border-border/60 p-4"
             style={{ background: "rgba(255,255,255,0.03)" }}
           >
-            <div className="mb-3 flex items-center justify-between">
+            <div className="mb-3 flex items-center justify-between gap-2 flex-wrap">
               <div className="flex items-center gap-2">
                 <h2 className="font-['Syne',sans-serif] text-sm font-semibold uppercase tracking-wider text-foreground">
                   Live Watchlist
@@ -844,17 +1108,45 @@ export default function LiveExecution() {
                     <span className="inline-flex cursor-help"><Info size={12} className="text-muted-foreground" /></span>
                   </TooltipTrigger>
                   <TooltipContent className="max-w-xs text-xs">
-                    Tickers you've pinned for quick re-evaluation. RS Rating and other metrics update from the qualified RS universe each scan.
+                    Tickers you've pinned for quick re-evaluation. Use the toggle to focus on outright Leaders (RS ≥ 80) or Rotation Watch candidates (improving RS but still lagging).
                   </TooltipContent>
                 </Tooltip>
               </div>
-              <span className="text-[10px] text-muted-foreground">
-                {watchTickers.length} pinned · click symbol to evaluate
-              </span>
+              <div className="flex items-center gap-2">
+                <div className="inline-flex rounded-md border border-border/60 bg-background/40 p-0.5 text-[10px]">
+                  {([
+                    { v: "all", label: "All" },
+                    { v: "leaders", label: "Leaders" },
+                    { v: "rotation", label: "Rotation Watch" },
+                  ] as const).map((opt) => (
+                    <button
+                      key={opt.v}
+                      type="button"
+                      onClick={() => setWatchMode(opt.v)}
+                      className={`rounded-sm px-2 py-0.5 font-mono font-semibold transition-colors ${
+                        watchMode === opt.v
+                          ? "bg-primary/20 text-primary"
+                          : "text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+                <span className="text-[10px] text-muted-foreground">
+                  {watchRows.length} / {watchTickers.length} shown
+                </span>
+              </div>
             </div>
             {watchTickers.length === 0 ? (
               <p className="text-xs text-muted-foreground">
                 Pin tickers from the verdict card above to track their RS, conviction, and momentum here.
+              </p>
+            ) : watchRows.length === 0 ? (
+              <p className="text-xs text-muted-foreground">
+                {watchMode === "leaders"
+                  ? "No pinned tickers currently rate as outright leaders (RS ≥ 80)."
+                  : "No pinned tickers fit the rotation profile right now (RS 50–79 with 1W stronger than 1M)."}
               </p>
             ) : (
               <div className="overflow-x-auto">
@@ -865,51 +1157,51 @@ export default function LiveExecution() {
                       <th className="py-2 text-right">RS Rating</th>
                       <th className="py-2 text-right">RS Overall</th>
                       <th className="py-2 text-right">1W Return</th>
+                      <th className="py-2 text-right">1M Return</th>
                       <th className="py-2 text-right">ADR%</th>
                       <th className="py-2 text-right w-8"></th>
                     </tr>
                   </thead>
                   <tbody>
-                    {watchTickers.map((sym) => {
-                      const s = stockMap.get(sym);
-                      const r = ratingOverall.get(sym) ?? null;
-                      return (
-                        <tr key={sym} className="border-b border-border/20 hover:bg-muted/20">
-                          <td className="py-2">
-                            <button
-                              onClick={() => {
-                                setInput(sym);
-                                submit(sym);
-                              }}
-                              className="font-mono font-semibold text-primary hover:underline"
-                            >
-                              {sym}
-                            </button>
-                          </td>
-                          <td className={`py-2 text-right font-mono font-semibold ${ratingClass(r)}`}>
-                            {r ?? "—"}
-                          </td>
-                          <td className="py-2 text-right font-mono text-foreground">
-                            {s ? num(s.rsOverall) : "—"}
-                          </td>
-                          <td className={`py-2 text-right font-mono ${pctClass(s?.return1w ?? null)}`}>
-                            {pct(s?.return1w ?? null)}
-                          </td>
-                          <td className="py-2 text-right font-mono text-foreground">
-                            {s?.adrPercent !== null && s?.adrPercent !== undefined ? `${s.adrPercent.toFixed(1)}%` : "—"}
-                          </td>
-                          <td className="py-2 text-right">
-                            <button
-                              onClick={() => removeWatch(sym)}
-                              className="text-muted-foreground hover:text-destructive"
-                              title="Remove"
-                            >
-                              <X size={12} />
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    })}
+                    {watchRows.map(({ sym, s, rating, r1w, r1m }) => (
+                      <tr key={sym} className="border-b border-border/20 hover:bg-muted/20">
+                        <td className="py-2">
+                          <button
+                            onClick={() => {
+                              setInput(sym);
+                              submit(sym);
+                            }}
+                            className="font-mono font-semibold text-primary hover:underline"
+                          >
+                            {sym}
+                          </button>
+                        </td>
+                        <td className={`py-2 text-right font-mono font-semibold ${ratingClass(rating)}`}>
+                          {rating ?? "—"}
+                        </td>
+                        <td className="py-2 text-right font-mono text-foreground">
+                          {s ? num(s.rsOverall) : "—"}
+                        </td>
+                        <td className={`py-2 text-right font-mono ${pctClass(r1w)}`}>
+                          {pct(r1w)}
+                        </td>
+                        <td className={`py-2 text-right font-mono ${pctClass(r1m)}`}>
+                          {pct(r1m)}
+                        </td>
+                        <td className="py-2 text-right font-mono text-foreground">
+                          {s?.adrPercent !== null && s?.adrPercent !== undefined ? `${s.adrPercent.toFixed(1)}%` : "—"}
+                        </td>
+                        <td className="py-2 text-right">
+                          <button
+                            onClick={() => removeWatch(sym)}
+                            className="text-muted-foreground hover:text-destructive"
+                            title="Remove"
+                          >
+                            <X size={12} />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
                   </tbody>
                 </table>
               </div>
@@ -998,6 +1290,106 @@ function OptionsTile({
         {value}
       </div>
       <div className="mt-1 text-[11px] leading-snug text-foreground/75">{explain}</div>
+    </div>
+  );
+}
+
+function ConvictionBreakdown({
+  total,
+  market,
+  industry,
+  stock,
+  benchmarkLabel,
+  sectorName,
+  sectorEtf,
+  fundamentals,
+  hasIndustry,
+  hasFund,
+}: {
+  total: number;
+  market: number;
+  industry: number;
+  stock: number;
+  benchmarkLabel: string;
+  sectorName: string | null;
+  sectorEtf: string | null;
+  fundamentals: import("@/hooks/useLiveSnapshot").LiveFundamentals | null;
+  hasIndustry: boolean;
+  hasFund: boolean;
+}) {
+  // Weighted contributions to the final 0-100 conviction.
+  const marketContrib = Math.round((market * 0.50));
+  const industryContrib = Math.round((industry * 0.37));
+  const stockContrib = Math.round((stock * 0.13));
+  const tone = (s: number) =>
+    s >= 70 ? "bg-[hsl(160,80%,45%)]" : s >= 50 ? "bg-[hsl(40,85%,55%)]" : "bg-destructive";
+  const fmtPct = (v: number | null) =>
+    v === null || v === undefined || !Number.isFinite(v) ? "—" : `${(v * 100).toFixed(1)}%`;
+  const explanation = (() => {
+    const marketWord = market >= 65 ? "Strong" : market >= 50 ? "Mixed" : "Weak";
+    const industryWord = industry >= 65 ? "leading" : industry >= 50 ? "neutral" : "lagging";
+    const stockWord = stock >= 70 ? "solid" : stock >= 50 ? "decent" : "soft";
+    return `${marketWord} market (${benchmarkLabel}) + ${industryWord} ${sectorName ?? "sector"}${sectorEtf ? ` (${sectorEtf})` : ""} + ${stockWord} individual stock${hasFund ? " (RS, accel, volume, P/E and growth)" : " (RS, accel, volume — fundamentals unavailable)"}.`;
+  })();
+
+  return (
+    <div className="rounded-lg border border-border/40 bg-background/40 p-3">
+      <div className="mb-2 flex items-center gap-2">
+        <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+          O&apos;Neil Conviction Breakdown
+        </span>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span className="inline-flex cursor-help"><Info size={11} /></span>
+          </TooltipTrigger>
+          <TooltipContent className="max-w-xs text-xs">
+            William O&apos;Neil&apos;s research found ~50% of a stock&apos;s move follows the market, ~37% follows the industry/sector, and only ~13% is stock-specific. We score each piece 0-100 from real data and combine them with those weights.
+          </TooltipContent>
+        </Tooltip>
+        <span className="ml-auto font-mono text-sm font-bold text-foreground">{total} <span className="text-[10px] text-muted-foreground">/ 100</span></span>
+      </div>
+      {/* Segmented bar */}
+      <div className="flex h-3 w-full overflow-hidden rounded-md border border-border/40 bg-background/60">
+        <div className={`${tone(market)} relative`} style={{ width: "50%" }} title={`Market 50% × ${market} = ${marketContrib} pts`}>
+          <div className="h-full w-full opacity-90" style={{ width: `${market}%` }} />
+        </div>
+        <div className={`${tone(industry)} relative border-l border-background/60`} style={{ width: "37%" }} title={`Industry 37% × ${industry} = ${industryContrib} pts`}>
+          <div className="h-full" style={{ width: `${industry}%` }} />
+        </div>
+        <div className={`${tone(stock)} relative border-l border-background/60`} style={{ width: "13%" }} title={`Stock 13% × ${stock} = ${stockContrib} pts`}>
+          <div className="h-full" style={{ width: `${stock}%` }} />
+        </div>
+      </div>
+      <div className="mt-2 grid grid-cols-3 gap-2 text-[11px]">
+        <div className="rounded border border-border/40 bg-background/40 p-2">
+          <div className="flex items-center justify-between">
+            <span className="text-muted-foreground">Market <span className="text-[9px]">(50%)</span></span>
+            <span className={`font-mono font-semibold ${ratingClass(market)}`}>{market}</span>
+          </div>
+          <div className="mt-0.5 text-[10px] text-muted-foreground">{benchmarkLabel} · contrib {marketContrib}</div>
+        </div>
+        <div className="rounded border border-border/40 bg-background/40 p-2">
+          <div className="flex items-center justify-between">
+            <span className="text-muted-foreground">Industry <span className="text-[9px]">(37%)</span></span>
+            <span className={`font-mono font-semibold ${ratingClass(industry)}`}>{industry}</span>
+          </div>
+          <div className="mt-0.5 text-[10px] text-muted-foreground">
+            {hasIndustry ? `${sectorName ?? "—"}${sectorEtf ? ` · ${sectorEtf}` : ""}` : "No sector mapped"} · contrib {industryContrib}
+          </div>
+        </div>
+        <div className="rounded border border-border/40 bg-background/40 p-2">
+          <div className="flex items-center justify-between">
+            <span className="text-muted-foreground">Stock <span className="text-[9px]">(13%)</span></span>
+            <span className={`font-mono font-semibold ${ratingClass(stock)}`}>{stock}</span>
+          </div>
+          <div className="mt-0.5 text-[10px] text-muted-foreground">
+            {hasFund && fundamentals
+              ? `P/E ${fundamentals.forwardPe?.toFixed(1) ?? fundamentals.pe?.toFixed(1) ?? "—"} · EPS Δ ${fmtPct(fundamentals.epsGrowth)} · Rev Δ ${fmtPct(fundamentals.revenueGrowth)}`
+              : "Technicals only · contrib " + stockContrib}
+          </div>
+        </div>
+      </div>
+      <p className="mt-2 text-[11px] leading-snug text-foreground/80">{explanation}</p>
     </div>
   );
 }

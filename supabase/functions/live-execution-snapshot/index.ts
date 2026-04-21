@@ -57,6 +57,27 @@ interface OptionsSnapshot {
   iv_explanation: string;
 }
 
+interface FundamentalsSnapshot {
+  available: boolean;
+  pe: number | null;
+  forwardPe: number | null;
+  pegRatio: number | null;
+  epsGrowth: number | null;       // earningsQuarterlyGrowth (yoy %, decimal)
+  revenueGrowth: number | null;   // revenueQuarterlyGrowth (yoy %, decimal)
+  profitMargin: number | null;    // decimal
+  source: string;
+}
+
+interface IndustrySnapshot {
+  available: boolean;
+  etfSymbol: string | null;
+  sectorName: string | null;
+  changePct: number | null;
+  return1w: number | null;
+  return1m: number | null;
+  return3m: number | null;
+}
+
 async function fetchYahooQuote(symbol: string): Promise<QuoteSnapshot | null> {
   const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=1d&interval=1m&includePrePost=false`;
   try {
@@ -273,6 +294,100 @@ function parseOptionsResponse(json: any, empty: OptionsSnapshot): OptionsSnapsho
   }
 }
 
+// Sector → SPDR sector ETF mapping. Accepts either a broad GICS sector name or
+// the granular "industry" string Finnhub stores (we substring-match keywords).
+const SECTOR_ETF_MAP: Array<{ etf: string; name: string; keywords: string[] }> = [
+  { etf: "XLK", name: "Information Technology", keywords: ["technolog", "software", "semicond", "it services", "hardware", "electronic equipment"] },
+  { etf: "XLV", name: "Health Care", keywords: ["health", "biotech", "pharma", "life sciences"] },
+  { etf: "XLF", name: "Financials", keywords: ["financ", "bank", "insurance", "capital markets", "consumer finance", "mortgage"] },
+  { etf: "XLY", name: "Consumer Discretionary", keywords: ["auto", "retail", "leisure", "hotel", "restaurant", "apparel", "household durab", "consumer products"] },
+  { etf: "XLP", name: "Consumer Staples", keywords: ["beverage", "food", "household products", "personal products", "tobacco", "staples"] },
+  { etf: "XLE", name: "Energy", keywords: ["energy", "oil", "gas"] },
+  { etf: "XLI", name: "Industrials", keywords: ["industrial", "aerospace", "airline", "logistics", "machinery", "construction", "transportation", "commercial services", "professional services"] },
+  { etf: "XLB", name: "Materials", keywords: ["material", "chemical", "metal", "mining", "paper", "packaging"] },
+  { etf: "XLU", name: "Utilities", keywords: ["utilit", "electric", "renewable energy"] },
+  { etf: "XLRE", name: "Real Estate", keywords: ["real estate", "reit"] },
+  { etf: "XLC", name: "Communication Services", keywords: ["media", "entertainment", "telecom", "interactive media", "communication"] },
+];
+
+function resolveSectorEtf(sector: string | null | undefined): { etf: string; name: string } | null {
+  if (!sector) return null;
+  const s = sector.toLowerCase();
+  for (const m of SECTOR_ETF_MAP) {
+    if (m.keywords.some((k) => s.includes(k))) return { etf: m.etf, name: m.name };
+  }
+  return null;
+}
+
+async function fetchIndustrySnapshot(sector: string | null | undefined): Promise<IndustrySnapshot> {
+  const empty: IndustrySnapshot = {
+    available: false, etfSymbol: null, sectorName: null,
+    changePct: null, return1w: null, return1m: null, return3m: null,
+  };
+  const map = resolveSectorEtf(sector);
+  if (!map) return empty;
+  try {
+    const sb = makeServiceClient();
+    const quote = await fetchYahooQuote(map.etf);
+    const periods: YahooPeriod[] = ["5d", "1mo", "3mo"];
+    const hist = await Promise.all(
+      periods.map((p) => getHistoricalData(sb, map.etf, p, { todayPrice: quote?.price ?? null }))
+    );
+    return {
+      available: true,
+      etfSymbol: map.etf,
+      sectorName: map.name,
+      changePct: quote?.changePct ?? null,
+      return1w: hist[0].returnPct,
+      return1m: hist[1].returnPct,
+      return3m: hist[2].returnPct,
+    };
+  } catch {
+    return empty;
+  }
+}
+
+async function fetchFundamentalsSnapshot(symbol: string): Promise<FundamentalsSnapshot> {
+  const empty: FundamentalsSnapshot = {
+    available: false, pe: null, forwardPe: null, pegRatio: null,
+    epsGrowth: null, revenueGrowth: null, profitMargin: null,
+    source: "yahoo",
+  };
+  const auth = await getYahooAuth();
+  if (!auth) return empty;
+  const modules = "summaryDetail,defaultKeyStatistics,financialData";
+  const url = `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(symbol)}?modules=${modules}&crumb=${encodeURIComponent(auth.crumb)}`;
+  try {
+    const res = await fetch(url, {
+      headers: { "User-Agent": UA, Cookie: auth.cookie, Accept: "application/json" },
+    });
+    if (!res.ok) return empty;
+    const json = await res.json();
+    const result = json?.quoteSummary?.result?.[0];
+    if (!result) return empty;
+    const sd = result.summaryDetail ?? {};
+    const ks = result.defaultKeyStatistics ?? {};
+    const fd = result.financialData ?? {};
+    const raw = (x: any): number | null => {
+      if (x === null || x === undefined) return null;
+      const v = typeof x === "object" ? x.raw : x;
+      return typeof v === "number" && Number.isFinite(v) ? v : null;
+    };
+    return {
+      available: true,
+      pe: raw(sd.trailingPE) ?? raw(ks.trailingPE) ?? null,
+      forwardPe: raw(sd.forwardPE) ?? raw(ks.forwardPE) ?? null,
+      pegRatio: raw(ks.pegRatio) ?? null,
+      epsGrowth: raw(ks.earningsQuarterlyGrowth) ?? raw(fd.earningsGrowth) ?? null,
+      revenueGrowth: raw(fd.revenueGrowth) ?? null,
+      profitMargin: raw(fd.profitMargins) ?? null,
+      source: "yahoo",
+    };
+  } catch {
+    return empty;
+  }
+}
+
 async function fetchHistoricalForTicker(symbol: string, todayPrice: number | null) {
   const sb = makeServiceClient();
   const periods: YahooPeriod[] = ["5d", "1mo", "3mo"];
@@ -296,6 +411,7 @@ Deno.serve(async (req) => {
       const b = (body?.benchmark ?? "SPY").toString().trim().toUpperCase();
       return ALLOWED_BENCHMARKS.has(b) ? b : "SPY";
     })();
+    const sectorHint = typeof body?.sector === "string" ? body.sector : null;
 
     if (!rawSymbol || !/^[A-Z][A-Z0-9.\-]{0,9}$/.test(rawSymbol)) {
       return new Response(JSON.stringify({ error: "Invalid symbol" }), {
@@ -304,10 +420,12 @@ Deno.serve(async (req) => {
       });
     }
 
-    const [quote, options, benchmark] = await Promise.all([
+    const [quote, options, benchmark, fundamentals, industry] = await Promise.all([
       fetchYahooQuote(rawSymbol),
       fetchYahooOptions(rawSymbol),
       fetchBenchmarkSnapshot(benchmarkSymbol),
+      fetchFundamentalsSnapshot(rawSymbol),
+      fetchIndustrySnapshot(sectorHint),
     ]);
 
     if (!quote || quote.price === null) {
@@ -317,8 +435,6 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Pull historical returns for the ticker so the client can compute fresh RS values
-    // against either benchmark without trusting potentially stale DB rows.
     const tickerHist = await fetchHistoricalForTicker(rawSymbol, quote.price);
 
     return new Response(
@@ -327,6 +443,8 @@ Deno.serve(async (req) => {
         quote,
         options,
         benchmark,
+        industry,
+        fundamentals,
         tickerHistory: tickerHist,
         fetchedAt: new Date().toISOString(),
       }),
