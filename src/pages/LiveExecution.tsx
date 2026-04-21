@@ -508,10 +508,23 @@ export default function LiveExecution() {
 
                 {/* RS trend across timeframes */}
                 {activeStock && (
-                  <div className="grid grid-cols-3 gap-2">
-                    <RsTrendCell label="1D" value={activeStock.rs1d} />
-                    <RsTrendCell label="1W" value={activeStock.rs1w} />
-                    <RsTrendCell label="1M" value={activeStock.rs1m} />
+                  <div>
+                    <div className="mb-1.5 flex items-center gap-1 text-[10px] uppercase tracking-wider text-muted-foreground">
+                      <span>RS vs SPY (% outperformance)</span>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span className="inline-flex cursor-help"><Info size={10} /></span>
+                        </TooltipTrigger>
+                        <TooltipContent className="max-w-xs text-xs">
+                          How much the stock outperformed (or underperformed) SPY over each window. Positive = stronger than the market; negative = weaker.
+                        </TooltipContent>
+                      </Tooltip>
+                    </div>
+                    <div className="grid grid-cols-3 gap-2">
+                      <RsTrendCell label="1D" value={activeStock.rs1d} />
+                      <RsTrendCell label="1W" value={activeStock.rs1w} />
+                      <RsTrendCell label="1M" value={activeStock.rs1m} />
+                    </div>
                   </div>
                 )}
 
