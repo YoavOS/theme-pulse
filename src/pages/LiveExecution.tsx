@@ -470,6 +470,32 @@ export default function LiveExecution() {
       .slice(0, 5);
   }, [activeStock, stocks]);
 
+  // Watchlist split-view mode
+  const [watchMode, setWatchMode] = useState<"all" | "leaders" | "rotation">("all");
+  const watchRows = useMemo(() => {
+    const rows = watchTickers.map((sym) => {
+      const s = stockMap.get(sym);
+      return {
+        sym,
+        s,
+        rating: ratingOverall.get(sym) ?? null,
+        r1w: s?.return1w ?? null,
+        r1m: s?.return1m ?? null,
+      };
+    });
+    if (watchMode === "leaders") {
+      return rows.filter((r) => r.rating !== null && r.rating >= 80);
+    }
+    if (watchMode === "rotation") {
+      return rows.filter((r) => {
+        if (r.rating === null || r.rating >= 80 || r.rating < 50) return false;
+        if (r.r1w === null || r.r1m === null) return false;
+        return r.r1w > r.r1m;
+      });
+    }
+    return rows;
+  }, [watchTickers, stockMap, ratingOverall, watchMode]);
+
   return (
     <TooltipProvider delayDuration={150}>
       <div className="min-h-screen bg-background">
