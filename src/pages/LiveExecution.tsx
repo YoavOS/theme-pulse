@@ -287,14 +287,170 @@ export default function LiveExecution() {
 
   const overallRating = activeSymbol ? ratingOverall.get(activeSymbol) ?? null : null;
 
-  // Conviction Score 0-100: 50% RS rating + 25% acceleration + 25% volume
+  // ── O'Neil weighted Conviction Score (0-100): 50% Market + 37% Industry + 13% Stock ──
   const conviction = useMemo(() => {
+    const bh = snapshot?.benchmark;
+    const scoreReturn = (r: number | null | undefined, perPctPoint = 5) => {
+      if (r === null || r === undefined || !Number.isFinite(r)) return null;
+      return Math.max(0, Math.min(100, 50 + (r as number) * perPctPoint));
+    };
+    const mDay = scoreReturn(bh?.changePct, 10);
+    const mWeek = scoreReturn(bh?.return1w, 5);
+    const mMonth = scoreReturn(bh?.return1m, 3);
+    const mParts = [mDay, mWeek, mMonth].filter((v): v is number => v !== null);
+    const marketScore = mParts.length > 0 ? mParts.reduce((a, b) => a + b, 0) / mParts.length : 50;
+
+    const ih = snapshot?.industry;
+    const iDay = scoreReturn(ih?.changePct, 10);
+    const iWeek = scoreReturn(ih?.return1w, 5);
+    const iMonth = scoreReturn(ih?.return1m, 3);
+    const iParts = [iDay, iWeek, iMonth].filter((v): v is number => v !== null);
+    const industryScore = iParts.length > 0
+      ? iParts.reduce((a, b) => a + b, 0) / iParts.length
+      : (ih?.available ? 50 : marketScore);
+
+    let rsPart: number | null = overallRating;
+    const accelPart = accelDelta === null ? null : Math.max(0, Math.min(100, 50 + accelDelta * 2));
+    const volPart = relVol === null ? null : Math.max(0, Math.min(100, relVol * 50));
+    const fd = snapshot?.fundamentals;
+    let fundPart: number | null = null;
+    if (fd?.available) {
+      const pe = fd.forwardPe ?? fd.pe;
+      let peScore: number | null = null;
+      if (pe !== null && pe > 0) {
+        if (pe < 15) peScore = 90;
+        else if (pe < 25) peScore = 75;
+        else if (pe < 40) peScore = 60;
+        else if (pe < 60) peScore = 45;
+        else peScore = 30;
+      }
+      let epsScore: number | null = null;
+      const eg = fd.epsGrowth;
+      if (eg !== null) {
+        if (eg >= 0.5) epsScore = 95;
+        else if (eg >= 0.25) epsScore = 80;
+        else if (eg >= 0.10) epsScore = 65;
+        else if (eg >= 0) epsScore = 55;
+        else if (eg >= -0.15) epsScore = 40;
+        else epsScore = 25;
+      }
+      let revScore: number | null = null;
+      const rg = fd.revenueGrowth;
+      if (rg !== null) {
+        if (rg >= 0.30) revScore = 90;
+        else if (rg >= 0.15) revScore = 75;
+        else if (rg >= 0.05) revScore = 60;
+        else if (rg >= 0) revScore = 50;
+        else revScore = 30;
+      }
+      const parts = [peScore, epsScore, revScore].filter((v): v is number => v !== null);
+      if (parts.length > 0) fundPart = parts.reduce((a, b) => a + b, 0) / parts.length;
+    }
+
+    const techParts = [rsPart, accelPart, volPart].filter((v): v is number => v !== null);
+    const techScore = techParts.length > 0 ? techParts.reduce((a, b) => a + b, 0) / techParts.length : null;
+    const stockScore =
+      techScore === null && fundPart === null
+        ? null
+        : fundPart === null
+        ? techScore!
+        : techScore === null
+        ? fundPart
+        : techScore * 0.6 + fundPart * 0.4;
+
+    if (stockScore === null) return null;
+
+    const final = marketScore * 0.50 + industryScore * 0.37 + stockScore * 0.13;
+    return {
+      total: Math.round(final),
+      market: Math.round(marketScore),
+      industry: Math.round(industryScore),
+      stock: Math.round(stockScore),
+      hasFund: fundPart !== null,
+      hasIndustry: ih?.available ?? false,
+    };
+  }, [snapshot, overallRating, accelDelta, relVol]);
+
+  // ── Setup Quality Score (0-100) ──
+  const setupQuality = useMemo(() => {
     if (overallRating === null) return null;
-    const rsPart = overallRating; // 0-99
-    const accelPart = accelDelta === null ? 50 : Math.max(0, Math.min(100, 50 + accelDelta * 2));
-    const volPart = relVol === null ? 50 : Math.max(0, Math.min(100, relVol * 50));
-    return Math.round(rsPart * 0.5 + accelPart * 0.25 + volPart * 0.25);
-  }, [overallRating, accelDelta, relVol]);
+    let score = 0;
+    let weight = 0;
+    if (accelDelta !== null) {
+      score += Math.max(0, Math.min(100, 50 + accelDelta * 4)) * 0.30;
+      weight += 0.30;
+    }
+    if (relVol !== null) {
+      score += Math.max(0, Math.min(100, relVol * 55)) * 0.25;
+      weight += 0.25;
+    }
+    const r1w = activeStock?.return1w ?? null;
+    if (r1w !== null && overallRating >= 70) {
+      let pullScore = 50;
+      if (r1w >= -8 && r1w <= -2) pullScore = 90;
+      else if (r1w > -2 && r1w <= 5) pullScore = 70;
+      else if (r1w > 5 && r1w <= 15) pullScore = 55;
+      else if (r1w < -8 && r1w >= -15) pullScore = 45;
+      else pullScore = 25;
+      score += pullScore * 0.25;
+      weight += 0.25;
+    } else if (r1w !== null) {
+      score += 50 * 0.20;
+      weight += 0.20;
+    }
+    const ih = snapshot?.industry;
+    if (ih?.available && ih.return1m !== null) {
+      const align = ih.return1m >= 0 ? 80 : 35;
+      score += align * 0.20;
+      weight += 0.20;
+    }
+    if (weight === 0) return null;
+    return Math.round(score / weight);
+  }, [overallRating, accelDelta, relVol, activeStock, snapshot]);
+
+  // ── Pullback Quality Detector ──
+  const pullback = useMemo(() => {
+    if (overallRating === null) return null;
+    const r1w = activeStock?.return1w ?? null;
+    const r1m = activeStock?.return1m ?? null;
+    if (r1w === null) return null;
+    const inUptrend = overallRating >= 65 && (r1m === null || r1m > 0);
+    const isPullback = r1w <= -1 && r1w >= -10;
+    const isBreakdown = r1w < -10 || (r1w < -3 && accelDelta !== null && accelDelta <= -10);
+    if (isBreakdown && overallRating < 70) {
+      return {
+        kind: "breakdown" as const,
+        label: "Unhealthy breakdown — momentum failing",
+        note: `1W ${r1w.toFixed(1)}%, RS ${overallRating}${accelDelta !== null ? `, accel ${accelDelta.toFixed(0)} pts` : ""}. Wait for the structure to repair.`,
+      };
+    }
+    if (inUptrend && isPullback && (relVol === null || relVol < 1.2)) {
+      return {
+        kind: "healthy" as const,
+        label: "Healthy pullback in a strong trend — potential dip-buy",
+        note: `1W ${r1w.toFixed(1)}% inside an RS ${overallRating} uptrend on quiet volume (${relVol !== null ? `${relVol.toFixed(2)}× avg` : "n/a"}). Confirm with a reversal candle on rising volume.`,
+      };
+    }
+    return null;
+  }, [overallRating, accelDelta, relVol, activeStock]);
+
+  // ── Rotation Risk: strong stock inside a fading sector ──
+  const rotationRisk = useMemo(() => {
+    if (overallRating === null) return null;
+    const ih = snapshot?.industry;
+    if (!ih?.available) return null;
+    if (ih.return1w === null || ih.return1m === null) return null;
+    const sectorWeak = ih.return1w < -1 && ih.return1w < ih.return1m;
+    if (overallRating >= 75 && sectorWeak) {
+      return {
+        sector: ih.sectorName ?? "sector",
+        etf: ih.etfSymbol,
+        sectorR1w: ih.return1w,
+        sectorR1m: ih.return1m,
+      };
+    }
+    return null;
+  }, [overallRating, snapshot]);
 
   const verdict = buildVerdict(overallRating, accelDelta, relVol, activeStock?.return1w ?? null);
   const VerdictIcon = verdict.icon;
