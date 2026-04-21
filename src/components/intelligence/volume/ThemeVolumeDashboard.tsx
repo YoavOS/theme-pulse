@@ -364,6 +364,14 @@ export default function ThemeVolumeDashboard({ open, onOpenChange, theme, smartV
                 <MetricCard icon={<TrendingUp size={12} />} label="Vol Consistency" value={aggregate?.consistency != null ? `${aggregate.consistency.toFixed(0)}%` : "—"} accent="#facc15" />
                 <MetricCard icon={<Users size={12} />} label="Tickers" value={String(theme.symbols.length)} accent="#94a3b8" />
               </div>
+              <div
+                className="text-[10.5px] text-muted-foreground leading-relaxed -mt-1"
+                style={{ fontFamily: DM_MONO }}
+              >
+                <span className="text-[#00f5c4]">Rel Vol</span> = today vs 20d avg ·{" "}
+                <span className="text-[#4ade80]">Sustained</span> = 10d vs 3m baseline ·{" "}
+                <span className="text-[#facc15]">Consistency</span> = % of days with above-avg volume
+              </div>
 
               {/* Top 3 strongest */}
               <div>
