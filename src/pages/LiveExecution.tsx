@@ -1293,3 +1293,103 @@ function OptionsTile({
     </div>
   );
 }
+
+function ConvictionBreakdown({
+  total,
+  market,
+  industry,
+  stock,
+  benchmarkLabel,
+  sectorName,
+  sectorEtf,
+  fundamentals,
+  hasIndustry,
+  hasFund,
+}: {
+  total: number;
+  market: number;
+  industry: number;
+  stock: number;
+  benchmarkLabel: string;
+  sectorName: string | null;
+  sectorEtf: string | null;
+  fundamentals: import("@/hooks/useLiveSnapshot").LiveFundamentals | null;
+  hasIndustry: boolean;
+  hasFund: boolean;
+}) {
+  // Weighted contributions to the final 0-100 conviction.
+  const marketContrib = Math.round((market * 0.50));
+  const industryContrib = Math.round((industry * 0.37));
+  const stockContrib = Math.round((stock * 0.13));
+  const tone = (s: number) =>
+    s >= 70 ? "bg-[hsl(160,80%,45%)]" : s >= 50 ? "bg-[hsl(40,85%,55%)]" : "bg-destructive";
+  const fmtPct = (v: number | null) =>
+    v === null || v === undefined || !Number.isFinite(v) ? "—" : `${(v * 100).toFixed(1)}%`;
+  const explanation = (() => {
+    const marketWord = market >= 65 ? "Strong" : market >= 50 ? "Mixed" : "Weak";
+    const industryWord = industry >= 65 ? "leading" : industry >= 50 ? "neutral" : "lagging";
+    const stockWord = stock >= 70 ? "solid" : stock >= 50 ? "decent" : "soft";
+    return `${marketWord} market (${benchmarkLabel}) + ${industryWord} ${sectorName ?? "sector"}${sectorEtf ? ` (${sectorEtf})` : ""} + ${stockWord} individual stock${hasFund ? " (RS, accel, volume, P/E and growth)" : " (RS, accel, volume — fundamentals unavailable)"}.`;
+  })();
+
+  return (
+    <div className="rounded-lg border border-border/40 bg-background/40 p-3">
+      <div className="mb-2 flex items-center gap-2">
+        <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+          O&apos;Neil Conviction Breakdown
+        </span>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span className="inline-flex cursor-help"><Info size={11} /></span>
+          </TooltipTrigger>
+          <TooltipContent className="max-w-xs text-xs">
+            William O&apos;Neil&apos;s research found ~50% of a stock&apos;s move follows the market, ~37% follows the industry/sector, and only ~13% is stock-specific. We score each piece 0-100 from real data and combine them with those weights.
+          </TooltipContent>
+        </Tooltip>
+        <span className="ml-auto font-mono text-sm font-bold text-foreground">{total} <span className="text-[10px] text-muted-foreground">/ 100</span></span>
+      </div>
+      {/* Segmented bar */}
+      <div className="flex h-3 w-full overflow-hidden rounded-md border border-border/40 bg-background/60">
+        <div className={`${tone(market)} relative`} style={{ width: "50%" }} title={`Market 50% × ${market} = ${marketContrib} pts`}>
+          <div className="h-full w-full opacity-90" style={{ width: `${market}%` }} />
+        </div>
+        <div className={`${tone(industry)} relative border-l border-background/60`} style={{ width: "37%" }} title={`Industry 37% × ${industry} = ${industryContrib} pts`}>
+          <div className="h-full" style={{ width: `${industry}%` }} />
+        </div>
+        <div className={`${tone(stock)} relative border-l border-background/60`} style={{ width: "13%" }} title={`Stock 13% × ${stock} = ${stockContrib} pts`}>
+          <div className="h-full" style={{ width: `${stock}%` }} />
+        </div>
+      </div>
+      <div className="mt-2 grid grid-cols-3 gap-2 text-[11px]">
+        <div className="rounded border border-border/40 bg-background/40 p-2">
+          <div className="flex items-center justify-between">
+            <span className="text-muted-foreground">Market <span className="text-[9px]">(50%)</span></span>
+            <span className={`font-mono font-semibold ${ratingClass(market)}`}>{market}</span>
+          </div>
+          <div className="mt-0.5 text-[10px] text-muted-foreground">{benchmarkLabel} · contrib {marketContrib}</div>
+        </div>
+        <div className="rounded border border-border/40 bg-background/40 p-2">
+          <div className="flex items-center justify-between">
+            <span className="text-muted-foreground">Industry <span className="text-[9px]">(37%)</span></span>
+            <span className={`font-mono font-semibold ${ratingClass(industry)}`}>{industry}</span>
+          </div>
+          <div className="mt-0.5 text-[10px] text-muted-foreground">
+            {hasIndustry ? `${sectorName ?? "—"}${sectorEtf ? ` · ${sectorEtf}` : ""}` : "No sector mapped"} · contrib {industryContrib}
+          </div>
+        </div>
+        <div className="rounded border border-border/40 bg-background/40 p-2">
+          <div className="flex items-center justify-between">
+            <span className="text-muted-foreground">Stock <span className="text-[9px]">(13%)</span></span>
+            <span className={`font-mono font-semibold ${ratingClass(stock)}`}>{stock}</span>
+          </div>
+          <div className="mt-0.5 text-[10px] text-muted-foreground">
+            {hasFund && fundamentals
+              ? `P/E ${fundamentals.forwardPe?.toFixed(1) ?? fundamentals.pe?.toFixed(1) ?? "—"} · EPS Δ ${fmtPct(fundamentals.epsGrowth)} · Rev Δ ${fmtPct(fundamentals.revenueGrowth)}`
+              : "Technicals only · contrib " + stockContrib}
+          </div>
+        </div>
+      </div>
+      <p className="mt-2 text-[11px] leading-snug text-foreground/80">{explanation}</p>
+    </div>
+  );
+}
