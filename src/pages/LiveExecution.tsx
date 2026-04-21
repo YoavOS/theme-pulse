@@ -1635,12 +1635,14 @@ function MetricCard({
   sub,
   tooltip,
   valueClass = "text-foreground",
+  onWhy,
 }: {
   label: string;
   value: string;
   sub?: string;
   tooltip?: string;
   valueClass?: string;
+  onWhy?: () => void;
 }) {
   return (
     <div className="rounded-lg border border-border/40 bg-background/40 p-3">
@@ -1653,6 +1655,17 @@ function MetricCard({
             </TooltipTrigger>
             <TooltipContent className="max-w-xs text-xs">{tooltip}</TooltipContent>
           </Tooltip>
+        )}
+        {onWhy && (
+          <button
+            type="button"
+            onClick={onWhy}
+            className="ml-auto inline-flex items-center gap-0.5 rounded border border-border/40 bg-background/60 px-1 py-px text-[9px] font-semibold uppercase tracking-wider text-muted-foreground transition-colors hover:border-primary/40 hover:bg-primary/10 hover:text-primary"
+            title="Detailed explanation"
+          >
+            <HelpCircle size={9} />
+            Why
+          </button>
         )}
       </div>
       <div className={`font-mono text-xl font-bold ${valueClass}`}>{value}</div>
