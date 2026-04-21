@@ -195,6 +195,7 @@ export default function LiveExecution() {
 
   const [input, setInput] = useState("");
   const [activeSymbol, setActiveSymbol] = useState<string | null>(null);
+  const [benchmark, setBenchmark] = useState<BenchmarkSymbol>("SPY");
   const debounceRef = useRef<number | null>(null);
 
   // Build a per-symbol map of RS data + a per-timeframe rating using the qualified universe.
@@ -219,7 +220,7 @@ export default function LiveExecution() {
     const sym = raw.trim().toUpperCase();
     if (!sym) return;
     setActiveSymbol(sym);
-    fetchSnapshot(sym);
+    fetchSnapshot(sym, benchmark);
   };
 
   // Debounce input → auto-submit after 600ms when length >= 1
@@ -233,6 +234,12 @@ export default function LiveExecution() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [input]);
 
+  // Re-fetch snapshot when benchmark toggle changes (so RS values use the new baseline).
+  useEffect(() => {
+    if (activeSymbol) fetchSnapshot(activeSymbol, benchmark);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [benchmark]);
+
   const activeStock = activeSymbol ? stockMap.get(activeSymbol) ?? null : null;
   const universeRank = useMemo(() => {
     if (!activeStock || activeStock.rsOverall === null) return null;
@@ -242,7 +249,22 @@ export default function LiveExecution() {
     return { rank: better + 1, total: stocks.filter((s) => s.rsOverall !== null).length };
   }, [activeStock, stocks]);
 
-  // RS acceleration: 1W rating vs 1M rating
+  // ── Fresh, benchmark-aware RS values computed live from the snapshot ──
+  // Replaces the (often stale) rs_1d/rs_1w/rs_1m stored against SPY in qualified_rs_universe.
+  const liveRs = useMemo(() => {
+    if (!snapshot) return { rs1d: null as number | null, rs1w: null as number | null, rs1m: null as number | null, rs3m: null as number | null };
+    const round = (v: number | null) => (v === null ? null : Math.round(v * 100) / 100);
+    const sub = (a: number | null, b: number | null) =>
+      a === null || b === null || !Number.isFinite(a) || !Number.isFinite(b) ? null : a - b;
+    return {
+      rs1d: round(sub(snapshot.quote.changePct, snapshot.benchmark.changePct)),
+      rs1w: round(sub(snapshot.tickerHistory.return1w, snapshot.benchmark.return1w)),
+      rs1m: round(sub(snapshot.tickerHistory.return1m, snapshot.benchmark.return1m)),
+      rs3m: round(sub(snapshot.tickerHistory.return3m, snapshot.benchmark.return3m)),
+    };
+  }, [snapshot]);
+
+  // RS acceleration: 1W rating vs 1M rating (universe-based, benchmark-agnostic ordinal rank).
   const accelDelta = useMemo(() => {
     if (!activeSymbol) return null;
     const r1w = rating1w.get(activeSymbol);
@@ -269,7 +291,7 @@ export default function LiveExecution() {
 
   const verdict = buildVerdict(overallRating, accelDelta, relVol, activeStock?.return1w ?? null);
   const VerdictIcon = verdict.icon;
-  const signals = buildEntrySignals(activeStock, snapshot);
+  const signals = buildEntrySignals(activeStock, snapshot, liveRs, benchmark);
 
   // Peers: same sector, top 5 by overall RS, excluding active
   const peers = useMemo(() => {
