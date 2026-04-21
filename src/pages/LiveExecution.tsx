@@ -755,8 +755,8 @@ function MetricCard({
         <span>{label}</span>
         {tooltip && (
           <Tooltip>
-            <TooltipTrigger>
-              <Info size={10} className="text-muted-foreground" />
+            <TooltipTrigger asChild>
+              <span className="inline-flex cursor-help"><Info size={10} className="text-muted-foreground" /></span>
             </TooltipTrigger>
             <TooltipContent className="max-w-xs text-xs">{tooltip}</TooltipContent>
           </Tooltip>
