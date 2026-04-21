@@ -56,58 +56,106 @@ function ratingClass(r: number | null): string {
   return "text-destructive";
 }
 
+interface VerdictFactor {
+  label: string;
+  status: "pos" | "neg" | "neu" | "na";
+  note: string;
+}
 interface Verdict {
-  label: "Good Momentum Entry" | "Watch Carefully" | "Avoid / High Risk";
+  label:
+    | "Constructive Setup"
+    | "Mixed — Watch & Wait"
+    | "Weak Setup"
+    | "Insufficient Data";
   color: string;
   bg: string;
   border: string;
   icon: typeof CheckCircle2;
   reason: string;
+  factors: VerdictFactor[];
 }
 
-function buildVerdict(rating: number | null, accel: number | null, relVol: number | null): Verdict {
+function buildVerdict(
+  rating: number | null,
+  accel: number | null,
+  relVol: number | null,
+  return1w: number | null,
+): Verdict {
+  // Multi-factor, explainable verdict. Each factor is scored independently and
+  // shown to the user so the verdict isn't a black-box.
+  const factors: VerdictFactor[] = [];
+
+  if (rating === null) factors.push({ label: "RS Rating", status: "na", note: "Not in qualified universe" });
+  else if (rating >= 70) factors.push({ label: "RS Rating", status: "pos", note: `Leader (RS ${rating})` });
+  else if (rating < 40) factors.push({ label: "RS Rating", status: "neg", note: `Lagging (RS ${rating})` });
+  else factors.push({ label: "RS Rating", status: "neu", note: `Average (RS ${rating})` });
+
+  if (accel === null) factors.push({ label: "Acceleration", status: "na", note: "Insufficient history" });
+  else if (accel >= 5) factors.push({ label: "Acceleration", status: "pos", note: `Improving (+${accel.toFixed(1)} pts)` });
+  else if (accel <= -10) factors.push({ label: "Acceleration", status: "neg", note: `Decelerating (${accel.toFixed(1)} pts)` });
+  else factors.push({ label: "Acceleration", status: "neu", note: `Stable (${accel >= 0 ? "+" : ""}${accel.toFixed(1)} pts)` });
+
+  if (relVol === null) factors.push({ label: "Volume", status: "na", note: "No live volume" });
+  else if (relVol >= 1.3) factors.push({ label: "Volume", status: "pos", note: `Above avg (${relVol.toFixed(2)}×)` });
+  else if (relVol < 0.7) factors.push({ label: "Volume", status: "neg", note: `Below avg (${relVol.toFixed(2)}×)` });
+  else factors.push({ label: "Volume", status: "neu", note: `Normal (${relVol.toFixed(2)}×)` });
+
+  if (return1w === null) factors.push({ label: "Recent Action", status: "na", note: "—" });
+  else if (return1w >= 15) factors.push({ label: "Recent Action", status: "neu", note: `Extended (+${return1w.toFixed(1)}% / 1W)` });
+  else if (return1w <= -10) factors.push({ label: "Recent Action", status: "neg", note: `Sharp drop (${return1w.toFixed(1)}% / 1W)` });
+  else factors.push({ label: "Recent Action", status: "neu", note: `${return1w >= 0 ? "+" : ""}${return1w.toFixed(1)}% / 1W` });
+
   if (rating === null) {
     return {
-      label: "Watch Carefully",
-      color: "text-[hsl(40,85%,55%)]",
-      bg: "bg-[hsl(40,85%,55%)]/10",
-      border: "border-[hsl(40,85%,55%)]/30",
-      icon: AlertTriangle,
-      reason: "This ticker isn't in the qualified RS universe — limited context available.",
+      label: "Insufficient Data",
+      color: "text-muted-foreground",
+      bg: "bg-muted/20",
+      border: "border-border/40",
+      icon: Info,
+      reason:
+        "This ticker isn't in the qualified RS universe, so we can't generate a confident multi-factor read. Treat anything shown here as preliminary context, not a recommendation.",
+      factors,
     };
   }
-  // Good entry: strong RS (>=70), positive accel, supportive volume
-  if (rating >= 70 && (accel ?? 0) >= 0 && (relVol ?? 1) >= 0.9) {
+
+  const posCount = factors.filter((f) => f.status === "pos").length;
+  const negCount = factors.filter((f) => f.status === "neg").length;
+
+  if (rating >= 70 && posCount >= 2 && negCount === 0) {
     return {
-      label: "Good Momentum Entry",
+      label: "Constructive Setup",
       color: "text-[hsl(160,80%,45%)]",
       bg: "bg-[hsl(160,80%,45%)]/10",
       border: "border-[hsl(160,80%,45%)]/30",
       icon: CheckCircle2,
-      reason: `Strong leader (RS ${rating}) with momentum still accelerating and supportive volume — quality entry candidate.`,
+      reason:
+        "Multiple factors line up favourably (relative strength, momentum, and volume). Worth deeper review — not an automatic buy. Confirm with your own entry rules.",
+      factors,
     };
   }
-  // Avoid: weak RS or sharp deceleration
-  if (rating < 40 || (accel ?? 0) < -15) {
+
+  if (rating < 40 || negCount >= 2 || (accel !== null && accel <= -15)) {
     return {
-      label: "Avoid / High Risk",
+      label: "Weak Setup",
       color: "text-destructive",
       bg: "bg-destructive/10",
       border: "border-destructive/30",
       icon: XCircle,
       reason:
-        rating < 40
-          ? `Lagging the market (RS ${rating}). Better setups exist — wait for relative strength to improve.`
-          : `Momentum is fading fast. Trend may be breaking — avoid chasing.`,
+        "Several factors are working against this name right now (lagging RS, fading momentum, or weak volume). Stronger setups usually exist elsewhere.",
+      factors,
     };
   }
+
   return {
-    label: "Watch Carefully",
+    label: "Mixed — Watch & Wait",
     color: "text-[hsl(40,85%,55%)]",
     bg: "bg-[hsl(40,85%,55%)]/10",
     border: "border-[hsl(40,85%,55%)]/30",
     icon: ShieldAlert,
-    reason: `Mixed signals (RS ${rating}). Wait for confirmation — ideally a volume-backed RS line breakout.`,
+    reason:
+      "Signals are mixed — some constructive, some not. Wait for clearer confirmation (e.g. RS line breakout on rising volume) before committing.",
+    factors,
   };
 }
 
@@ -120,16 +168,16 @@ function buildEntrySignals(stock: RsStock | null, snapshot: LiveSnapshot | null)
   if (stock.rs1d !== null && stock.rs1d > 1) out.push("⚡ Outperforming SPY today (positive intraday RS).");
   if (stock.rs1d !== null && stock.rs1d < -1) out.push("🔻 Underperforming SPY today.");
   if (stock.adrPercent !== null && stock.adrPercent >= 5)
-    out.push(`🎯 High range stock (ADR ${stock.adrPercent.toFixed(1)}%) — large daily moves expected.`);
+    out.push(`🎯 High range stock (ADR ${stock.adrPercent.toFixed(1)}%) — expect larger daily swings.`);
   if (snapshot?.quote.volume && snapshot.quote.avgVolume) {
     const rv = snapshot.quote.volume / snapshot.quote.avgVolume;
     if (rv >= 1.5) out.push(`🔊 Volume confirming move — ${rv.toFixed(1)}× the 3-month average.`);
-    else if (rv < 0.6) out.push("🔉 Volume below average — lacks conviction.");
+    else if (rv < 0.6) out.push("🔉 Volume below average — move lacks conviction.");
   }
   if (stock.rsOverall !== null && stock.rsOverall > 5 && (accel ?? 0) >= 0)
     out.push("🚀 Trending leader holding above benchmark — RS line near new highs.");
   if (stock.return1w !== null && stock.return1w < -3 && stock.rsOverall !== null && stock.rsOverall > 5)
-    out.push("🟢 Pullback in a strong RS stock — potential entry opportunity.");
+    out.push("🟢 Pullback within a strong RS name — possible entry zone, confirm with price action.");
   return out;
 }
 
