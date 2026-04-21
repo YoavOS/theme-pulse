@@ -873,11 +873,13 @@ function OptionsTile({
   label,
   value,
   explain,
+  tooltip,
   highlight = false,
 }: {
   label: string;
   value: string;
   explain: string;
+  tooltip?: string;
   highlight?: boolean;
 }) {
   return (
@@ -886,7 +888,17 @@ function OptionsTile({
         highlight ? "border-[hsl(40,85%,55%)]/40 bg-[hsl(40,85%,55%)]/5" : "border-border/40 bg-background/40"
       }`}
     >
-      <div className="mb-1 text-[10px] uppercase tracking-wider text-muted-foreground">{label}</div>
+      <div className="mb-1 flex items-center gap-1 text-[10px] uppercase tracking-wider text-muted-foreground">
+        <span>{label}</span>
+        {tooltip && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className="inline-flex cursor-help"><Info size={10} /></span>
+            </TooltipTrigger>
+            <TooltipContent className="max-w-xs text-xs">{tooltip}</TooltipContent>
+          </Tooltip>
+        )}
+      </div>
       <div className={`font-mono text-lg font-bold ${highlight ? "text-[hsl(40,85%,55%)]" : "text-foreground"}`}>
         {value}
       </div>
