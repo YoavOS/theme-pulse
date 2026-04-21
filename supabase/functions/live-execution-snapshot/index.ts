@@ -57,6 +57,27 @@ interface OptionsSnapshot {
   iv_explanation: string;
 }
 
+interface FundamentalsSnapshot {
+  available: boolean;
+  pe: number | null;
+  forwardPe: number | null;
+  pegRatio: number | null;
+  epsGrowth: number | null;       // earningsQuarterlyGrowth (yoy %, decimal)
+  revenueGrowth: number | null;   // revenueQuarterlyGrowth (yoy %, decimal)
+  profitMargin: number | null;    // decimal
+  source: string;
+}
+
+interface IndustrySnapshot {
+  available: boolean;
+  etfSymbol: string | null;
+  sectorName: string | null;
+  changePct: number | null;
+  return1w: number | null;
+  return1m: number | null;
+  return3m: number | null;
+}
+
 async function fetchYahooQuote(symbol: string): Promise<QuoteSnapshot | null> {
   const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=1d&interval=1m&includePrePost=false`;
   try {
