@@ -3,10 +3,11 @@
 //
 // Returns:
 //   quote: { price, changePct, dayHigh, dayLow, volume, avgVolume }
+//   benchmark: { symbol, price, changePct, return1w, return1m, return3m }
 //   options: { put_call_ratio, total_call_volume, total_put_volume,
 //              avg_iv, sentiment, unusual_activity, expiration }
 
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { getHistoricalData, makeServiceClient, type YahooPeriod } from "../_shared/yahooHistory.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -16,6 +17,8 @@ const corsHeaders = {
 
 const UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36";
+
+const ALLOWED_BENCHMARKS = new Set(["SPY", "QQQ"]);
 
 interface QuoteSnapshot {
   symbol: string;
@@ -27,6 +30,15 @@ interface QuoteSnapshot {
   avgVolume: number | null;
   marketCap: number | null;
   shortName: string | null;
+}
+
+interface BenchmarkSnapshot {
+  symbol: string;
+  price: number | null;
+  changePct: number | null;       // 1D % change (live, intraday)
+  return1w: number | null;
+  return1m: number | null;
+  return3m: number | null;
 }
 
 interface OptionsSnapshot {
@@ -46,7 +58,6 @@ interface OptionsSnapshot {
 }
 
 async function fetchYahooQuote(symbol: string): Promise<QuoteSnapshot | null> {
-  // Use the chart endpoint — no crumb cookie required, includes meta with live price.
   const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=1d&interval=1m&includePrePost=false`;
   try {
     const res = await fetch(url, { headers: { "User-Agent": UA, Accept: "application/json" } });
@@ -76,6 +87,27 @@ async function fetchYahooQuote(symbol: string): Promise<QuoteSnapshot | null> {
   }
 }
 
+async function fetchBenchmarkSnapshot(symbol: string): Promise<BenchmarkSnapshot> {
+  const sb = makeServiceClient();
+  const quote = await fetchYahooQuote(symbol);
+  // Fetch historical returns in parallel via shared helper.
+  const periods: YahooPeriod[] = ["5d", "1mo", "3mo"];
+  const hist = await Promise.all(
+    periods.map((p) =>
+      getHistoricalData(sb, symbol, p, { todayPrice: quote?.price ?? null })
+    )
+  );
+  const [w, m, q] = hist;
+  return {
+    symbol,
+    price: quote?.price ?? null,
+    changePct: quote?.changePct ?? null,
+    return1w: w.returnPct,
+    return1m: m.returnPct,
+    return3m: q.returnPct,
+  };
+}
+
 // Cache the Yahoo (cookie, crumb) pair across invocations within the same warm container.
 let cachedAuth: { cookie: string; crumb: string; ts: number } | null = null;
 const AUTH_TTL_MS = 30 * 60 * 1000; // 30 min
@@ -85,7 +117,6 @@ async function getYahooAuth(): Promise<{ cookie: string; crumb: string } | null>
     return { cookie: cachedAuth.cookie, crumb: cachedAuth.crumb };
   }
   try {
-    // Step 1: hit fc.yahoo.com to get the A3 consent cookie
     const cookieRes = await fetch("https://fc.yahoo.com", {
       headers: { "User-Agent": UA, Accept: "*/*" },
       redirect: "manual",
@@ -95,7 +126,6 @@ async function getYahooAuth(): Promise<{ cookie: string; crumb: string } | null>
     if (!a3Match) return null;
     const cookie = `A3=${a3Match[1]}`;
 
-    // Step 2: exchange the cookie for a crumb
     const crumbRes = await fetch("https://query2.finance.yahoo.com/v1/test/getcrumb", {
       headers: { "User-Agent": UA, Cookie: cookie, Accept: "text/plain" },
     });
@@ -136,7 +166,6 @@ async function fetchYahooOptions(symbol: string): Promise<OptionsSnapshot> {
       headers: { "User-Agent": UA, Cookie: auth.cookie, Accept: "application/json" },
     });
     if (res.status === 401 || res.status === 403) {
-      // crumb stale — clear cache and retry once
       cachedAuth = null;
       const fresh = await getYahooAuth();
       if (!fresh) return empty;
@@ -175,8 +204,6 @@ function parseOptionsResponse(json: any, empty: OptionsSnapshot): OptionsSnapsho
 
     const pcr = totalCallVol > 0 ? totalPutVol / totalCallVol : null;
     const totalContractVol = totalCallVol + totalPutVol;
-    // Require a minimum sample size before drawing any directional conclusion.
-    // Below this, sentiment is unreliable noise.
     const MIN_VOL_FOR_SENTIMENT = 500;
 
     let sentiment: "Bullish" | "Bearish" | "Neutral" = "Neutral";
@@ -246,12 +273,30 @@ function parseOptionsResponse(json: any, empty: OptionsSnapshot): OptionsSnapsho
   }
 }
 
+async function fetchHistoricalForTicker(symbol: string, todayPrice: number | null) {
+  const sb = makeServiceClient();
+  const periods: YahooPeriod[] = ["5d", "1mo", "3mo"];
+  const hist = await Promise.all(
+    periods.map((p) => getHistoricalData(sb, symbol, p, { todayPrice }))
+  );
+  return {
+    return1w: hist[0].returnPct,
+    return1m: hist[1].returnPct,
+    return3m: hist[2].returnPct,
+  };
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
     const body = await req.json().catch(() => ({}));
     const rawSymbol = (body?.symbol ?? "").toString().trim().toUpperCase();
+    const benchmarkSymbol = (() => {
+      const b = (body?.benchmark ?? "SPY").toString().trim().toUpperCase();
+      return ALLOWED_BENCHMARKS.has(b) ? b : "SPY";
+    })();
+
     if (!rawSymbol || !/^[A-Z][A-Z0-9.\-]{0,9}$/.test(rawSymbol)) {
       return new Response(JSON.stringify({ error: "Invalid symbol" }), {
         status: 400,
@@ -259,9 +304,10 @@ Deno.serve(async (req) => {
       });
     }
 
-    const [quote, options] = await Promise.all([
+    const [quote, options, benchmark] = await Promise.all([
       fetchYahooQuote(rawSymbol),
       fetchYahooOptions(rawSymbol),
+      fetchBenchmarkSnapshot(benchmarkSymbol),
     ]);
 
     if (!quote || quote.price === null) {
@@ -271,8 +317,19 @@ Deno.serve(async (req) => {
       );
     }
 
+    // Pull historical returns for the ticker so the client can compute fresh RS values
+    // against either benchmark without trusting potentially stale DB rows.
+    const tickerHist = await fetchHistoricalForTicker(rawSymbol, quote.price);
+
     return new Response(
-      JSON.stringify({ symbol: rawSymbol, quote, options, fetchedAt: new Date().toISOString() }),
+      JSON.stringify({
+        symbol: rawSymbol,
+        quote,
+        options,
+        benchmark,
+        tickerHistory: tickerHist,
+        fetchedAt: new Date().toISOString(),
+      }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   } catch (err) {

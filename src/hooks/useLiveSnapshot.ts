@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 
+export type BenchmarkSymbol = "SPY" | "QQQ";
+
 export interface LiveQuote {
   symbol: string;
   price: number | null;
@@ -29,10 +31,27 @@ export interface LiveOptions {
   iv_explanation: string;
 }
 
+export interface LiveBenchmark {
+  symbol: string;
+  price: number | null;
+  changePct: number | null;
+  return1w: number | null;
+  return1m: number | null;
+  return3m: number | null;
+}
+
+export interface LiveTickerHistory {
+  return1w: number | null;
+  return1m: number | null;
+  return3m: number | null;
+}
+
 export interface LiveSnapshot {
   symbol: string;
   quote: LiveQuote;
   options: LiveOptions;
+  benchmark: LiveBenchmark;
+  tickerHistory: LiveTickerHistory;
   fetchedAt: string;
 }
 
@@ -40,38 +59,38 @@ export function useLiveSnapshot() {
   const [snapshot, setSnapshot] = useState<LiveSnapshot | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const lastSymbolRef = useRef<string | null>(null);
+  const lastKeyRef = useRef<string | null>(null);
 
-  const fetchSnapshot = useCallback(async (symbol: string) => {
+  const fetchSnapshot = useCallback(async (symbol: string, benchmark: BenchmarkSymbol = "SPY") => {
     const sym = symbol.trim().toUpperCase();
     if (!sym) return;
-    lastSymbolRef.current = sym;
+    const key = `${sym}|${benchmark}`;
+    lastKeyRef.current = key;
     setIsLoading(true);
     setError(null);
     try {
       const { data, error: fnErr } = await supabase.functions.invoke("live-execution-snapshot", {
-        body: { symbol: sym },
+        body: { symbol: sym, benchmark },
       });
       if (fnErr) throw new Error(fnErr.message);
       if (data?.error) throw new Error(data.error);
-      // Discard stale results if user typed another ticker meanwhile
-      if (lastSymbolRef.current === sym) {
+      if (lastKeyRef.current === key) {
         setSnapshot(data as LiveSnapshot);
       }
     } catch (e) {
-      if (lastSymbolRef.current === sym) {
+      if (lastKeyRef.current === key) {
         setError(e instanceof Error ? e.message : String(e));
         setSnapshot(null);
       }
     } finally {
-      if (lastSymbolRef.current === sym) setIsLoading(false);
+      if (lastKeyRef.current === key) setIsLoading(false);
     }
   }, []);
 
   const clear = useCallback(() => {
     setSnapshot(null);
     setError(null);
-    lastSymbolRef.current = null;
+    lastKeyRef.current = null;
   }, []);
 
   return { snapshot, isLoading, error, fetchSnapshot, clear };
