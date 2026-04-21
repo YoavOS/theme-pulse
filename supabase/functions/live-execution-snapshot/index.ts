@@ -221,10 +221,10 @@ function parseOptionsResponse(json: any, empty: OptionsSnapshot): OptionsSnapsho
     const highIv = avgIv !== null && avgIv > 0.6;
     const ivExp =
       avgIv === null
-        ? ""
+        ? "Not enough data to estimate expected movement."
         : highIv
-        ? `High options premium today — traders expect big movement (avg IV ${(avgIv * 100).toFixed(0)}%).`
-        : `Options premiums look normal (avg IV ${(avgIv * 100).toFixed(0)}%).`;
+        ? `Options are pricing in larger-than-usual moves (avg IV ${(avgIv * 100).toFixed(0)}%) — premiums are expensive.`
+        : `Options premiums look normal (avg IV ${(avgIv * 100).toFixed(0)}%) — market expects typical movement.`;
 
     return {
       available: true,
