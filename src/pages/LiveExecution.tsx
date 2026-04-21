@@ -638,25 +638,28 @@ export default function LiveExecution() {
                   <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
                     <OptionsTile
                       label="Put / Call Ratio"
+                      tooltip="Total put-contract volume divided by total call-contract volume on the nearest expiration. Below ~0.7 leans bullish, above ~1.3 leans bearish, in between is balanced."
                       value={snapshot.options.put_call_ratio !== null ? snapshot.options.put_call_ratio.toFixed(2) : "—"}
                       explain={
                         snapshot.options.put_call_ratio === null
-                          ? "Not enough volume to calculate."
+                          ? "Not enough volume to calculate reliably."
                           : snapshot.options.put_call_ratio < 0.7
-                          ? `${snapshot.options.put_call_ratio.toFixed(2)} → More calls than puts being traded (bullish lean).`
+                          ? `${snapshot.options.put_call_ratio.toFixed(2)} → More calls than puts being traded (mild bullish lean).`
                           : snapshot.options.put_call_ratio > 1.3
-                          ? `${snapshot.options.put_call_ratio.toFixed(2)} → More puts than calls (bearish lean).`
+                          ? `${snapshot.options.put_call_ratio.toFixed(2)} → More puts than calls (mild bearish / hedging lean).`
                           : `${snapshot.options.put_call_ratio.toFixed(2)} → Calls and puts roughly balanced.`
                       }
                     />
                     <OptionsTile
                       label="Implied Volatility"
+                      tooltip="The market's expectation of future price swings, priced into options. Higher IV = more expensive options and bigger expected moves. Above ~60% is elevated."
                       value={snapshot.options.avg_iv !== null ? `${(snapshot.options.avg_iv * 100).toFixed(0)}%` : "—"}
-                      explain={snapshot.options.iv_explanation || "Measures expected price movement."}
+                      explain={snapshot.options.iv_explanation || "Not enough data to estimate expected movement."}
                       highlight={snapshot.options.high_iv_alert}
                     />
                     <OptionsTile
-                      label="Volume Today"
+                      label="Calls / Puts Volume"
+                      tooltip="Total contracts traded today on the nearest expiration. Higher activity generally means stronger directional interest from options traders."
                       value={`${compactNum(snapshot.options.total_call_volume)} / ${compactNum(snapshot.options.total_put_volume)}`}
                       explain={`${compactNum(snapshot.options.total_call_volume)} call contracts vs ${compactNum(snapshot.options.total_put_volume)} put contracts traded today.`}
                     />
