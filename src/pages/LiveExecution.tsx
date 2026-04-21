@@ -345,6 +345,33 @@ export default function LiveExecution() {
                 Quick Trade Check
               </h2>
               {rsLoading && <Loader2 size={12} className="animate-spin text-muted-foreground" />}
+              <div className="ml-auto flex items-center gap-1.5">
+                <span className="text-[10px] uppercase tracking-wider text-muted-foreground">Benchmark</span>
+                <div className="inline-flex rounded-md border border-border/60 bg-background/40 p-0.5">
+                  {(["SPY", "QQQ"] as const).map((b) => (
+                    <button
+                      key={b}
+                      type="button"
+                      onClick={() => setBenchmark(b)}
+                      className={`rounded-sm px-2 py-0.5 font-mono text-[11px] font-semibold transition-colors ${
+                        benchmark === b
+                          ? "bg-primary/20 text-primary"
+                          : "text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      {b}
+                    </button>
+                  ))}
+                </div>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="inline-flex cursor-help"><Info size={11} className="text-muted-foreground" /></span>
+                  </TooltipTrigger>
+                  <TooltipContent className="max-w-xs text-xs">
+                    Switch the benchmark used for relative strength (RS) comparisons. SPY tracks the S&amp;P 500 (broad market); QQQ tracks the Nasdaq-100 (tech-heavy). RS values below recompute live.
+                  </TooltipContent>
+                </Tooltip>
+              </div>
             </div>
 
             <form
