@@ -1220,9 +1220,12 @@ export default function LiveExecution() {
                     ) : (
                       <XCircle size={14} className="mt-0.5 shrink-0 text-destructive" />
                     )}
-                    <div>
-                      <div className={`font-semibold ${pullback.kind === "healthy" ? "text-[hsl(160,80%,45%)]" : "text-destructive"}`}>
-                        {pullback.label}
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <div className={`font-semibold ${pullback.kind === "healthy" ? "text-[hsl(160,80%,45%)]" : "text-destructive"}`}>
+                          {pullback.label}
+                        </div>
+                        <WhyButton onClick={() => setWhyTopic("pullback")} />
                       </div>
                       <div className="mt-0.5 text-foreground/80">{pullback.note}</div>
                     </div>
@@ -1233,9 +1236,12 @@ export default function LiveExecution() {
                 {rotationRisk && (
                   <div className="flex items-start gap-2 rounded-lg border border-[hsl(40,85%,55%)]/30 bg-[hsl(40,85%,55%)]/10 p-3 text-xs">
                     <AlertTriangle size={14} className="mt-0.5 shrink-0 text-[hsl(40,85%,55%)]" />
-                    <div>
-                      <div className="font-semibold text-[hsl(40,85%,55%)]">
-                        Rotation Risk — strong stock, weakening sector
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <div className="font-semibold text-[hsl(40,85%,55%)]">
+                          Rotation Risk — strong stock, weakening sector
+                        </div>
+                        <WhyButton onClick={() => setWhyTopic("rotation")} />
                       </div>
                       <div className="mt-0.5 text-foreground/80">
                         {rotationRisk.sector} ({rotationRisk.etf}) is fading: 1W {pct(rotationRisk.sectorR1w)} vs 1M {pct(rotationRisk.sectorR1m)}.
