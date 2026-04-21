@@ -1119,7 +1119,7 @@ export default function LiveExecution() {
                         : "Not in universe"
                     }
                     valueClass={ratingClass(overallRating)}
-                  />
+                    onWhy={() => setWhyTopic("rs")}
                   <MetricCard
                     label="Conviction"
                     tooltip="O'Neil-weighted score (0-100): 50% Market strength + 37% Industry/sector strength + 13% Individual stock (RS, accel, volume, P/E and growth)."
@@ -1134,6 +1134,7 @@ export default function LiveExecution() {
                         : "Low conviction"
                     }
                     valueClass={ratingClass(conviction?.total ?? null)}
+                    onWhy={() => setWhyTopic("conviction")}
                   />
                   <MetricCard
                     label="Setup Quality"
@@ -1149,6 +1150,7 @@ export default function LiveExecution() {
                         : "Poor setup"
                     }
                     valueClass={ratingClass(setupQuality)}
+                    onWhy={() => setWhyTopic("setup")}
                   />
                   <MetricCard
                     label="Rel Volume"
@@ -1172,6 +1174,7 @@ export default function LiveExecution() {
                         ? "text-destructive"
                         : "text-foreground"
                     }
+                    onWhy={() => setWhyTopic("relVol")}
                   />
                   <MetricCard
                     label="ADR%"
