@@ -772,9 +772,19 @@ export default function LiveExecution() {
             style={{ background: "rgba(255,255,255,0.03)" }}
           >
             <div className="mb-3 flex items-center justify-between">
-              <h2 className="font-['Syne',sans-serif] text-sm font-semibold uppercase tracking-wider text-foreground">
-                Live Watchlist
-              </h2>
+              <div className="flex items-center gap-2">
+                <h2 className="font-['Syne',sans-serif] text-sm font-semibold uppercase tracking-wider text-foreground">
+                  Live Watchlist
+                </h2>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="inline-flex cursor-help"><Info size={12} className="text-muted-foreground" /></span>
+                  </TooltipTrigger>
+                  <TooltipContent className="max-w-xs text-xs">
+                    Tickers you've pinned for quick re-evaluation. RS Rating and other metrics update from the qualified RS universe each scan.
+                  </TooltipContent>
+                </Tooltip>
+              </div>
               <span className="text-[10px] text-muted-foreground">
                 {watchTickers.length} pinned · click symbol to evaluate
               </span>
