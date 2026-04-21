@@ -46,23 +46,30 @@ interface OptionsSnapshot {
 }
 
 async function fetchYahooQuote(symbol: string): Promise<QuoteSnapshot | null> {
-  const url = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${encodeURIComponent(symbol)}`;
+  // Use the chart endpoint — no crumb cookie required, includes meta with live price.
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=1d&interval=1m&includePrePost=false`;
   try {
     const res = await fetch(url, { headers: { "User-Agent": UA, Accept: "application/json" } });
     if (!res.ok) return null;
     const json = await res.json();
-    const q = json?.quoteResponse?.result?.[0];
-    if (!q) return null;
+    const result = json?.chart?.result?.[0];
+    const meta = result?.meta;
+    if (!meta) return null;
+    const price = meta.regularMarketPrice ?? null;
+    const prevClose = meta.chartPreviousClose ?? meta.previousClose ?? null;
+    const changePct = price !== null && prevClose && prevClose > 0
+      ? ((price - prevClose) / prevClose) * 100
+      : null;
     return {
-      symbol: q.symbol,
-      price: q.regularMarketPrice ?? null,
-      changePct: q.regularMarketChangePercent ?? null,
-      dayHigh: q.regularMarketDayHigh ?? null,
-      dayLow: q.regularMarketDayLow ?? null,
-      volume: q.regularMarketVolume ?? null,
-      avgVolume: q.averageDailyVolume3Month ?? q.averageDailyVolume10Day ?? null,
-      marketCap: q.marketCap ?? null,
-      shortName: q.shortName ?? q.longName ?? null,
+      symbol: meta.symbol ?? symbol,
+      price,
+      changePct,
+      dayHigh: meta.regularMarketDayHigh ?? null,
+      dayLow: meta.regularMarketDayLow ?? null,
+      volume: meta.regularMarketVolume ?? null,
+      avgVolume: meta.averageDailyVolume3Month ?? meta.averageDailyVolume10Day ?? null,
+      marketCap: null,
+      shortName: meta.shortName ?? meta.longName ?? null,
     };
   } catch {
     return null;
