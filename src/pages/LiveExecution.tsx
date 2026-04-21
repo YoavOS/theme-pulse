@@ -487,13 +487,16 @@ export default function LiveExecution() {
                   Options Activity
                 </h2>
                 <Tooltip>
-                  <TooltipTrigger>
-                    <Info size={12} className="text-muted-foreground" />
+                  <TooltipTrigger asChild>
+                    <span className="inline-flex cursor-help"><Info size={12} className="text-muted-foreground" /></span>
                   </TooltipTrigger>
                   <TooltipContent className="max-w-xs text-xs">
                     Options are contracts traders use to bet on a stock's direction. This panel translates the most recent options activity into plain English.
                   </TooltipContent>
                 </Tooltip>
+                <span className="ml-auto text-[10px] text-muted-foreground">
+                  Source: Yahoo Finance · Nearest expiration
+                </span>
               </div>
 
               {!snapshot.options.available ? (
