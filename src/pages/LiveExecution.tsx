@@ -188,6 +188,424 @@ function buildEntrySignals(
   return out;
 }
 
+// ───────────────────────── "Why?" explanation engine ─────────────────────────
+
+type WhyTopic =
+  | "verdict"
+  | "conviction"
+  | "setup"
+  | "rs"
+  | "relVol"
+  | "fundamentals"
+  | "pullback"
+  | "rotation";
+
+interface WhySection {
+  heading: string;
+  body: string;
+  rows?: { label: string; value: string; tone?: "pos" | "neg" | "neu" | "na" }[];
+}
+
+interface WhyContent {
+  title: string;
+  subtitle: string;
+  sections: WhySection[];
+  footer?: string;
+}
+
+function toneClass(t?: "pos" | "neg" | "neu" | "na"): string {
+  if (t === "pos") return "text-[hsl(160,80%,45%)]";
+  if (t === "neg") return "text-destructive";
+  if (t === "na") return "text-muted-foreground italic";
+  return "text-foreground";
+}
+
+interface WhyArgs {
+  topic: WhyTopic;
+  symbol: string | null;
+  benchmark: BenchmarkSymbol;
+  verdict: ReturnType<typeof buildVerdict>;
+  conviction: {
+    total: number;
+    market: number;
+    industry: number;
+    stock: number;
+    hasFund: boolean;
+    hasIndustry: boolean;
+  } | null;
+  setupQuality: number | null;
+  overallRating: number | null;
+  accelDelta: number | null;
+  relVol: number | null;
+  pullback: { kind: "healthy" | "breakdown"; label: string; note: string } | null;
+  rotationRisk: { sector: string; etf: string | null; sectorR1w: number; sectorR1m: number } | null;
+  snapshot: LiveSnapshot | null;
+  activeStock: RsStock | null;
+}
+
+function buildWhyContent(args: WhyArgs): WhyContent {
+  const { topic, symbol, benchmark, verdict, conviction, setupQuality, overallRating, accelDelta, relVol, pullback, rotationRisk, snapshot, activeStock } = args;
+  const sym = symbol ?? "—";
+  const fd = snapshot?.fundamentals;
+  const ih = snapshot?.industry;
+
+  if (topic === "verdict") {
+    return {
+      title: `Verdict: ${verdict.label}`,
+      subtitle: `Multi-factor read for ${sym} — built from RS, momentum, volume and recent price action.`,
+      sections: [
+        {
+          heading: "Why this verdict",
+          body: verdict.reason,
+          rows: verdict.factors.map((f) => ({ label: f.label, value: f.note, tone: f.status })),
+        },
+        {
+          heading: "How it's decided",
+          body:
+            "• Constructive Setup → RS Rating ≥ 70, ≥ 2 positive factors, no negatives.\n" +
+            "• Weak Setup → RS Rating < 40, OR ≥ 2 negative factors, OR RS acceleration ≤ −15 pts.\n" +
+            "• Mixed — Watch & Wait → anything in between (some positives, some negatives).\n" +
+            "• Insufficient Data → ticker is not in the qualified RS universe yet.",
+        },
+      ],
+      footer: "This is descriptive context, not a buy/sell recommendation. Always confirm with your own entry rules.",
+    };
+  }
+
+  if (topic === "conviction") {
+    if (!conviction) {
+      return {
+        title: "Conviction Score — Not available",
+        subtitle: `${sym} doesn't have enough data to compute a conviction score yet.`,
+        sections: [
+          {
+            heading: "What's missing",
+            body:
+              overallRating === null
+                ? "RS Rating is required (the stock isn't in the qualified universe). The score will appear once it qualifies."
+                : "Live snapshot data is incomplete. Try refreshing the ticker.",
+          },
+        ],
+      };
+    }
+    const mDesc =
+      conviction.market >= 65 ? "strong (uptrend)" : conviction.market >= 45 ? "neutral" : "weak (downtrend)";
+    const iDesc = conviction.hasIndustry
+      ? conviction.industry >= 65
+        ? "leading"
+        : conviction.industry >= 45
+        ? "neutral"
+        : "lagging"
+      : "n/a (mirrored from market)";
+    const sDesc = conviction.stock >= 65 ? "leader-grade" : conviction.stock >= 45 ? "average" : "weak";
+
+    const fundLines: { label: string; value: string; tone?: "pos" | "neg" | "neu" | "na" }[] = [];
+    if (conviction.hasFund && fd) {
+      const pe = fd.forwardPe ?? fd.pe;
+      if (pe !== null && pe > 0) {
+        const tone = pe < 25 ? "pos" : pe < 40 ? "neu" : "neg";
+        fundLines.push({ label: pe === fd.forwardPe ? "Forward P/E" : "P/E", value: pe.toFixed(1), tone });
+      }
+      if (fd.epsGrowth !== null) {
+        const v = fd.epsGrowth * 100;
+        const tone = v >= 25 ? "pos" : v >= 0 ? "neu" : "neg";
+        fundLines.push({ label: "EPS growth (YoY)", value: `${v >= 0 ? "+" : ""}${v.toFixed(1)}%`, tone });
+      }
+      if (fd.revenueGrowth !== null) {
+        const v = fd.revenueGrowth * 100;
+        const tone = v >= 15 ? "pos" : v >= 0 ? "neu" : "neg";
+        fundLines.push({ label: "Revenue growth (YoY)", value: `${v >= 0 ? "+" : ""}${v.toFixed(1)}%`, tone });
+      }
+    }
+
+    return {
+      title: `Conviction: ${conviction.total} / 100`,
+      subtitle: `O'Neil-weighted blend: 50% Market + 37% Industry + 13% Individual stock.`,
+      sections: [
+        {
+          heading: `Component breakdown for ${sym}`,
+          body: "Each component is scored 0–100, then weighted into the final number.",
+          rows: [
+            { label: `Market (${benchmark}) — 50%`, value: `${conviction.market} (${mDesc})`, tone: conviction.market >= 65 ? "pos" : conviction.market >= 45 ? "neu" : "neg" },
+            { label: `Industry${ih?.etfSymbol ? ` (${ih.etfSymbol})` : ""} — 37%`, value: `${conviction.industry} (${iDesc})`, tone: conviction.industry >= 65 ? "pos" : conviction.industry >= 45 ? "neu" : "neg" },
+            { label: "Individual stock — 13%", value: `${conviction.stock} (${sDesc})`, tone: conviction.stock >= 65 ? "pos" : conviction.stock >= 45 ? "neu" : "neg" },
+          ],
+        },
+        {
+          heading: "Market component (50%)",
+          body: `Built from ${benchmark}'s 1D, 1W and 1M returns. Strong, broad market = higher score. O'Neil's rule: 3 of 4 stocks follow the general market direction, so this carries the most weight.`,
+        },
+        {
+          heading: "Industry component (37%)",
+          body: ih?.available
+            ? `Mapped to ${ih.sectorName ?? "the sector"} via ${ih.etfSymbol}. Built from the sector ETF's 1D, 1W and 1M returns. Half of a stock's move comes from its group, so this is the second-biggest weight.`
+            : "No reliable sector ETF mapping for this ticker right now — we mirror the market score so the conviction isn't artificially deflated.",
+        },
+        {
+          heading: "Individual stock component (13%)",
+          body:
+            "Blends technical (60%) and fundamental (40%, when available) signals.",
+          rows: [
+            { label: "RS Rating", value: overallRating !== null ? `${overallRating}` : "N/A", tone: overallRating === null ? "na" : overallRating >= 70 ? "pos" : overallRating < 40 ? "neg" : "neu" },
+            { label: "RS acceleration (1W − 1M)", value: accelDelta !== null ? `${accelDelta >= 0 ? "+" : ""}${accelDelta.toFixed(1)} pts` : "—", tone: accelDelta === null ? "na" : accelDelta >= 5 ? "pos" : accelDelta <= -5 ? "neg" : "neu" },
+            { label: "Relative volume", value: relVol !== null ? `${relVol.toFixed(2)}×` : "—", tone: relVol === null ? "na" : relVol >= 1.3 ? "pos" : relVol < 0.7 ? "neg" : "neu" },
+            ...fundLines,
+            ...(conviction.hasFund ? [] : [{ label: "Fundamentals", value: "Not available — using technicals only", tone: "na" as const }]),
+          ],
+        },
+      ],
+      footer:
+        `Final = round(${conviction.market} × 0.50 + ${conviction.industry} × 0.37 + ${conviction.stock} × 0.13) = ${conviction.total}.`,
+    };
+  }
+
+  if (topic === "setup") {
+    if (setupQuality === null) {
+      return {
+        title: "Setup Quality — Not available",
+        subtitle: `${sym} needs an RS Rating before a setup score can be computed.`,
+        sections: [{ heading: "What's missing", body: "Stock isn't in the qualified RS universe, or RS data hasn't loaded yet." }],
+      };
+    }
+    const r1w = activeStock?.return1w ?? null;
+    return {
+      title: `Setup Quality: ${setupQuality} / 100`,
+      subtitle: "How clean the entry is RIGHT NOW (different from Conviction, which judges the regime).",
+      sections: [
+        {
+          heading: "Inputs",
+          body: "Each input is normalised 0–100 and weighted, then averaged across whatever data is available.",
+          rows: [
+            { label: "RS acceleration (30%)", value: accelDelta !== null ? `${accelDelta >= 0 ? "+" : ""}${accelDelta.toFixed(1)} pts` : "n/a", tone: accelDelta === null ? "na" : accelDelta >= 5 ? "pos" : accelDelta <= -5 ? "neg" : "neu" },
+            { label: "Volume confirmation (25%)", value: relVol !== null ? `${relVol.toFixed(2)}× avg` : "n/a", tone: relVol === null ? "na" : relVol >= 1.3 ? "pos" : relVol < 0.7 ? "neg" : "neu" },
+            { label: "Pullback depth in uptrend (25%)", value: r1w !== null ? `1W ${r1w >= 0 ? "+" : ""}${r1w.toFixed(1)}%` : "n/a", tone: r1w === null ? "na" : (r1w >= -8 && r1w <= -2) ? "pos" : (r1w > -2 && r1w <= 5) ? "neu" : "neg" },
+            { label: "Sector alignment (20%)", value: ih?.available && ih.return1m !== null ? `${ih.etfSymbol} 1M ${pct(ih.return1m, 1)}` : "n/a", tone: !ih?.available || ih.return1m === null ? "na" : ih.return1m >= 0 ? "pos" : "neg" },
+          ],
+        },
+        {
+          heading: "How to read the score",
+          body:
+            "• 70+ → Clean setup: trend up, volume confirming, pullback shallow, sector aligned.\n" +
+            "• 50–69 → Acceptable: some friction, manage size carefully.\n" +
+            "• < 50 → Poor: signals are working against the entry, expect chop.",
+        },
+      ],
+    };
+  }
+
+  if (topic === "rs") {
+    return {
+      title: `RS Rating: ${overallRating !== null ? overallRating : "N/A"}`,
+      subtitle: "Relative Strength rank from 1–99 within the qualified universe.",
+      sections: [
+        {
+          heading: "Reading the number",
+          body:
+            "RS is computed from a blended return across multiple timeframes vs the universe. 99 = strongest. 1 = weakest.",
+          rows: [
+            { label: "80+", value: "Leader — institutional accumulation candidate", tone: "pos" },
+            { label: "60–79", value: "Above average — worth monitoring", tone: "neu" },
+            { label: "40–59", value: "Average — usually not a buy candidate", tone: "neu" },
+            { label: "< 40", value: "Laggard — avoid for long setups", tone: "neg" },
+          ],
+        },
+        {
+          heading: `Acceleration (1W RS − 1M RS)`,
+          body:
+            accelDelta === null
+              ? "Not enough timeframe data yet to compute acceleration."
+              : `Currently ${accelDelta >= 0 ? "+" : ""}${accelDelta.toFixed(1)} pts. Positive = recent strength is improving vs the longer trend (constructive). Strongly negative (≤ −10 pts) = momentum fading even if the headline RS is still high.`,
+        },
+      ],
+    };
+  }
+
+  if (topic === "relVol") {
+    return {
+      title: `Relative Volume: ${relVol !== null ? `${relVol.toFixed(2)}×` : "—"}`,
+      subtitle: "Today's trading volume vs the 3-month average.",
+      sections: [
+        {
+          heading: "Why it matters",
+          body:
+            "Volume confirms (or rejects) price moves. A breakout on heavy volume is institutional. A breakout on light volume often fails.",
+        },
+        {
+          heading: "Thresholds used here",
+          body: "",
+          rows: [
+            { label: "≥ 1.5×", value: "Above average — move has conviction", tone: "pos" },
+            { label: "0.7×–1.5×", value: "Normal range", tone: "neu" },
+            { label: "< 0.7×", value: "Below average — move lacks conviction", tone: "neg" },
+          ],
+        },
+        {
+          heading: "Live numbers",
+          body: "",
+          rows: [
+            { label: "Today's volume", value: snapshot?.quote.volume ? compactNum(snapshot.quote.volume) : "—" },
+            { label: "3-month avg", value: snapshot?.quote.avgVolume ? compactNum(snapshot.quote.avgVolume) : "—" },
+          ],
+        },
+      ],
+    };
+  }
+
+  if (topic === "fundamentals") {
+    if (!fd?.available) {
+      return {
+        title: "Fundamentals — Not available",
+        subtitle: `Yahoo Finance didn't return clean fundamental data for ${sym}.`,
+        sections: [
+          {
+            heading: "What this means",
+            body:
+              "The Conviction Score's stock component is using technicals only (RS, acceleration, volume). The score is still valid; it just leans more on the chart than the books.",
+          },
+        ],
+      };
+    }
+    const pe = fd.forwardPe ?? fd.pe;
+    return {
+      title: "Fundamentals (Yahoo Finance)",
+      subtitle: `Simple O'Neil-style sanity check for ${sym}: valuation + growth.`,
+      sections: [
+        {
+          heading: "Valuation",
+          body: pe === null ? "P/E not reported — likely no earnings or pre-revenue." :
+            pe < 15 ? `P/E of ${pe.toFixed(1)} is low — value range.` :
+            pe < 25 ? `P/E of ${pe.toFixed(1)} is reasonable.` :
+            pe < 40 ? `P/E of ${pe.toFixed(1)} is elevated — needs growth to justify.` :
+            `P/E of ${pe.toFixed(1)} is high — only justifiable with strong growth.`,
+          rows: [
+            { label: "Trailing P/E", value: fd.pe !== null ? fd.pe.toFixed(1) : "—" },
+            { label: "Forward P/E", value: fd.forwardPe !== null ? fd.forwardPe.toFixed(1) : "—" },
+            { label: "PEG", value: fd.pegRatio !== null ? fd.pegRatio.toFixed(2) : "—" },
+          ],
+        },
+        {
+          heading: "Growth",
+          body: "O'Neil wants quarterly EPS up ≥ 25% and accelerating. Annual revenue growth ≥ 15% is constructive.",
+          rows: [
+            { label: "EPS growth (YoY)", value: fd.epsGrowth !== null ? `${fd.epsGrowth >= 0 ? "+" : ""}${(fd.epsGrowth * 100).toFixed(1)}%` : "—", tone: fd.epsGrowth === null ? "na" : fd.epsGrowth >= 0.25 ? "pos" : fd.epsGrowth >= 0 ? "neu" : "neg" },
+            { label: "Revenue growth (YoY)", value: fd.revenueGrowth !== null ? `${fd.revenueGrowth >= 0 ? "+" : ""}${(fd.revenueGrowth * 100).toFixed(1)}%` : "—", tone: fd.revenueGrowth === null ? "na" : fd.revenueGrowth >= 0.15 ? "pos" : fd.revenueGrowth >= 0 ? "neu" : "neg" },
+            { label: "Profit margin", value: fd.profitMargin !== null ? `${(fd.profitMargin * 100).toFixed(1)}%` : "—", tone: fd.profitMargin === null ? "na" : fd.profitMargin >= 0.10 ? "pos" : fd.profitMargin >= 0 ? "neu" : "neg" },
+          ],
+        },
+      ],
+      footer: `Source: Yahoo Finance quoteSummary (${fd.source}).`,
+    };
+  }
+
+  if (topic === "pullback") {
+    if (!pullback) return { title: "No pullback signal", subtitle: "", sections: [{ heading: "Status", body: "Stock is not in a recognised pullback or breakdown pattern right now." }] };
+    return {
+      title: pullback.label,
+      subtitle: `Detected for ${sym}.`,
+      sections: [
+        { heading: "Why this fired", body: pullback.note },
+        {
+          heading: "Detection rules",
+          body:
+            "• Healthy pullback → RS ≥ 65, 1M return positive, 1W between −1% and −10%, on quiet volume (Rel Vol < 1.2×).\n" +
+            "• Unhealthy breakdown → 1W < −10%, OR 1W < −3% with RS acceleration ≤ −10 pts, AND RS < 70.",
+        },
+      ],
+    };
+  }
+
+  if (topic === "rotation") {
+    if (!rotationRisk) return { title: "No rotation risk", subtitle: "", sections: [{ heading: "Status", body: "The stock's sector is not currently fading relative to its 1M trend." }] };
+    return {
+      title: "Rotation Risk — strong stock, weakening sector",
+      subtitle: `${sym} is a leader, but ${rotationRisk.sector} (${rotationRisk.etf ?? "sector ETF"}) is rolling over.`,
+      sections: [
+        {
+          heading: "Sector trend",
+          body: "",
+          rows: [
+            { label: "Sector 1M return", value: pct(rotationRisk.sectorR1m, 2), tone: rotationRisk.sectorR1m >= 0 ? "pos" : "neg" },
+            { label: "Sector 1W return", value: pct(rotationRisk.sectorR1w, 2), tone: rotationRisk.sectorR1w >= 0 ? "pos" : "neg" },
+          ],
+        },
+        {
+          heading: "Why it matters",
+          body:
+            "Leaders inside fading groups often get sold next as money rotates out of the theme. The stock can still work, but the tailwind is gone — tighten stops or wait for the sector to stabilise before adding.",
+        },
+        {
+          heading: "Trigger rule",
+          body: "RS Rating ≥ 75 AND sector 1W < −1% AND sector 1W < sector 1M (i.e. accelerating to the downside).",
+        },
+      ],
+    };
+  }
+
+  return { title: "Details", subtitle: "", sections: [] };
+}
+
+function WhyDialog({
+  open,
+  onOpenChange,
+  content,
+}: {
+  open: boolean;
+  onOpenChange: (o: boolean) => void;
+  content: WhyContent | null;
+}) {
+  if (!content) return null;
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="font-['Syne',sans-serif] text-lg">{content.title}</DialogTitle>
+          {content.subtitle && (
+            <DialogDescription className="text-xs leading-relaxed">{content.subtitle}</DialogDescription>
+          )}
+        </DialogHeader>
+        <div className="space-y-4 mt-2">
+          {content.sections.map((s, i) => (
+            <div key={i} className="rounded-lg border border-border/40 bg-background/40 p-3">
+              <div className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground mb-1.5">
+                {s.heading}
+              </div>
+              {s.body && (
+                <p className="text-xs leading-relaxed text-foreground/90 whitespace-pre-line">{s.body}</p>
+              )}
+              {s.rows && s.rows.length > 0 && (
+                <div className="mt-2 space-y-1">
+                  {s.rows.map((r, j) => (
+                    <div key={j} className="flex items-baseline justify-between gap-3 text-xs border-b border-border/20 pb-1 last:border-0">
+                      <span className="text-muted-foreground">{r.label}</span>
+                      <span className={`font-mono font-semibold text-right ${toneClass(r.tone)}`}>{r.value}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          ))}
+          {content.footer && (
+            <p className="text-[11px] italic text-muted-foreground border-t border-border/30 pt-2">{content.footer}</p>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function WhyButton({ onClick, label = "Why?" }: { onClick: () => void; label?: string }) {
+  return (
+    <button
+      type="button"
+      onClick={(e) => { e.stopPropagation(); onClick(); }}
+      className="inline-flex items-center gap-1 rounded-md border border-border/50 bg-background/60 px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground transition-colors hover:border-primary/40 hover:bg-primary/10 hover:text-primary"
+    >
+      <HelpCircle size={10} />
+      {label}
+    </button>
+  );
+}
+
 // ───────────────────────── component ─────────────────────────
 
 export default function LiveExecution() {
