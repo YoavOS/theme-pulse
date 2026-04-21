@@ -198,6 +198,7 @@ export default function LiveExecution() {
   const [input, setInput] = useState("");
   const [activeSymbol, setActiveSymbol] = useState<string | null>(null);
   const [benchmark, setBenchmark] = useState<BenchmarkSymbol>("SPY");
+  const [whyTopic, setWhyTopic] = useState<WhyTopic | null>(null);
   const debounceRef = useRef<number | null>(null);
 
   // Build a per-symbol map of RS data + a per-timeframe rating using the qualified universe.
