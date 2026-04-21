@@ -19,7 +19,7 @@ import {
   ShieldAlert,
 } from "lucide-react";
 import { useRsAlpha, type RsStock } from "@/hooks/useRsAlpha";
-import { useLiveSnapshot, useLiveWatchlist, type LiveSnapshot } from "@/hooks/useLiveSnapshot";
+import { useLiveSnapshot, useLiveWatchlist, type LiveSnapshot, type BenchmarkSymbol } from "@/hooks/useLiveSnapshot";
 import { computeRsRatings } from "@/components/rs/RsRatingBadge";
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip";
 import HelpButton from "@/components/HelpButton";
@@ -159,24 +159,29 @@ function buildVerdict(
   };
 }
 
-function buildEntrySignals(stock: RsStock | null, snapshot: LiveSnapshot | null): string[] {
+function buildEntrySignals(
+  stock: RsStock | null,
+  snapshot: LiveSnapshot | null,
+  liveRs: { rs1d: number | null; rs1w: number | null; rs1m: number | null },
+  benchmarkLabel: string,
+): string[] {
   const out: string[] = [];
-  if (!stock) return out;
-  const accel = stock.rs1w !== null && stock.rs1m !== null ? stock.rs1w - stock.rs1m : null;
+  const accel =
+    liveRs.rs1w !== null && liveRs.rs1m !== null ? liveRs.rs1w - liveRs.rs1m : null;
   if (accel !== null && accel > 5) out.push("📈 RS accelerating — 1W relative strength stronger than 1M.");
   if (accel !== null && accel < -5) out.push("⚠️ RS decelerating — short-term weaker than longer-term.");
-  if (stock.rs1d !== null && stock.rs1d > 1) out.push("⚡ Outperforming SPY today (positive intraday RS).");
-  if (stock.rs1d !== null && stock.rs1d < -1) out.push("🔻 Underperforming SPY today.");
-  if (stock.adrPercent !== null && stock.adrPercent >= 5)
+  if (liveRs.rs1d !== null && liveRs.rs1d > 1) out.push(`⚡ Outperforming ${benchmarkLabel} today (positive intraday RS).`);
+  if (liveRs.rs1d !== null && liveRs.rs1d < -1) out.push(`🔻 Underperforming ${benchmarkLabel} today.`);
+  if (stock?.adrPercent !== null && stock?.adrPercent !== undefined && stock.adrPercent >= 5)
     out.push(`🎯 High range stock (ADR ${stock.adrPercent.toFixed(1)}%) — expect larger daily swings.`);
   if (snapshot?.quote.volume && snapshot.quote.avgVolume) {
     const rv = snapshot.quote.volume / snapshot.quote.avgVolume;
     if (rv >= 1.5) out.push(`🔊 Volume confirming move — ${rv.toFixed(1)}× the 3-month average.`);
     else if (rv < 0.6) out.push("🔉 Volume below average — move lacks conviction.");
   }
-  if (stock.rsOverall !== null && stock.rsOverall > 5 && (accel ?? 0) >= 0)
-    out.push("🚀 Trending leader holding above benchmark — RS line near new highs.");
-  if (stock.return1w !== null && stock.return1w < -3 && stock.rsOverall !== null && stock.rsOverall > 5)
+  if (liveRs.rs1d !== null && liveRs.rs1d > 0 && (accel ?? 0) >= 0 && stock?.rsOverall !== null && (stock?.rsOverall ?? 0) > 5)
+    out.push(`🚀 Trending leader holding above ${benchmarkLabel} — RS line near new highs.`);
+  if (stock?.return1w !== null && stock?.return1w !== undefined && stock.return1w < -3 && stock.rsOverall !== null && (stock.rsOverall ?? 0) > 5)
     out.push("🟢 Pullback within a strong RS name — possible entry zone, confirm with price action.");
   return out;
 }
@@ -190,6 +195,7 @@ export default function LiveExecution() {
 
   const [input, setInput] = useState("");
   const [activeSymbol, setActiveSymbol] = useState<string | null>(null);
+  const [benchmark, setBenchmark] = useState<BenchmarkSymbol>("SPY");
   const debounceRef = useRef<number | null>(null);
 
   // Build a per-symbol map of RS data + a per-timeframe rating using the qualified universe.
@@ -214,7 +220,7 @@ export default function LiveExecution() {
     const sym = raw.trim().toUpperCase();
     if (!sym) return;
     setActiveSymbol(sym);
-    fetchSnapshot(sym);
+    fetchSnapshot(sym, benchmark);
   };
 
   // Debounce input → auto-submit after 600ms when length >= 1
@@ -228,6 +234,12 @@ export default function LiveExecution() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [input]);
 
+  // Re-fetch snapshot when benchmark toggle changes (so RS values use the new baseline).
+  useEffect(() => {
+    if (activeSymbol) fetchSnapshot(activeSymbol, benchmark);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [benchmark]);
+
   const activeStock = activeSymbol ? stockMap.get(activeSymbol) ?? null : null;
   const universeRank = useMemo(() => {
     if (!activeStock || activeStock.rsOverall === null) return null;
@@ -237,7 +249,22 @@ export default function LiveExecution() {
     return { rank: better + 1, total: stocks.filter((s) => s.rsOverall !== null).length };
   }, [activeStock, stocks]);
 
-  // RS acceleration: 1W rating vs 1M rating
+  // ── Fresh, benchmark-aware RS values computed live from the snapshot ──
+  // Replaces the (often stale) rs_1d/rs_1w/rs_1m stored against SPY in qualified_rs_universe.
+  const liveRs = useMemo(() => {
+    if (!snapshot) return { rs1d: null as number | null, rs1w: null as number | null, rs1m: null as number | null, rs3m: null as number | null };
+    const round = (v: number | null) => (v === null ? null : Math.round(v * 100) / 100);
+    const sub = (a: number | null, b: number | null) =>
+      a === null || b === null || !Number.isFinite(a) || !Number.isFinite(b) ? null : a - b;
+    return {
+      rs1d: round(sub(snapshot.quote.changePct, snapshot.benchmark.changePct)),
+      rs1w: round(sub(snapshot.tickerHistory.return1w, snapshot.benchmark.return1w)),
+      rs1m: round(sub(snapshot.tickerHistory.return1m, snapshot.benchmark.return1m)),
+      rs3m: round(sub(snapshot.tickerHistory.return3m, snapshot.benchmark.return3m)),
+    };
+  }, [snapshot]);
+
+  // RS acceleration: 1W rating vs 1M rating (universe-based, benchmark-agnostic ordinal rank).
   const accelDelta = useMemo(() => {
     if (!activeSymbol) return null;
     const r1w = rating1w.get(activeSymbol);
@@ -264,7 +291,7 @@ export default function LiveExecution() {
 
   const verdict = buildVerdict(overallRating, accelDelta, relVol, activeStock?.return1w ?? null);
   const VerdictIcon = verdict.icon;
-  const signals = buildEntrySignals(activeStock, snapshot);
+  const signals = buildEntrySignals(activeStock, snapshot, liveRs, benchmark);
 
   // Peers: same sector, top 5 by overall RS, excluding active
   const peers = useMemo(() => {
@@ -318,6 +345,33 @@ export default function LiveExecution() {
                 Quick Trade Check
               </h2>
               {rsLoading && <Loader2 size={12} className="animate-spin text-muted-foreground" />}
+              <div className="ml-auto flex items-center gap-1.5">
+                <span className="text-[10px] uppercase tracking-wider text-muted-foreground">Benchmark</span>
+                <div className="inline-flex rounded-md border border-border/60 bg-background/40 p-0.5">
+                  {(["SPY", "QQQ"] as const).map((b) => (
+                    <button
+                      key={b}
+                      type="button"
+                      onClick={() => setBenchmark(b)}
+                      className={`rounded-sm px-2 py-0.5 font-mono text-[11px] font-semibold transition-colors ${
+                        benchmark === b
+                          ? "bg-primary/20 text-primary"
+                          : "text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      {b}
+                    </button>
+                  ))}
+                </div>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="inline-flex cursor-help"><Info size={11} className="text-muted-foreground" /></span>
+                  </TooltipTrigger>
+                  <TooltipContent className="max-w-xs text-xs">
+                    Switch the benchmark used for relative strength (RS) comparisons. SPY tracks the S&amp;P 500 (broad market); QQQ tracks the Nasdaq-100 (tech-heavy). RS values below recompute live.
+                  </TooltipContent>
+                </Tooltip>
+              </div>
             </div>
 
             <form
@@ -506,24 +560,30 @@ export default function LiveExecution() {
                   />
                 </div>
 
-                {/* RS trend across timeframes */}
-                {activeStock && (
+                {/* RS trend across timeframes — recomputed live against the chosen benchmark */}
+                {snapshot && (
                   <div>
                     <div className="mb-1.5 flex items-center gap-1 text-[10px] uppercase tracking-wider text-muted-foreground">
-                      <span>RS vs SPY (% outperformance)</span>
+                      <span>RS vs {benchmark} (% outperformance)</span>
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <span className="inline-flex cursor-help"><Info size={10} /></span>
                         </TooltipTrigger>
                         <TooltipContent className="max-w-xs text-xs">
-                          How much the stock outperformed (or underperformed) SPY over each window. Positive = stronger than the market; negative = weaker.
+                          How much the stock outperformed (or underperformed) {benchmark} over each window. 1D uses live intraday change vs {benchmark}'s intraday change; 1W/1M/3M use Yahoo historical closes. Positive = stronger than {benchmark}; negative = weaker.
                         </TooltipContent>
                       </Tooltip>
                     </div>
-                    <div className="grid grid-cols-3 gap-2">
-                      <RsTrendCell label="1D" value={activeStock.rs1d} />
-                      <RsTrendCell label="1W" value={activeStock.rs1w} />
-                      <RsTrendCell label="1M" value={activeStock.rs1m} />
+                    <div className="grid grid-cols-4 gap-2">
+                      <RsTrendCell label="1D" value={liveRs.rs1d} />
+                      <RsTrendCell label="1W" value={liveRs.rs1w} />
+                      <RsTrendCell label="1M" value={liveRs.rs1m} />
+                      <RsTrendCell label="3M" value={liveRs.rs3m} />
+                    </div>
+                    <div className="mt-1 text-[10px] text-muted-foreground">
+                      {benchmark} today: <span className={pctClass(snapshot.benchmark.changePct)}>{pct(snapshot.benchmark.changePct)}</span>
+                      {snapshot.benchmark.return1w !== null && (<>{" · 1W "}<span className={pctClass(snapshot.benchmark.return1w)}>{pct(snapshot.benchmark.return1w)}</span></>)}
+                      {snapshot.benchmark.return1m !== null && (<>{" · 1M "}<span className={pctClass(snapshot.benchmark.return1m)}>{pct(snapshot.benchmark.return1m)}</span></>)}
                     </div>
                   </div>
                 )}
