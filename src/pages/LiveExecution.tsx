@@ -1061,18 +1061,11 @@ export default function LiveExecution() {
                 >
                   <VerdictIcon size={22} className={`shrink-0 ${verdict.color}`} />
                   <div className="flex-1">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <div className={`font-['Syne',sans-serif] text-base font-bold ${verdict.color}`}>
                         {verdict.label}
                       </div>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <span className="inline-flex cursor-help"><Info size={11} className="text-muted-foreground" /></span>
-                        </TooltipTrigger>
-                        <TooltipContent className="max-w-xs text-xs">
-                          A descriptive read of the current setup based on multiple factors. This is context, not a buy/sell recommendation — always confirm with your own rules.
-                        </TooltipContent>
-                      </Tooltip>
+                      <WhyButton onClick={() => setWhyTopic("verdict")} label="Why this verdict?" />
                     </div>
                     <p className="mt-1 text-xs leading-relaxed text-foreground/80">{verdict.reason}</p>
                     {/* Factor breakdown chips */}
