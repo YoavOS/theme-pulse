@@ -294,17 +294,6 @@ function parseOptionsResponse(json: any, empty: OptionsSnapshot): OptionsSnapsho
   }
 }
 
-
-  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
-
-  try {
-    const body = await req.json().catch(() => ({}));
-    const rawSymbol = (body?.symbol ?? "").toString().trim().toUpperCase();
-    const benchmarkSymbol = (() => {
-      const b = (body?.benchmark ?? "SPY").toString().trim().toUpperCase();
-      return ALLOWED_BENCHMARKS.has(b) ? b : "SPY";
-    })();
-
 // Sector → SPDR sector ETF mapping. Accepts either a broad GICS sector name or
 // the granular "industry" string Finnhub stores (we substring-match keywords).
 const SECTOR_ETF_MAP: Array<{ etf: string; name: string; keywords: string[] }> = [
