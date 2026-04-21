@@ -252,15 +252,18 @@ export default function LiveExecution() {
   // ── Fresh, benchmark-aware RS values computed live from the snapshot ──
   // Replaces the (often stale) rs_1d/rs_1w/rs_1m stored against SPY in qualified_rs_universe.
   const liveRs = useMemo(() => {
-    if (!snapshot) return { rs1d: null as number | null, rs1w: null as number | null, rs1m: null as number | null, rs3m: null as number | null };
+    const empty = { rs1d: null as number | null, rs1w: null as number | null, rs1m: null as number | null, rs3m: null as number | null };
+    if (!snapshot || !snapshot.quote || !snapshot.benchmark) return empty;
+    const th = snapshot.tickerHistory ?? { return1w: null, return1m: null, return3m: null };
+    const bh = snapshot.benchmark;
     const round = (v: number | null) => (v === null ? null : Math.round(v * 100) / 100);
-    const sub = (a: number | null, b: number | null) =>
-      a === null || b === null || !Number.isFinite(a) || !Number.isFinite(b) ? null : a - b;
+    const sub = (a: number | null | undefined, b: number | null | undefined) =>
+      a == null || b == null || !Number.isFinite(a) || !Number.isFinite(b) ? null : (a as number) - (b as number);
     return {
-      rs1d: round(sub(snapshot.quote.changePct, snapshot.benchmark.changePct)),
-      rs1w: round(sub(snapshot.tickerHistory.return1w, snapshot.benchmark.return1w)),
-      rs1m: round(sub(snapshot.tickerHistory.return1m, snapshot.benchmark.return1m)),
-      rs3m: round(sub(snapshot.tickerHistory.return3m, snapshot.benchmark.return3m)),
+      rs1d: round(sub(snapshot.quote.changePct, bh.changePct)),
+      rs1w: round(sub(th.return1w, bh.return1w)),
+      rs1m: round(sub(th.return1m, bh.return1m)),
+      rs3m: round(sub(th.return3m, bh.return3m)),
     };
   }, [snapshot]);
 
