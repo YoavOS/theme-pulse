@@ -13,6 +13,7 @@ import AlertCenter from "./pages/AlertCenter";
 import ThemeIntelligence from "./pages/ThemeIntelligence";
 import Watchlist from "./pages/Watchlist";
 import RsAlpha from "./pages/RsAlpha";
+import LiveExecution from "./pages/LiveExecution";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -34,6 +35,7 @@ const App = () => (
               <Route path="/intelligence" element={<ThemeIntelligence />} />
               <Route path="/watchlist" element={<Watchlist />} />
               <Route path="/rs-alpha" element={<RsAlpha />} />
+              <Route path="/live" element={<LiveExecution />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </BrowserRouter>
