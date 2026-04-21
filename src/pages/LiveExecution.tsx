@@ -668,10 +668,10 @@ export default function LiveExecution() {
                 </div>
 
                 {/* Metric grid */}
-                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
                   <MetricCard
                     label="RS Rating"
-                    tooltip="Relative Strength rank from 1–99 within the qualified universe."
+                    tooltip="Relative Strength rank from 1–99 within the qualified universe. 80+ = leader, 40-79 = average, <40 = laggard."
                     value={overallRating !== null ? `${overallRating}` : "N/A"}
                     sub={
                       universeRank
@@ -682,10 +682,33 @@ export default function LiveExecution() {
                   />
                   <MetricCard
                     label="Conviction"
-                    tooltip="Composite 0–100 score: RS rating (50%) + acceleration (25%) + volume (25%)."
-                    value={conviction !== null ? `${conviction}` : "—"}
-                    sub={conviction === null ? "Need RS data" : conviction >= 70 ? "High" : conviction >= 50 ? "Medium" : "Low"}
-                    valueClass={ratingClass(conviction)}
+                    tooltip="O'Neil-weighted score (0-100): 50% Market strength + 37% Industry/sector strength + 13% Individual stock (RS, accel, volume, P/E and growth)."
+                    value={conviction !== null ? `${conviction.total}` : "—"}
+                    sub={
+                      conviction === null
+                        ? "Need RS data"
+                        : conviction.total >= 70
+                        ? "High conviction"
+                        : conviction.total >= 50
+                        ? "Medium"
+                        : "Low conviction"
+                    }
+                    valueClass={ratingClass(conviction?.total ?? null)}
+                  />
+                  <MetricCard
+                    label="Setup Quality"
+                    tooltip="0-100 score for how clean the entry is RIGHT NOW: RS acceleration, volume confirmation, pullback depth in a strong trend, and theme alignment."
+                    value={setupQuality !== null ? `${setupQuality}` : "—"}
+                    sub={
+                      setupQuality === null
+                        ? "Need RS data"
+                        : setupQuality >= 70
+                        ? "Clean setup"
+                        : setupQuality >= 50
+                        ? "Acceptable"
+                        : "Poor setup"
+                    }
+                    valueClass={ratingClass(setupQuality)}
                   />
                   <MetricCard
                     label="Rel Volume"
@@ -712,7 +735,7 @@ export default function LiveExecution() {
                   />
                   <MetricCard
                     label="ADR%"
-                    tooltip="Average Daily Range — typical % move per day. Higher ADR = bigger swings."
+                    tooltip="Average Daily Range — typical % move per day. Higher ADR = bigger swings, requires wider stops."
                     value={activeStock?.adrPercent !== null && activeStock?.adrPercent !== undefined ? `${activeStock.adrPercent.toFixed(1)}%` : "—"}
                     sub={
                       activeStock?.adrPercent && activeStock.adrPercent >= 5
@@ -722,6 +745,61 @@ export default function LiveExecution() {
                     valueClass="text-foreground"
                   />
                 </div>
+
+                {/* Conviction Breakdown */}
+                {conviction && (
+                  <ConvictionBreakdown
+                    total={conviction.total}
+                    market={conviction.market}
+                    industry={conviction.industry}
+                    stock={conviction.stock}
+                    benchmarkLabel={benchmark}
+                    sectorName={snapshot?.industry?.sectorName ?? null}
+                    sectorEtf={snapshot?.industry?.etfSymbol ?? null}
+                    fundamentals={snapshot?.fundamentals ?? null}
+                    hasIndustry={conviction.hasIndustry}
+                    hasFund={conviction.hasFund}
+                  />
+                )}
+
+                {/* Pullback / Breakdown callout */}
+                {pullback && (
+                  <div
+                    className={`flex items-start gap-2 rounded-lg border p-3 text-xs ${
+                      pullback.kind === "healthy"
+                        ? "border-[hsl(160,80%,45%)]/30 bg-[hsl(160,80%,45%)]/10"
+                        : "border-destructive/30 bg-destructive/10"
+                    }`}
+                  >
+                    {pullback.kind === "healthy" ? (
+                      <TrendingDown size={14} className="mt-0.5 shrink-0 text-[hsl(160,80%,45%)]" />
+                    ) : (
+                      <XCircle size={14} className="mt-0.5 shrink-0 text-destructive" />
+                    )}
+                    <div>
+                      <div className={`font-semibold ${pullback.kind === "healthy" ? "text-[hsl(160,80%,45%)]" : "text-destructive"}`}>
+                        {pullback.label}
+                      </div>
+                      <div className="mt-0.5 text-foreground/80">{pullback.note}</div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Rotation Risk warning */}
+                {rotationRisk && (
+                  <div className="flex items-start gap-2 rounded-lg border border-[hsl(40,85%,55%)]/30 bg-[hsl(40,85%,55%)]/10 p-3 text-xs">
+                    <AlertTriangle size={14} className="mt-0.5 shrink-0 text-[hsl(40,85%,55%)]" />
+                    <div>
+                      <div className="font-semibold text-[hsl(40,85%,55%)]">
+                        Rotation Risk — strong stock, weakening sector
+                      </div>
+                      <div className="mt-0.5 text-foreground/80">
+                        {rotationRisk.sector} ({rotationRisk.etf}) is fading: 1W {pct(rotationRisk.sectorR1w)} vs 1M {pct(rotationRisk.sectorR1m)}.
+                        Leaders inside fading sectors often roll over next. Tighten stops or wait for sector to stabilise.
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 {/* RS trend across timeframes — recomputed live against the chosen benchmark */}
                 {snapshot && (
