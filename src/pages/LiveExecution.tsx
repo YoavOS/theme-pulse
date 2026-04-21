@@ -487,13 +487,16 @@ export default function LiveExecution() {
                   Options Activity
                 </h2>
                 <Tooltip>
-                  <TooltipTrigger>
-                    <Info size={12} className="text-muted-foreground" />
+                  <TooltipTrigger asChild>
+                    <span className="inline-flex cursor-help"><Info size={12} className="text-muted-foreground" /></span>
                   </TooltipTrigger>
                   <TooltipContent className="max-w-xs text-xs">
                     Options are contracts traders use to bet on a stock's direction. This panel translates the most recent options activity into plain English.
                   </TooltipContent>
                 </Tooltip>
+                <span className="ml-auto text-[10px] text-muted-foreground">
+                  Source: Yahoo Finance · Nearest expiration
+                </span>
               </div>
 
               {!snapshot.options.available ? (
@@ -516,8 +519,8 @@ export default function LiveExecution() {
                           Overall Sentiment
                         </span>
                         <Tooltip>
-                          <TooltipTrigger>
-                            <Info size={11} className="text-muted-foreground" />
+                          <TooltipTrigger asChild>
+                            <span className="inline-flex cursor-help"><Info size={11} className="text-muted-foreground" /></span>
                           </TooltipTrigger>
                           <TooltipContent className="max-w-xs text-xs">
                             Based on the ratio of put-buying vs call-buying. Calls = bullish bets, Puts = bearish bets.
@@ -568,7 +571,7 @@ export default function LiveExecution() {
                   </div>
 
                   {/* Unusual activity */}
-                  {snapshot.options.unusual_activity.length > 0 && (
+                  {snapshot.options.unusual_activity.length > 0 ? (
                     <div className="rounded-lg border border-[hsl(40,85%,55%)]/30 bg-[hsl(40,85%,55%)]/10 p-3">
                       <div className="mb-1 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-[hsl(40,85%,55%)]">
                         <AlertTriangle size={11} /> Unusual Options Activity
@@ -581,6 +584,10 @@ export default function LiveExecution() {
                       <p className="mt-2 text-[10px] text-muted-foreground">
                         Unusual = today's contract volume more than 3× the existing open interest at that strike.
                       </p>
+                    </div>
+                  ) : (
+                    <div className="rounded-lg border border-border/40 bg-muted/10 p-3 text-xs text-muted-foreground">
+                      No significant unusual options activity detected today.
                     </div>
                   )}
                 </div>
@@ -748,8 +755,8 @@ function MetricCard({
         <span>{label}</span>
         {tooltip && (
           <Tooltip>
-            <TooltipTrigger>
-              <Info size={10} className="text-muted-foreground" />
+            <TooltipTrigger asChild>
+              <span className="inline-flex cursor-help"><Info size={10} className="text-muted-foreground" /></span>
             </TooltipTrigger>
             <TooltipContent className="max-w-xs text-xs">{tooltip}</TooltipContent>
           </Tooltip>
