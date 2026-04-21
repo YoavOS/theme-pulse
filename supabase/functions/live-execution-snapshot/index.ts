@@ -158,23 +158,6 @@ function parseOptionsResponse(json: any, empty: OptionsSnapshot): OptionsSnapsho
   try {
     const result = json?.optionChain?.result?.[0];
     if (!result) return empty;
-    put_call_ratio: null,
-    avg_iv: null,
-    sentiment: "Neutral",
-    sentiment_explanation: "Options data not available for this ticker.",
-    unusual_activity: [],
-    high_iv_alert: false,
-    iv_explanation: "",
-  };
-
-  const url = `https://query1.finance.yahoo.com/v7/finance/options/${encodeURIComponent(symbol)}`;
-  try {
-    const res = await fetch(url, { headers: { "User-Agent": UA, Accept: "application/json" } });
-    if (!res.ok) return empty;
-    const json = await res.json();
-    const result = json?.optionChain?.result?.[0];
-    if (!result) return empty;
-
     const expirationTs: number | undefined = result.options?.[0]?.expirationDate;
     const calls: any[] = result.options?.[0]?.calls ?? [];
     const puts: any[] = result.options?.[0]?.puts ?? [];
@@ -192,9 +175,8 @@ function parseOptionsResponse(json: any, empty: OptionsSnapshot): OptionsSnapsho
 
     const pcr = totalCallVol > 0 ? totalPutVol / totalCallVol : null;
 
-    // Sentiment: lower P/C = more calls = bullish
     let sentiment: "Bullish" | "Bearish" | "Neutral" = "Neutral";
-    let sentimentExp = "Roughly equal calls and puts — traders are split.";
+    let sentimentExp = "Calls and puts are roughly balanced — no strong directional bet.";
     if (pcr !== null) {
       if (pcr < 0.7) {
         sentiment = "Bullish";
@@ -202,12 +184,9 @@ function parseOptionsResponse(json: any, empty: OptionsSnapshot): OptionsSnapsho
       } else if (pcr > 1.3) {
         sentiment = "Bearish";
         sentimentExp = "More traders are buying puts than calls — leaning cautious.";
-      } else {
-        sentimentExp = "Calls and puts are roughly balanced — no strong directional bet.";
       }
     }
 
-    // Unusual activity: contracts where today's volume > 3× open interest AND volume is meaningful (>500)
     const unusualCalls = calls.filter(
       (c) => (c.volume ?? 0) > 500 && c.openInterest > 0 && (c.volume ?? 0) > 3 * c.openInterest,
     );
@@ -217,19 +196,18 @@ function parseOptionsResponse(json: any, empty: OptionsSnapshot): OptionsSnapsho
 
     const unusual: string[] = [];
     if (unusualCalls.length > 0) {
-      const topStrike = unusualCalls.sort((a, b) => (b.volume ?? 0) - (a.volume ?? 0))[0];
+      const top = unusualCalls.sort((a, b) => (b.volume ?? 0) - (a.volume ?? 0))[0];
       unusual.push(
-        `Large call buying detected at $${topStrike.strike} strike (${(topStrike.volume ?? 0).toLocaleString()} contracts vs ${(topStrike.openInterest ?? 0).toLocaleString()} open interest).`,
+        `Large call buying detected at $${top.strike} strike (${(top.volume ?? 0).toLocaleString()} contracts vs ${(top.openInterest ?? 0).toLocaleString()} open interest).`,
       );
     }
     if (unusualPuts.length > 0) {
-      const topStrike = unusualPuts.sort((a, b) => (b.volume ?? 0) - (a.volume ?? 0))[0];
+      const top = unusualPuts.sort((a, b) => (b.volume ?? 0) - (a.volume ?? 0))[0];
       unusual.push(
-        `Unusual put volume at $${topStrike.strike} strike (${(topStrike.volume ?? 0).toLocaleString()} contracts vs ${(topStrike.openInterest ?? 0).toLocaleString()} open interest).`,
+        `Unusual put volume at $${top.strike} strike (${(top.volume ?? 0).toLocaleString()} contracts vs ${(top.openInterest ?? 0).toLocaleString()} open interest).`,
       );
     }
 
-    // High IV: avg IV > 60% annualized is "high" for most equities
     const highIv = avgIv !== null && avgIv > 0.6;
     const ivExp =
       avgIv === null
