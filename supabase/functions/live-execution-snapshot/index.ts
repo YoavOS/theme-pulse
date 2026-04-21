@@ -294,20 +294,7 @@ function parseOptionsResponse(json: any, empty: OptionsSnapshot): OptionsSnapsho
   }
 }
 
-async function fetchHistoricalForTicker(symbol: string, todayPrice: number | null) {
-  const sb = makeServiceClient();
-  const periods: YahooPeriod[] = ["5d", "1mo", "3mo"];
-  const hist = await Promise.all(
-    periods.map((p) => getHistoricalData(sb, symbol, p, { todayPrice }))
-  );
-  return {
-    return1w: hist[0].returnPct,
-    return1m: hist[1].returnPct,
-    return3m: hist[2].returnPct,
-  };
-}
 
-Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
