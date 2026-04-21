@@ -1098,7 +1098,7 @@ export default function LiveExecution() {
             className="rounded-xl border border-border/60 p-4"
             style={{ background: "rgba(255,255,255,0.03)" }}
           >
-            <div className="mb-3 flex items-center justify-between">
+            <div className="mb-3 flex items-center justify-between gap-2 flex-wrap">
               <div className="flex items-center gap-2">
                 <h2 className="font-['Syne',sans-serif] text-sm font-semibold uppercase tracking-wider text-foreground">
                   Live Watchlist
@@ -1108,17 +1108,45 @@ export default function LiveExecution() {
                     <span className="inline-flex cursor-help"><Info size={12} className="text-muted-foreground" /></span>
                   </TooltipTrigger>
                   <TooltipContent className="max-w-xs text-xs">
-                    Tickers you've pinned for quick re-evaluation. RS Rating and other metrics update from the qualified RS universe each scan.
+                    Tickers you've pinned for quick re-evaluation. Use the toggle to focus on outright Leaders (RS ≥ 80) or Rotation Watch candidates (improving RS but still lagging).
                   </TooltipContent>
                 </Tooltip>
               </div>
-              <span className="text-[10px] text-muted-foreground">
-                {watchTickers.length} pinned · click symbol to evaluate
-              </span>
+              <div className="flex items-center gap-2">
+                <div className="inline-flex rounded-md border border-border/60 bg-background/40 p-0.5 text-[10px]">
+                  {([
+                    { v: "all", label: "All" },
+                    { v: "leaders", label: "Leaders" },
+                    { v: "rotation", label: "Rotation Watch" },
+                  ] as const).map((opt) => (
+                    <button
+                      key={opt.v}
+                      type="button"
+                      onClick={() => setWatchMode(opt.v)}
+                      className={`rounded-sm px-2 py-0.5 font-mono font-semibold transition-colors ${
+                        watchMode === opt.v
+                          ? "bg-primary/20 text-primary"
+                          : "text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+                <span className="text-[10px] text-muted-foreground">
+                  {watchRows.length} / {watchTickers.length} shown
+                </span>
+              </div>
             </div>
             {watchTickers.length === 0 ? (
               <p className="text-xs text-muted-foreground">
                 Pin tickers from the verdict card above to track their RS, conviction, and momentum here.
+              </p>
+            ) : watchRows.length === 0 ? (
+              <p className="text-xs text-muted-foreground">
+                {watchMode === "leaders"
+                  ? "No pinned tickers currently rate as outright leaders (RS ≥ 80)."
+                  : "No pinned tickers fit the rotation profile right now (RS 50–79 with 1W stronger than 1M)."}
               </p>
             ) : (
               <div className="overflow-x-auto">
@@ -1129,51 +1157,51 @@ export default function LiveExecution() {
                       <th className="py-2 text-right">RS Rating</th>
                       <th className="py-2 text-right">RS Overall</th>
                       <th className="py-2 text-right">1W Return</th>
+                      <th className="py-2 text-right">1M Return</th>
                       <th className="py-2 text-right">ADR%</th>
                       <th className="py-2 text-right w-8"></th>
                     </tr>
                   </thead>
                   <tbody>
-                    {watchTickers.map((sym) => {
-                      const s = stockMap.get(sym);
-                      const r = ratingOverall.get(sym) ?? null;
-                      return (
-                        <tr key={sym} className="border-b border-border/20 hover:bg-muted/20">
-                          <td className="py-2">
-                            <button
-                              onClick={() => {
-                                setInput(sym);
-                                submit(sym);
-                              }}
-                              className="font-mono font-semibold text-primary hover:underline"
-                            >
-                              {sym}
-                            </button>
-                          </td>
-                          <td className={`py-2 text-right font-mono font-semibold ${ratingClass(r)}`}>
-                            {r ?? "—"}
-                          </td>
-                          <td className="py-2 text-right font-mono text-foreground">
-                            {s ? num(s.rsOverall) : "—"}
-                          </td>
-                          <td className={`py-2 text-right font-mono ${pctClass(s?.return1w ?? null)}`}>
-                            {pct(s?.return1w ?? null)}
-                          </td>
-                          <td className="py-2 text-right font-mono text-foreground">
-                            {s?.adrPercent !== null && s?.adrPercent !== undefined ? `${s.adrPercent.toFixed(1)}%` : "—"}
-                          </td>
-                          <td className="py-2 text-right">
-                            <button
-                              onClick={() => removeWatch(sym)}
-                              className="text-muted-foreground hover:text-destructive"
-                              title="Remove"
-                            >
-                              <X size={12} />
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    })}
+                    {watchRows.map(({ sym, s, rating, r1w, r1m }) => (
+                      <tr key={sym} className="border-b border-border/20 hover:bg-muted/20">
+                        <td className="py-2">
+                          <button
+                            onClick={() => {
+                              setInput(sym);
+                              submit(sym);
+                            }}
+                            className="font-mono font-semibold text-primary hover:underline"
+                          >
+                            {sym}
+                          </button>
+                        </td>
+                        <td className={`py-2 text-right font-mono font-semibold ${ratingClass(rating)}`}>
+                          {rating ?? "—"}
+                        </td>
+                        <td className="py-2 text-right font-mono text-foreground">
+                          {s ? num(s.rsOverall) : "—"}
+                        </td>
+                        <td className={`py-2 text-right font-mono ${pctClass(r1w)}`}>
+                          {pct(r1w)}
+                        </td>
+                        <td className={`py-2 text-right font-mono ${pctClass(r1m)}`}>
+                          {pct(r1m)}
+                        </td>
+                        <td className="py-2 text-right font-mono text-foreground">
+                          {s?.adrPercent !== null && s?.adrPercent !== undefined ? `${s.adrPercent.toFixed(1)}%` : "—"}
+                        </td>
+                        <td className="py-2 text-right">
+                          <button
+                            onClick={() => removeWatch(sym)}
+                            className="text-muted-foreground hover:text-destructive"
+                            title="Remove"
+                          >
+                            <X size={12} />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
                   </tbody>
                 </table>
               </div>
