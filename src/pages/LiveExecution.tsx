@@ -262,7 +262,7 @@ export default function LiveExecution() {
     return Math.round(rsPart * 0.5 + accelPart * 0.25 + volPart * 0.25);
   }, [overallRating, accelDelta, relVol]);
 
-  const verdict = buildVerdict(overallRating, accelDelta, relVol);
+  const verdict = buildVerdict(overallRating, accelDelta, relVol, activeStock?.return1w ?? null);
   const VerdictIcon = verdict.icon;
   const signals = buildEntrySignals(activeStock, snapshot);
 
