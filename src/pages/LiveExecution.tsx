@@ -1633,6 +1633,29 @@ export default function LiveExecution() {
           </section>
         </main>
       </div>
+      <WhyDialog
+        open={whyTopic !== null}
+        onOpenChange={(o) => { if (!o) setWhyTopic(null); }}
+        content={
+          whyTopic === null
+            ? null
+            : buildWhyContent({
+                topic: whyTopic,
+                symbol: activeSymbol,
+                benchmark,
+                verdict,
+                conviction,
+                setupQuality,
+                overallRating,
+                accelDelta,
+                relVol,
+                pullback,
+                rotationRisk,
+                snapshot,
+                activeStock,
+              })
+        }
+      />
     </TooltipProvider>
   );
 }
