@@ -19,7 +19,7 @@ import {
   ShieldAlert,
 } from "lucide-react";
 import { useRsAlpha, type RsStock } from "@/hooks/useRsAlpha";
-import { useLiveSnapshot, useLiveWatchlist, type LiveSnapshot } from "@/hooks/useLiveSnapshot";
+import { useLiveSnapshot, useLiveWatchlist, type LiveSnapshot, type BenchmarkSymbol } from "@/hooks/useLiveSnapshot";
 import { computeRsRatings } from "@/components/rs/RsRatingBadge";
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip";
 import HelpButton from "@/components/HelpButton";
