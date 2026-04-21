@@ -159,24 +159,29 @@ function buildVerdict(
   };
 }
 
-function buildEntrySignals(stock: RsStock | null, snapshot: LiveSnapshot | null): string[] {
+function buildEntrySignals(
+  stock: RsStock | null,
+  snapshot: LiveSnapshot | null,
+  liveRs: { rs1d: number | null; rs1w: number | null; rs1m: number | null },
+  benchmarkLabel: string,
+): string[] {
   const out: string[] = [];
-  if (!stock) return out;
-  const accel = stock.rs1w !== null && stock.rs1m !== null ? stock.rs1w - stock.rs1m : null;
+  const accel =
+    liveRs.rs1w !== null && liveRs.rs1m !== null ? liveRs.rs1w - liveRs.rs1m : null;
   if (accel !== null && accel > 5) out.push("📈 RS accelerating — 1W relative strength stronger than 1M.");
   if (accel !== null && accel < -5) out.push("⚠️ RS decelerating — short-term weaker than longer-term.");
-  if (stock.rs1d !== null && stock.rs1d > 1) out.push("⚡ Outperforming SPY today (positive intraday RS).");
-  if (stock.rs1d !== null && stock.rs1d < -1) out.push("🔻 Underperforming SPY today.");
-  if (stock.adrPercent !== null && stock.adrPercent >= 5)
+  if (liveRs.rs1d !== null && liveRs.rs1d > 1) out.push(`⚡ Outperforming ${benchmarkLabel} today (positive intraday RS).`);
+  if (liveRs.rs1d !== null && liveRs.rs1d < -1) out.push(`🔻 Underperforming ${benchmarkLabel} today.`);
+  if (stock?.adrPercent !== null && stock?.adrPercent !== undefined && stock.adrPercent >= 5)
     out.push(`🎯 High range stock (ADR ${stock.adrPercent.toFixed(1)}%) — expect larger daily swings.`);
   if (snapshot?.quote.volume && snapshot.quote.avgVolume) {
     const rv = snapshot.quote.volume / snapshot.quote.avgVolume;
     if (rv >= 1.5) out.push(`🔊 Volume confirming move — ${rv.toFixed(1)}× the 3-month average.`);
     else if (rv < 0.6) out.push("🔉 Volume below average — move lacks conviction.");
   }
-  if (stock.rsOverall !== null && stock.rsOverall > 5 && (accel ?? 0) >= 0)
-    out.push("🚀 Trending leader holding above benchmark — RS line near new highs.");
-  if (stock.return1w !== null && stock.return1w < -3 && stock.rsOverall !== null && stock.rsOverall > 5)
+  if (liveRs.rs1d !== null && liveRs.rs1d > 0 && (accel ?? 0) >= 0 && stock?.rsOverall !== null && (stock?.rsOverall ?? 0) > 5)
+    out.push(`🚀 Trending leader holding above ${benchmarkLabel} — RS line near new highs.`);
+  if (stock?.return1w !== null && stock?.return1w !== undefined && stock.return1w < -3 && stock.rsOverall !== null && (stock.rsOverall ?? 0) > 5)
     out.push("🟢 Pullback within a strong RS name — possible entry zone, confirm with price action.");
   return out;
 }
