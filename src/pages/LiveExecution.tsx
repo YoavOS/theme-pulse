@@ -519,8 +519,8 @@ export default function LiveExecution() {
                           Overall Sentiment
                         </span>
                         <Tooltip>
-                          <TooltipTrigger>
-                            <Info size={11} className="text-muted-foreground" />
+                          <TooltipTrigger asChild>
+                            <span className="inline-flex cursor-help"><Info size={11} className="text-muted-foreground" /></span>
                           </TooltipTrigger>
                           <TooltipContent className="max-w-xs text-xs">
                             Based on the ratio of put-buying vs call-buying. Calls = bullish bets, Puts = bearish bets.
