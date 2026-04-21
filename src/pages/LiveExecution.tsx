@@ -696,17 +696,28 @@ export default function LiveExecution() {
               className="rounded-xl border border-border/60 p-4"
               style={{ background: "rgba(255,255,255,0.03)" }}
             >
-              <h2 className="mb-3 font-['Syne',sans-serif] text-sm font-semibold uppercase tracking-wider text-foreground">
-                Peers in {activeStock?.sector}
-              </h2>
+              <div className="mb-3 flex items-center gap-2">
+                <h2 className="font-['Syne',sans-serif] text-sm font-semibold uppercase tracking-wider text-foreground">
+                  Peers in {activeStock?.sector}
+                </h2>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="inline-flex cursor-help"><Info size={12} className="text-muted-foreground" /></span>
+                  </TooltipTrigger>
+                  <TooltipContent className="max-w-xs text-xs">
+                    Top names in the same sector by RS Overall. Useful to compare relative strength against direct competitors and spot the actual sector leader.
+                  </TooltipContent>
+                </Tooltip>
+                <span className="ml-auto text-[10px] text-muted-foreground">Click a symbol to evaluate it</span>
+              </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-xs">
                   <thead>
                     <tr className="border-b border-border/40 text-[10px] uppercase tracking-wider text-muted-foreground">
                       <th className="py-2 text-left">Symbol</th>
                       <th className="py-2 text-left">Company</th>
-                      <th className="py-2 text-right">RS Rating</th>
-                      <th className="py-2 text-right">RS Overall</th>
+                      <th className="py-2 text-right" title="1–99 rank within the qualified universe (higher = stronger)">RS Rating</th>
+                      <th className="py-2 text-right" title="Raw composite RS score (used to derive RS Rating)">RS Overall</th>
                       <th className="py-2 text-right">1M Return</th>
                     </tr>
                   </thead>
