@@ -571,7 +571,7 @@ export default function LiveExecution() {
                   </div>
 
                   {/* Unusual activity */}
-                  {snapshot.options.unusual_activity.length > 0 && (
+                  {snapshot.options.unusual_activity.length > 0 ? (
                     <div className="rounded-lg border border-[hsl(40,85%,55%)]/30 bg-[hsl(40,85%,55%)]/10 p-3">
                       <div className="mb-1 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-[hsl(40,85%,55%)]">
                         <AlertTriangle size={11} /> Unusual Options Activity
@@ -584,6 +584,10 @@ export default function LiveExecution() {
                       <p className="mt-2 text-[10px] text-muted-foreground">
                         Unusual = today's contract volume more than 3× the existing open interest at that strike.
                       </p>
+                    </div>
+                  ) : (
+                    <div className="rounded-lg border border-border/40 bg-muted/10 p-3 text-xs text-muted-foreground">
+                      No significant unusual options activity detected today.
                     </div>
                   )}
                 </div>
