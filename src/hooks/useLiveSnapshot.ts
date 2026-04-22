@@ -75,6 +75,7 @@ export interface LiveSnapshot {
   tickerHistory: LiveTickerHistory;
   fundamentals?: LiveFundamentals;
   industry?: LiveIndustry;
+  sectorPeAvg?: number | null;
   fetchedAt: string;
 }
 
