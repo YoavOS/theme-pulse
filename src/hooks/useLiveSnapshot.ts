@@ -54,6 +54,8 @@ export interface LiveFundamentals {
   epsGrowth: number | null;       // decimal (e.g. 0.25 = +25%)
   revenueGrowth: number | null;   // decimal
   profitMargin: number | null;    // decimal
+  sector: string | null;
+  industry: string | null;
   source: string;
 }
 
