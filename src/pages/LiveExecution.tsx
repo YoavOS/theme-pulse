@@ -1388,7 +1388,51 @@ export default function LiveExecution() {
             )}
           </section>
 
-          {/* ── Options Activity ── */}
+          {/* ── Fundamentals (20% pillar) ── */}
+          {snapshot && (
+            <section
+              className="rounded-xl border border-border/60 p-4"
+              style={{ background: "rgba(255,255,255,0.03)" }}
+            >
+              <div className="mb-3 flex items-center gap-2 flex-wrap">
+                <h2 className="font-['Syne',sans-serif] text-sm font-semibold uppercase tracking-wider text-foreground">
+                  Fundamentals
+                </h2>
+                <span className="rounded border border-border/40 bg-background/40 px-1.5 py-0.5 text-[10px] uppercase tracking-wider text-muted-foreground">
+                  20% pillar
+                </span>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="inline-flex cursor-help"><Info size={12} className="text-muted-foreground" /></span>
+                  </TooltipTrigger>
+                  <TooltipContent className="max-w-xs text-xs">
+                    Simple O'Neil-style sanity check: are earnings and revenue growing, and is the valuation reasonable for that growth? High P/E is fine if growth is strong (≥ 25% EPS or ≥ 20% revenue YoY).
+                  </TooltipContent>
+                </Tooltip>
+                <span className="ml-auto text-[10px] text-muted-foreground">Source: Yahoo Finance</span>
+                {conviction?.fund !== null && conviction?.fund !== undefined && (
+                  <span className={`font-mono text-base font-bold ${ratingClass(conviction.fund)}`}>
+                    {conviction.fund} <span className="text-[10px] text-muted-foreground">/ 100</span>
+                  </span>
+                )}
+              </div>
+              {snapshot.fundamentals?.available ? (
+                <FundamentalsBlock
+                  fd={snapshot.fundamentals}
+                  sectorPeAvg={(snapshot as any)?.sectorPeAvg ?? null}
+                  sectorEtf={snapshot.industry?.etfSymbol ?? null}
+                  peJustified={conviction?.fundDetail.peJustified ?? false}
+                  onWhy={() => setWhyTopic("fundamentals")}
+                />
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  No clean fundamental data returned for this ticker. The Overall Conviction Score above redistributes the 20% weight to the other pillars.
+                </p>
+              )}
+            </section>
+          )}
+
+          {/* ── Options Activity (10% pillar) ── */}
           {snapshot && (
             <section
               className="rounded-xl border border-border/60 p-4"
