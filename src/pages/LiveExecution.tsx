@@ -2033,25 +2033,25 @@ function OptionsTile({
 }) {
   return (
     <div
-      className={`rounded-lg border p-3 ${
+      className={`rounded-lg border p-4 ${
         highlight ? "border-[hsl(40,85%,55%)]/40 bg-[hsl(40,85%,55%)]/5" : "border-border/40 bg-background/40"
       }`}
     >
-      <div className="mb-1 flex items-center gap-1 text-[10px] uppercase tracking-wider text-muted-foreground">
+      <div className="mb-2 flex items-center gap-1.5 text-sm font-bold uppercase tracking-wider text-muted-foreground">
         <span>{label}</span>
         {tooltip && (
           <Tooltip>
             <TooltipTrigger asChild>
-              <span className="inline-flex cursor-help"><Info size={10} /></span>
+              <span className="inline-flex cursor-help"><Info size={12} /></span>
             </TooltipTrigger>
-            <TooltipContent className="max-w-xs text-xs">{tooltip}</TooltipContent>
+            <TooltipContent className="max-w-xs text-sm">{tooltip}</TooltipContent>
           </Tooltip>
         )}
       </div>
-      <div className={`font-mono text-lg font-bold ${highlight ? "text-[hsl(40,85%,55%)]" : "text-foreground"}`}>
+      <div className={`font-mono text-3xl font-extrabold ${highlight ? "text-[hsl(40,85%,55%)]" : "text-foreground"}`}>
         {value}
       </div>
-      <div className="mt-1 text-[11px] leading-snug text-foreground/75">{explain}</div>
+      <div className="mt-2 text-sm leading-snug text-foreground/80">{explain}</div>
     </div>
   );
 }
