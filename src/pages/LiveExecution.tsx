@@ -1339,34 +1339,6 @@ export default function LiveExecution() {
                   </div>
                 )}
 
-                {/* RS trend across timeframes — recomputed live against the chosen benchmark */}
-                {snapshot && (
-                  <div>
-                    <div className="mb-1.5 flex items-center gap-1 text-[10px] uppercase tracking-wider text-muted-foreground">
-                      <span>RS vs {benchmark} (% outperformance)</span>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <span className="inline-flex cursor-help"><Info size={10} /></span>
-                        </TooltipTrigger>
-                        <TooltipContent className="max-w-xs text-xs">
-                          How much the stock outperformed (or underperformed) {benchmark} over each window. 1D uses live intraday change vs {benchmark}'s intraday change; 1W/1M/3M use Yahoo historical closes. Positive = stronger than {benchmark}; negative = weaker.
-                        </TooltipContent>
-                      </Tooltip>
-                    </div>
-                    <div className="grid grid-cols-4 gap-2">
-                      <RsTrendCell label="1D" value={liveRs.rs1d} />
-                      <RsTrendCell label="1W" value={liveRs.rs1w} />
-                      <RsTrendCell label="1M" value={liveRs.rs1m} />
-                      <RsTrendCell label="3M" value={liveRs.rs3m} />
-                    </div>
-                    <div className="mt-1 text-[10px] text-muted-foreground">
-                      {benchmark} today: <span className={pctClass(snapshot.benchmark.changePct)}>{pct(snapshot.benchmark.changePct)}</span>
-                      {snapshot.benchmark.return1w !== null && (<>{" · 1W "}<span className={pctClass(snapshot.benchmark.return1w)}>{pct(snapshot.benchmark.return1w)}</span></>)}
-                      {snapshot.benchmark.return1m !== null && (<>{" · 1M "}<span className={pctClass(snapshot.benchmark.return1m)}>{pct(snapshot.benchmark.return1m)}</span></>)}
-                    </div>
-                  </div>
-                )}
-
                 {/* Acceleration callout */}
                 {accelDelta !== null && (
                   <div className="flex items-center gap-2 rounded-md border border-border/40 bg-muted/20 px-3 py-2 text-xs">
