@@ -1224,19 +1224,19 @@ export default function LiveExecution() {
                 {/* Top row: name + price + watchlist toggle */}
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex items-baseline gap-3 flex-wrap">
-                    <span className="font-mono text-2xl font-bold text-foreground">{snapshot.symbol}</span>
-                    <span className="text-sm text-muted-foreground">{snapshot.quote.shortName ?? "—"}</span>
+                    <span className="font-mono text-4xl font-extrabold text-foreground">{snapshot.symbol}</span>
+                    <span className="text-lg text-muted-foreground">{snapshot.quote.shortName ?? "—"}</span>
                     {activeStock?.sector && (
-                      <span className="rounded border border-border/60 px-1.5 py-0.5 text-[10px] uppercase tracking-wider text-muted-foreground">
+                      <span className="rounded border border-border/60 px-2 py-1 text-xs uppercase tracking-wider text-muted-foreground">
                         {activeStock.sector}
                       </span>
                     )}
                   </div>
                   <div className="text-right">
-                    <div className="font-mono text-2xl font-bold text-foreground">
+                    <div className="font-mono text-4xl font-extrabold text-foreground">
                       ${num(snapshot.quote.price)}
                     </div>
-                    <div className={`font-mono text-sm ${pctClass(snapshot.quote.changePct)}`}>
+                    <div className={`font-mono text-lg font-bold ${pctClass(snapshot.quote.changePct)}`}>
                       {pct(snapshot.quote.changePct)}
                     </div>
                   </div>
@@ -1244,19 +1244,19 @@ export default function LiveExecution() {
 
                 {/* Verdict badge */}
                 <div
-                  className={`flex items-start gap-3 rounded-lg border ${verdict.border} ${verdict.bg} p-3`}
+                  className={`flex items-start gap-3 rounded-lg border ${verdict.border} ${verdict.bg} p-4`}
                 >
-                  <VerdictIcon size={22} className={`shrink-0 ${verdict.color}`} />
+                  <VerdictIcon size={28} className={`shrink-0 ${verdict.color}`} />
                   <div className="flex-1">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <div className={`font-['Syne',sans-serif] text-base font-bold ${verdict.color}`}>
+                      <div className={`font-['Syne',sans-serif] text-xl font-bold ${verdict.color}`}>
                         {verdict.label}
                       </div>
                       <WhyButton onClick={() => setWhyTopic("verdict")} label="Why this verdict?" />
                     </div>
-                    <p className="mt-1 text-xs leading-relaxed text-foreground/80">{verdict.reason}</p>
+                    <p className="mt-1.5 text-base leading-relaxed text-foreground/85">{verdict.reason}</p>
                     {/* Factor breakdown chips */}
-                    <div className="mt-2 flex flex-wrap gap-1.5">
+                    <div className="mt-3 flex flex-wrap gap-2">
                       {verdict.factors.map((f) => {
                         const cls =
                           f.status === "pos"
@@ -1269,9 +1269,9 @@ export default function LiveExecution() {
                         return (
                           <span
                             key={f.label}
-                            className={`rounded border px-1.5 py-0.5 text-[10px] ${cls}`}
+                            className={`rounded border px-2 py-1 text-sm ${cls}`}
                           >
-                            <span className="font-semibold">{f.label}:</span> {f.note}
+                            <span className="font-bold">{f.label}:</span> {f.note}
                           </span>
                         );
                       })}
@@ -1283,13 +1283,13 @@ export default function LiveExecution() {
                         ? removeWatch(snapshot.symbol)
                         : addWatch(snapshot.symbol)
                     }
-                    className="shrink-0 rounded-md border border-border bg-background/60 p-2 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                    className="shrink-0 rounded-md border border-border bg-background/60 p-2.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
                     title={hasWatch(snapshot.symbol) ? "Remove from live watchlist" : "Pin to live watchlist"}
                   >
                     {hasWatch(snapshot.symbol) ? (
-                      <Star size={14} className="fill-[hsl(40,85%,55%)] text-[hsl(40,85%,55%)]" />
+                      <Star size={18} className="fill-[hsl(40,85%,55%)] text-[hsl(40,85%,55%)]" />
                     ) : (
-                      <StarOff size={14} />
+                      <StarOff size={18} />
                     )}
                   </button>
                 </div>
