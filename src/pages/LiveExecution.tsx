@@ -1022,6 +1022,37 @@ export default function LiveExecution() {
   const VerdictIcon = verdict.icon;
   const signals = buildEntrySignals(activeStock, snapshot, liveRs, benchmark);
 
+  // ── AI-suggested theme peers (fallback when the qualified universe doesn't have enough) ──
+  type AiPeer = { symbol: string; shortName: string | null; price: number | null; changePct: number | null; return1m: number | null };
+  const [aiTheme, setAiTheme] = useState<{ theme: string | null; peers: AiPeer[] } | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
+  const aiKeyRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    setAiTheme(null);
+    aiKeyRef.current = null;
+    if (!activeSymbol || !snapshot) return;
+    // Only use AI fallback when we have fewer than 3 qualified peers.
+    if (themeUniverseMembers.length >= 3) return;
+
+    const key = activeSymbol;
+    aiKeyRef.current = key;
+    const hint = activeStock?.sector
+      ?? snapshot.fundamentals?.industry
+      ?? snapshot.fundamentals?.sector
+      ?? null;
+    setAiLoading(true);
+    supabase.functions
+      .invoke("live-theme-suggest", { body: { symbol: activeSymbol, hint } })
+      .then(({ data, error }) => {
+        if (aiKeyRef.current !== key) return;
+        if (error || !data) { setAiTheme(null); return; }
+        setAiTheme({ theme: (data as any).theme ?? null, peers: ((data as any).quotes ?? []) as AiPeer[] });
+      })
+      .finally(() => { if (aiKeyRef.current === key) setAiLoading(false); });
+  }, [activeSymbol, snapshot, themeUniverseMembers.length, activeStock?.sector]);
+
+
   // Peers: same sector, top 5 by overall RS, excluding active
   const peers = useMemo(() => {
     if (!activeStock?.sector) return [];
