@@ -1189,7 +1189,7 @@ export default function LiveExecution() {
                 autoFocus
                 spellCheck={false}
                 maxLength={10}
-                className="h-12 w-full rounded-lg border border-border bg-background/60 pl-10 pr-24 font-mono text-base text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+                className="h-16 w-full rounded-lg border border-border bg-background/60 pl-12 pr-28 font-mono text-2xl font-bold text-foreground placeholder:text-muted-foreground placeholder:text-base placeholder:font-normal focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
               />
               {input && (
                 <button
