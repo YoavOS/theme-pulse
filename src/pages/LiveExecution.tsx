@@ -1179,7 +1179,7 @@ export default function LiveExecution() {
                   />
                   <MetricCard
                     label="Conviction"
-                    tooltip="O'Neil-weighted score (0-100): 50% Market strength + 37% Industry/sector strength + 13% Individual stock (RS, accel, volume, P/E and growth)."
+                    tooltip="Overall Conviction (0-100): 40% RS Rating + 30% Theme/Sector strength + 20% Fundamentals (growth-adjusted) + 10% Options activity. Missing pillars are dropped and weight is redistributed."
                     value={conviction !== null ? `${conviction.total}` : "—"}
                     sub={
                       conviction === null
