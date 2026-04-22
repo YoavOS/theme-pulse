@@ -2195,33 +2195,33 @@ function FundamentalsBlock({
 
   return (
     <div className="space-y-3">
-      <p className="text-[11px] leading-relaxed text-muted-foreground">
+      <p className="text-sm leading-relaxed text-muted-foreground">
         Growth-focused read: are earnings and revenue actually growing, and is the price reasonable for that growth?
         High P/E is acceptable when growth is strong — we don't penalise it.
         <button onClick={onWhy} className="ml-1 underline decoration-dotted hover:text-foreground">Full breakdown</button>
       </p>
-      <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-        <div className="rounded-lg border border-border/40 bg-background/40 p-3">
-          <div className="mb-1 text-[10px] uppercase tracking-wider text-muted-foreground">{eps.label}</div>
-          <div className={`font-mono text-lg font-bold ${eps.tone}`}>{eps.value}</div>
-          <div className="mt-0.5 text-[10px] text-muted-foreground">{eps.note} · O'Neil target ≥ 25%</div>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <div className="rounded-lg border border-border/40 bg-background/40 p-4">
+          <div className="mb-1.5 text-sm font-bold uppercase tracking-wider text-muted-foreground">{eps.label}</div>
+          <div className={`font-mono text-3xl font-extrabold ${eps.tone}`}>{eps.value}</div>
+          <div className="mt-1.5 text-xs text-muted-foreground">{eps.note} · O'Neil target ≥ 25%</div>
         </div>
-        <div className="rounded-lg border border-border/40 bg-background/40 p-3">
-          <div className="mb-1 text-[10px] uppercase tracking-wider text-muted-foreground">{rev.label}</div>
-          <div className={`font-mono text-lg font-bold ${rev.tone}`}>{rev.value}</div>
-          <div className="mt-0.5 text-[10px] text-muted-foreground">{rev.note} · target ≥ 15%</div>
+        <div className="rounded-lg border border-border/40 bg-background/40 p-4">
+          <div className="mb-1.5 text-sm font-bold uppercase tracking-wider text-muted-foreground">{rev.label}</div>
+          <div className={`font-mono text-3xl font-extrabold ${rev.tone}`}>{rev.value}</div>
+          <div className="mt-1.5 text-xs text-muted-foreground">{rev.note} · target ≥ 15%</div>
         </div>
-        <div className="rounded-lg border border-border/40 bg-background/40 p-3">
-          <div className="mb-1 text-[10px] uppercase tracking-wider text-muted-foreground">{peLabel} vs Sector</div>
-          <div className={`font-mono text-lg font-bold ${peTone}`}>
+        <div className="rounded-lg border border-border/40 bg-background/40 p-4">
+          <div className="mb-1.5 text-sm font-bold uppercase tracking-wider text-muted-foreground">{peLabel} vs Sector</div>
+          <div className={`font-mono text-3xl font-extrabold ${peTone}`}>
             {pe !== null ? pe.toFixed(1) : "—"}
             {sectorPeAvg && pe !== null && (
-              <span className="ml-1 text-[10px] font-normal text-muted-foreground">
+              <span className="ml-1.5 text-xs font-normal text-muted-foreground">
                 vs {sectorEtf ?? "sector"} ~{sectorPeAvg}
               </span>
             )}
           </div>
-          <div className="mt-0.5 text-[10px] text-muted-foreground">
+          <div className="mt-1.5 text-xs text-muted-foreground">
             {pe === null
               ? "No P/E reported"
               : peVsSector === null
@@ -2236,7 +2236,7 @@ function FundamentalsBlock({
         </div>
       </div>
       {peJustified && pe !== null && (
-        <div className="rounded-md border border-[hsl(160,80%,45%)]/30 bg-[hsl(160,80%,45%)]/10 p-2 text-[11px] text-foreground/85">
+        <div className="rounded-md border border-[hsl(160,80%,45%)]/30 bg-[hsl(160,80%,45%)]/10 p-3 text-sm text-foreground/90">
           ✓ The high P/E ({pe.toFixed(1)}) is being justified by strong growth (EPS ≥ 25% or Revenue ≥ 20% YoY) — no valuation penalty applied to the Fundamentals score.
         </div>
       )}
