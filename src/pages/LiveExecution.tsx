@@ -1438,10 +1438,13 @@ export default function LiveExecution() {
               className="rounded-xl border border-border/60 p-4"
               style={{ background: "rgba(255,255,255,0.03)" }}
             >
-              <div className="mb-3 flex items-center gap-2">
+              <div className="mb-3 flex items-center gap-2 flex-wrap">
                 <h2 className="font-['Syne',sans-serif] text-sm font-semibold uppercase tracking-wider text-foreground">
                   Options Activity
                 </h2>
+                <span className="rounded border border-border/40 bg-background/40 px-1.5 py-0.5 text-[10px] uppercase tracking-wider text-muted-foreground">
+                  10% pillar
+                </span>
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <span className="inline-flex cursor-help"><Info size={12} className="text-muted-foreground" /></span>
@@ -1453,6 +1456,11 @@ export default function LiveExecution() {
                 <span className="ml-auto text-[10px] text-muted-foreground">
                   Source: Yahoo Finance · Nearest expiration
                 </span>
+                {conviction?.opt !== null && conviction?.opt !== undefined && (
+                  <span className={`font-mono text-base font-bold ${ratingClass(conviction.opt)}`}>
+                    {conviction.opt} <span className="text-[10px] text-muted-foreground">/ 100</span>
+                  </span>
+                )}
               </div>
 
               {!snapshot.options.available ? (
