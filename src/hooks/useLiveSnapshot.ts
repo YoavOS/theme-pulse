@@ -89,16 +89,17 @@ export function useLiveSnapshot() {
     symbol: string,
     benchmark: BenchmarkSymbol = "SPY",
     sector?: string | null,
+    forceRefresh = false,
   ) => {
     const sym = symbol.trim().toUpperCase();
     if (!sym) return;
-    const key = `${sym}|${benchmark}|${sector ?? ""}`;
+    const key = `${sym}|${benchmark}|${sector ?? ""}|${forceRefresh ? "f" : ""}`;
     lastKeyRef.current = key;
     setIsLoading(true);
     setError(null);
     try {
       const { data, error: fnErr } = await supabase.functions.invoke("live-execution-snapshot", {
-        body: { symbol: sym, benchmark, sector: sector ?? null },
+        body: { symbol: sym, benchmark, sector: sector ?? null, forceRefresh },
       });
       if (fnErr) throw new Error(fnErr.message);
       if (data?.error) throw new Error(data.error);
