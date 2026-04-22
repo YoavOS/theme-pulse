@@ -1693,87 +1693,62 @@ export default function LiveExecution() {
             </section>
           )}
 
-          {/* ── [4] RS Rating Across Timeframes ── full width */}
+          {/* ── [4] RS vs Benchmark Across Timeframes ── full width, at the very bottom */}
           {snapshot && (
             <section
-              className="rounded-xl border border-border/60 p-4"
+              className="rounded-xl border border-border/60 p-6"
               style={{ background: "rgba(255,255,255,0.03)" }}
             >
-              <div className="mb-3 flex items-center gap-2 flex-wrap">
-                <h2 className="font-['Syne',sans-serif] text-sm font-semibold uppercase tracking-wider text-foreground">
-                  RS Rating Across Timeframes
+              <div className="mb-5 flex items-center gap-3 flex-wrap">
+                <h2 className="font-['Syne',sans-serif] text-2xl font-bold uppercase tracking-wider text-foreground">
+                  RS vs {benchmark} Across Timeframes
                 </h2>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <span className="inline-flex cursor-help"><Info size={12} className="text-muted-foreground" /></span>
+                    <span className="inline-flex cursor-help"><Info size={16} className="text-muted-foreground" /></span>
                   </TooltipTrigger>
-                  <TooltipContent className="max-w-xs text-xs">
-                    For each timeframe we show two reliable numbers: raw % return for the stock vs the same-window return for {benchmark} (the difference is the RS — outperformance). The 1W and 1M RS Ratings (1–99) come from the qualified universe.
+                  <TooltipContent className="max-w-xs text-sm">
+                    Each card shows the stock's % return for the window, the {benchmark} return for the same window, the resulting RS (% outperformance), and where available the universe-based RS Rating (1–99).
                   </TooltipContent>
                 </Tooltip>
-                <span className="ml-auto text-[10px] text-muted-foreground">
-                  Benchmark: {benchmark}
+                <span className="ml-auto text-sm text-muted-foreground">
+                  Benchmark: <span className="font-mono font-semibold text-foreground">{benchmark}</span>
                 </span>
               </div>
 
-              <div className="overflow-x-auto">
-                <table className="w-full text-xs">
-                  <thead>
-                    <tr className="border-b border-border/40 text-[10px] uppercase tracking-wider text-muted-foreground">
-                      <th className="py-2 text-left">Timeframe</th>
-                      <th className="py-2 text-right">Stock %</th>
-                      <th className="py-2 text-right">{benchmark} %</th>
-                      <th className="py-2 text-right">RS (vs {benchmark})</th>
-                      <th className="py-2 text-right">RS Rating (1–99)</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {([
-                      { tf: "1D", stock: snapshot.quote.changePct, bench: snapshot.benchmark.changePct, rs: liveRs.rs1d, rating: null as number | null },
-                      { tf: "1W", stock: snapshot.tickerHistory?.return1w ?? null, bench: snapshot.benchmark.return1w, rs: liveRs.rs1w, rating: activeSymbol ? rating1w.get(activeSymbol) ?? null : null },
-                      { tf: "1M", stock: snapshot.tickerHistory?.return1m ?? null, bench: snapshot.benchmark.return1m, rs: liveRs.rs1m, rating: activeSymbol ? rating1m.get(activeSymbol) ?? null : null },
-                      { tf: "3M", stock: snapshot.tickerHistory?.return3m ?? null, bench: snapshot.benchmark.return3m, rs: liveRs.rs3m, rating: null as number | null },
-                    ]).map((row) => (
-                      <tr key={row.tf} className="border-b border-border/20">
-                        <td className="py-2 font-mono font-semibold text-foreground">{row.tf}</td>
-                        <td className={`py-2 text-right font-mono ${pctClass(row.stock)}`}>{pct(row.stock)}</td>
-                        <td className={`py-2 text-right font-mono ${pctClass(row.bench)}`}>{pct(row.bench)}</td>
-                        <td className={`py-2 text-right font-mono font-semibold ${pctClass(row.rs)}`}>{pct(row.rs)}</td>
-                        <td className={`py-2 text-right font-mono font-semibold ${ratingClass(row.rating)}`}>
-                          {row.rating !== null ? row.rating : <span className="text-muted-foreground">—</span>}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-
-              <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
-                <div className="rounded-md border border-border/40 bg-background/40 p-2 text-[11px]">
-                  <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Current RS Rating</div>
-                  <div className={`font-mono text-base font-bold ${ratingClass(overallRating)}`}>{overallRating ?? "—"}</div>
-                  <div className="text-[10px] text-muted-foreground">
-                    {universeRank ? `Rank ${universeRank.rank} / ${universeRank.total}` : "Not in qualified universe"}
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                {([
+                  { tf: "1D", stock: snapshot.quote.changePct, bench: snapshot.benchmark.changePct, rs: liveRs.rs1d, rating: null as number | null },
+                  { tf: "1W", stock: snapshot.tickerHistory?.return1w ?? null, bench: snapshot.benchmark.return1w, rs: liveRs.rs1w, rating: activeSymbol ? rating1w.get(activeSymbol) ?? null : null },
+                  { tf: "1M", stock: snapshot.tickerHistory?.return1m ?? null, bench: snapshot.benchmark.return1m, rs: liveRs.rs1m, rating: activeSymbol ? rating1m.get(activeSymbol) ?? null : null },
+                  { tf: "3M", stock: snapshot.tickerHistory?.return3m ?? null, bench: snapshot.benchmark.return3m, rs: liveRs.rs3m, rating: null as number | null },
+                ]).map((row) => (
+                  <div key={row.tf} className="rounded-lg border border-border/40 bg-background/40 p-4">
+                    <div className="mb-2 flex items-baseline justify-between">
+                      <span className="font-['Syne',sans-serif] text-lg font-bold uppercase tracking-wider text-muted-foreground">
+                        RS {row.tf}
+                      </span>
+                      {row.rating !== null && (
+                        <span className={`font-mono text-base font-bold ${ratingClass(row.rating)}`}>
+                          {row.rating}<span className="text-xs text-muted-foreground">/99</span>
+                        </span>
+                      )}
+                    </div>
+                    <div className={`font-mono text-3xl font-extrabold ${pctClass(row.rs)}`}>
+                      {pct(row.rs)}
+                    </div>
+                    <div className="mt-2 space-y-1 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Stock</span>
+                        <span className={`font-mono font-semibold ${pctClass(row.stock)}`}>{pct(row.stock)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">{benchmark}</span>
+                        <span className={`font-mono font-semibold ${pctClass(row.bench)}`}>{pct(row.bench)}</span>
+                      </div>
+                    </div>
                   </div>
-                </div>
-                <div className="rounded-md border border-border/40 bg-background/40 p-2 text-[11px]">
-                  <div className="text-[10px] uppercase tracking-wider text-muted-foreground">RS Acceleration (1W − 1M)</div>
-                  <div className={`font-mono text-base font-bold ${accelDelta === null ? "text-muted-foreground" : accelDelta >= 5 ? "text-[hsl(160,80%,45%)]" : accelDelta <= -5 ? "text-destructive" : "text-foreground"}`}>
-                    {accelDelta !== null ? `${accelDelta > 0 ? "+" : ""}${accelDelta.toFixed(1)}` : "—"}
-                  </div>
-                  <div className="text-[10px] text-muted-foreground">
-                    {accelDelta === null ? "Insufficient data" : accelDelta >= 5 ? "Improving" : accelDelta <= -5 ? "Decelerating" : "Stable"}
-                  </div>
-                </div>
-                <div className="rounded-md border border-border/40 bg-background/40 p-2 text-[11px]">
-                  <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Universe Rank</div>
-                  <div className="font-mono text-base font-bold text-foreground">
-                    {universeRank ? `#${universeRank.rank}` : "—"}
-                  </div>
-                  <div className="text-[10px] text-muted-foreground">
-                    {universeRank ? `out of ${universeRank.total.toLocaleString()} qualified names` : "Not ranked"}
-                  </div>
-                </div>
+                ))}
               </div>
             </section>
           )}
