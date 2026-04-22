@@ -1467,44 +1467,44 @@ export default function LiveExecution() {
                     )}
                   </div>
                 ) : aiLoading ? (
-                  <div className="flex items-center gap-2 rounded-md border border-border/30 bg-muted/10 p-4 text-xs text-muted-foreground">
-                    <Loader2 size={12} className="animate-spin" /> AI is identifying the theme and peers…
+                  <div className="flex items-center gap-2 rounded-md border border-border/30 bg-muted/10 p-4 text-sm text-muted-foreground">
+                    <Loader2 size={14} className="animate-spin" /> AI is identifying the theme and peers…
                   </div>
                 ) : aiTheme && aiTheme.peers.length > 0 ? (
                   <div className="space-y-2">
-                    <div className="rounded-md border border-primary/20 bg-primary/5 p-2 text-[11px] text-foreground/80">
+                    <div className="rounded-md border border-primary/20 bg-primary/5 p-3 text-sm text-foreground/85">
                       🤖 No qualified peers in the RS universe — these peers were suggested by AI for the theme
-                      <span className="ml-1 font-semibold">{aiTheme.theme ?? "—"}</span>, with live Yahoo quotes.
+                      <span className="ml-1 font-bold">{aiTheme.theme ?? "—"}</span>, with live Yahoo quotes.
                     </div>
                     <div className="overflow-x-auto">
-                      <table className="w-full text-xs">
+                      <table className="w-full text-base">
                         <thead>
-                          <tr className="border-b border-border/40 text-[10px] uppercase tracking-wider text-muted-foreground">
-                            <th className="py-2 text-left">Ticker</th>
-                            <th className="py-2 text-right">Price</th>
-                            <th className="py-2 text-right">1D</th>
-                            <th className="py-2 text-right">1M</th>
+                          <tr className="border-b border-border/40 text-xs uppercase tracking-wider text-muted-foreground">
+                            <th className="py-2.5 text-left">Ticker</th>
+                            <th className="py-2.5 text-right">Price</th>
+                            <th className="py-2.5 text-right">1D</th>
+                            <th className="py-2.5 text-right">1M</th>
                           </tr>
                         </thead>
                         <tbody>
                           {aiTheme.peers.map((p) => (
                             <tr key={p.symbol} className="border-b border-border/20 hover:bg-muted/20">
-                              <td className="py-2">
+                              <td className="py-3">
                                 <button
                                   onClick={() => { setInput(p.symbol); submit(p.symbol); }}
-                                  className="font-mono font-semibold text-primary hover:underline"
+                                  className="font-mono text-base font-bold text-primary hover:underline"
                                 >
                                   {p.symbol}
                                 </button>
                                 {p.shortName && (
-                                  <div className="truncate text-[10px] text-muted-foreground max-w-[180px]">{p.shortName}</div>
+                                  <div className="truncate text-xs text-muted-foreground max-w-[200px]">{p.shortName}</div>
                                 )}
                               </td>
-                              <td className="py-2 text-right font-mono text-foreground">
+                              <td className="py-3 text-right font-mono text-base text-foreground">
                                 {p.price !== null ? `$${p.price.toFixed(2)}` : "—"}
                               </td>
-                              <td className={`py-2 text-right font-mono ${pctClass(p.changePct)}`}>{pct(p.changePct)}</td>
-                              <td className={`py-2 text-right font-mono ${pctClass(p.return1m)}`}>{pct(p.return1m)}</td>
+                              <td className={`py-3 text-right font-mono text-base ${pctClass(p.changePct)}`}>{pct(p.changePct)}</td>
+                              <td className={`py-3 text-right font-mono text-base ${pctClass(p.return1m)}`}>{pct(p.return1m)}</td>
                             </tr>
                           ))}
                         </tbody>
@@ -1512,7 +1512,7 @@ export default function LiveExecution() {
                     </div>
                   </div>
                 ) : (
-                  <div className="rounded-md border border-border/30 bg-muted/10 p-3 text-xs text-muted-foreground">
+                  <div className="rounded-md border border-border/30 bg-muted/10 p-4 text-sm text-muted-foreground">
                     Insufficient data — could not match this ticker to a theme peer set.
                   </div>
                 )}
