@@ -1250,7 +1250,7 @@ export default function LiveExecution() {
                 </div>
 
                 {/* Metric grid */}
-                <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 xl:grid-cols-5">
                   <MetricCard
                     label="RS Rating"
                     tooltip="Relative Strength rank from 1–99 within the qualified universe. 80+ = leader, 40-79 = average, <40 = laggard."
@@ -1264,36 +1264,41 @@ export default function LiveExecution() {
                     onWhy={() => setWhyTopic("rs")}
                   />
                   <MetricCard
-                    label="Conviction"
-                    tooltip="Overall Conviction (0-100): 40% RS Rating + 30% Theme/Sector strength + 20% Fundamentals (growth-adjusted) + 10% Options activity. Missing pillars are dropped and weight is redistributed."
-                    value={conviction !== null ? `${conviction.total}` : "—"}
+                    label="RS Acceleration"
+                    tooltip="Difference between the stock's 1W RS rating and 1M RS rating. Positive means near-term relative strength is improving."
+                    value={accelDelta !== null ? `${accelDelta > 0 ? "+" : ""}${accelDelta.toFixed(1)}` : "—"}
                     sub={
-                      conviction === null
-                        ? "Need RS data"
-                        : conviction.total >= 70
-                        ? "High conviction"
-                        : conviction.total >= 50
-                        ? "Medium"
-                        : "Low conviction"
+                      accelDelta === null
+                        ? "Insufficient data"
+                        : accelDelta >= 5
+                        ? "Improving"
+                        : accelDelta <= -5
+                        ? "Decelerating"
+                        : "Stable"
                     }
-                    valueClass={ratingClass(conviction?.total ?? null)}
-                    onWhy={() => setWhyTopic("conviction")}
+                    valueClass={
+                      accelDelta === null
+                        ? "text-muted-foreground"
+                        : accelDelta >= 5
+                        ? "text-[hsl(160,80%,45%)]"
+                        : accelDelta <= -5
+                        ? "text-destructive"
+                        : "text-foreground"
+                    }
+                    onWhy={() => setWhyTopic("rs")}
                   />
                   <MetricCard
-                    label="Setup Quality"
-                    tooltip="0-100 score for how clean the entry is RIGHT NOW: RS acceleration, volume confirmation, pullback depth in a strong trend, and theme alignment."
-                    value={setupQuality !== null ? `${setupQuality}` : "—"}
+                    label="Theme"
+                    tooltip="Broad theme or sector context derived from the stock's industry mapping plus sector ETF strength when available."
+                    value={resolvedTheme.broadLabel ?? "—"}
                     sub={
-                      setupQuality === null
-                        ? "Need RS data"
-                        : setupQuality >= 70
-                        ? "Clean setup"
-                        : setupQuality >= 50
-                        ? "Acceptable"
-                        : "Poor setup"
+                      themeStats.matchedCount > 0
+                        ? `${themeStats.matchedCount} qualified names`
+                        : resolvedTheme.etfSymbol
+                        ? `${resolvedTheme.etfSymbol} ETF context only`
+                        : "Insufficient data"
                     }
-                    valueClass={ratingClass(setupQuality)}
-                    onWhy={() => setWhyTopic("setup")}
+                    valueClass="text-foreground"
                   />
                   <MetricCard
                     label="Rel Volume"
@@ -1301,7 +1306,7 @@ export default function LiveExecution() {
                     value={relVol !== null ? `${relVol.toFixed(2)}×` : "—"}
                     sub={
                       relVol === null
-                        ? "—"
+                        ? "Insufficient data"
                         : relVol >= 1.5
                         ? "Above average"
                         : relVol < 0.6
@@ -1320,38 +1325,27 @@ export default function LiveExecution() {
                     onWhy={() => setWhyTopic("relVol")}
                   />
                   <MetricCard
-                    label="ADR%"
-                    tooltip="Average Daily Range — typical % move per day. Higher ADR = bigger swings, requires wider stops."
-                    value={activeStock?.adrPercent !== null && activeStock?.adrPercent !== undefined ? `${activeStock.adrPercent.toFixed(1)}%` : "—"}
+                    label="Options"
+                    tooltip="Simple options-flow read from the nearest expiration: sentiment, put/call balance, and implied volatility."
+                    value={snapshot.options.available ? snapshot.options.sentiment : "—"}
                     sub={
-                      activeStock?.adrPercent && activeStock.adrPercent >= 5
-                        ? "High volatility"
-                        : "Normal"
+                      snapshot.options.available
+                        ? snapshot.options.high_iv_alert
+                          ? "Elevated IV"
+                          : "Normal read"
+                        : "Insufficient data"
                     }
-                    valueClass="text-foreground"
+                    valueClass={
+                      !snapshot.options.available
+                        ? "text-muted-foreground"
+                        : snapshot.options.sentiment === "Bullish"
+                        ? "text-[hsl(160,80%,45%)]"
+                        : snapshot.options.sentiment === "Bearish"
+                        ? "text-destructive"
+                        : "text-foreground"
+                    }
                   />
                 </div>
-
-                {/* Overall Conviction Breakdown — 4 Pillars */}
-                {conviction && (
-                  <ConvictionBreakdown
-                    total={conviction.total}
-                    rs={conviction.rs}
-                    theme={conviction.theme}
-                    fund={conviction.fund}
-                    opt={conviction.opt}
-                    benchmarkLabel={benchmark}
-                    sectorName={snapshot?.industry?.sectorName ?? null}
-                    sectorEtf={snapshot?.industry?.etfSymbol ?? null}
-                    fundamentals={snapshot?.fundamentals ?? null}
-                    sectorPeAvg={(snapshot as any)?.sectorPeAvg ?? null}
-                    peJustified={conviction.fundDetail.peJustified}
-                    hasIndustry={conviction.hasIndustry}
-                    hasFund={conviction.hasFund}
-                    hasOptions={conviction.hasOptions}
-                    onWhy={() => setWhyTopic("conviction")}
-                  />
-                )}
 
                 {/* Pullback / Breakdown callout */}
                 {pullback && (
