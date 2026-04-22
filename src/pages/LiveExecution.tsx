@@ -1535,6 +1535,115 @@ export default function LiveExecution() {
             </section>
           )}
 
+          {/* ── Theme Section (30% pillar) ── */}
+          {snapshot && (
+            <section
+              className="rounded-xl border border-border/60 p-4"
+              style={{ background: "rgba(255,255,255,0.03)" }}
+            >
+              <div className="mb-3 flex items-center gap-2 flex-wrap">
+                <h2 className="font-['Syne',sans-serif] text-sm font-semibold uppercase tracking-wider text-foreground">
+                  Theme
+                </h2>
+                <span className="rounded border border-border/40 bg-background/40 px-1.5 py-0.5 text-[10px] uppercase tracking-wider text-muted-foreground">
+                  30% weight
+                </span>
+                <span className="text-[11px] text-muted-foreground">
+                  Group strength: ETF trend plus the RS quality of the other names in the same theme.
+                </span>
+                {conviction?.theme !== null && conviction?.theme !== undefined && (
+                  <span className={`ml-auto font-mono text-base font-bold ${ratingClass(conviction.theme)}`}>
+                    {conviction.theme} <span className="text-[10px] text-muted-foreground">/ 100</span>
+                  </span>
+                )}
+              </div>
+              <div className="grid gap-3 lg:grid-cols-[0.95fr_1.05fr]">
+                <div className="space-y-3 rounded-lg border border-border/40 bg-background/40 p-3">
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                    <MetricCard
+                      label="Theme"
+                      value={resolvedTheme.broadLabel ?? "—"}
+                      sub={resolvedTheme.rawLabel ?? "Insufficient data"}
+                    />
+                    <MetricCard
+                      label="Avg RS Rating"
+                      value={themeStats.avgRating !== null ? `${themeStats.avgRating}` : "—"}
+                      sub={themeStats.matchedCount > 0 ? `${themeStats.matchedCount} qualified names` : "Insufficient data"}
+                      valueClass={ratingClass(themeStats.avgRating)}
+                    />
+                    <MetricCard
+                      label="Leaders"
+                      value={themeStats.leaderPct !== null ? `${themeStats.leaderPct}%` : "—"}
+                      sub="RS ≥ 80 inside theme"
+                      valueClass={themeStats.leaderPct !== null && themeStats.leaderPct >= 40 ? "text-[hsl(160,80%,45%)]" : themeStats.leaderPct !== null && themeStats.leaderPct < 15 ? "text-destructive" : "text-foreground"}
+                    />
+                    <MetricCard
+                      label="ETF Context"
+                      value={snapshot.industry?.etfSymbol ?? "—"}
+                      sub={snapshot.industry?.available ? `${pct(snapshot.industry.return1m)} · 1M` : "Insufficient data"}
+                      valueClass={pctClass(snapshot.industry?.return1m ?? null)}
+                    />
+                  </div>
+                  <p className="text-xs leading-relaxed text-muted-foreground">
+                    A stock is more trustworthy when it is leading inside a healthy theme. This section combines the sector ETF trend with the RS quality of the qualified names in the same group.
+                  </p>
+                </div>
+                <div className="rounded-lg border border-border/40 bg-background/40 p-3">
+                  <div className="mb-2 flex items-center justify-between gap-2">
+                    <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                      Top theme tickers by RS
+                    </div>
+                    <div className="text-[10px] text-muted-foreground">
+                      {themeLeaders.length > 0 ? `${themeLeaders.length} shown` : "No peers found"}
+                    </div>
+                  </div>
+                  {themeLeaders.length === 0 ? (
+                    <div className="rounded-md border border-border/30 bg-muted/10 p-3 text-xs text-muted-foreground">
+                      Insufficient data — this ticker could not be matched to a qualified theme peer set yet.
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-xs">
+                        <thead>
+                          <tr className="border-b border-border/30 text-[10px] uppercase tracking-wider text-muted-foreground">
+                            <th className="py-2 text-left">Ticker</th>
+                            <th className="py-2 text-right">RS Rating</th>
+                            <th className="py-2 text-right">RS 1M</th>
+                            <th className="py-2 text-right">1M Return</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {themeLeaders.map((stock) => {
+                            const rating = ratingOverall.get(stock.symbol.toUpperCase()) ?? null;
+                            const isActive = stock.symbol === activeSymbol;
+                            return (
+                              <tr key={stock.symbol} className="border-b border-border/20 last:border-0">
+                                <td className="py-2">
+                                  <button
+                                    onClick={() => {
+                                      setInput(stock.symbol);
+                                      submit(stock.symbol);
+                                    }}
+                                    className={`font-mono font-semibold ${isActive ? "text-foreground" : "text-primary hover:underline"}`}
+                                  >
+                                    {stock.symbol}
+                                  </button>
+                                </td>
+                                <td className={`py-2 text-right font-mono font-semibold ${ratingClass(rating)}`}>{rating ?? "—"}</td>
+                                <td className={`py-2 text-right font-mono ${pctClass(stock.rs1m)}`}>{pct(stock.rs1m)}</td>
+                                <td className={`py-2 text-right font-mono ${pctClass(stock.return1m)}`}>{pct(stock.return1m)}</td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </section>
+          )}
+
           {/* ── Fundamentals (20% pillar) ── */}
           {snapshot && (
             <section
