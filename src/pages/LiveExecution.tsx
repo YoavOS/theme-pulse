@@ -1520,22 +1520,22 @@ export default function LiveExecution() {
 
               {/* ── [2] Fundamentals ── top right */}
               <div
-                className="rounded-xl border border-border/60 p-4"
+                className="rounded-xl border border-border/60 p-5"
                 style={{ background: "rgba(255,255,255,0.03)" }}
               >
-                <div className="mb-3 flex items-center gap-2 flex-wrap">
-                  <h2 className="font-['Syne',sans-serif] text-sm font-semibold uppercase tracking-wider text-foreground">
+                <div className="mb-4 flex items-center gap-2 flex-wrap">
+                  <h2 className="font-['Syne',sans-serif] text-2xl font-bold uppercase tracking-wider text-foreground">
                     Fundamentals
                   </h2>
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <span className="inline-flex cursor-help"><Info size={12} className="text-muted-foreground" /></span>
+                      <span className="inline-flex cursor-help"><Info size={14} className="text-muted-foreground" /></span>
                     </TooltipTrigger>
-                    <TooltipContent className="max-w-xs text-xs">
+                    <TooltipContent className="max-w-xs text-sm">
                       Growth-focused: EPS growth (YoY), revenue growth (YoY) and Forward P/E vs the sector average. High P/E is acceptable when growth is strong and is not heavily penalised.
                     </TooltipContent>
                   </Tooltip>
-                  <span className="ml-auto text-[10px] text-muted-foreground">Source: Yahoo Finance</span>
+                  <span className="ml-auto text-sm text-muted-foreground">Source: Yahoo Finance</span>
                 </div>
                 {snapshot.fundamentals?.available ? (
                   <FundamentalsBlock
@@ -1546,7 +1546,7 @@ export default function LiveExecution() {
                     onWhy={() => setWhyTopic("fundamentals")}
                   />
                 ) : (
-                  <div className="rounded-md border border-border/30 bg-muted/10 p-3 text-xs text-muted-foreground">
+                  <div className="rounded-md border border-border/30 bg-muted/10 p-4 text-sm text-muted-foreground">
                     Insufficient data — Yahoo did not return clean fundamentals for this ticker.
                   </div>
                 )}
