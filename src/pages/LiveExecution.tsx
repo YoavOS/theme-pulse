@@ -1108,10 +1108,10 @@ export default function LiveExecution() {
                 <ArrowLeft size={16} />
               </Link>
               <div>
-                <h1 className="font-['Syne',sans-serif] text-xl font-bold tracking-tight text-foreground">
+                <h1 className="font-['Syne',sans-serif] text-3xl font-bold tracking-tight text-foreground">
                   Live Execution
                 </h1>
-                <p className="text-[11px] text-muted-foreground">
+                <p className="text-sm text-muted-foreground">
                   Real-time trade decision tool · {stocks.length.toLocaleString()} qualified RS universe
                 </p>
               </div>
