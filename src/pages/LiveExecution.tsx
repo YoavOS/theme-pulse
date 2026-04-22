@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { useRsAlpha, type RsStock } from "@/hooks/useRsAlpha";
 import { useLiveSnapshot, useLiveWatchlist, type LiveSnapshot, type BenchmarkSymbol } from "@/hooks/useLiveSnapshot";
+import { supabase } from "@/integrations/supabase/client";
 import { computeRsRatings } from "@/components/rs/RsRatingBadge";
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
@@ -689,6 +690,19 @@ export default function LiveExecution() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [benchmark]);
 
+  // Auto-refresh the live snapshot every 10 s while a ticker is active.
+  // Pauses while the tab is hidden so we don't burn API calls in the background.
+  useEffect(() => {
+    if (!activeSymbol) return;
+    const id = window.setInterval(() => {
+      if (document.visibilityState !== "visible") return;
+      const sector = stockMap.get(activeSymbol)?.sector ?? null;
+      fetchSnapshot(activeSymbol, benchmark, sector);
+    }, 10_000);
+    return () => window.clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeSymbol, benchmark]);
+
   const activeStock = activeSymbol ? stockMap.get(activeSymbol) ?? null : null;
   const resolvedTheme = useMemo(() => {
     const rawLabel = activeStock?.sector ?? snapshot?.fundamentals?.industry ?? snapshot?.fundamentals?.sector ?? null;
@@ -1008,6 +1022,37 @@ export default function LiveExecution() {
   const verdict = buildVerdict(overallRating, accelDelta, relVol, activeStock?.return1w ?? null);
   const VerdictIcon = verdict.icon;
   const signals = buildEntrySignals(activeStock, snapshot, liveRs, benchmark);
+
+  // ── AI-suggested theme peers (fallback when the qualified universe doesn't have enough) ──
+  type AiPeer = { symbol: string; shortName: string | null; price: number | null; changePct: number | null; return1m: number | null };
+  const [aiTheme, setAiTheme] = useState<{ theme: string | null; peers: AiPeer[] } | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
+  const aiKeyRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    setAiTheme(null);
+    aiKeyRef.current = null;
+    if (!activeSymbol || !snapshot) return;
+    // Only use AI fallback when we have fewer than 3 qualified peers.
+    if (themeUniverseMembers.length >= 3) return;
+
+    const key = activeSymbol;
+    aiKeyRef.current = key;
+    const hint = activeStock?.sector
+      ?? snapshot.fundamentals?.industry
+      ?? snapshot.fundamentals?.sector
+      ?? null;
+    setAiLoading(true);
+    supabase.functions
+      .invoke("live-theme-suggest", { body: { symbol: activeSymbol, hint } })
+      .then(({ data, error }) => {
+        if (aiKeyRef.current !== key) return;
+        if (error || !data) { setAiTheme(null); return; }
+        setAiTheme({ theme: (data as any).theme ?? null, peers: ((data as any).quotes ?? []) as AiPeer[] });
+      })
+      .finally(() => { if (aiKeyRef.current === key) setAiLoading(false); });
+  }, [activeSymbol, snapshot, themeUniverseMembers.length, activeStock?.sector]);
+
 
   // Peers: same sector, top 5 by overall RS, excluding active
   const peers = useMemo(() => {
@@ -1468,227 +1513,202 @@ export default function LiveExecution() {
             )}
           </section>
 
-          {/* ── RS Rating Section (40% pillar) ── */}
+          {/*
+            ── New 4-section sketch layout ──
+            Row A: [1] Theme Tickers (tall left col)  |  [2] Fundamentals (top right) + Conviction summary
+            Row B: [3] Options Activity (full width)
+            Row C: [4] RS Rating Across Timeframes (full width, raw % + RS score)
+          */}
           {snapshot && (
-            <section
-              className="rounded-xl border border-border/60 p-4"
-              style={{ background: "rgba(255,255,255,0.03)" }}
-            >
-              <div className="mb-3 flex items-center gap-2 flex-wrap">
-                <h2 className="font-['Syne',sans-serif] text-sm font-semibold uppercase tracking-wider text-foreground">
-                  RS Rating
-                </h2>
-                <span className="rounded border border-border/40 bg-background/40 px-1.5 py-0.5 text-[10px] uppercase tracking-wider text-muted-foreground">
-                  40% weight
-                </span>
-                <span className="text-[11px] text-muted-foreground">
-                  Leadership first: current rank, acceleration, and benchmark-relative strength.
-                </span>
-              </div>
-              <div className="grid gap-3 lg:grid-cols-[1.25fr_1fr]">
-                <div className="rounded-lg border border-border/40 bg-background/40 p-3">
-                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                    <MetricCard
-                      label="Current RS Rating"
-                      value={overallRating !== null ? `${overallRating}` : "—"}
-                      sub={universeRank ? `Rank ${universeRank.rank} / ${universeRank.total}` : "Insufficient data"}
-                      valueClass={ratingClass(overallRating)}
-                      onWhy={() => setWhyTopic("rs")}
-                    />
-                    <MetricCard
-                      label="RS Acceleration"
-                      value={accelDelta !== null ? `${accelDelta > 0 ? "+" : ""}${accelDelta.toFixed(1)}` : "—"}
-                      sub={accelDelta === null ? "Insufficient data" : accelDelta >= 5 ? "Improving" : accelDelta <= -5 ? "Decelerating" : "Stable"}
-                      valueClass={accelDelta === null ? "text-muted-foreground" : accelDelta >= 5 ? "text-[hsl(160,80%,45%)]" : accelDelta <= -5 ? "text-destructive" : "text-foreground"}
-                      onWhy={() => setWhyTopic("rs")}
-                    />
-                    <MetricCard
-                      label={`RS 1D vs ${benchmark}`}
-                      value={liveRs.rs1d !== null ? pct(liveRs.rs1d) : "—"}
-                      sub={liveRs.rs1d === null ? "Insufficient data" : liveRs.rs1d >= 0 ? "Outperforming today" : "Underperforming today"}
-                      valueClass={pctClass(liveRs.rs1d)}
-                    />
-                    <MetricCard
-                      label="Setup Quality"
-                      value={setupQuality !== null ? `${setupQuality}` : "—"}
-                      sub={setupQuality === null ? "Insufficient data" : setupQuality >= 70 ? "Clean setup" : setupQuality >= 50 ? "Balanced" : "Needs work"}
-                      valueClass={ratingClass(setupQuality)}
-                      onWhy={() => setWhyTopic("setup")}
-                    />
-                  </div>
-                </div>
-                <div className="rounded-lg border border-border/40 bg-background/40 p-3">
-                  <div className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                    RS across timeframes
-                  </div>
-                  <div className="grid grid-cols-4 gap-2">
-                    <RsTrendCell label="1D" value={liveRs.rs1d} />
-                    <RsTrendCell label="1W" value={liveRs.rs1w} />
-                    <RsTrendCell label="1M" value={liveRs.rs1m} />
-                    <RsTrendCell label="3M" value={liveRs.rs3m} />
-                  </div>
-                  <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-                    This section tells you whether the stock is a true leader, whether that leadership is improving, and whether the latest move is still stronger than the selected benchmark.
-                  </p>
-                </div>
-              </div>
-            </section>
-          )}
-
-          {/* ── Theme Section (30% pillar) ── */}
-          {snapshot && (
-            <section
-              className="rounded-xl border border-border/60 p-4"
-              style={{ background: "rgba(255,255,255,0.03)" }}
-            >
-              <div className="mb-3 flex items-center gap-2 flex-wrap">
-                <h2 className="font-['Syne',sans-serif] text-sm font-semibold uppercase tracking-wider text-foreground">
-                  Theme
-                </h2>
-                <span className="rounded border border-border/40 bg-background/40 px-1.5 py-0.5 text-[10px] uppercase tracking-wider text-muted-foreground">
-                  30% weight
-                </span>
-                <span className="text-[11px] text-muted-foreground">
-                  Group strength: ETF trend plus the RS quality of the other names in the same theme.
-                </span>
-                {conviction?.theme !== null && conviction?.theme !== undefined && (
-                  <span className={`ml-auto font-mono text-base font-bold ${ratingClass(conviction.theme)}`}>
-                    {conviction.theme} <span className="text-[10px] text-muted-foreground">/ 100</span>
+            <section className="grid gap-4 lg:grid-cols-[1.05fr_1fr]">
+              {/* ── [1] Theme Tickers ── tall left column */}
+              <div
+                className="rounded-xl border border-border/60 p-4 lg:row-span-2"
+                style={{ background: "rgba(255,255,255,0.03)" }}
+              >
+                <div className="mb-3 flex items-center gap-2 flex-wrap">
+                  <h2 className="font-['Syne',sans-serif] text-sm font-semibold uppercase tracking-wider text-foreground">
+                    Theme Tickers
+                  </h2>
+                  <span className="text-[12px] font-semibold text-primary">
+                    {(themeUniverseMembers.length > 0 ? resolvedTheme.broadLabel : aiTheme?.theme) ?? resolvedTheme.broadLabel ?? "—"}
                   </span>
-                )}
-              </div>
-              <div className="grid gap-3 lg:grid-cols-[0.95fr_1.05fr]">
-                <div className="space-y-3 rounded-lg border border-border/40 bg-background/40 p-3">
-                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                    <MetricCard
-                      label="Theme"
-                      value={resolvedTheme.broadLabel ?? "—"}
-                      sub={resolvedTheme.rawLabel ?? "Insufficient data"}
-                    />
-                    <MetricCard
-                      label="Avg RS Rating"
-                      value={themeStats.avgRating !== null ? `${themeStats.avgRating}` : "—"}
-                      sub={themeStats.matchedCount > 0 ? `${themeStats.matchedCount} qualified names` : "Insufficient data"}
-                      valueClass={ratingClass(themeStats.avgRating)}
-                    />
-                    <MetricCard
-                      label="Leaders"
-                      value={themeStats.leaderPct !== null ? `${themeStats.leaderPct}%` : "—"}
-                      sub="RS ≥ 80 inside theme"
-                      valueClass={themeStats.leaderPct !== null && themeStats.leaderPct >= 40 ? "text-[hsl(160,80%,45%)]" : themeStats.leaderPct !== null && themeStats.leaderPct < 15 ? "text-destructive" : "text-foreground"}
-                    />
-                    <MetricCard
-                      label="ETF Context"
-                      value={snapshot.industry?.etfSymbol ?? "—"}
-                      sub={snapshot.industry?.available ? `${pct(snapshot.industry.return1m)} · 1M` : "Insufficient data"}
-                      valueClass={pctClass(snapshot.industry?.return1m ?? null)}
-                    />
-                  </div>
-                  <p className="text-xs leading-relaxed text-muted-foreground">
-                    A stock is more trustworthy when it is leading inside a healthy theme. This section combines the sector ETF trend with the RS quality of the qualified names in the same group.
-                  </p>
+                  {snapLoading && <Loader2 size={11} className="animate-spin text-muted-foreground" />}
+                  <span className="ml-auto text-[10px] text-muted-foreground">
+                    {themeUniverseMembers.length > 0
+                      ? `${themeUniverseMembers.length} qualified peers`
+                      : aiTheme && aiTheme.peers.length > 0
+                      ? `${aiTheme.peers.length} AI-suggested peers`
+                      : aiLoading
+                      ? "Finding peers…"
+                      : ""}
+                  </span>
                 </div>
-                <div className="rounded-lg border border-border/40 bg-background/40 p-3">
-                  <div className="mb-2 flex items-center justify-between gap-2">
-                    <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                      Top theme tickers by RS
-                    </div>
-                    <div className="text-[10px] text-muted-foreground">
-                      {themeLeaders.length > 0 ? `${themeLeaders.length} shown` : "No peers found"}
-                    </div>
+                <p className="mb-3 text-[11px] leading-relaxed text-muted-foreground">
+                  All tickers in the same theme as <span className="font-mono text-foreground">{snapshot.symbol}</span>.
+                  Auto-refreshes every 10 s. When the qualified universe has fewer than 3 peers we fall back to an AI-suggested peer set and pull live Yahoo quotes for them.
+                </p>
+
+                {themeUniverseMembers.length > 0 ? (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr className="border-b border-border/40 text-[10px] uppercase tracking-wider text-muted-foreground">
+                          <th className="py-2 text-left">Ticker</th>
+                          <th className="py-2 text-right">RS Rating</th>
+                          <th className="py-2 text-right">1D</th>
+                          <th className="py-2 text-right">1M</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {themeUniverseMembers.slice(0, 15).map((stock) => {
+                          const rating = ratingOverall.get(stock.symbol.toUpperCase()) ?? null;
+                          const isActive = stock.symbol === activeSymbol;
+                          // 1D return: use the live snapshot's quote when this row is the active ticker;
+                          // otherwise fall back to the universe-stored intraday return when present.
+                          const r1d = isActive ? snapshot.quote.changePct : (stock as any).return1d ?? null;
+                          return (
+                            <tr key={stock.symbol} className="border-b border-border/20 hover:bg-muted/20">
+                              <td className="py-2">
+                                <button
+                                  onClick={() => { setInput(stock.symbol); submit(stock.symbol); }}
+                                  className={`font-mono font-semibold ${isActive ? "text-foreground" : "text-primary hover:underline"}`}
+                                >
+                                  {stock.symbol}
+                                </button>
+                                {stock.companyName && (
+                                  <div className="truncate text-[10px] text-muted-foreground max-w-[180px]">{stock.companyName}</div>
+                                )}
+                              </td>
+                              <td className={`py-2 text-right font-mono font-semibold ${ratingClass(rating)}`}>{rating ?? "—"}</td>
+                              <td className={`py-2 text-right font-mono ${pctClass(r1d)}`}>{pct(r1d)}</td>
+                              <td className={`py-2 text-right font-mono ${pctClass(stock.return1m)}`}>{pct(stock.return1m)}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                    {themeUniverseMembers.length > 15 && (
+                      <div className="mt-2 text-center text-[10px] text-muted-foreground">
+                        Showing top 15 of {themeUniverseMembers.length} by RS Rating
+                      </div>
+                    )}
                   </div>
-                  {themeLeaders.length === 0 ? (
-                    <div className="rounded-md border border-border/30 bg-muted/10 p-3 text-xs text-muted-foreground">
-                      Insufficient data — this ticker could not be matched to a qualified theme peer set yet.
+                ) : aiLoading ? (
+                  <div className="flex items-center gap-2 rounded-md border border-border/30 bg-muted/10 p-4 text-xs text-muted-foreground">
+                    <Loader2 size={12} className="animate-spin" /> AI is identifying the theme and peers…
+                  </div>
+                ) : aiTheme && aiTheme.peers.length > 0 ? (
+                  <div className="space-y-2">
+                    <div className="rounded-md border border-primary/20 bg-primary/5 p-2 text-[11px] text-foreground/80">
+                      🤖 No qualified peers in the RS universe — these peers were suggested by AI for the theme
+                      <span className="ml-1 font-semibold">{aiTheme.theme ?? "—"}</span>, with live Yahoo quotes.
                     </div>
-                  ) : (
                     <div className="overflow-x-auto">
                       <table className="w-full text-xs">
                         <thead>
-                          <tr className="border-b border-border/30 text-[10px] uppercase tracking-wider text-muted-foreground">
+                          <tr className="border-b border-border/40 text-[10px] uppercase tracking-wider text-muted-foreground">
                             <th className="py-2 text-left">Ticker</th>
-                            <th className="py-2 text-right">RS Rating</th>
-                            <th className="py-2 text-right">RS 1M</th>
-                            <th className="py-2 text-right">1M Return</th>
+                            <th className="py-2 text-right">Price</th>
+                            <th className="py-2 text-right">1D</th>
+                            <th className="py-2 text-right">1M</th>
                           </tr>
                         </thead>
                         <tbody>
-                          {themeLeaders.map((stock) => {
-                            const rating = ratingOverall.get(stock.symbol.toUpperCase()) ?? null;
-                            const isActive = stock.symbol === activeSymbol;
-                            return (
-                              <tr key={stock.symbol} className="border-b border-border/20 last:border-0">
-                                <td className="py-2">
-                                  <button
-                                    onClick={() => {
-                                      setInput(stock.symbol);
-                                      submit(stock.symbol);
-                                    }}
-                                    className={`font-mono font-semibold ${isActive ? "text-foreground" : "text-primary hover:underline"}`}
-                                  >
-                                    {stock.symbol}
-                                  </button>
-                                </td>
-                                <td className={`py-2 text-right font-mono font-semibold ${ratingClass(rating)}`}>{rating ?? "—"}</td>
-                                <td className={`py-2 text-right font-mono ${pctClass(stock.rs1m)}`}>{pct(stock.rs1m)}</td>
-                                <td className={`py-2 text-right font-mono ${pctClass(stock.return1m)}`}>{pct(stock.return1m)}</td>
-                              </tr>
-                            );
-                          })}
+                          {aiTheme.peers.map((p) => (
+                            <tr key={p.symbol} className="border-b border-border/20 hover:bg-muted/20">
+                              <td className="py-2">
+                                <button
+                                  onClick={() => { setInput(p.symbol); submit(p.symbol); }}
+                                  className="font-mono font-semibold text-primary hover:underline"
+                                >
+                                  {p.symbol}
+                                </button>
+                                {p.shortName && (
+                                  <div className="truncate text-[10px] text-muted-foreground max-w-[180px]">{p.shortName}</div>
+                                )}
+                              </td>
+                              <td className="py-2 text-right font-mono text-foreground">
+                                {p.price !== null ? `$${p.price.toFixed(2)}` : "—"}
+                              </td>
+                              <td className={`py-2 text-right font-mono ${pctClass(p.changePct)}`}>{pct(p.changePct)}</td>
+                              <td className={`py-2 text-right font-mono ${pctClass(p.return1m)}`}>{pct(p.return1m)}</td>
+                            </tr>
+                          ))}
                         </tbody>
                       </table>
                     </div>
-                  )}
-                </div>
-              </div>
-            </section>
-          )}
-
-          {/* ── Fundamentals (20% pillar) ── */}
-          {snapshot && (
-            <section
-              className="rounded-xl border border-border/60 p-4"
-              style={{ background: "rgba(255,255,255,0.03)" }}
-            >
-              <div className="mb-3 flex items-center gap-2 flex-wrap">
-                <h2 className="font-['Syne',sans-serif] text-sm font-semibold uppercase tracking-wider text-foreground">
-                  Fundamentals
-                </h2>
-                <span className="rounded border border-border/40 bg-background/40 px-1.5 py-0.5 text-[10px] uppercase tracking-wider text-muted-foreground">
-                  20% pillar
-                </span>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <span className="inline-flex cursor-help"><Info size={12} className="text-muted-foreground" /></span>
-                  </TooltipTrigger>
-                  <TooltipContent className="max-w-xs text-xs">
-                    Simple O'Neil-style sanity check: are earnings and revenue growing, and is the valuation reasonable for that growth? High P/E is fine if growth is strong (≥ 25% EPS or ≥ 20% revenue YoY).
-                  </TooltipContent>
-                </Tooltip>
-                <span className="ml-auto text-[10px] text-muted-foreground">Source: Yahoo Finance</span>
-                {conviction?.fund !== null && conviction?.fund !== undefined && (
-                  <span className={`font-mono text-base font-bold ${ratingClass(conviction.fund)}`}>
-                    {conviction.fund} <span className="text-[10px] text-muted-foreground">/ 100</span>
-                  </span>
+                  </div>
+                ) : (
+                  <div className="rounded-md border border-border/30 bg-muted/10 p-3 text-xs text-muted-foreground">
+                    Insufficient data — could not match this ticker to a theme peer set.
+                  </div>
                 )}
               </div>
-              {snapshot.fundamentals?.available ? (
-                <FundamentalsBlock
-                  fd={snapshot.fundamentals}
-                  sectorPeAvg={(snapshot as any)?.sectorPeAvg ?? null}
-                  sectorEtf={snapshot.industry?.etfSymbol ?? null}
-                  peJustified={conviction?.fundDetail.peJustified ?? false}
-                  onWhy={() => setWhyTopic("fundamentals")}
-                />
-              ) : (
-                <p className="text-xs text-muted-foreground">
-                  No clean fundamental data returned for this ticker. The Overall Conviction Score above redistributes the 20% weight to the other pillars.
-                </p>
+
+              {/* ── [2] Fundamentals ── top right */}
+              <div
+                className="rounded-xl border border-border/60 p-4"
+                style={{ background: "rgba(255,255,255,0.03)" }}
+              >
+                <div className="mb-3 flex items-center gap-2 flex-wrap">
+                  <h2 className="font-['Syne',sans-serif] text-sm font-semibold uppercase tracking-wider text-foreground">
+                    Fundamentals
+                  </h2>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span className="inline-flex cursor-help"><Info size={12} className="text-muted-foreground" /></span>
+                    </TooltipTrigger>
+                    <TooltipContent className="max-w-xs text-xs">
+                      Growth-focused: EPS growth (YoY), revenue growth (YoY) and Forward P/E vs the sector average. High P/E is acceptable when growth is strong and is not heavily penalised.
+                    </TooltipContent>
+                  </Tooltip>
+                  <span className="ml-auto text-[10px] text-muted-foreground">Source: Yahoo Finance</span>
+                </div>
+                {snapshot.fundamentals?.available ? (
+                  <FundamentalsBlock
+                    fd={snapshot.fundamentals}
+                    sectorPeAvg={(snapshot as any)?.sectorPeAvg ?? null}
+                    sectorEtf={snapshot.industry?.etfSymbol ?? null}
+                    peJustified={conviction?.fundDetail.peJustified ?? false}
+                    onWhy={() => setWhyTopic("fundamentals")}
+                  />
+                ) : (
+                  <div className="rounded-md border border-border/30 bg-muted/10 p-3 text-xs text-muted-foreground">
+                    Insufficient data — Yahoo did not return clean fundamentals for this ticker.
+                  </div>
+                )}
+              </div>
+
+              {/* Conviction summary slot — sits below Fundamentals on the right column */}
+              {conviction && (
+                <div
+                  className="rounded-xl border border-primary/30 p-4"
+                  style={{ background: "rgba(60, 200, 255, 0.04)" }}
+                >
+                  <ConvictionBreakdown
+                    total={conviction.total}
+                    rs={conviction.rs}
+                    theme={conviction.theme}
+                    fund={conviction.fund}
+                    opt={conviction.opt}
+                    benchmarkLabel={benchmark}
+                    sectorName={resolvedTheme.broadLabel ?? snapshot?.industry?.sectorName ?? null}
+                    sectorEtf={snapshot?.industry?.etfSymbol ?? null}
+                    fundamentals={snapshot?.fundamentals ?? null}
+                    sectorPeAvg={(snapshot as any)?.sectorPeAvg ?? null}
+                    peJustified={conviction.fundDetail.peJustified}
+                    hasIndustry={conviction.hasIndustry}
+                    hasFund={conviction.hasFund}
+                    hasOptions={conviction.hasOptions}
+                    onWhy={() => setWhyTopic("conviction")}
+                  />
+                </div>
               )}
             </section>
           )}
 
-          {/* ── Options Activity (10% pillar) ── */}
+          {/* ── [3] Options Activity ── full width */}
           {snapshot && (
             <section
               className="rounded-xl border border-border/60 p-4"
@@ -1698,32 +1718,25 @@ export default function LiveExecution() {
                 <h2 className="font-['Syne',sans-serif] text-sm font-semibold uppercase tracking-wider text-foreground">
                   Options Activity
                 </h2>
-                <span className="rounded border border-border/40 bg-background/40 px-1.5 py-0.5 text-[10px] uppercase tracking-wider text-muted-foreground">
-                  10% pillar
-                </span>
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <span className="inline-flex cursor-help"><Info size={12} className="text-muted-foreground" /></span>
                   </TooltipTrigger>
                   <TooltipContent className="max-w-xs text-xs">
-                    Options are contracts traders use to bet on a stock's direction. This panel translates the most recent options activity into plain English.
+                    Plain-English read of today's options flow on the nearest expiration: directional sentiment, put/call balance, implied volatility and any unusual prints.
                   </TooltipContent>
                 </Tooltip>
                 <span className="ml-auto text-[10px] text-muted-foreground">
                   Source: Yahoo Finance · Nearest expiration
                 </span>
-                {conviction?.opt !== null && conviction?.opt !== undefined && (
-                  <span className={`font-mono text-base font-bold ${ratingClass(conviction.opt)}`}>
-                    {conviction.opt} <span className="text-[10px] text-muted-foreground">/ 100</span>
-                  </span>
-                )}
               </div>
 
               {!snapshot.options.available ? (
-                <p className="text-xs text-muted-foreground">No options data available for this ticker.</p>
+                <div className="rounded-md border border-border/30 bg-muted/10 p-3 text-xs text-muted-foreground">
+                  Insufficient data — no live options chain available for this ticker.
+                </div>
               ) : (
                 <div className="space-y-3">
-                  {/* Sentiment */}
                   <div
                     className={`rounded-lg border p-3 ${
                       snapshot.options.sentiment === "Bullish"
@@ -1734,19 +1747,9 @@ export default function LiveExecution() {
                     }`}
                   >
                     <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                          Overall Sentiment
-                        </span>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <span className="inline-flex cursor-help"><Info size={11} className="text-muted-foreground" /></span>
-                          </TooltipTrigger>
-                          <TooltipContent className="max-w-xs text-xs">
-                            Based on the ratio of put-buying vs call-buying. Calls = bullish bets, Puts = bearish bets.
-                          </TooltipContent>
-                        </Tooltip>
-                      </div>
+                      <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                        Overall Sentiment
+                      </span>
                       <span
                         className={`font-['Syne',sans-serif] text-base font-bold ${
                           snapshot.options.sentiment === "Bullish"
@@ -1762,7 +1765,6 @@ export default function LiveExecution() {
                     <p className="mt-1 text-xs text-foreground/80">{snapshot.options.sentiment_explanation}</p>
                   </div>
 
-                  {/* Three quick metric tiles */}
                   <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
                     <OptionsTile
                       label="Put / Call Ratio"
@@ -1793,7 +1795,6 @@ export default function LiveExecution() {
                     />
                   </div>
 
-                  {/* Unusual activity */}
                   {snapshot.options.unusual_activity.length > 0 ? (
                     <div className="rounded-lg border border-[hsl(40,85%,55%)]/30 bg-[hsl(40,85%,55%)]/10 p-3">
                       <div className="mb-1 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-[hsl(40,85%,55%)]">
@@ -1818,7 +1819,7 @@ export default function LiveExecution() {
             </section>
           )}
 
-          {/* ── Overall Conviction Score ── */}
+          {/* ── [4] RS Rating Across Timeframes ── full width */}
           {snapshot && (
             <section
               className="rounded-xl border border-border/60 p-4"
@@ -1826,42 +1827,80 @@ export default function LiveExecution() {
             >
               <div className="mb-3 flex items-center gap-2 flex-wrap">
                 <h2 className="font-['Syne',sans-serif] text-sm font-semibold uppercase tracking-wider text-foreground">
-                  Overall Conviction Score
+                  RS Rating Across Timeframes
                 </h2>
-                <span className="text-[11px] text-muted-foreground">
-                  Final weighted read: 40% RS + 30% Theme + 20% Fundamentals + 10% Options.
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="inline-flex cursor-help"><Info size={12} className="text-muted-foreground" /></span>
+                  </TooltipTrigger>
+                  <TooltipContent className="max-w-xs text-xs">
+                    For each timeframe we show two reliable numbers: raw % return for the stock vs the same-window return for {benchmark} (the difference is the RS — outperformance). The 1W and 1M RS Ratings (1–99) come from the qualified universe.
+                  </TooltipContent>
+                </Tooltip>
+                <span className="ml-auto text-[10px] text-muted-foreground">
+                  Benchmark: {benchmark}
                 </span>
               </div>
-              {conviction ? (
-                <div className="space-y-3">
-                  <ConvictionBreakdown
-                    total={conviction.total}
-                    rs={conviction.rs}
-                    theme={conviction.theme}
-                    fund={conviction.fund}
-                    opt={conviction.opt}
-                    benchmarkLabel={benchmark}
-                    sectorName={resolvedTheme.broadLabel ?? snapshot?.industry?.sectorName ?? null}
-                    sectorEtf={snapshot?.industry?.etfSymbol ?? null}
-                    fundamentals={snapshot?.fundamentals ?? null}
-                    sectorPeAvg={(snapshot as any)?.sectorPeAvg ?? null}
-                    peJustified={conviction.fundDetail.peJustified}
-                    hasIndustry={conviction.hasIndustry}
-                    hasFund={conviction.hasFund}
-                    hasOptions={conviction.hasOptions}
-                    onWhy={() => setWhyTopic("conviction")}
-                  />
-                  <div className="rounded-lg border border-border/40 bg-background/40 p-3 text-xs text-muted-foreground">
-                    {snapshot.symbol} currently scores
-                    <span className="mx-1 font-mono font-semibold text-foreground">{conviction.total}/100</span>
-                    because RS contributes {conviction.contributions.rs ?? 0}, Theme {conviction.contributions.theme ?? 0}, Fundamentals {conviction.contributions.fund ?? 0}, and Options {conviction.contributions.opt ?? 0} points.
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="border-b border-border/40 text-[10px] uppercase tracking-wider text-muted-foreground">
+                      <th className="py-2 text-left">Timeframe</th>
+                      <th className="py-2 text-right">Stock %</th>
+                      <th className="py-2 text-right">{benchmark} %</th>
+                      <th className="py-2 text-right">RS (vs {benchmark})</th>
+                      <th className="py-2 text-right">RS Rating (1–99)</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {([
+                      { tf: "1D", stock: snapshot.quote.changePct, bench: snapshot.benchmark.changePct, rs: liveRs.rs1d, rating: null as number | null },
+                      { tf: "1W", stock: snapshot.tickerHistory?.return1w ?? null, bench: snapshot.benchmark.return1w, rs: liveRs.rs1w, rating: activeSymbol ? rating1w.get(activeSymbol) ?? null : null },
+                      { tf: "1M", stock: snapshot.tickerHistory?.return1m ?? null, bench: snapshot.benchmark.return1m, rs: liveRs.rs1m, rating: activeSymbol ? rating1m.get(activeSymbol) ?? null : null },
+                      { tf: "3M", stock: snapshot.tickerHistory?.return3m ?? null, bench: snapshot.benchmark.return3m, rs: liveRs.rs3m, rating: null as number | null },
+                    ]).map((row) => (
+                      <tr key={row.tf} className="border-b border-border/20">
+                        <td className="py-2 font-mono font-semibold text-foreground">{row.tf}</td>
+                        <td className={`py-2 text-right font-mono ${pctClass(row.stock)}`}>{pct(row.stock)}</td>
+                        <td className={`py-2 text-right font-mono ${pctClass(row.bench)}`}>{pct(row.bench)}</td>
+                        <td className={`py-2 text-right font-mono font-semibold ${pctClass(row.rs)}`}>{pct(row.rs)}</td>
+                        <td className={`py-2 text-right font-mono font-semibold ${ratingClass(row.rating)}`}>
+                          {row.rating !== null ? row.rating : <span className="text-muted-foreground">—</span>}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
+                <div className="rounded-md border border-border/40 bg-background/40 p-2 text-[11px]">
+                  <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Current RS Rating</div>
+                  <div className={`font-mono text-base font-bold ${ratingClass(overallRating)}`}>{overallRating ?? "—"}</div>
+                  <div className="text-[10px] text-muted-foreground">
+                    {universeRank ? `Rank ${universeRank.rank} / ${universeRank.total}` : "Not in qualified universe"}
                   </div>
                 </div>
-              ) : (
-                <div className="rounded-lg border border-border/40 bg-background/40 p-3 text-xs text-muted-foreground">
-                  Insufficient data — a final conviction score appears once at least one of the four sections has reliable real data.
+                <div className="rounded-md border border-border/40 bg-background/40 p-2 text-[11px]">
+                  <div className="text-[10px] uppercase tracking-wider text-muted-foreground">RS Acceleration (1W − 1M)</div>
+                  <div className={`font-mono text-base font-bold ${accelDelta === null ? "text-muted-foreground" : accelDelta >= 5 ? "text-[hsl(160,80%,45%)]" : accelDelta <= -5 ? "text-destructive" : "text-foreground"}`}>
+                    {accelDelta !== null ? `${accelDelta > 0 ? "+" : ""}${accelDelta.toFixed(1)}` : "—"}
+                  </div>
+                  <div className="text-[10px] text-muted-foreground">
+                    {accelDelta === null ? "Insufficient data" : accelDelta >= 5 ? "Improving" : accelDelta <= -5 ? "Decelerating" : "Stable"}
+                  </div>
                 </div>
-              )}
+                <div className="rounded-md border border-border/40 bg-background/40 p-2 text-[11px]">
+                  <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Universe Rank</div>
+                  <div className="font-mono text-base font-bold text-foreground">
+                    {universeRank ? `#${universeRank.rank}` : "—"}
+                  </div>
+                  <div className="text-[10px] text-muted-foreground">
+                    {universeRank ? `out of ${universeRank.total.toLocaleString()} qualified names` : "Not ranked"}
+                  </div>
+                </div>
+              </div>
             </section>
           )}
 
