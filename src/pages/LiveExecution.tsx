@@ -1397,18 +1397,18 @@ export default function LiveExecution() {
             <section className="grid gap-4 lg:grid-cols-[1.05fr_1fr]">
               {/* ── [1] Theme Tickers ── tall left column */}
               <div
-                className="rounded-xl border border-border/60 p-4 lg:row-span-2"
+                className="rounded-xl border border-border/60 p-5 lg:row-span-2"
                 style={{ background: "rgba(255,255,255,0.03)" }}
               >
                 <div className="mb-3 flex items-center gap-2 flex-wrap">
-                  <h2 className="font-['Syne',sans-serif] text-sm font-semibold uppercase tracking-wider text-foreground">
+                  <h2 className="font-['Syne',sans-serif] text-2xl font-bold uppercase tracking-wider text-foreground">
                     Theme Tickers
                   </h2>
-                  <span className="text-[12px] font-semibold text-primary">
+                  <span className="text-base font-bold text-primary">
                     {(themeUniverseMembers.length > 0 ? resolvedTheme.broadLabel : aiTheme?.theme) ?? resolvedTheme.broadLabel ?? "—"}
                   </span>
-                  {snapLoading && <Loader2 size={11} className="animate-spin text-muted-foreground" />}
-                  <span className="ml-auto text-[10px] text-muted-foreground">
+                  {snapLoading && <Loader2 size={14} className="animate-spin text-muted-foreground" />}
+                  <span className="ml-auto text-sm text-muted-foreground">
                     {themeUniverseMembers.length > 0
                       ? `${themeUniverseMembers.length} qualified peers`
                       : aiTheme && aiTheme.peers.length > 0
@@ -1418,52 +1418,50 @@ export default function LiveExecution() {
                       : ""}
                   </span>
                 </div>
-                <p className="mb-3 text-[11px] leading-relaxed text-muted-foreground">
-                  All tickers in the same theme as <span className="font-mono text-foreground">{snapshot.symbol}</span>.
-                  Auto-refreshes every 10 s. When the qualified universe has fewer than 3 peers we fall back to an AI-suggested peer set and pull live Yahoo quotes for them.
+                <p className="mb-4 text-sm leading-relaxed text-muted-foreground">
+                  All tickers in the same theme as <span className="font-mono font-bold text-foreground">{snapshot.symbol}</span>.
+                  Auto-refreshes every 7 s. When the qualified universe has fewer than 3 peers we fall back to an AI-suggested peer set with live Yahoo quotes.
                 </p>
 
                 {themeUniverseMembers.length > 0 ? (
                   <div className="overflow-x-auto">
-                    <table className="w-full text-xs">
+                    <table className="w-full text-base">
                       <thead>
-                        <tr className="border-b border-border/40 text-[10px] uppercase tracking-wider text-muted-foreground">
-                          <th className="py-2 text-left">Ticker</th>
-                          <th className="py-2 text-right">RS Rating</th>
-                          <th className="py-2 text-right">1D</th>
-                          <th className="py-2 text-right">1M</th>
+                        <tr className="border-b border-border/40 text-xs uppercase tracking-wider text-muted-foreground">
+                          <th className="py-2.5 text-left">Ticker</th>
+                          <th className="py-2.5 text-right">RS Rating</th>
+                          <th className="py-2.5 text-right">1D</th>
+                          <th className="py-2.5 text-right">1M</th>
                         </tr>
                       </thead>
                       <tbody>
                         {themeUniverseMembers.slice(0, 15).map((stock) => {
                           const rating = ratingOverall.get(stock.symbol.toUpperCase()) ?? null;
                           const isActive = stock.symbol === activeSymbol;
-                          // 1D return: use the live snapshot's quote when this row is the active ticker;
-                          // otherwise fall back to the universe-stored intraday return when present.
                           const r1d = isActive ? snapshot.quote.changePct : (stock as any).return1d ?? null;
                           return (
                             <tr key={stock.symbol} className="border-b border-border/20 hover:bg-muted/20">
-                              <td className="py-2">
+                              <td className="py-3">
                                 <button
                                   onClick={() => { setInput(stock.symbol); submit(stock.symbol); }}
-                                  className={`font-mono font-semibold ${isActive ? "text-foreground" : "text-primary hover:underline"}`}
+                                  className={`font-mono text-base font-bold ${isActive ? "text-foreground" : "text-primary hover:underline"}`}
                                 >
                                   {stock.symbol}
                                 </button>
                                 {stock.companyName && (
-                                  <div className="truncate text-[10px] text-muted-foreground max-w-[180px]">{stock.companyName}</div>
+                                  <div className="truncate text-xs text-muted-foreground max-w-[200px]">{stock.companyName}</div>
                                 )}
                               </td>
-                              <td className={`py-2 text-right font-mono font-semibold ${ratingClass(rating)}`}>{rating ?? "—"}</td>
-                              <td className={`py-2 text-right font-mono ${pctClass(r1d)}`}>{pct(r1d)}</td>
-                              <td className={`py-2 text-right font-mono ${pctClass(stock.return1m)}`}>{pct(stock.return1m)}</td>
+                              <td className={`py-3 text-right font-mono text-base font-bold ${ratingClass(rating)}`}>{rating ?? "—"}</td>
+                              <td className={`py-3 text-right font-mono text-base ${pctClass(r1d)}`}>{pct(r1d)}</td>
+                              <td className={`py-3 text-right font-mono text-base ${pctClass(stock.return1m)}`}>{pct(stock.return1m)}</td>
                             </tr>
                           );
                         })}
                       </tbody>
                     </table>
                     {themeUniverseMembers.length > 15 && (
-                      <div className="mt-2 text-center text-[10px] text-muted-foreground">
+                      <div className="mt-2 text-center text-sm text-muted-foreground">
                         Showing top 15 of {themeUniverseMembers.length} by RS Rating
                       </div>
                     )}
