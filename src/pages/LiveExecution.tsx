@@ -227,11 +227,14 @@ interface WhyArgs {
   verdict: ReturnType<typeof buildVerdict>;
   conviction: {
     total: number;
-    market: number;
-    industry: number;
-    stock: number;
+    rs: number | null;
+    theme: number | null;
+    fund: number | null;
+    opt: number | null;
     hasFund: boolean;
     hasIndustry: boolean;
+    hasOptions: boolean;
+    fundDetail: { peScore: number | null; epsScore: number | null; revScore: number | null; peJustified: boolean };
   } | null;
   setupQuality: number | null;
   overallRating: number | null;
