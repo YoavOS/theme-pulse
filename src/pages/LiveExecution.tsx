@@ -643,12 +643,12 @@ export default function LiveExecution() {
     return { stockMap: map, ratingOverall: ratingByOverall, rating1w: ratingBy1w, rating1m: ratingBy1m };
   }, [stocks]);
 
-  const submit = (raw: string) => {
+  const submit = (raw: string, opts: { force?: boolean } = {}) => {
     const sym = raw.trim().toUpperCase();
     if (!sym) return;
     setActiveSymbol(sym);
     const sector = stockMap.get(sym)?.sector ?? null;
-    fetchSnapshot(sym, benchmark, sector);
+    fetchSnapshot(sym, benchmark, sector, opts.force === true);
   };
 
   // Debounce input → auto-submit after 600ms when length >= 1
