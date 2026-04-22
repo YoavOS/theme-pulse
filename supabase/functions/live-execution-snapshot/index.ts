@@ -434,12 +434,11 @@ Deno.serve(async (req) => {
       });
     }
 
-    const [quote, options, benchmark, fundamentals, industry] = await Promise.all([
+    const [quote, options, benchmark, fundamentals] = await Promise.all([
       fetchYahooQuote(rawSymbol),
       fetchYahooOptions(rawSymbol),
       fetchBenchmarkSnapshot(benchmarkSymbol, forceRefresh),
       fetchFundamentalsSnapshot(rawSymbol),
-      fetchIndustrySnapshot(sectorHint, forceRefresh),
     ]);
 
     if (!quote || quote.price === null) {
@@ -449,6 +448,8 @@ Deno.serve(async (req) => {
       );
     }
 
+    const resolvedSectorHint = sectorHint ?? fundamentals.industry ?? fundamentals.sector ?? null;
+    const industry = await fetchIndustrySnapshot(resolvedSectorHint, forceRefresh);
     const tickerHist = await fetchHistoricalForTicker(rawSymbol, quote.price, forceRefresh);
 
     const sectorPeAvg =
