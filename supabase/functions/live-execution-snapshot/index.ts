@@ -65,6 +65,8 @@ interface FundamentalsSnapshot {
   epsGrowth: number | null;       // earningsQuarterlyGrowth (yoy %, decimal)
   revenueGrowth: number | null;   // revenueQuarterlyGrowth (yoy %, decimal)
   profitMargin: number | null;    // decimal
+  sector: string | null;
+  industry: string | null;
   source: string;
 }
 
@@ -350,6 +352,7 @@ async function fetchFundamentalsSnapshot(symbol: string): Promise<FundamentalsSn
   const empty: FundamentalsSnapshot = {
     available: false, pe: null, forwardPe: null, pegRatio: null,
     epsGrowth: null, revenueGrowth: null, profitMargin: null,
+    sector: null, industry: null,
     source: "yahoo",
   };
   const auth = await getYahooAuth();
@@ -367,6 +370,8 @@ async function fetchFundamentalsSnapshot(symbol: string): Promise<FundamentalsSn
     const sd = result.summaryDetail ?? {};
     const ks = result.defaultKeyStatistics ?? {};
     const fd = result.financialData ?? {};
+    const ps = result.price ?? {};
+    const profile = result.assetProfile ?? {};
     const raw = (x: any): number | null => {
       if (x === null || x === undefined) return null;
       const v = typeof x === "object" ? x.raw : x;
@@ -380,6 +385,8 @@ async function fetchFundamentalsSnapshot(symbol: string): Promise<FundamentalsSn
       epsGrowth: raw(ks.earningsQuarterlyGrowth) ?? raw(fd.earningsGrowth) ?? null,
       revenueGrowth: raw(fd.revenueGrowth) ?? null,
       profitMargin: raw(fd.profitMargins) ?? null,
+      sector: (profile.sector as string | undefined) ?? (ps.sector as string | undefined) ?? null,
+      industry: (profile.industry as string | undefined) ?? (ps.industry as string | undefined) ?? null,
       source: "yahoo",
     };
   } catch {
