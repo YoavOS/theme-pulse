@@ -1806,100 +1806,105 @@ function OptionsTile({
 
 function ConvictionBreakdown({
   total,
-  market,
-  industry,
-  stock,
+  rs,
+  theme,
+  fund,
+  opt,
   benchmarkLabel,
   sectorName,
   sectorEtf,
   fundamentals,
+  sectorPeAvg,
+  peJustified,
   hasIndustry,
   hasFund,
+  hasOptions,
+  onWhy,
 }: {
   total: number;
-  market: number;
-  industry: number;
-  stock: number;
+  rs: number | null;
+  theme: number | null;
+  fund: number | null;
+  opt: number | null;
   benchmarkLabel: string;
   sectorName: string | null;
   sectorEtf: string | null;
   fundamentals: import("@/hooks/useLiveSnapshot").LiveFundamentals | null;
+  sectorPeAvg: number | null;
+  peJustified: boolean;
   hasIndustry: boolean;
   hasFund: boolean;
+  hasOptions: boolean;
+  onWhy?: () => void;
 }) {
-  // Weighted contributions to the final 0-100 conviction.
-  const marketContrib = Math.round((market * 0.50));
-  const industryContrib = Math.round((industry * 0.37));
-  const stockContrib = Math.round((stock * 0.13));
-  const tone = (s: number) =>
+  // Pillars and weights for the new 4-section blend.
+  const pillars = [
+    { key: "RS", weight: 0.40, value: rs, sub: "RS Rating + acceleration" },
+    { key: "Theme", weight: 0.30, value: theme, sub: hasIndustry ? `${sectorName ?? "Sector"}${sectorEtf ? ` · ${sectorEtf}` : ""}` : "No sector mapped" },
+    { key: "Fundamentals", weight: 0.20, value: fund, sub: hasFund && fundamentals
+        ? `P/E ${(fundamentals.forwardPe ?? fundamentals.pe)?.toFixed(1) ?? "—"}${sectorPeAvg ? ` (sec ~${sectorPeAvg})` : ""}${peJustified ? " · growth-justified" : ""}`
+        : "Not available" },
+    { key: "Options", weight: 0.10, value: opt, sub: hasOptions ? "Sentiment + IV" : "Not available" },
+  ];
+  const tone = (s: number | null) =>
+    s === null ? "bg-muted/40" :
     s >= 70 ? "bg-[hsl(160,80%,45%)]" : s >= 50 ? "bg-[hsl(40,85%,55%)]" : "bg-destructive";
-  const fmtPct = (v: number | null) =>
-    v === null || v === undefined || !Number.isFinite(v) ? "—" : `${(v * 100).toFixed(1)}%`;
-  const explanation = (() => {
-    const marketWord = market >= 65 ? "Strong" : market >= 50 ? "Mixed" : "Weak";
-    const industryWord = industry >= 65 ? "leading" : industry >= 50 ? "neutral" : "lagging";
-    const stockWord = stock >= 70 ? "solid" : stock >= 50 ? "decent" : "soft";
-    return `${marketWord} market (${benchmarkLabel}) + ${industryWord} ${sectorName ?? "sector"}${sectorEtf ? ` (${sectorEtf})` : ""} + ${stockWord} individual stock${hasFund ? " (RS, accel, volume, P/E and growth)" : " (RS, accel, volume — fundamentals unavailable)"}.`;
-  })();
 
   return (
-    <div className="rounded-lg border border-border/40 bg-background/40 p-3">
-      <div className="mb-2 flex items-center gap-2">
-        <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-          O&apos;Neil Conviction Breakdown
+    <div className="rounded-lg border border-primary/30 bg-primary/5 p-3">
+      <div className="mb-2 flex items-center gap-2 flex-wrap">
+        <span className="text-[11px] font-semibold uppercase tracking-wider text-foreground">
+          Overall Conviction Score
         </span>
         <Tooltip>
           <TooltipTrigger asChild>
-            <span className="inline-flex cursor-help"><Info size={11} /></span>
+            <span className="inline-flex cursor-help"><Info size={11} className="text-muted-foreground" /></span>
           </TooltipTrigger>
           <TooltipContent className="max-w-xs text-xs">
-            William O&apos;Neil&apos;s research found ~50% of a stock&apos;s move follows the market, ~37% follows the industry/sector, and only ~13% is stock-specific. We score each piece 0-100 from real data and combine them with those weights.
+            Weighted blend of the four sections below: 40% RS Rating, 30% Theme/Sector strength, 20% Fundamentals, 10% Options activity. Missing pillars are dropped and the weight is redistributed proportionally.
           </TooltipContent>
         </Tooltip>
-        <span className="ml-auto font-mono text-sm font-bold text-foreground">{total} <span className="text-[10px] text-muted-foreground">/ 100</span></span>
+        {onWhy && (
+          <button
+            type="button"
+            onClick={onWhy}
+            className="inline-flex items-center gap-1 rounded-md border border-border/50 bg-background/60 px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground transition-colors hover:border-primary/40 hover:bg-primary/10 hover:text-primary"
+          >
+            <HelpCircle size={10} /> Why this score?
+          </button>
+        )}
+        <span className="ml-auto font-mono text-2xl font-bold text-foreground">
+          {total} <span className="text-[11px] text-muted-foreground">/ 100</span>
+        </span>
       </div>
-      {/* Segmented bar */}
+      {/* Segmented bar — width matches each pillar's weight; intensity matches its 0–100 score. */}
       <div className="flex h-3 w-full overflow-hidden rounded-md border border-border/40 bg-background/60">
-        <div className={`${tone(market)} relative`} style={{ width: "50%" }} title={`Market 50% × ${market} = ${marketContrib} pts`}>
-          <div className="h-full w-full opacity-90" style={{ width: `${market}%` }} />
-        </div>
-        <div className={`${tone(industry)} relative border-l border-background/60`} style={{ width: "37%" }} title={`Industry 37% × ${industry} = ${industryContrib} pts`}>
-          <div className="h-full" style={{ width: `${industry}%` }} />
-        </div>
-        <div className={`${tone(stock)} relative border-l border-background/60`} style={{ width: "13%" }} title={`Stock 13% × ${stock} = ${stockContrib} pts`}>
-          <div className="h-full" style={{ width: `${stock}%` }} />
-        </div>
+        {pillars.map((p) => (
+          <div
+            key={p.key}
+            className="relative border-l border-background/60 first:border-l-0"
+            style={{ width: `${p.weight * 100}%` }}
+            title={`${p.key} (${(p.weight * 100).toFixed(0)}%) — score ${p.value ?? "n/a"}`}
+          >
+            <div className={`h-full ${tone(p.value)}`} style={{ width: `${p.value ?? 0}%`, opacity: p.value === null ? 0.2 : 1 }} />
+          </div>
+        ))}
       </div>
-      <div className="mt-2 grid grid-cols-3 gap-2 text-[11px]">
-        <div className="rounded border border-border/40 bg-background/40 p-2">
-          <div className="flex items-center justify-between">
-            <span className="text-muted-foreground">Market <span className="text-[9px]">(50%)</span></span>
-            <span className={`font-mono font-semibold ${ratingClass(market)}`}>{market}</span>
+      <div className="mt-2 grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px]">
+        {pillars.map((p) => (
+          <div key={p.key} className="rounded border border-border/40 bg-background/40 p-2">
+            <div className="flex items-center justify-between">
+              <span className="text-muted-foreground">{p.key} <span className="text-[9px]">({(p.weight * 100).toFixed(0)}%)</span></span>
+              <span className={`font-mono font-semibold ${ratingClass(p.value)}`}>{p.value ?? "—"}</span>
+            </div>
+            <div className="mt-0.5 truncate text-[10px] text-muted-foreground" title={p.sub}>{p.sub}</div>
           </div>
-          <div className="mt-0.5 text-[10px] text-muted-foreground">{benchmarkLabel} · contrib {marketContrib}</div>
-        </div>
-        <div className="rounded border border-border/40 bg-background/40 p-2">
-          <div className="flex items-center justify-between">
-            <span className="text-muted-foreground">Industry <span className="text-[9px]">(37%)</span></span>
-            <span className={`font-mono font-semibold ${ratingClass(industry)}`}>{industry}</span>
-          </div>
-          <div className="mt-0.5 text-[10px] text-muted-foreground">
-            {hasIndustry ? `${sectorName ?? "—"}${sectorEtf ? ` · ${sectorEtf}` : ""}` : "No sector mapped"} · contrib {industryContrib}
-          </div>
-        </div>
-        <div className="rounded border border-border/40 bg-background/40 p-2">
-          <div className="flex items-center justify-between">
-            <span className="text-muted-foreground">Stock <span className="text-[9px]">(13%)</span></span>
-            <span className={`font-mono font-semibold ${ratingClass(stock)}`}>{stock}</span>
-          </div>
-          <div className="mt-0.5 text-[10px] text-muted-foreground">
-            {hasFund && fundamentals
-              ? `P/E ${fundamentals.forwardPe?.toFixed(1) ?? fundamentals.pe?.toFixed(1) ?? "—"} · EPS Δ ${fmtPct(fundamentals.epsGrowth)} · Rev Δ ${fmtPct(fundamentals.revenueGrowth)}`
-              : "Technicals only · contrib " + stockContrib}
-          </div>
-        </div>
+        ))}
       </div>
-      <p className="mt-2 text-[11px] leading-snug text-foreground/80">{explanation}</p>
+      <p className="mt-2 text-[11px] leading-snug text-foreground/75">
+        Final = {pillars.filter((p) => p.value !== null).map((p) => `${p.value} × ${(p.weight * 100).toFixed(0)}%`).join(" + ")}
+        {pillars.some((p) => p.value === null) && " (missing pillars dropped, weight redistributed)"} = <span className="font-semibold text-foreground">{total}</span>.
+      </p>
     </div>
   );
 }
