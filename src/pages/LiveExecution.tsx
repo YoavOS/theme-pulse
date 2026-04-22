@@ -689,6 +689,19 @@ export default function LiveExecution() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [benchmark]);
 
+  // Auto-refresh the live snapshot every 10 s while a ticker is active.
+  // Pauses while the tab is hidden so we don't burn API calls in the background.
+  useEffect(() => {
+    if (!activeSymbol) return;
+    const id = window.setInterval(() => {
+      if (document.visibilityState !== "visible") return;
+      const sector = stockMap.get(activeSymbol)?.sector ?? null;
+      fetchSnapshot(activeSymbol, benchmark, sector);
+    }, 10_000);
+    return () => window.clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeSymbol, benchmark]);
+
   const activeStock = activeSymbol ? stockMap.get(activeSymbol) ?? null : null;
   const resolvedTheme = useMemo(() => {
     const rawLabel = activeStock?.sector ?? snapshot?.fundamentals?.industry ?? snapshot?.fundamentals?.sector ?? null;
