@@ -1027,6 +1027,16 @@ export default function LiveExecution() {
                     Switch the benchmark used for relative strength (RS) comparisons. SPY tracks the S&amp;P 500 (broad market); QQQ tracks the Nasdaq-100 (tech-heavy). RS values below recompute live.
                   </TooltipContent>
                 </Tooltip>
+                <button
+                  type="button"
+                  onClick={() => activeSymbol && submit(activeSymbol, { force: true })}
+                  disabled={!activeSymbol || snapLoading}
+                  className="ml-1 inline-flex items-center gap-1 rounded-md border border-primary/40 bg-primary/10 px-2 py-1 text-[11px] font-semibold text-primary transition-colors hover:bg-primary/20 disabled:cursor-not-allowed disabled:opacity-40"
+                  title="Force a fresh data pull from Yahoo (bypasses 24h cache)"
+                >
+                  <RefreshCw size={11} className={snapLoading ? "animate-spin" : ""} />
+                  Refresh Data
+                </button>
               </div>
             </div>
 
