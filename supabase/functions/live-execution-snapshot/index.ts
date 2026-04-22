@@ -108,14 +108,13 @@ async function fetchYahooQuote(symbol: string): Promise<QuoteSnapshot | null> {
   }
 }
 
-async function fetchBenchmarkSnapshot(symbol: string): Promise<BenchmarkSnapshot> {
+async function fetchBenchmarkSnapshot(symbol: string, forceRefresh = false): Promise<BenchmarkSnapshot> {
   const sb = makeServiceClient();
   const quote = await fetchYahooQuote(symbol);
-  // Fetch historical returns in parallel via shared helper.
   const periods: YahooPeriod[] = ["5d", "1mo", "3mo"];
   const hist = await Promise.all(
     periods.map((p) =>
-      getHistoricalData(sb, symbol, p, { todayPrice: quote?.price ?? null })
+      getHistoricalData(sb, symbol, p, { todayPrice: quote?.price ?? null, skipCache: forceRefresh })
     )
   );
   const [w, m, q] = hist;
@@ -319,7 +318,7 @@ function resolveSectorEtf(sector: string | null | undefined): { etf: string; nam
   return null;
 }
 
-async function fetchIndustrySnapshot(sector: string | null | undefined): Promise<IndustrySnapshot> {
+async function fetchIndustrySnapshot(sector: string | null | undefined, forceRefresh = false): Promise<IndustrySnapshot> {
   const empty: IndustrySnapshot = {
     available: false, etfSymbol: null, sectorName: null,
     changePct: null, return1w: null, return1m: null, return3m: null,
@@ -331,7 +330,7 @@ async function fetchIndustrySnapshot(sector: string | null | undefined): Promise
     const quote = await fetchYahooQuote(map.etf);
     const periods: YahooPeriod[] = ["5d", "1mo", "3mo"];
     const hist = await Promise.all(
-      periods.map((p) => getHistoricalData(sb, map.etf, p, { todayPrice: quote?.price ?? null }))
+      periods.map((p) => getHistoricalData(sb, map.etf, p, { todayPrice: quote?.price ?? null, skipCache: forceRefresh }))
     );
     return {
       available: true,
@@ -388,11 +387,11 @@ async function fetchFundamentalsSnapshot(symbol: string): Promise<FundamentalsSn
   }
 }
 
-async function fetchHistoricalForTicker(symbol: string, todayPrice: number | null) {
+async function fetchHistoricalForTicker(symbol: string, todayPrice: number | null, forceRefresh = false) {
   const sb = makeServiceClient();
   const periods: YahooPeriod[] = ["5d", "1mo", "3mo"];
   const hist = await Promise.all(
-    periods.map((p) => getHistoricalData(sb, symbol, p, { todayPrice }))
+    periods.map((p) => getHistoricalData(sb, symbol, p, { todayPrice, skipCache: forceRefresh }))
   );
   return {
     return1w: hist[0].returnPct,
@@ -400,6 +399,13 @@ async function fetchHistoricalForTicker(symbol: string, todayPrice: number | nul
     return3m: hist[2].returnPct,
   };
 }
+
+// Rough sector-average forward P/E benchmarks (long-term S&P 500 sector medians).
+// Used so we can show "P/E vs sector avg" without fetching every peer.
+const SECTOR_PE_BENCHMARK: Record<string, number> = {
+  XLK: 28, XLV: 18, XLF: 14, XLY: 24, XLP: 21,
+  XLE: 13, XLI: 20, XLB: 18, XLU: 17, XLRE: 30, XLC: 19,
+};
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
@@ -412,6 +418,7 @@ Deno.serve(async (req) => {
       return ALLOWED_BENCHMARKS.has(b) ? b : "SPY";
     })();
     const sectorHint = typeof body?.sector === "string" ? body.sector : null;
+    const forceRefresh = body?.forceRefresh === true;
 
     if (!rawSymbol || !/^[A-Z][A-Z0-9.\-]{0,9}$/.test(rawSymbol)) {
       return new Response(JSON.stringify({ error: "Invalid symbol" }), {
@@ -423,9 +430,9 @@ Deno.serve(async (req) => {
     const [quote, options, benchmark, fundamentals, industry] = await Promise.all([
       fetchYahooQuote(rawSymbol),
       fetchYahooOptions(rawSymbol),
-      fetchBenchmarkSnapshot(benchmarkSymbol),
+      fetchBenchmarkSnapshot(benchmarkSymbol, forceRefresh),
       fetchFundamentalsSnapshot(rawSymbol),
-      fetchIndustrySnapshot(sectorHint),
+      fetchIndustrySnapshot(sectorHint, forceRefresh),
     ]);
 
     if (!quote || quote.price === null) {
@@ -435,7 +442,12 @@ Deno.serve(async (req) => {
       );
     }
 
-    const tickerHist = await fetchHistoricalForTicker(rawSymbol, quote.price);
+    const tickerHist = await fetchHistoricalForTicker(rawSymbol, quote.price, forceRefresh);
+
+    const sectorPeAvg =
+      industry?.etfSymbol && SECTOR_PE_BENCHMARK[industry.etfSymbol] !== undefined
+        ? SECTOR_PE_BENCHMARK[industry.etfSymbol]
+        : null;
 
     return new Response(
       JSON.stringify({
@@ -445,6 +457,7 @@ Deno.serve(async (req) => {
         benchmark,
         industry,
         fundamentals,
+        sectorPeAvg,
         tickerHistory: tickerHist,
         fetchedAt: new Date().toISOString(),
       }),

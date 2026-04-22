@@ -18,6 +18,7 @@ import {
   XCircle,
   ShieldAlert,
   HelpCircle,
+  RefreshCw,
 } from "lucide-react";
 import { useRsAlpha, type RsStock } from "@/hooks/useRsAlpha";
 import { useLiveSnapshot, useLiveWatchlist, type LiveSnapshot, type BenchmarkSymbol } from "@/hooks/useLiveSnapshot";
@@ -227,11 +228,14 @@ interface WhyArgs {
   verdict: ReturnType<typeof buildVerdict>;
   conviction: {
     total: number;
-    market: number;
-    industry: number;
-    stock: number;
+    rs: number | null;
+    theme: number | null;
+    fund: number | null;
+    opt: number | null;
     hasFund: boolean;
     hasIndustry: boolean;
+    hasOptions: boolean;
+    fundDetail: { peScore: number | null; epsScore: number | null; revScore: number | null; peJustified: boolean };
   } | null;
   setupQuality: number | null;
   overallRating: number | null;
@@ -288,23 +292,22 @@ function buildWhyContent(args: WhyArgs): WhyContent {
         ],
       };
     }
-    const mDesc =
-      conviction.market >= 65 ? "strong (uptrend)" : conviction.market >= 45 ? "neutral" : "weak (downtrend)";
-    const iDesc = conviction.hasIndustry
-      ? conviction.industry >= 65
-        ? "leading"
-        : conviction.industry >= 45
-        ? "neutral"
-        : "lagging"
-      : "n/a (mirrored from market)";
-    const sDesc = conviction.stock >= 65 ? "leader-grade" : conviction.stock >= 45 ? "average" : "weak";
+    const desc = (s: number | null, name: string) =>
+      s === null ? `${name} not available — weight redistributed to other pillars` :
+      s >= 70 ? "strong" : s >= 50 ? "neutral" : "weak";
 
     const fundLines: { label: string; value: string; tone?: "pos" | "neg" | "neu" | "na" }[] = [];
     if (conviction.hasFund && fd) {
       const pe = fd.forwardPe ?? fd.pe;
+      const sectorPe = (snapshot as any)?.sectorPeAvg as number | null | undefined;
       if (pe !== null && pe > 0) {
-        const tone = pe < 25 ? "pos" : pe < 40 ? "neu" : "neg";
-        fundLines.push({ label: pe === fd.forwardPe ? "Forward P/E" : "P/E", value: pe.toFixed(1), tone });
+        const ratio = sectorPe ? pe / sectorPe : null;
+        const tone = ratio === null ? "neu" : ratio < 1.1 ? "pos" : ratio < 1.7 ? "neu" : "neg";
+        fundLines.push({
+          label: pe === fd.forwardPe ? "Forward P/E" : "P/E",
+          value: sectorPe ? `${pe.toFixed(1)} (sector avg ~${sectorPe.toFixed(0)})` : pe.toFixed(1),
+          tone,
+        });
       }
       if (fd.epsGrowth !== null) {
         const v = fd.epsGrowth * 100;
@@ -316,46 +319,50 @@ function buildWhyContent(args: WhyArgs): WhyContent {
         const tone = v >= 15 ? "pos" : v >= 0 ? "neu" : "neg";
         fundLines.push({ label: "Revenue growth (YoY)", value: `${v >= 0 ? "+" : ""}${v.toFixed(1)}%`, tone });
       }
+      if (conviction.fundDetail.peJustified) {
+        fundLines.push({ label: "Valuation note", value: "High P/E justified by strong growth — no penalty applied", tone: "pos" });
+      }
     }
 
     return {
-      title: `Conviction: ${conviction.total} / 100`,
-      subtitle: `O'Neil-weighted blend: 50% Market + 37% Industry + 13% Individual stock.`,
+      title: `Overall Conviction: ${conviction.total} / 100`,
+      subtitle: `Weighted blend — 40% RS · 30% Theme · 20% Fundamentals · 10% Options. Missing pillars are dropped (weight redistributed).`,
       sections: [
         {
-          heading: `Component breakdown for ${sym}`,
-          body: "Each component is scored 0–100, then weighted into the final number.",
+          heading: `Pillar breakdown for ${sym}`,
+          body: "Each pillar is scored 0–100 from real data and combined with the weights above.",
           rows: [
-            { label: `Market (${benchmark}) — 50%`, value: `${conviction.market} (${mDesc})`, tone: conviction.market >= 65 ? "pos" : conviction.market >= 45 ? "neu" : "neg" },
-            { label: `Industry${ih?.etfSymbol ? ` (${ih.etfSymbol})` : ""} — 37%`, value: `${conviction.industry} (${iDesc})`, tone: conviction.industry >= 65 ? "pos" : conviction.industry >= 45 ? "neu" : "neg" },
-            { label: "Individual stock — 13%", value: `${conviction.stock} (${sDesc})`, tone: conviction.stock >= 65 ? "pos" : conviction.stock >= 45 ? "neu" : "neg" },
+            { label: "RS Rating — 40%", value: conviction.rs !== null ? `${conviction.rs} (${desc(conviction.rs, "RS")})` : "n/a", tone: conviction.rs === null ? "na" : conviction.rs >= 70 ? "pos" : conviction.rs < 40 ? "neg" : "neu" },
+            { label: `Theme${ih?.etfSymbol ? ` (${ih.etfSymbol})` : ""} — 30%`, value: conviction.theme !== null ? `${conviction.theme} (${desc(conviction.theme, "Theme")})` : "n/a (no sector mapping)", tone: conviction.theme === null ? "na" : conviction.theme >= 70 ? "pos" : conviction.theme < 50 ? "neg" : "neu" },
+            { label: "Fundamentals — 20%", value: conviction.fund !== null ? `${conviction.fund} (${desc(conviction.fund, "Fundamentals")})` : "n/a (no fundamentals)", tone: conviction.fund === null ? "na" : conviction.fund >= 70 ? "pos" : conviction.fund < 50 ? "neg" : "neu" },
+            { label: "Options activity — 10%", value: conviction.opt !== null ? `${conviction.opt} (${desc(conviction.opt, "Options")})` : "n/a", tone: conviction.opt === null ? "na" : conviction.opt >= 70 ? "pos" : conviction.opt < 50 ? "neg" : "neu" },
           ],
         },
         {
-          heading: "Market component (50%)",
-          body: `Built from ${benchmark}'s 1D, 1W and 1M returns. Strong, broad market = higher score. O'Neil's rule: 3 of 4 stocks follow the general market direction, so this carries the most weight.`,
-        },
-        {
-          heading: "Industry component (37%)",
-          body: ih?.available
-            ? `Mapped to ${ih.sectorName ?? "the sector"} via ${ih.etfSymbol}. Built from the sector ETF's 1D, 1W and 1M returns. Half of a stock's move comes from its group, so this is the second-biggest weight.`
-            : "No reliable sector ETF mapping for this ticker right now — we mirror the market score so the conviction isn't artificially deflated.",
-        },
-        {
-          heading: "Individual stock component (13%)",
+          heading: "RS pillar (40%)",
           body:
-            "Blends technical (60%) and fundamental (40%, when available) signals.",
-          rows: [
-            { label: "RS Rating", value: overallRating !== null ? `${overallRating}` : "N/A", tone: overallRating === null ? "na" : overallRating >= 70 ? "pos" : overallRating < 40 ? "neg" : "neu" },
-            { label: "RS acceleration (1W − 1M)", value: accelDelta !== null ? `${accelDelta >= 0 ? "+" : ""}${accelDelta.toFixed(1)} pts` : "—", tone: accelDelta === null ? "na" : accelDelta >= 5 ? "pos" : accelDelta <= -5 ? "neg" : "neu" },
-            { label: "Relative volume", value: relVol !== null ? `${relVol.toFixed(2)}×` : "—", tone: relVol === null ? "na" : relVol >= 1.3 ? "pos" : relVol < 0.7 ? "neg" : "neu" },
-            ...fundLines,
-            ...(conviction.hasFund ? [] : [{ label: "Fundamentals", value: "Not available — using technicals only", tone: "na" as const }]),
-          ],
+            "Built directly from the RS Rating (1–99 rank within the qualified universe), with a small boost/penalty from RS acceleration (1W rating vs 1M rating). RS is the single best predictor of future relative performance, so it carries the largest weight.",
+        },
+        {
+          heading: "Theme pillar (30%)",
+          body: ih?.available
+            ? `Sector strength from ${ih.sectorName ?? "the sector"} (${ih.etfSymbol}) — averages 1D, 1W and 1M ETF returns. A leader inside a strong group has a structural tailwind.`
+            : "No reliable sector ETF mapping — this pillar is dropped and its weight is redistributed to the others.",
+        },
+        {
+          heading: "Fundamentals pillar (20%)",
+          body:
+            "Growth-focused, growth-adjusted. EPS growth and revenue growth carry equal weight with valuation. P/E is compared to the sector average; a high P/E is NOT penalised when EPS growth ≥ 25% or revenue growth ≥ 20%.",
+          rows: fundLines,
+        },
+        {
+          heading: "Options pillar (10%)",
+          body: conviction.hasOptions
+            ? "Based on the options-flow sentiment (Put/Call ratio) with a small adjustment for elevated implied volatility (premiums getting expensive = crowded entry)."
+            : "No usable options data today — this pillar is dropped and weight redistributes.",
         },
       ],
-      footer:
-        `Final = round(${conviction.market} × 0.50 + ${conviction.industry} × 0.37 + ${conviction.stock} × 0.13) = ${conviction.total}.`,
+      footer: `Weighted total = ${conviction.total} / 100. Missing pillars are dropped before weighting so the score isn't artificially deflated.`,
     };
   }
 
@@ -637,12 +644,12 @@ export default function LiveExecution() {
     return { stockMap: map, ratingOverall: ratingByOverall, rating1w: ratingBy1w, rating1m: ratingBy1m };
   }, [stocks]);
 
-  const submit = (raw: string) => {
+  const submit = (raw: string, opts: { force?: boolean } = {}) => {
     const sym = raw.trim().toUpperCase();
     if (!sym) return;
     setActiveSymbol(sym);
     const sector = stockMap.get(sym)?.sector ?? null;
-    fetchSnapshot(sym, benchmark, sector);
+    fetchSnapshot(sym, benchmark, sector, opts.force === true);
   };
 
   // Debounce input → auto-submit after 600ms when length >= 1
@@ -708,45 +715,48 @@ export default function LiveExecution() {
 
   const overallRating = activeSymbol ? ratingOverall.get(activeSymbol) ?? null : null;
 
-  // ── O'Neil weighted Conviction Score (0-100): 50% Market + 37% Industry + 13% Stock ──
+  // ── New 4-Pillar Overall Conviction Score (0-100) ──
+  // Weights: 40% RS · 30% Theme · 20% Fundamentals · 10% Options
+  // If a pillar has no data its weight is redistributed proportionally to the others.
   const conviction = useMemo(() => {
-    const bh = snapshot?.benchmark;
+    // 1) RS pillar (40%) — based on RS Rating, with a small acceleration boost.
+    let rsScore: number | null = null;
+    if (overallRating !== null) {
+      let s = overallRating;
+      if (accelDelta !== null) s += Math.max(-15, Math.min(15, accelDelta * 0.5));
+      rsScore = Math.max(0, Math.min(100, s));
+    }
+
+    // 2) Theme pillar (30%) — sector ETF strength across 1D / 1W / 1M.
+    const ih = snapshot?.industry;
     const scoreReturn = (r: number | null | undefined, perPctPoint = 5) => {
       if (r === null || r === undefined || !Number.isFinite(r)) return null;
       return Math.max(0, Math.min(100, 50 + (r as number) * perPctPoint));
     };
-    const mDay = scoreReturn(bh?.changePct, 10);
-    const mWeek = scoreReturn(bh?.return1w, 5);
-    const mMonth = scoreReturn(bh?.return1m, 3);
-    const mParts = [mDay, mWeek, mMonth].filter((v): v is number => v !== null);
-    const marketScore = mParts.length > 0 ? mParts.reduce((a, b) => a + b, 0) / mParts.length : 50;
+    let themeScore: number | null = null;
+    if (ih?.available) {
+      const parts = [
+        scoreReturn(ih.changePct, 10),
+        scoreReturn(ih.return1w, 5),
+        scoreReturn(ih.return1m, 3),
+      ].filter((v): v is number => v !== null);
+      if (parts.length > 0) themeScore = parts.reduce((a, b) => a + b, 0) / parts.length;
+    }
 
-    const ih = snapshot?.industry;
-    const iDay = scoreReturn(ih?.changePct, 10);
-    const iWeek = scoreReturn(ih?.return1w, 5);
-    const iMonth = scoreReturn(ih?.return1m, 3);
-    const iParts = [iDay, iWeek, iMonth].filter((v): v is number => v !== null);
-    const industryScore = iParts.length > 0
-      ? iParts.reduce((a, b) => a + b, 0) / iParts.length
-      : (ih?.available ? 50 : marketScore);
-
-    let rsPart: number | null = overallRating;
-    const accelPart = accelDelta === null ? null : Math.max(0, Math.min(100, 50 + accelDelta * 2));
-    const volPart = relVol === null ? null : Math.max(0, Math.min(100, relVol * 50));
+    // 3) Fundamentals pillar (20%) — growth-focused, growth-adjusted valuation.
     const fd = snapshot?.fundamentals;
-    let fundPart: number | null = null;
+    const sectorPeAvg = (snapshot as any)?.sectorPeAvg as number | null | undefined;
+    let fundScore: number | null = null;
+    let fundDetail: { peScore: number | null; epsScore: number | null; revScore: number | null; peJustified: boolean } = {
+      peScore: null, epsScore: null, revScore: null, peJustified: false,
+    };
     if (fd?.available) {
-      const pe = fd.forwardPe ?? fd.pe;
-      let peScore: number | null = null;
-      if (pe !== null && pe > 0) {
-        if (pe < 15) peScore = 90;
-        else if (pe < 25) peScore = 75;
-        else if (pe < 40) peScore = 60;
-        else if (pe < 60) peScore = 45;
-        else peScore = 30;
-      }
-      let epsScore: number | null = null;
       const eg = fd.epsGrowth;
+      const rg = fd.revenueGrowth;
+      const strongGrowth = (eg !== null && eg >= 0.25) || (rg !== null && rg >= 0.20);
+
+      // EPS growth score
+      let epsScore: number | null = null;
       if (eg !== null) {
         if (eg >= 0.5) epsScore = 95;
         else if (eg >= 0.25) epsScore = 80;
@@ -755,8 +765,8 @@ export default function LiveExecution() {
         else if (eg >= -0.15) epsScore = 40;
         else epsScore = 25;
       }
+      // Revenue growth score
       let revScore: number | null = null;
-      const rg = fd.revenueGrowth;
       if (rg !== null) {
         if (rg >= 0.30) revScore = 90;
         else if (rg >= 0.15) revScore = 75;
@@ -764,33 +774,69 @@ export default function LiveExecution() {
         else if (rg >= 0) revScore = 50;
         else revScore = 30;
       }
+      // Valuation score — compared to sector average if available, growth-adjusted.
+      let peScore: number | null = null;
+      const pe = fd.forwardPe ?? fd.pe;
+      if (pe !== null && pe > 0) {
+        const benchPe = sectorPeAvg ?? 22;
+        const ratio = pe / benchPe;
+        if (ratio < 0.7) peScore = 80;        // cheap vs sector
+        else if (ratio < 1.0) peScore = 70;   // fair / slight discount
+        else if (ratio < 1.3) peScore = 60;   // slight premium
+        else if (ratio < 1.7) peScore = 50;   // notable premium
+        else if (ratio < 2.5) peScore = 40;   // large premium
+        else peScore = 30;                    // extreme premium
+        if (strongGrowth) {
+          peScore = Math.max(peScore, 60);    // don't penalise high P/E if growth is strong
+          fundDetail.peJustified = true;
+        }
+      }
+      fundDetail = { peScore, epsScore, revScore, peJustified: fundDetail.peJustified };
       const parts = [peScore, epsScore, revScore].filter((v): v is number => v !== null);
-      if (parts.length > 0) fundPart = parts.reduce((a, b) => a + b, 0) / parts.length;
+      if (parts.length > 0) fundScore = parts.reduce((a, b) => a + b, 0) / parts.length;
     }
 
-    const techParts = [rsPart, accelPart, volPart].filter((v): v is number => v !== null);
-    const techScore = techParts.length > 0 ? techParts.reduce((a, b) => a + b, 0) / techParts.length : null;
-    const stockScore =
-      techScore === null && fundPart === null
-        ? null
-        : fundPart === null
-        ? techScore!
-        : techScore === null
-        ? fundPart
-        : techScore * 0.6 + fundPart * 0.4;
+    // 4) Options pillar (10%) — sentiment + IV reasonableness.
+    const opt = snapshot?.options;
+    let optScore: number | null = null;
+    if (opt?.available) {
+      let s = 50;
+      if (opt.sentiment === "Bullish") s = 70;
+      else if (opt.sentiment === "Bearish") s = 35;
+      // Mild penalty for very high IV (expensive premiums = crowded / risky entry).
+      if (opt.avg_iv !== null) {
+        if (opt.avg_iv > 0.8) s -= 10;
+        else if (opt.avg_iv > 0.6) s -= 5;
+      }
+      // Small bonus when bullish unusual activity is present.
+      if (opt.unusual_activity.length > 0 && opt.sentiment === "Bullish") s += 5;
+      optScore = Math.max(0, Math.min(100, s));
+    }
 
-    if (stockScore === null) return null;
+    // Weighted blend with redistribution.
+    const pillars = [
+      { key: "rs", w: 0.40, v: rsScore },
+      { key: "theme", w: 0.30, v: themeScore },
+      { key: "fund", w: 0.20, v: fundScore },
+      { key: "opt", w: 0.10, v: optScore },
+    ];
+    const present = pillars.filter((p) => p.v !== null);
+    if (present.length === 0) return null;
+    const wSum = present.reduce((a, p) => a + p.w, 0);
+    const total = present.reduce((a, p) => a + (p.v as number) * (p.w / wSum), 0);
 
-    const final = marketScore * 0.50 + industryScore * 0.37 + stockScore * 0.13;
     return {
-      total: Math.round(final),
-      market: Math.round(marketScore),
-      industry: Math.round(industryScore),
-      stock: Math.round(stockScore),
-      hasFund: fundPart !== null,
+      total: Math.round(total),
+      rs: rsScore === null ? null : Math.round(rsScore),
+      theme: themeScore === null ? null : Math.round(themeScore),
+      fund: fundScore === null ? null : Math.round(fundScore),
+      opt: optScore === null ? null : Math.round(optScore),
       hasIndustry: ih?.available ?? false,
+      hasFund: fd?.available ?? false,
+      hasOptions: opt?.available ?? false,
+      fundDetail,
     };
-  }, [snapshot, overallRating, accelDelta, relVol]);
+  }, [snapshot, overallRating, accelDelta]);
 
   // ── Setup Quality Score (0-100) ──
   const setupQuality = useMemo(() => {
@@ -981,6 +1027,16 @@ export default function LiveExecution() {
                     Switch the benchmark used for relative strength (RS) comparisons. SPY tracks the S&amp;P 500 (broad market); QQQ tracks the Nasdaq-100 (tech-heavy). RS values below recompute live.
                   </TooltipContent>
                 </Tooltip>
+                <button
+                  type="button"
+                  onClick={() => activeSymbol && submit(activeSymbol, { force: true })}
+                  disabled={!activeSymbol || snapLoading}
+                  className="ml-1 inline-flex items-center gap-1 rounded-md border border-primary/40 bg-primary/10 px-2 py-1 text-[11px] font-semibold text-primary transition-colors hover:bg-primary/20 disabled:cursor-not-allowed disabled:opacity-40"
+                  title="Force a fresh data pull from Yahoo (bypasses 24h cache)"
+                >
+                  <RefreshCw size={11} className={snapLoading ? "animate-spin" : ""} />
+                  Refresh Data
+                </button>
               </div>
             </div>
 
@@ -1123,7 +1179,7 @@ export default function LiveExecution() {
                   />
                   <MetricCard
                     label="Conviction"
-                    tooltip="O'Neil-weighted score (0-100): 50% Market strength + 37% Industry/sector strength + 13% Individual stock (RS, accel, volume, P/E and growth)."
+                    tooltip="Overall Conviction (0-100): 40% RS Rating + 30% Theme/Sector strength + 20% Fundamentals (growth-adjusted) + 10% Options activity. Missing pillars are dropped and weight is redistributed."
                     value={conviction !== null ? `${conviction.total}` : "—"}
                     sub={
                       conviction === null
@@ -1190,19 +1246,24 @@ export default function LiveExecution() {
                   />
                 </div>
 
-                {/* Conviction Breakdown */}
+                {/* Overall Conviction Breakdown — 4 Pillars */}
                 {conviction && (
                   <ConvictionBreakdown
                     total={conviction.total}
-                    market={conviction.market}
-                    industry={conviction.industry}
-                    stock={conviction.stock}
+                    rs={conviction.rs}
+                    theme={conviction.theme}
+                    fund={conviction.fund}
+                    opt={conviction.opt}
                     benchmarkLabel={benchmark}
                     sectorName={snapshot?.industry?.sectorName ?? null}
                     sectorEtf={snapshot?.industry?.etfSymbol ?? null}
                     fundamentals={snapshot?.fundamentals ?? null}
+                    sectorPeAvg={(snapshot as any)?.sectorPeAvg ?? null}
+                    peJustified={conviction.fundDetail.peJustified}
                     hasIndustry={conviction.hasIndustry}
                     hasFund={conviction.hasFund}
+                    hasOptions={conviction.hasOptions}
+                    onWhy={() => setWhyTopic("conviction")}
                   />
                 )}
 
@@ -1327,16 +1388,63 @@ export default function LiveExecution() {
             )}
           </section>
 
-          {/* ── Options Activity ── */}
+          {/* ── Fundamentals (20% pillar) ── */}
           {snapshot && (
             <section
               className="rounded-xl border border-border/60 p-4"
               style={{ background: "rgba(255,255,255,0.03)" }}
             >
-              <div className="mb-3 flex items-center gap-2">
+              <div className="mb-3 flex items-center gap-2 flex-wrap">
+                <h2 className="font-['Syne',sans-serif] text-sm font-semibold uppercase tracking-wider text-foreground">
+                  Fundamentals
+                </h2>
+                <span className="rounded border border-border/40 bg-background/40 px-1.5 py-0.5 text-[10px] uppercase tracking-wider text-muted-foreground">
+                  20% pillar
+                </span>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="inline-flex cursor-help"><Info size={12} className="text-muted-foreground" /></span>
+                  </TooltipTrigger>
+                  <TooltipContent className="max-w-xs text-xs">
+                    Simple O'Neil-style sanity check: are earnings and revenue growing, and is the valuation reasonable for that growth? High P/E is fine if growth is strong (≥ 25% EPS or ≥ 20% revenue YoY).
+                  </TooltipContent>
+                </Tooltip>
+                <span className="ml-auto text-[10px] text-muted-foreground">Source: Yahoo Finance</span>
+                {conviction?.fund !== null && conviction?.fund !== undefined && (
+                  <span className={`font-mono text-base font-bold ${ratingClass(conviction.fund)}`}>
+                    {conviction.fund} <span className="text-[10px] text-muted-foreground">/ 100</span>
+                  </span>
+                )}
+              </div>
+              {snapshot.fundamentals?.available ? (
+                <FundamentalsBlock
+                  fd={snapshot.fundamentals}
+                  sectorPeAvg={(snapshot as any)?.sectorPeAvg ?? null}
+                  sectorEtf={snapshot.industry?.etfSymbol ?? null}
+                  peJustified={conviction?.fundDetail.peJustified ?? false}
+                  onWhy={() => setWhyTopic("fundamentals")}
+                />
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  No clean fundamental data returned for this ticker. The Overall Conviction Score above redistributes the 20% weight to the other pillars.
+                </p>
+              )}
+            </section>
+          )}
+
+          {/* ── Options Activity (10% pillar) ── */}
+          {snapshot && (
+            <section
+              className="rounded-xl border border-border/60 p-4"
+              style={{ background: "rgba(255,255,255,0.03)" }}
+            >
+              <div className="mb-3 flex items-center gap-2 flex-wrap">
                 <h2 className="font-['Syne',sans-serif] text-sm font-semibold uppercase tracking-wider text-foreground">
                   Options Activity
                 </h2>
+                <span className="rounded border border-border/40 bg-background/40 px-1.5 py-0.5 text-[10px] uppercase tracking-wider text-muted-foreground">
+                  10% pillar
+                </span>
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <span className="inline-flex cursor-help"><Info size={12} className="text-muted-foreground" /></span>
@@ -1348,6 +1456,11 @@ export default function LiveExecution() {
                 <span className="ml-auto text-[10px] text-muted-foreground">
                   Source: Yahoo Finance · Nearest expiration
                 </span>
+                {conviction?.opt !== null && conviction?.opt !== undefined && (
+                  <span className={`font-mono text-base font-bold ${ratingClass(conviction.opt)}`}>
+                    {conviction.opt} <span className="text-[10px] text-muted-foreground">/ 100</span>
+                  </span>
+                )}
               </div>
 
               {!snapshot.options.available ? (
@@ -1756,100 +1869,188 @@ function OptionsTile({
 
 function ConvictionBreakdown({
   total,
-  market,
-  industry,
-  stock,
+  rs,
+  theme,
+  fund,
+  opt,
   benchmarkLabel,
   sectorName,
   sectorEtf,
   fundamentals,
+  sectorPeAvg,
+  peJustified,
   hasIndustry,
   hasFund,
+  hasOptions,
+  onWhy,
 }: {
   total: number;
-  market: number;
-  industry: number;
-  stock: number;
+  rs: number | null;
+  theme: number | null;
+  fund: number | null;
+  opt: number | null;
   benchmarkLabel: string;
   sectorName: string | null;
   sectorEtf: string | null;
   fundamentals: import("@/hooks/useLiveSnapshot").LiveFundamentals | null;
+  sectorPeAvg: number | null;
+  peJustified: boolean;
   hasIndustry: boolean;
   hasFund: boolean;
+  hasOptions: boolean;
+  onWhy?: () => void;
 }) {
-  // Weighted contributions to the final 0-100 conviction.
-  const marketContrib = Math.round((market * 0.50));
-  const industryContrib = Math.round((industry * 0.37));
-  const stockContrib = Math.round((stock * 0.13));
-  const tone = (s: number) =>
+  // Pillars and weights for the new 4-section blend.
+  const pillars = [
+    { key: "RS", weight: 0.40, value: rs, sub: "RS Rating + acceleration" },
+    { key: "Theme", weight: 0.30, value: theme, sub: hasIndustry ? `${sectorName ?? "Sector"}${sectorEtf ? ` · ${sectorEtf}` : ""}` : "No sector mapped" },
+    { key: "Fundamentals", weight: 0.20, value: fund, sub: hasFund && fundamentals
+        ? `P/E ${(fundamentals.forwardPe ?? fundamentals.pe)?.toFixed(1) ?? "—"}${sectorPeAvg ? ` (sec ~${sectorPeAvg})` : ""}${peJustified ? " · growth-justified" : ""}`
+        : "Not available" },
+    { key: "Options", weight: 0.10, value: opt, sub: hasOptions ? "Sentiment + IV" : "Not available" },
+  ];
+  const tone = (s: number | null) =>
+    s === null ? "bg-muted/40" :
     s >= 70 ? "bg-[hsl(160,80%,45%)]" : s >= 50 ? "bg-[hsl(40,85%,55%)]" : "bg-destructive";
-  const fmtPct = (v: number | null) =>
-    v === null || v === undefined || !Number.isFinite(v) ? "—" : `${(v * 100).toFixed(1)}%`;
-  const explanation = (() => {
-    const marketWord = market >= 65 ? "Strong" : market >= 50 ? "Mixed" : "Weak";
-    const industryWord = industry >= 65 ? "leading" : industry >= 50 ? "neutral" : "lagging";
-    const stockWord = stock >= 70 ? "solid" : stock >= 50 ? "decent" : "soft";
-    return `${marketWord} market (${benchmarkLabel}) + ${industryWord} ${sectorName ?? "sector"}${sectorEtf ? ` (${sectorEtf})` : ""} + ${stockWord} individual stock${hasFund ? " (RS, accel, volume, P/E and growth)" : " (RS, accel, volume — fundamentals unavailable)"}.`;
-  })();
 
   return (
-    <div className="rounded-lg border border-border/40 bg-background/40 p-3">
-      <div className="mb-2 flex items-center gap-2">
-        <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-          O&apos;Neil Conviction Breakdown
+    <div className="rounded-lg border border-primary/30 bg-primary/5 p-3">
+      <div className="mb-2 flex items-center gap-2 flex-wrap">
+        <span className="text-[11px] font-semibold uppercase tracking-wider text-foreground">
+          Overall Conviction Score
         </span>
         <Tooltip>
           <TooltipTrigger asChild>
-            <span className="inline-flex cursor-help"><Info size={11} /></span>
+            <span className="inline-flex cursor-help"><Info size={11} className="text-muted-foreground" /></span>
           </TooltipTrigger>
           <TooltipContent className="max-w-xs text-xs">
-            William O&apos;Neil&apos;s research found ~50% of a stock&apos;s move follows the market, ~37% follows the industry/sector, and only ~13% is stock-specific. We score each piece 0-100 from real data and combine them with those weights.
+            Weighted blend of the four sections below: 40% RS Rating, 30% Theme/Sector strength, 20% Fundamentals, 10% Options activity. Missing pillars are dropped and the weight is redistributed proportionally.
           </TooltipContent>
         </Tooltip>
-        <span className="ml-auto font-mono text-sm font-bold text-foreground">{total} <span className="text-[10px] text-muted-foreground">/ 100</span></span>
+        {onWhy && (
+          <button
+            type="button"
+            onClick={onWhy}
+            className="inline-flex items-center gap-1 rounded-md border border-border/50 bg-background/60 px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground transition-colors hover:border-primary/40 hover:bg-primary/10 hover:text-primary"
+          >
+            <HelpCircle size={10} /> Why this score?
+          </button>
+        )}
+        <span className="ml-auto font-mono text-2xl font-bold text-foreground">
+          {total} <span className="text-[11px] text-muted-foreground">/ 100</span>
+        </span>
       </div>
-      {/* Segmented bar */}
+      {/* Segmented bar — width matches each pillar's weight; intensity matches its 0–100 score. */}
       <div className="flex h-3 w-full overflow-hidden rounded-md border border-border/40 bg-background/60">
-        <div className={`${tone(market)} relative`} style={{ width: "50%" }} title={`Market 50% × ${market} = ${marketContrib} pts`}>
-          <div className="h-full w-full opacity-90" style={{ width: `${market}%` }} />
-        </div>
-        <div className={`${tone(industry)} relative border-l border-background/60`} style={{ width: "37%" }} title={`Industry 37% × ${industry} = ${industryContrib} pts`}>
-          <div className="h-full" style={{ width: `${industry}%` }} />
-        </div>
-        <div className={`${tone(stock)} relative border-l border-background/60`} style={{ width: "13%" }} title={`Stock 13% × ${stock} = ${stockContrib} pts`}>
-          <div className="h-full" style={{ width: `${stock}%` }} />
-        </div>
-      </div>
-      <div className="mt-2 grid grid-cols-3 gap-2 text-[11px]">
-        <div className="rounded border border-border/40 bg-background/40 p-2">
-          <div className="flex items-center justify-between">
-            <span className="text-muted-foreground">Market <span className="text-[9px]">(50%)</span></span>
-            <span className={`font-mono font-semibold ${ratingClass(market)}`}>{market}</span>
+        {pillars.map((p) => (
+          <div
+            key={p.key}
+            className="relative border-l border-background/60 first:border-l-0"
+            style={{ width: `${p.weight * 100}%` }}
+            title={`${p.key} (${(p.weight * 100).toFixed(0)}%) — score ${p.value ?? "n/a"}`}
+          >
+            <div className={`h-full ${tone(p.value)}`} style={{ width: `${p.value ?? 0}%`, opacity: p.value === null ? 0.2 : 1 }} />
           </div>
-          <div className="mt-0.5 text-[10px] text-muted-foreground">{benchmarkLabel} · contrib {marketContrib}</div>
+        ))}
+      </div>
+      <div className="mt-2 grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px]">
+        {pillars.map((p) => (
+          <div key={p.key} className="rounded border border-border/40 bg-background/40 p-2">
+            <div className="flex items-center justify-between">
+              <span className="text-muted-foreground">{p.key} <span className="text-[9px]">({(p.weight * 100).toFixed(0)}%)</span></span>
+              <span className={`font-mono font-semibold ${ratingClass(p.value)}`}>{p.value ?? "—"}</span>
+            </div>
+            <div className="mt-0.5 truncate text-[10px] text-muted-foreground" title={p.sub}>{p.sub}</div>
+          </div>
+        ))}
+      </div>
+      <p className="mt-2 text-[11px] leading-snug text-foreground/75">
+        Final = {pillars.filter((p) => p.value !== null).map((p) => `${p.value} × ${(p.weight * 100).toFixed(0)}%`).join(" + ")}
+        {pillars.some((p) => p.value === null) && " (missing pillars dropped, weight redistributed)"} = <span className="font-semibold text-foreground">{total}</span>.
+      </p>
+    </div>
+  );
+}
+
+function FundamentalsBlock({
+  fd,
+  sectorPeAvg,
+  sectorEtf,
+  peJustified,
+  onWhy,
+}: {
+  fd: import("@/hooks/useLiveSnapshot").LiveFundamentals;
+  sectorPeAvg: number | null;
+  sectorEtf: string | null;
+  peJustified: boolean;
+  onWhy: () => void;
+}) {
+  const pe = fd.forwardPe ?? fd.pe;
+  const peLabel = fd.forwardPe !== null ? "Forward P/E" : "Trailing P/E";
+  const peVsSector = pe !== null && sectorPeAvg ? pe / sectorPeAvg : null;
+  const peTone = peVsSector === null
+    ? "text-muted-foreground"
+    : peVsSector < 1.0 ? "text-[hsl(160,80%,45%)]"
+    : peVsSector < 1.5 ? "text-foreground"
+    : "text-[hsl(40,85%,55%)]";
+
+  const growthCard = (label: string, value: number | null, goodAt: number) => {
+    if (value === null) return { label, value: "—", tone: "text-muted-foreground", note: "Not reported" };
+    const v = value * 100;
+    const tone = v >= goodAt ? "text-[hsl(160,80%,45%)]" : v >= 0 ? "text-foreground" : "text-destructive";
+    const note = v >= goodAt ? "Strong" : v >= 0 ? "Positive but modest" : "Contracting";
+    return { label, value: `${v >= 0 ? "+" : ""}${v.toFixed(1)}%`, tone, note };
+  };
+  const eps = growthCard("EPS growth (YoY)", fd.epsGrowth, 25);
+  const rev = growthCard("Revenue growth (YoY)", fd.revenueGrowth, 15);
+
+  return (
+    <div className="space-y-3">
+      <p className="text-[11px] leading-relaxed text-muted-foreground">
+        Growth-focused read: are earnings and revenue actually growing, and is the price reasonable for that growth?
+        High P/E is acceptable when growth is strong — we don't penalise it.
+        <button onClick={onWhy} className="ml-1 underline decoration-dotted hover:text-foreground">Full breakdown</button>
+      </p>
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+        <div className="rounded-lg border border-border/40 bg-background/40 p-3">
+          <div className="mb-1 text-[10px] uppercase tracking-wider text-muted-foreground">{eps.label}</div>
+          <div className={`font-mono text-lg font-bold ${eps.tone}`}>{eps.value}</div>
+          <div className="mt-0.5 text-[10px] text-muted-foreground">{eps.note} · O'Neil target ≥ 25%</div>
         </div>
-        <div className="rounded border border-border/40 bg-background/40 p-2">
-          <div className="flex items-center justify-between">
-            <span className="text-muted-foreground">Industry <span className="text-[9px]">(37%)</span></span>
-            <span className={`font-mono font-semibold ${ratingClass(industry)}`}>{industry}</span>
+        <div className="rounded-lg border border-border/40 bg-background/40 p-3">
+          <div className="mb-1 text-[10px] uppercase tracking-wider text-muted-foreground">{rev.label}</div>
+          <div className={`font-mono text-lg font-bold ${rev.tone}`}>{rev.value}</div>
+          <div className="mt-0.5 text-[10px] text-muted-foreground">{rev.note} · target ≥ 15%</div>
+        </div>
+        <div className="rounded-lg border border-border/40 bg-background/40 p-3">
+          <div className="mb-1 text-[10px] uppercase tracking-wider text-muted-foreground">{peLabel} vs Sector</div>
+          <div className={`font-mono text-lg font-bold ${peTone}`}>
+            {pe !== null ? pe.toFixed(1) : "—"}
+            {sectorPeAvg && pe !== null && (
+              <span className="ml-1 text-[10px] font-normal text-muted-foreground">
+                vs {sectorEtf ?? "sector"} ~{sectorPeAvg}
+              </span>
+            )}
           </div>
           <div className="mt-0.5 text-[10px] text-muted-foreground">
-            {hasIndustry ? `${sectorName ?? "—"}${sectorEtf ? ` · ${sectorEtf}` : ""}` : "No sector mapped"} · contrib {industryContrib}
-          </div>
-        </div>
-        <div className="rounded border border-border/40 bg-background/40 p-2">
-          <div className="flex items-center justify-between">
-            <span className="text-muted-foreground">Stock <span className="text-[9px]">(13%)</span></span>
-            <span className={`font-mono font-semibold ${ratingClass(stock)}`}>{stock}</span>
-          </div>
-          <div className="mt-0.5 text-[10px] text-muted-foreground">
-            {hasFund && fundamentals
-              ? `P/E ${fundamentals.forwardPe?.toFixed(1) ?? fundamentals.pe?.toFixed(1) ?? "—"} · EPS Δ ${fmtPct(fundamentals.epsGrowth)} · Rev Δ ${fmtPct(fundamentals.revenueGrowth)}`
-              : "Technicals only · contrib " + stockContrib}
+            {pe === null
+              ? "No P/E reported"
+              : peVsSector === null
+              ? "No sector benchmark"
+              : peVsSector < 1.0
+              ? "Trading below sector average"
+              : peVsSector < 1.5
+              ? "Slight premium to sector"
+              : "Notable premium to sector"}
+            {peJustified && " · justified by growth"}
           </div>
         </div>
       </div>
-      <p className="mt-2 text-[11px] leading-snug text-foreground/80">{explanation}</p>
+      {peJustified && pe !== null && (
+        <div className="rounded-md border border-[hsl(160,80%,45%)]/30 bg-[hsl(160,80%,45%)]/10 p-2 text-[11px] text-foreground/85">
+          ✓ The high P/E ({pe.toFixed(1)}) is being justified by strong growth (EPS ≥ 25% or Revenue ≥ 20% YoY) — no valuation penalty applied to the Fundamentals score.
+        </div>
+      )}
     </div>
   );
 }
