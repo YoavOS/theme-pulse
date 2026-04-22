@@ -388,11 +388,11 @@ async function fetchFundamentalsSnapshot(symbol: string): Promise<FundamentalsSn
   }
 }
 
-async function fetchHistoricalForTicker(symbol: string, todayPrice: number | null) {
+async function fetchHistoricalForTicker(symbol: string, todayPrice: number | null, forceRefresh = false) {
   const sb = makeServiceClient();
   const periods: YahooPeriod[] = ["5d", "1mo", "3mo"];
   const hist = await Promise.all(
-    periods.map((p) => getHistoricalData(sb, symbol, p, { todayPrice }))
+    periods.map((p) => getHistoricalData(sb, symbol, p, { todayPrice, skipCache: forceRefresh }))
   );
   return {
     return1w: hist[0].returnPct,
@@ -400,6 +400,13 @@ async function fetchHistoricalForTicker(symbol: string, todayPrice: number | nul
     return3m: hist[2].returnPct,
   };
 }
+
+// Rough sector-average forward P/E benchmarks (long-term S&P 500 sector medians).
+// Used so we can show "P/E vs sector avg" without fetching every peer.
+const SECTOR_PE_BENCHMARK: Record<string, number> = {
+  XLK: 28, XLV: 18, XLF: 14, XLY: 24, XLP: 21,
+  XLE: 13, XLI: 20, XLB: 18, XLU: 17, XLRE: 30, XLC: 19,
+};
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
