@@ -26,6 +26,7 @@ import { computeRsRatings } from "@/components/rs/RsRatingBadge";
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import HelpButton from "@/components/HelpButton";
+import { gicsForIndustry } from "@/lib/sectorTaxonomy";
 
 // ───────────────────────── helpers ─────────────────────────
 
