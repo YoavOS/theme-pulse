@@ -319,7 +319,7 @@ function resolveSectorEtf(sector: string | null | undefined): { etf: string; nam
   return null;
 }
 
-async function fetchIndustrySnapshot(sector: string | null | undefined): Promise<IndustrySnapshot> {
+async function fetchIndustrySnapshot(sector: string | null | undefined, forceRefresh = false): Promise<IndustrySnapshot> {
   const empty: IndustrySnapshot = {
     available: false, etfSymbol: null, sectorName: null,
     changePct: null, return1w: null, return1m: null, return3m: null,
@@ -331,7 +331,7 @@ async function fetchIndustrySnapshot(sector: string | null | undefined): Promise
     const quote = await fetchYahooQuote(map.etf);
     const periods: YahooPeriod[] = ["5d", "1mo", "3mo"];
     const hist = await Promise.all(
-      periods.map((p) => getHistoricalData(sb, map.etf, p, { todayPrice: quote?.price ?? null }))
+      periods.map((p) => getHistoricalData(sb, map.etf, p, { todayPrice: quote?.price ?? null, skipCache: forceRefresh }))
     );
     return {
       available: true,
