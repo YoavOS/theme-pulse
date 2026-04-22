@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { useRsAlpha, type RsStock } from "@/hooks/useRsAlpha";
 import { useLiveSnapshot, useLiveWatchlist, type LiveSnapshot, type BenchmarkSymbol } from "@/hooks/useLiveSnapshot";
+import { supabase } from "@/integrations/supabase/client";
 import { computeRsRatings } from "@/components/rs/RsRatingBadge";
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
