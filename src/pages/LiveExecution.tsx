@@ -1818,6 +1818,53 @@ export default function LiveExecution() {
             </section>
           )}
 
+          {/* ── Overall Conviction Score ── */}
+          {snapshot && (
+            <section
+              className="rounded-xl border border-border/60 p-4"
+              style={{ background: "rgba(255,255,255,0.03)" }}
+            >
+              <div className="mb-3 flex items-center gap-2 flex-wrap">
+                <h2 className="font-['Syne',sans-serif] text-sm font-semibold uppercase tracking-wider text-foreground">
+                  Overall Conviction Score
+                </h2>
+                <span className="text-[11px] text-muted-foreground">
+                  Final weighted read: 40% RS + 30% Theme + 20% Fundamentals + 10% Options.
+                </span>
+              </div>
+              {conviction ? (
+                <div className="space-y-3">
+                  <ConvictionBreakdown
+                    total={conviction.total}
+                    rs={conviction.rs}
+                    theme={conviction.theme}
+                    fund={conviction.fund}
+                    opt={conviction.opt}
+                    benchmarkLabel={benchmark}
+                    sectorName={resolvedTheme.broadLabel ?? snapshot?.industry?.sectorName ?? null}
+                    sectorEtf={snapshot?.industry?.etfSymbol ?? null}
+                    fundamentals={snapshot?.fundamentals ?? null}
+                    sectorPeAvg={(snapshot as any)?.sectorPeAvg ?? null}
+                    peJustified={conviction.fundDetail.peJustified}
+                    hasIndustry={conviction.hasIndustry}
+                    hasFund={conviction.hasFund}
+                    hasOptions={conviction.hasOptions}
+                    onWhy={() => setWhyTopic("conviction")}
+                  />
+                  <div className="rounded-lg border border-border/40 bg-background/40 p-3 text-xs text-muted-foreground">
+                    {snapshot.symbol} currently scores
+                    <span className="mx-1 font-mono font-semibold text-foreground">{conviction.total}/100</span>
+                    because RS contributes {conviction.contributions.rs ?? 0}, Theme {conviction.contributions.theme ?? 0}, Fundamentals {conviction.contributions.fund ?? 0}, and Options {conviction.contributions.opt ?? 0} points.
+                  </div>
+                </div>
+              ) : (
+                <div className="rounded-lg border border-border/40 bg-background/40 p-3 text-xs text-muted-foreground">
+                  Insufficient data — a final conviction score appears once at least one of the four sections has reliable real data.
+                </div>
+              )}
+            </section>
+          )}
+
           {/* ── Peers ── */}
           {peers.length > 0 && (
             <section
