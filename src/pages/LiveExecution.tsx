@@ -698,7 +698,7 @@ export default function LiveExecution() {
       if (document.visibilityState !== "visible") return;
       const sector = stockMap.get(activeSymbol)?.sector ?? null;
       fetchSnapshot(activeSymbol, benchmark, sector);
-    }, 10_000);
+    }, 7_000);
     return () => window.clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeSymbol, benchmark]);
@@ -1108,10 +1108,10 @@ export default function LiveExecution() {
                 <ArrowLeft size={16} />
               </Link>
               <div>
-                <h1 className="font-['Syne',sans-serif] text-xl font-bold tracking-tight text-foreground">
+                <h1 className="font-['Syne',sans-serif] text-3xl font-bold tracking-tight text-foreground">
                   Live Execution
                 </h1>
-                <p className="text-[11px] text-muted-foreground">
+                <p className="text-sm text-muted-foreground">
                   Real-time trade decision tool · {stocks.length.toLocaleString()} qualified RS universe
                 </p>
               </div>
@@ -1126,21 +1126,21 @@ export default function LiveExecution() {
             className="rounded-xl border border-border/60 bg-card/40 p-4 backdrop-blur-sm"
             style={{ background: "rgba(255,255,255,0.03)" }}
           >
-            <div className="mb-3 flex items-center gap-2">
-              <Zap size={14} className="text-primary" />
-              <h2 className="font-['Syne',sans-serif] text-sm font-semibold uppercase tracking-wider text-foreground">
+            <div className="mb-4 flex items-center gap-2">
+              <Zap size={20} className="text-primary" />
+              <h2 className="font-['Syne',sans-serif] text-2xl font-bold uppercase tracking-wider text-foreground">
                 Quick Trade Check
               </h2>
-              {rsLoading && <Loader2 size={12} className="animate-spin text-muted-foreground" />}
-              <div className="ml-auto flex items-center gap-1.5">
-                <span className="text-[10px] uppercase tracking-wider text-muted-foreground">Benchmark</span>
+              {rsLoading && <Loader2 size={16} className="animate-spin text-muted-foreground" />}
+              <div className="ml-auto flex items-center gap-2">
+                <span className="text-sm uppercase tracking-wider text-muted-foreground">Benchmark</span>
                 <div className="inline-flex rounded-md border border-border/60 bg-background/40 p-0.5">
                   {(["SPY", "QQQ"] as const).map((b) => (
                     <button
                       key={b}
                       type="button"
                       onClick={() => setBenchmark(b)}
-                      className={`rounded-sm px-2 py-0.5 font-mono text-[11px] font-semibold transition-colors ${
+                      className={`rounded-sm px-3 py-1 font-mono text-base font-bold transition-colors ${
                         benchmark === b
                           ? "bg-primary/20 text-primary"
                           : "text-muted-foreground hover:text-foreground"
@@ -1152,9 +1152,9 @@ export default function LiveExecution() {
                 </div>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <span className="inline-flex cursor-help"><Info size={11} className="text-muted-foreground" /></span>
+                    <span className="inline-flex cursor-help"><Info size={14} className="text-muted-foreground" /></span>
                   </TooltipTrigger>
-                  <TooltipContent className="max-w-xs text-xs">
+                  <TooltipContent className="max-w-xs text-sm">
                     Switch the benchmark used for relative strength (RS) comparisons. SPY tracks the S&amp;P 500 (broad market); QQQ tracks the Nasdaq-100 (tech-heavy). RS values below recompute live.
                   </TooltipContent>
                 </Tooltip>
@@ -1162,10 +1162,10 @@ export default function LiveExecution() {
                   type="button"
                   onClick={() => activeSymbol && submit(activeSymbol, { force: true })}
                   disabled={!activeSymbol || snapLoading}
-                  className="ml-1 inline-flex items-center gap-1 rounded-md border border-primary/40 bg-primary/10 px-2 py-1 text-[11px] font-semibold text-primary transition-colors hover:bg-primary/20 disabled:cursor-not-allowed disabled:opacity-40"
+                  className="ml-1 inline-flex items-center gap-1.5 rounded-md border border-primary/40 bg-primary/10 px-3 py-1.5 text-sm font-bold text-primary transition-colors hover:bg-primary/20 disabled:cursor-not-allowed disabled:opacity-40"
                   title="Force a fresh data pull from Yahoo (bypasses 24h cache)"
                 >
-                  <RefreshCw size={11} className={snapLoading ? "animate-spin" : ""} />
+                  <RefreshCw size={14} className={snapLoading ? "animate-spin" : ""} />
                   Refresh Data
                 </button>
               </div>
@@ -1189,7 +1189,7 @@ export default function LiveExecution() {
                 autoFocus
                 spellCheck={false}
                 maxLength={10}
-                className="h-12 w-full rounded-lg border border-border bg-background/60 pl-10 pr-24 font-mono text-base text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+                className="h-16 w-full rounded-lg border border-border bg-background/60 pl-12 pr-28 font-mono text-2xl font-bold text-foreground placeholder:text-muted-foreground placeholder:text-base placeholder:font-normal focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
               />
               {input && (
                 <button
@@ -1224,19 +1224,19 @@ export default function LiveExecution() {
                 {/* Top row: name + price + watchlist toggle */}
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex items-baseline gap-3 flex-wrap">
-                    <span className="font-mono text-2xl font-bold text-foreground">{snapshot.symbol}</span>
-                    <span className="text-sm text-muted-foreground">{snapshot.quote.shortName ?? "—"}</span>
+                    <span className="font-mono text-4xl font-extrabold text-foreground">{snapshot.symbol}</span>
+                    <span className="text-lg text-muted-foreground">{snapshot.quote.shortName ?? "—"}</span>
                     {activeStock?.sector && (
-                      <span className="rounded border border-border/60 px-1.5 py-0.5 text-[10px] uppercase tracking-wider text-muted-foreground">
+                      <span className="rounded border border-border/60 px-2 py-1 text-xs uppercase tracking-wider text-muted-foreground">
                         {activeStock.sector}
                       </span>
                     )}
                   </div>
                   <div className="text-right">
-                    <div className="font-mono text-2xl font-bold text-foreground">
+                    <div className="font-mono text-4xl font-extrabold text-foreground">
                       ${num(snapshot.quote.price)}
                     </div>
-                    <div className={`font-mono text-sm ${pctClass(snapshot.quote.changePct)}`}>
+                    <div className={`font-mono text-lg font-bold ${pctClass(snapshot.quote.changePct)}`}>
                       {pct(snapshot.quote.changePct)}
                     </div>
                   </div>
@@ -1244,19 +1244,19 @@ export default function LiveExecution() {
 
                 {/* Verdict badge */}
                 <div
-                  className={`flex items-start gap-3 rounded-lg border ${verdict.border} ${verdict.bg} p-3`}
+                  className={`flex items-start gap-3 rounded-lg border ${verdict.border} ${verdict.bg} p-4`}
                 >
-                  <VerdictIcon size={22} className={`shrink-0 ${verdict.color}`} />
+                  <VerdictIcon size={28} className={`shrink-0 ${verdict.color}`} />
                   <div className="flex-1">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <div className={`font-['Syne',sans-serif] text-base font-bold ${verdict.color}`}>
+                      <div className={`font-['Syne',sans-serif] text-xl font-bold ${verdict.color}`}>
                         {verdict.label}
                       </div>
                       <WhyButton onClick={() => setWhyTopic("verdict")} label="Why this verdict?" />
                     </div>
-                    <p className="mt-1 text-xs leading-relaxed text-foreground/80">{verdict.reason}</p>
+                    <p className="mt-1.5 text-base leading-relaxed text-foreground/85">{verdict.reason}</p>
                     {/* Factor breakdown chips */}
-                    <div className="mt-2 flex flex-wrap gap-1.5">
+                    <div className="mt-3 flex flex-wrap gap-2">
                       {verdict.factors.map((f) => {
                         const cls =
                           f.status === "pos"
@@ -1269,9 +1269,9 @@ export default function LiveExecution() {
                         return (
                           <span
                             key={f.label}
-                            className={`rounded border px-1.5 py-0.5 text-[10px] ${cls}`}
+                            className={`rounded border px-2 py-1 text-sm ${cls}`}
                           >
-                            <span className="font-semibold">{f.label}:</span> {f.note}
+                            <span className="font-bold">{f.label}:</span> {f.note}
                           </span>
                         );
                       })}
@@ -1283,113 +1283,15 @@ export default function LiveExecution() {
                         ? removeWatch(snapshot.symbol)
                         : addWatch(snapshot.symbol)
                     }
-                    className="shrink-0 rounded-md border border-border bg-background/60 p-2 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                    className="shrink-0 rounded-md border border-border bg-background/60 p-2.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
                     title={hasWatch(snapshot.symbol) ? "Remove from live watchlist" : "Pin to live watchlist"}
                   >
                     {hasWatch(snapshot.symbol) ? (
-                      <Star size={14} className="fill-[hsl(40,85%,55%)] text-[hsl(40,85%,55%)]" />
+                      <Star size={18} className="fill-[hsl(40,85%,55%)] text-[hsl(40,85%,55%)]" />
                     ) : (
-                      <StarOff size={14} />
+                      <StarOff size={18} />
                     )}
                   </button>
-                </div>
-
-                {/* Metric grid */}
-                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 xl:grid-cols-5">
-                  <MetricCard
-                    label="RS Rating"
-                    tooltip="Relative Strength rank from 1–99 within the qualified universe. 80+ = leader, 40-79 = average, <40 = laggard."
-                    value={overallRating !== null ? `${overallRating}` : "N/A"}
-                    sub={
-                      universeRank
-                        ? `Rank ${universeRank.rank.toLocaleString()} / ${universeRank.total.toLocaleString()}`
-                        : "Not in universe"
-                    }
-                    valueClass={ratingClass(overallRating)}
-                    onWhy={() => setWhyTopic("rs")}
-                  />
-                  <MetricCard
-                    label="RS Acceleration"
-                    tooltip="Difference between the stock's 1W RS rating and 1M RS rating. Positive means near-term relative strength is improving."
-                    value={accelDelta !== null ? `${accelDelta > 0 ? "+" : ""}${accelDelta.toFixed(1)}` : "—"}
-                    sub={
-                      accelDelta === null
-                        ? "Insufficient data"
-                        : accelDelta >= 5
-                        ? "Improving"
-                        : accelDelta <= -5
-                        ? "Decelerating"
-                        : "Stable"
-                    }
-                    valueClass={
-                      accelDelta === null
-                        ? "text-muted-foreground"
-                        : accelDelta >= 5
-                        ? "text-[hsl(160,80%,45%)]"
-                        : accelDelta <= -5
-                        ? "text-destructive"
-                        : "text-foreground"
-                    }
-                    onWhy={() => setWhyTopic("rs")}
-                  />
-                  <MetricCard
-                    label="Theme"
-                    tooltip="Broad theme or sector context derived from the stock's industry mapping plus sector ETF strength when available."
-                    value={resolvedTheme.broadLabel ?? "—"}
-                    sub={
-                      themeStats.matchedCount > 0
-                        ? `${themeStats.matchedCount} qualified names`
-                        : resolvedTheme.etfSymbol
-                        ? `${resolvedTheme.etfSymbol} ETF context only`
-                        : "Insufficient data"
-                    }
-                    valueClass="text-foreground"
-                  />
-                  <MetricCard
-                    label="Rel Volume"
-                    tooltip="Today's volume vs 3-month average. >1.5× signals confirmation; <0.6× signals weak conviction."
-                    value={relVol !== null ? `${relVol.toFixed(2)}×` : "—"}
-                    sub={
-                      relVol === null
-                        ? "Insufficient data"
-                        : relVol >= 1.5
-                        ? "Above average"
-                        : relVol < 0.6
-                        ? "Below average"
-                        : "Normal"
-                    }
-                    valueClass={
-                      relVol === null
-                        ? "text-muted-foreground"
-                        : relVol >= 1.5
-                        ? "text-[hsl(160,80%,45%)]"
-                        : relVol < 0.6
-                        ? "text-destructive"
-                        : "text-foreground"
-                    }
-                    onWhy={() => setWhyTopic("relVol")}
-                  />
-                  <MetricCard
-                    label="Options"
-                    tooltip="Simple options-flow read from the nearest expiration: sentiment, put/call balance, and implied volatility."
-                    value={snapshot.options.available ? snapshot.options.sentiment : "—"}
-                    sub={
-                      snapshot.options.available
-                        ? snapshot.options.high_iv_alert
-                          ? "Elevated IV"
-                          : "Normal read"
-                        : "Insufficient data"
-                    }
-                    valueClass={
-                      !snapshot.options.available
-                        ? "text-muted-foreground"
-                        : snapshot.options.sentiment === "Bullish"
-                        ? "text-[hsl(160,80%,45%)]"
-                        : snapshot.options.sentiment === "Bearish"
-                        ? "text-destructive"
-                        : "text-foreground"
-                    }
-                  />
                 </div>
 
                 {/* Pullback / Breakdown callout */}
@@ -1433,34 +1335,6 @@ export default function LiveExecution() {
                         {rotationRisk.sector} ({rotationRisk.etf}) is fading: 1W {pct(rotationRisk.sectorR1w)} vs 1M {pct(rotationRisk.sectorR1m)}.
                         Leaders inside fading sectors often roll over next. Tighten stops or wait for sector to stabilise.
                       </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* RS trend across timeframes — recomputed live against the chosen benchmark */}
-                {snapshot && (
-                  <div>
-                    <div className="mb-1.5 flex items-center gap-1 text-[10px] uppercase tracking-wider text-muted-foreground">
-                      <span>RS vs {benchmark} (% outperformance)</span>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <span className="inline-flex cursor-help"><Info size={10} /></span>
-                        </TooltipTrigger>
-                        <TooltipContent className="max-w-xs text-xs">
-                          How much the stock outperformed (or underperformed) {benchmark} over each window. 1D uses live intraday change vs {benchmark}'s intraday change; 1W/1M/3M use Yahoo historical closes. Positive = stronger than {benchmark}; negative = weaker.
-                        </TooltipContent>
-                      </Tooltip>
-                    </div>
-                    <div className="grid grid-cols-4 gap-2">
-                      <RsTrendCell label="1D" value={liveRs.rs1d} />
-                      <RsTrendCell label="1W" value={liveRs.rs1w} />
-                      <RsTrendCell label="1M" value={liveRs.rs1m} />
-                      <RsTrendCell label="3M" value={liveRs.rs3m} />
-                    </div>
-                    <div className="mt-1 text-[10px] text-muted-foreground">
-                      {benchmark} today: <span className={pctClass(snapshot.benchmark.changePct)}>{pct(snapshot.benchmark.changePct)}</span>
-                      {snapshot.benchmark.return1w !== null && (<>{" · 1W "}<span className={pctClass(snapshot.benchmark.return1w)}>{pct(snapshot.benchmark.return1w)}</span></>)}
-                      {snapshot.benchmark.return1m !== null && (<>{" · 1M "}<span className={pctClass(snapshot.benchmark.return1m)}>{pct(snapshot.benchmark.return1m)}</span></>)}
                     </div>
                   </div>
                 )}
@@ -1523,18 +1397,18 @@ export default function LiveExecution() {
             <section className="grid gap-4 lg:grid-cols-[1.05fr_1fr]">
               {/* ── [1] Theme Tickers ── tall left column */}
               <div
-                className="rounded-xl border border-border/60 p-4 lg:row-span-2"
+                className="rounded-xl border border-border/60 p-5 lg:row-span-2"
                 style={{ background: "rgba(255,255,255,0.03)" }}
               >
                 <div className="mb-3 flex items-center gap-2 flex-wrap">
-                  <h2 className="font-['Syne',sans-serif] text-sm font-semibold uppercase tracking-wider text-foreground">
+                  <h2 className="font-['Syne',sans-serif] text-2xl font-bold uppercase tracking-wider text-foreground">
                     Theme Tickers
                   </h2>
-                  <span className="text-[12px] font-semibold text-primary">
+                  <span className="text-base font-bold text-primary">
                     {(themeUniverseMembers.length > 0 ? resolvedTheme.broadLabel : aiTheme?.theme) ?? resolvedTheme.broadLabel ?? "—"}
                   </span>
-                  {snapLoading && <Loader2 size={11} className="animate-spin text-muted-foreground" />}
-                  <span className="ml-auto text-[10px] text-muted-foreground">
+                  {snapLoading && <Loader2 size={14} className="animate-spin text-muted-foreground" />}
+                  <span className="ml-auto text-sm text-muted-foreground">
                     {themeUniverseMembers.length > 0
                       ? `${themeUniverseMembers.length} qualified peers`
                       : aiTheme && aiTheme.peers.length > 0
@@ -1544,95 +1418,93 @@ export default function LiveExecution() {
                       : ""}
                   </span>
                 </div>
-                <p className="mb-3 text-[11px] leading-relaxed text-muted-foreground">
-                  All tickers in the same theme as <span className="font-mono text-foreground">{snapshot.symbol}</span>.
-                  Auto-refreshes every 10 s. When the qualified universe has fewer than 3 peers we fall back to an AI-suggested peer set and pull live Yahoo quotes for them.
+                <p className="mb-4 text-sm leading-relaxed text-muted-foreground">
+                  All tickers in the same theme as <span className="font-mono font-bold text-foreground">{snapshot.symbol}</span>.
+                  Auto-refreshes every 7 s. When the qualified universe has fewer than 3 peers we fall back to an AI-suggested peer set with live Yahoo quotes.
                 </p>
 
                 {themeUniverseMembers.length > 0 ? (
                   <div className="overflow-x-auto">
-                    <table className="w-full text-xs">
+                    <table className="w-full text-base">
                       <thead>
-                        <tr className="border-b border-border/40 text-[10px] uppercase tracking-wider text-muted-foreground">
-                          <th className="py-2 text-left">Ticker</th>
-                          <th className="py-2 text-right">RS Rating</th>
-                          <th className="py-2 text-right">1D</th>
-                          <th className="py-2 text-right">1M</th>
+                        <tr className="border-b border-border/40 text-xs uppercase tracking-wider text-muted-foreground">
+                          <th className="py-2.5 text-left">Ticker</th>
+                          <th className="py-2.5 text-right">RS Rating</th>
+                          <th className="py-2.5 text-right">1D</th>
+                          <th className="py-2.5 text-right">1M</th>
                         </tr>
                       </thead>
                       <tbody>
                         {themeUniverseMembers.slice(0, 15).map((stock) => {
                           const rating = ratingOverall.get(stock.symbol.toUpperCase()) ?? null;
                           const isActive = stock.symbol === activeSymbol;
-                          // 1D return: use the live snapshot's quote when this row is the active ticker;
-                          // otherwise fall back to the universe-stored intraday return when present.
                           const r1d = isActive ? snapshot.quote.changePct : (stock as any).return1d ?? null;
                           return (
                             <tr key={stock.symbol} className="border-b border-border/20 hover:bg-muted/20">
-                              <td className="py-2">
+                              <td className="py-3">
                                 <button
                                   onClick={() => { setInput(stock.symbol); submit(stock.symbol); }}
-                                  className={`font-mono font-semibold ${isActive ? "text-foreground" : "text-primary hover:underline"}`}
+                                  className={`font-mono text-base font-bold ${isActive ? "text-foreground" : "text-primary hover:underline"}`}
                                 >
                                   {stock.symbol}
                                 </button>
                                 {stock.companyName && (
-                                  <div className="truncate text-[10px] text-muted-foreground max-w-[180px]">{stock.companyName}</div>
+                                  <div className="truncate text-xs text-muted-foreground max-w-[200px]">{stock.companyName}</div>
                                 )}
                               </td>
-                              <td className={`py-2 text-right font-mono font-semibold ${ratingClass(rating)}`}>{rating ?? "—"}</td>
-                              <td className={`py-2 text-right font-mono ${pctClass(r1d)}`}>{pct(r1d)}</td>
-                              <td className={`py-2 text-right font-mono ${pctClass(stock.return1m)}`}>{pct(stock.return1m)}</td>
+                              <td className={`py-3 text-right font-mono text-base font-bold ${ratingClass(rating)}`}>{rating ?? "—"}</td>
+                              <td className={`py-3 text-right font-mono text-base ${pctClass(r1d)}`}>{pct(r1d)}</td>
+                              <td className={`py-3 text-right font-mono text-base ${pctClass(stock.return1m)}`}>{pct(stock.return1m)}</td>
                             </tr>
                           );
                         })}
                       </tbody>
                     </table>
                     {themeUniverseMembers.length > 15 && (
-                      <div className="mt-2 text-center text-[10px] text-muted-foreground">
+                      <div className="mt-2 text-center text-sm text-muted-foreground">
                         Showing top 15 of {themeUniverseMembers.length} by RS Rating
                       </div>
                     )}
                   </div>
                 ) : aiLoading ? (
-                  <div className="flex items-center gap-2 rounded-md border border-border/30 bg-muted/10 p-4 text-xs text-muted-foreground">
-                    <Loader2 size={12} className="animate-spin" /> AI is identifying the theme and peers…
+                  <div className="flex items-center gap-2 rounded-md border border-border/30 bg-muted/10 p-4 text-sm text-muted-foreground">
+                    <Loader2 size={14} className="animate-spin" /> AI is identifying the theme and peers…
                   </div>
                 ) : aiTheme && aiTheme.peers.length > 0 ? (
                   <div className="space-y-2">
-                    <div className="rounded-md border border-primary/20 bg-primary/5 p-2 text-[11px] text-foreground/80">
+                    <div className="rounded-md border border-primary/20 bg-primary/5 p-3 text-sm text-foreground/85">
                       🤖 No qualified peers in the RS universe — these peers were suggested by AI for the theme
-                      <span className="ml-1 font-semibold">{aiTheme.theme ?? "—"}</span>, with live Yahoo quotes.
+                      <span className="ml-1 font-bold">{aiTheme.theme ?? "—"}</span>, with live Yahoo quotes.
                     </div>
                     <div className="overflow-x-auto">
-                      <table className="w-full text-xs">
+                      <table className="w-full text-base">
                         <thead>
-                          <tr className="border-b border-border/40 text-[10px] uppercase tracking-wider text-muted-foreground">
-                            <th className="py-2 text-left">Ticker</th>
-                            <th className="py-2 text-right">Price</th>
-                            <th className="py-2 text-right">1D</th>
-                            <th className="py-2 text-right">1M</th>
+                          <tr className="border-b border-border/40 text-xs uppercase tracking-wider text-muted-foreground">
+                            <th className="py-2.5 text-left">Ticker</th>
+                            <th className="py-2.5 text-right">Price</th>
+                            <th className="py-2.5 text-right">1D</th>
+                            <th className="py-2.5 text-right">1M</th>
                           </tr>
                         </thead>
                         <tbody>
                           {aiTheme.peers.map((p) => (
                             <tr key={p.symbol} className="border-b border-border/20 hover:bg-muted/20">
-                              <td className="py-2">
+                              <td className="py-3">
                                 <button
                                   onClick={() => { setInput(p.symbol); submit(p.symbol); }}
-                                  className="font-mono font-semibold text-primary hover:underline"
+                                  className="font-mono text-base font-bold text-primary hover:underline"
                                 >
                                   {p.symbol}
                                 </button>
                                 {p.shortName && (
-                                  <div className="truncate text-[10px] text-muted-foreground max-w-[180px]">{p.shortName}</div>
+                                  <div className="truncate text-xs text-muted-foreground max-w-[200px]">{p.shortName}</div>
                                 )}
                               </td>
-                              <td className="py-2 text-right font-mono text-foreground">
+                              <td className="py-3 text-right font-mono text-base text-foreground">
                                 {p.price !== null ? `$${p.price.toFixed(2)}` : "—"}
                               </td>
-                              <td className={`py-2 text-right font-mono ${pctClass(p.changePct)}`}>{pct(p.changePct)}</td>
-                              <td className={`py-2 text-right font-mono ${pctClass(p.return1m)}`}>{pct(p.return1m)}</td>
+                              <td className={`py-3 text-right font-mono text-base ${pctClass(p.changePct)}`}>{pct(p.changePct)}</td>
+                              <td className={`py-3 text-right font-mono text-base ${pctClass(p.return1m)}`}>{pct(p.return1m)}</td>
                             </tr>
                           ))}
                         </tbody>
@@ -1640,7 +1512,7 @@ export default function LiveExecution() {
                     </div>
                   </div>
                 ) : (
-                  <div className="rounded-md border border-border/30 bg-muted/10 p-3 text-xs text-muted-foreground">
+                  <div className="rounded-md border border-border/30 bg-muted/10 p-4 text-sm text-muted-foreground">
                     Insufficient data — could not match this ticker to a theme peer set.
                   </div>
                 )}
@@ -1648,22 +1520,22 @@ export default function LiveExecution() {
 
               {/* ── [2] Fundamentals ── top right */}
               <div
-                className="rounded-xl border border-border/60 p-4"
+                className="rounded-xl border border-border/60 p-5"
                 style={{ background: "rgba(255,255,255,0.03)" }}
               >
-                <div className="mb-3 flex items-center gap-2 flex-wrap">
-                  <h2 className="font-['Syne',sans-serif] text-sm font-semibold uppercase tracking-wider text-foreground">
+                <div className="mb-4 flex items-center gap-2 flex-wrap">
+                  <h2 className="font-['Syne',sans-serif] text-2xl font-bold uppercase tracking-wider text-foreground">
                     Fundamentals
                   </h2>
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <span className="inline-flex cursor-help"><Info size={12} className="text-muted-foreground" /></span>
+                      <span className="inline-flex cursor-help"><Info size={14} className="text-muted-foreground" /></span>
                     </TooltipTrigger>
-                    <TooltipContent className="max-w-xs text-xs">
+                    <TooltipContent className="max-w-xs text-sm">
                       Growth-focused: EPS growth (YoY), revenue growth (YoY) and Forward P/E vs the sector average. High P/E is acceptable when growth is strong and is not heavily penalised.
                     </TooltipContent>
                   </Tooltip>
-                  <span className="ml-auto text-[10px] text-muted-foreground">Source: Yahoo Finance</span>
+                  <span className="ml-auto text-sm text-muted-foreground">Source: Yahoo Finance</span>
                 </div>
                 {snapshot.fundamentals?.available ? (
                   <FundamentalsBlock
@@ -1674,7 +1546,7 @@ export default function LiveExecution() {
                     onWhy={() => setWhyTopic("fundamentals")}
                   />
                 ) : (
-                  <div className="rounded-md border border-border/30 bg-muted/10 p-3 text-xs text-muted-foreground">
+                  <div className="rounded-md border border-border/30 bg-muted/10 p-4 text-sm text-muted-foreground">
                     Insufficient data — Yahoo did not return clean fundamentals for this ticker.
                   </div>
                 )}
@@ -1683,7 +1555,7 @@ export default function LiveExecution() {
               {/* Conviction summary slot — sits below Fundamentals on the right column */}
               {conviction && (
                 <div
-                  className="rounded-xl border border-primary/30 p-4"
+                  className="rounded-xl border border-primary/30 p-5"
                   style={{ background: "rgba(60, 200, 255, 0.04)" }}
                 >
                   <ConvictionBreakdown
@@ -1711,34 +1583,34 @@ export default function LiveExecution() {
           {/* ── [3] Options Activity ── full width */}
           {snapshot && (
             <section
-              className="rounded-xl border border-border/60 p-4"
+              className="rounded-xl border border-border/60 p-6"
               style={{ background: "rgba(255,255,255,0.03)" }}
             >
-              <div className="mb-3 flex items-center gap-2 flex-wrap">
-                <h2 className="font-['Syne',sans-serif] text-sm font-semibold uppercase tracking-wider text-foreground">
+              <div className="mb-5 flex items-center gap-3 flex-wrap">
+                <h2 className="font-['Syne',sans-serif] text-2xl font-bold uppercase tracking-wider text-foreground">
                   Options Activity
                 </h2>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <span className="inline-flex cursor-help"><Info size={12} className="text-muted-foreground" /></span>
+                    <span className="inline-flex cursor-help"><Info size={16} className="text-muted-foreground" /></span>
                   </TooltipTrigger>
-                  <TooltipContent className="max-w-xs text-xs">
+                  <TooltipContent className="max-w-xs text-sm">
                     Plain-English read of today's options flow on the nearest expiration: directional sentiment, put/call balance, implied volatility and any unusual prints.
                   </TooltipContent>
                 </Tooltip>
-                <span className="ml-auto text-[10px] text-muted-foreground">
+                <span className="ml-auto text-sm text-muted-foreground">
                   Source: Yahoo Finance · Nearest expiration
                 </span>
               </div>
 
               {!snapshot.options.available ? (
-                <div className="rounded-md border border-border/30 bg-muted/10 p-3 text-xs text-muted-foreground">
+                <div className="rounded-md border border-border/30 bg-muted/10 p-4 text-base text-muted-foreground">
                   Insufficient data — no live options chain available for this ticker.
                 </div>
               ) : (
-                <div className="space-y-3">
+                <div className="space-y-4">
                   <div
-                    className={`rounded-lg border p-3 ${
+                    className={`rounded-lg border p-4 ${
                       snapshot.options.sentiment === "Bullish"
                         ? "border-[hsl(160,80%,45%)]/30 bg-[hsl(160,80%,45%)]/10"
                         : snapshot.options.sentiment === "Bearish"
@@ -1747,11 +1619,11 @@ export default function LiveExecution() {
                     }`}
                   >
                     <div className="flex items-center justify-between">
-                      <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                      <span className="text-sm font-bold uppercase tracking-wider text-muted-foreground">
                         Overall Sentiment
                       </span>
                       <span
-                        className={`font-['Syne',sans-serif] text-base font-bold ${
+                        className={`font-['Syne',sans-serif] text-2xl font-bold ${
                           snapshot.options.sentiment === "Bullish"
                             ? "text-[hsl(160,80%,45%)]"
                             : snapshot.options.sentiment === "Bearish"
@@ -1762,10 +1634,10 @@ export default function LiveExecution() {
                         {snapshot.options.sentiment}
                       </span>
                     </div>
-                    <p className="mt-1 text-xs text-foreground/80">{snapshot.options.sentiment_explanation}</p>
+                    <p className="mt-2 text-base text-foreground/85">{snapshot.options.sentiment_explanation}</p>
                   </div>
 
-                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                     <OptionsTile
                       label="Put / Call Ratio"
                       tooltip="Total put-contract volume divided by total call-contract volume on the nearest expiration. Below ~0.7 leans bullish, above ~1.3 leans bearish, in between is balanced."
@@ -1796,21 +1668,21 @@ export default function LiveExecution() {
                   </div>
 
                   {snapshot.options.unusual_activity.length > 0 ? (
-                    <div className="rounded-lg border border-[hsl(40,85%,55%)]/30 bg-[hsl(40,85%,55%)]/10 p-3">
-                      <div className="mb-1 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-[hsl(40,85%,55%)]">
-                        <AlertTriangle size={11} /> Unusual Options Activity
+                    <div className="rounded-lg border border-[hsl(40,85%,55%)]/30 bg-[hsl(40,85%,55%)]/10 p-4">
+                      <div className="mb-2 flex items-center gap-1.5 text-sm font-bold uppercase tracking-wider text-[hsl(40,85%,55%)]">
+                        <AlertTriangle size={14} /> Unusual Options Activity
                       </div>
-                      <ul className="space-y-1 text-xs text-foreground/85">
+                      <ul className="space-y-1 text-base text-foreground/90">
                         {snapshot.options.unusual_activity.map((u, i) => (
                           <li key={i}>• {u}</li>
                         ))}
                       </ul>
-                      <p className="mt-2 text-[10px] text-muted-foreground">
+                      <p className="mt-2 text-xs text-muted-foreground">
                         Unusual = today's contract volume more than 3× the existing open interest at that strike.
                       </p>
                     </div>
                   ) : (
-                    <div className="rounded-lg border border-border/40 bg-muted/10 p-3 text-xs text-muted-foreground">
+                    <div className="rounded-lg border border-border/40 bg-muted/10 p-4 text-base text-muted-foreground">
                       No significant unusual options activity detected today.
                     </div>
                   )}
@@ -1819,87 +1691,62 @@ export default function LiveExecution() {
             </section>
           )}
 
-          {/* ── [4] RS Rating Across Timeframes ── full width */}
+          {/* ── [4] RS vs Benchmark Across Timeframes ── full width, at the very bottom */}
           {snapshot && (
             <section
-              className="rounded-xl border border-border/60 p-4"
+              className="rounded-xl border border-border/60 p-6"
               style={{ background: "rgba(255,255,255,0.03)" }}
             >
-              <div className="mb-3 flex items-center gap-2 flex-wrap">
-                <h2 className="font-['Syne',sans-serif] text-sm font-semibold uppercase tracking-wider text-foreground">
-                  RS Rating Across Timeframes
+              <div className="mb-5 flex items-center gap-3 flex-wrap">
+                <h2 className="font-['Syne',sans-serif] text-2xl font-bold uppercase tracking-wider text-foreground">
+                  RS vs {benchmark} Across Timeframes
                 </h2>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <span className="inline-flex cursor-help"><Info size={12} className="text-muted-foreground" /></span>
+                    <span className="inline-flex cursor-help"><Info size={16} className="text-muted-foreground" /></span>
                   </TooltipTrigger>
-                  <TooltipContent className="max-w-xs text-xs">
-                    For each timeframe we show two reliable numbers: raw % return for the stock vs the same-window return for {benchmark} (the difference is the RS — outperformance). The 1W and 1M RS Ratings (1–99) come from the qualified universe.
+                  <TooltipContent className="max-w-xs text-sm">
+                    Each card shows the stock's % return for the window, the {benchmark} return for the same window, the resulting RS (% outperformance), and where available the universe-based RS Rating (1–99).
                   </TooltipContent>
                 </Tooltip>
-                <span className="ml-auto text-[10px] text-muted-foreground">
-                  Benchmark: {benchmark}
+                <span className="ml-auto text-sm text-muted-foreground">
+                  Benchmark: <span className="font-mono font-semibold text-foreground">{benchmark}</span>
                 </span>
               </div>
 
-              <div className="overflow-x-auto">
-                <table className="w-full text-xs">
-                  <thead>
-                    <tr className="border-b border-border/40 text-[10px] uppercase tracking-wider text-muted-foreground">
-                      <th className="py-2 text-left">Timeframe</th>
-                      <th className="py-2 text-right">Stock %</th>
-                      <th className="py-2 text-right">{benchmark} %</th>
-                      <th className="py-2 text-right">RS (vs {benchmark})</th>
-                      <th className="py-2 text-right">RS Rating (1–99)</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {([
-                      { tf: "1D", stock: snapshot.quote.changePct, bench: snapshot.benchmark.changePct, rs: liveRs.rs1d, rating: null as number | null },
-                      { tf: "1W", stock: snapshot.tickerHistory?.return1w ?? null, bench: snapshot.benchmark.return1w, rs: liveRs.rs1w, rating: activeSymbol ? rating1w.get(activeSymbol) ?? null : null },
-                      { tf: "1M", stock: snapshot.tickerHistory?.return1m ?? null, bench: snapshot.benchmark.return1m, rs: liveRs.rs1m, rating: activeSymbol ? rating1m.get(activeSymbol) ?? null : null },
-                      { tf: "3M", stock: snapshot.tickerHistory?.return3m ?? null, bench: snapshot.benchmark.return3m, rs: liveRs.rs3m, rating: null as number | null },
-                    ]).map((row) => (
-                      <tr key={row.tf} className="border-b border-border/20">
-                        <td className="py-2 font-mono font-semibold text-foreground">{row.tf}</td>
-                        <td className={`py-2 text-right font-mono ${pctClass(row.stock)}`}>{pct(row.stock)}</td>
-                        <td className={`py-2 text-right font-mono ${pctClass(row.bench)}`}>{pct(row.bench)}</td>
-                        <td className={`py-2 text-right font-mono font-semibold ${pctClass(row.rs)}`}>{pct(row.rs)}</td>
-                        <td className={`py-2 text-right font-mono font-semibold ${ratingClass(row.rating)}`}>
-                          {row.rating !== null ? row.rating : <span className="text-muted-foreground">—</span>}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-
-              <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
-                <div className="rounded-md border border-border/40 bg-background/40 p-2 text-[11px]">
-                  <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Current RS Rating</div>
-                  <div className={`font-mono text-base font-bold ${ratingClass(overallRating)}`}>{overallRating ?? "—"}</div>
-                  <div className="text-[10px] text-muted-foreground">
-                    {universeRank ? `Rank ${universeRank.rank} / ${universeRank.total}` : "Not in qualified universe"}
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                {([
+                  { tf: "1D", stock: snapshot.quote.changePct, bench: snapshot.benchmark.changePct, rs: liveRs.rs1d, rating: null as number | null },
+                  { tf: "1W", stock: snapshot.tickerHistory?.return1w ?? null, bench: snapshot.benchmark.return1w, rs: liveRs.rs1w, rating: activeSymbol ? rating1w.get(activeSymbol) ?? null : null },
+                  { tf: "1M", stock: snapshot.tickerHistory?.return1m ?? null, bench: snapshot.benchmark.return1m, rs: liveRs.rs1m, rating: activeSymbol ? rating1m.get(activeSymbol) ?? null : null },
+                  { tf: "3M", stock: snapshot.tickerHistory?.return3m ?? null, bench: snapshot.benchmark.return3m, rs: liveRs.rs3m, rating: null as number | null },
+                ]).map((row) => (
+                  <div key={row.tf} className="rounded-lg border border-border/40 bg-background/40 p-4">
+                    <div className="mb-2 flex items-baseline justify-between">
+                      <span className="font-['Syne',sans-serif] text-lg font-bold uppercase tracking-wider text-muted-foreground">
+                        RS {row.tf}
+                      </span>
+                      {row.rating !== null && (
+                        <span className={`font-mono text-base font-bold ${ratingClass(row.rating)}`}>
+                          {row.rating}<span className="text-xs text-muted-foreground">/99</span>
+                        </span>
+                      )}
+                    </div>
+                    <div className={`font-mono text-3xl font-extrabold ${pctClass(row.rs)}`}>
+                      {pct(row.rs)}
+                    </div>
+                    <div className="mt-2 space-y-1 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Stock</span>
+                        <span className={`font-mono font-semibold ${pctClass(row.stock)}`}>{pct(row.stock)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">{benchmark}</span>
+                        <span className={`font-mono font-semibold ${pctClass(row.bench)}`}>{pct(row.bench)}</span>
+                      </div>
+                    </div>
                   </div>
-                </div>
-                <div className="rounded-md border border-border/40 bg-background/40 p-2 text-[11px]">
-                  <div className="text-[10px] uppercase tracking-wider text-muted-foreground">RS Acceleration (1W − 1M)</div>
-                  <div className={`font-mono text-base font-bold ${accelDelta === null ? "text-muted-foreground" : accelDelta >= 5 ? "text-[hsl(160,80%,45%)]" : accelDelta <= -5 ? "text-destructive" : "text-foreground"}`}>
-                    {accelDelta !== null ? `${accelDelta > 0 ? "+" : ""}${accelDelta.toFixed(1)}` : "—"}
-                  </div>
-                  <div className="text-[10px] text-muted-foreground">
-                    {accelDelta === null ? "Insufficient data" : accelDelta >= 5 ? "Improving" : accelDelta <= -5 ? "Decelerating" : "Stable"}
-                  </div>
-                </div>
-                <div className="rounded-md border border-border/40 bg-background/40 p-2 text-[11px]">
-                  <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Universe Rank</div>
-                  <div className="font-mono text-base font-bold text-foreground">
-                    {universeRank ? `#${universeRank.rank}` : "—"}
-                  </div>
-                  <div className="text-[10px] text-muted-foreground">
-                    {universeRank ? `out of ${universeRank.total.toLocaleString()} qualified names` : "Not ranked"}
-                  </div>
-                </div>
+                ))}
               </div>
             </section>
           )}
@@ -2186,25 +2033,25 @@ function OptionsTile({
 }) {
   return (
     <div
-      className={`rounded-lg border p-3 ${
+      className={`rounded-lg border p-4 ${
         highlight ? "border-[hsl(40,85%,55%)]/40 bg-[hsl(40,85%,55%)]/5" : "border-border/40 bg-background/40"
       }`}
     >
-      <div className="mb-1 flex items-center gap-1 text-[10px] uppercase tracking-wider text-muted-foreground">
+      <div className="mb-2 flex items-center gap-1.5 text-sm font-bold uppercase tracking-wider text-muted-foreground">
         <span>{label}</span>
         {tooltip && (
           <Tooltip>
             <TooltipTrigger asChild>
-              <span className="inline-flex cursor-help"><Info size={10} /></span>
+              <span className="inline-flex cursor-help"><Info size={12} /></span>
             </TooltipTrigger>
-            <TooltipContent className="max-w-xs text-xs">{tooltip}</TooltipContent>
+            <TooltipContent className="max-w-xs text-sm">{tooltip}</TooltipContent>
           </Tooltip>
         )}
       </div>
-      <div className={`font-mono text-lg font-bold ${highlight ? "text-[hsl(40,85%,55%)]" : "text-foreground"}`}>
+      <div className={`font-mono text-3xl font-extrabold ${highlight ? "text-[hsl(40,85%,55%)]" : "text-foreground"}`}>
         {value}
       </div>
-      <div className="mt-1 text-[11px] leading-snug text-foreground/75">{explain}</div>
+      <div className="mt-2 text-sm leading-snug text-foreground/80">{explain}</div>
     </div>
   );
 }
@@ -2256,16 +2103,16 @@ function ConvictionBreakdown({
     s >= 70 ? "bg-[hsl(160,80%,45%)]" : s >= 50 ? "bg-[hsl(40,85%,55%)]" : "bg-destructive";
 
   return (
-    <div className="rounded-lg border border-primary/30 bg-primary/5 p-3">
-      <div className="mb-2 flex items-center gap-2 flex-wrap">
-        <span className="text-[11px] font-semibold uppercase tracking-wider text-foreground">
+    <div className="rounded-lg border border-primary/30 bg-primary/5 p-4">
+      <div className="mb-3 flex items-center gap-2 flex-wrap">
+        <span className="font-['Syne',sans-serif] text-lg font-bold uppercase tracking-wider text-foreground">
           Overall Conviction Score
         </span>
         <Tooltip>
           <TooltipTrigger asChild>
-            <span className="inline-flex cursor-help"><Info size={11} className="text-muted-foreground" /></span>
+            <span className="inline-flex cursor-help"><Info size={14} className="text-muted-foreground" /></span>
           </TooltipTrigger>
-          <TooltipContent className="max-w-xs text-xs">
+          <TooltipContent className="max-w-xs text-sm">
             Weighted blend of the four sections below: 40% RS Rating, 30% Theme/Sector strength, 20% Fundamentals, 10% Options activity. Missing pillars are dropped and the weight is redistributed proportionally.
           </TooltipContent>
         </Tooltip>
@@ -2273,17 +2120,17 @@ function ConvictionBreakdown({
           <button
             type="button"
             onClick={onWhy}
-            className="inline-flex items-center gap-1 rounded-md border border-border/50 bg-background/60 px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground transition-colors hover:border-primary/40 hover:bg-primary/10 hover:text-primary"
+            className="inline-flex items-center gap-1 rounded-md border border-border/50 bg-background/60 px-2 py-1 text-sm font-bold text-muted-foreground transition-colors hover:border-primary/40 hover:bg-primary/10 hover:text-primary"
           >
-            <HelpCircle size={10} /> Why this score?
+            <HelpCircle size={12} /> Why this score?
           </button>
         )}
-        <span className="ml-auto font-mono text-2xl font-bold text-foreground">
-          {total} <span className="text-[11px] text-muted-foreground">/ 100</span>
+        <span className="ml-auto font-mono text-5xl font-extrabold text-foreground">
+          {total} <span className="text-base text-muted-foreground">/ 100</span>
         </span>
       </div>
-      {/* Segmented bar — width matches each pillar's weight; intensity matches its 0–100 score. */}
-      <div className="flex h-3 w-full overflow-hidden rounded-md border border-border/40 bg-background/60">
+      {/* Segmented bar */}
+      <div className="flex h-4 w-full overflow-hidden rounded-md border border-border/40 bg-background/60">
         {pillars.map((p) => (
           <div
             key={p.key}
@@ -2295,20 +2142,20 @@ function ConvictionBreakdown({
           </div>
         ))}
       </div>
-      <div className="mt-2 grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px]">
+      <div className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-2 text-sm">
         {pillars.map((p) => (
-          <div key={p.key} className="rounded border border-border/40 bg-background/40 p-2">
+          <div key={p.key} className="rounded border border-border/40 bg-background/40 p-3">
             <div className="flex items-center justify-between">
-              <span className="text-muted-foreground">{p.key} <span className="text-[9px]">({(p.weight * 100).toFixed(0)}%)</span></span>
-              <span className={`font-mono font-semibold ${ratingClass(p.value)}`}>{p.value ?? "—"}</span>
+              <span className="font-bold text-muted-foreground">{p.key} <span className="text-xs">({(p.weight * 100).toFixed(0)}%)</span></span>
+              <span className={`font-mono text-lg font-bold ${ratingClass(p.value)}`}>{p.value ?? "—"}</span>
             </div>
-            <div className="mt-0.5 truncate text-[10px] text-muted-foreground" title={p.sub}>{p.sub}</div>
+            <div className="mt-1 truncate text-xs text-muted-foreground" title={p.sub}>{p.sub}</div>
           </div>
         ))}
       </div>
-      <p className="mt-2 text-[11px] leading-snug text-foreground/75">
+      <p className="mt-3 text-sm leading-snug text-foreground/80">
         Final = {pillars.filter((p) => p.value !== null).map((p) => `${p.value} × ${(p.weight * 100).toFixed(0)}%`).join(" + ")}
-        {pillars.some((p) => p.value === null) && " (missing pillars dropped, weight redistributed)"} = <span className="font-semibold text-foreground">{total}</span>.
+        {pillars.some((p) => p.value === null) && " (missing pillars dropped, weight redistributed)"} = <span className="font-bold text-foreground">{total}</span>.
       </p>
     </div>
   );
@@ -2348,33 +2195,33 @@ function FundamentalsBlock({
 
   return (
     <div className="space-y-3">
-      <p className="text-[11px] leading-relaxed text-muted-foreground">
+      <p className="text-sm leading-relaxed text-muted-foreground">
         Growth-focused read: are earnings and revenue actually growing, and is the price reasonable for that growth?
         High P/E is acceptable when growth is strong — we don't penalise it.
         <button onClick={onWhy} className="ml-1 underline decoration-dotted hover:text-foreground">Full breakdown</button>
       </p>
-      <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-        <div className="rounded-lg border border-border/40 bg-background/40 p-3">
-          <div className="mb-1 text-[10px] uppercase tracking-wider text-muted-foreground">{eps.label}</div>
-          <div className={`font-mono text-lg font-bold ${eps.tone}`}>{eps.value}</div>
-          <div className="mt-0.5 text-[10px] text-muted-foreground">{eps.note} · O'Neil target ≥ 25%</div>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <div className="rounded-lg border border-border/40 bg-background/40 p-4">
+          <div className="mb-1.5 text-sm font-bold uppercase tracking-wider text-muted-foreground">{eps.label}</div>
+          <div className={`font-mono text-3xl font-extrabold ${eps.tone}`}>{eps.value}</div>
+          <div className="mt-1.5 text-xs text-muted-foreground">{eps.note} · O'Neil target ≥ 25%</div>
         </div>
-        <div className="rounded-lg border border-border/40 bg-background/40 p-3">
-          <div className="mb-1 text-[10px] uppercase tracking-wider text-muted-foreground">{rev.label}</div>
-          <div className={`font-mono text-lg font-bold ${rev.tone}`}>{rev.value}</div>
-          <div className="mt-0.5 text-[10px] text-muted-foreground">{rev.note} · target ≥ 15%</div>
+        <div className="rounded-lg border border-border/40 bg-background/40 p-4">
+          <div className="mb-1.5 text-sm font-bold uppercase tracking-wider text-muted-foreground">{rev.label}</div>
+          <div className={`font-mono text-3xl font-extrabold ${rev.tone}`}>{rev.value}</div>
+          <div className="mt-1.5 text-xs text-muted-foreground">{rev.note} · target ≥ 15%</div>
         </div>
-        <div className="rounded-lg border border-border/40 bg-background/40 p-3">
-          <div className="mb-1 text-[10px] uppercase tracking-wider text-muted-foreground">{peLabel} vs Sector</div>
-          <div className={`font-mono text-lg font-bold ${peTone}`}>
+        <div className="rounded-lg border border-border/40 bg-background/40 p-4">
+          <div className="mb-1.5 text-sm font-bold uppercase tracking-wider text-muted-foreground">{peLabel} vs Sector</div>
+          <div className={`font-mono text-3xl font-extrabold ${peTone}`}>
             {pe !== null ? pe.toFixed(1) : "—"}
             {sectorPeAvg && pe !== null && (
-              <span className="ml-1 text-[10px] font-normal text-muted-foreground">
+              <span className="ml-1.5 text-xs font-normal text-muted-foreground">
                 vs {sectorEtf ?? "sector"} ~{sectorPeAvg}
               </span>
             )}
           </div>
-          <div className="mt-0.5 text-[10px] text-muted-foreground">
+          <div className="mt-1.5 text-xs text-muted-foreground">
             {pe === null
               ? "No P/E reported"
               : peVsSector === null
@@ -2389,7 +2236,7 @@ function FundamentalsBlock({
         </div>
       </div>
       {peJustified && pe !== null && (
-        <div className="rounded-md border border-[hsl(160,80%,45%)]/30 bg-[hsl(160,80%,45%)]/10 p-2 text-[11px] text-foreground/85">
+        <div className="rounded-md border border-[hsl(160,80%,45%)]/30 bg-[hsl(160,80%,45%)]/10 p-3 text-sm text-foreground/90">
           ✓ The high P/E ({pe.toFixed(1)}) is being justified by strong growth (EPS ≥ 25% or Revenue ≥ 20% YoY) — no valuation penalty applied to the Fundamentals score.
         </div>
       )}
