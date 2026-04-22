@@ -357,7 +357,7 @@ async function fetchFundamentalsSnapshot(symbol: string): Promise<FundamentalsSn
   };
   const auth = await getYahooAuth();
   if (!auth) return empty;
-  const modules = "summaryDetail,defaultKeyStatistics,financialData";
+  const modules = "summaryDetail,defaultKeyStatistics,financialData,assetProfile,price";
   const url = `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(symbol)}?modules=${modules}&crumb=${encodeURIComponent(auth.crumb)}`;
   try {
     const res = await fetch(url, {
