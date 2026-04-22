@@ -1583,34 +1583,34 @@ export default function LiveExecution() {
           {/* ── [3] Options Activity ── full width */}
           {snapshot && (
             <section
-              className="rounded-xl border border-border/60 p-4"
+              className="rounded-xl border border-border/60 p-6"
               style={{ background: "rgba(255,255,255,0.03)" }}
             >
-              <div className="mb-3 flex items-center gap-2 flex-wrap">
-                <h2 className="font-['Syne',sans-serif] text-sm font-semibold uppercase tracking-wider text-foreground">
+              <div className="mb-5 flex items-center gap-3 flex-wrap">
+                <h2 className="font-['Syne',sans-serif] text-2xl font-bold uppercase tracking-wider text-foreground">
                   Options Activity
                 </h2>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <span className="inline-flex cursor-help"><Info size={12} className="text-muted-foreground" /></span>
+                    <span className="inline-flex cursor-help"><Info size={16} className="text-muted-foreground" /></span>
                   </TooltipTrigger>
-                  <TooltipContent className="max-w-xs text-xs">
+                  <TooltipContent className="max-w-xs text-sm">
                     Plain-English read of today's options flow on the nearest expiration: directional sentiment, put/call balance, implied volatility and any unusual prints.
                   </TooltipContent>
                 </Tooltip>
-                <span className="ml-auto text-[10px] text-muted-foreground">
+                <span className="ml-auto text-sm text-muted-foreground">
                   Source: Yahoo Finance · Nearest expiration
                 </span>
               </div>
 
               {!snapshot.options.available ? (
-                <div className="rounded-md border border-border/30 bg-muted/10 p-3 text-xs text-muted-foreground">
+                <div className="rounded-md border border-border/30 bg-muted/10 p-4 text-base text-muted-foreground">
                   Insufficient data — no live options chain available for this ticker.
                 </div>
               ) : (
-                <div className="space-y-3">
+                <div className="space-y-4">
                   <div
-                    className={`rounded-lg border p-3 ${
+                    className={`rounded-lg border p-4 ${
                       snapshot.options.sentiment === "Bullish"
                         ? "border-[hsl(160,80%,45%)]/30 bg-[hsl(160,80%,45%)]/10"
                         : snapshot.options.sentiment === "Bearish"
@@ -1619,11 +1619,11 @@ export default function LiveExecution() {
                     }`}
                   >
                     <div className="flex items-center justify-between">
-                      <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                      <span className="text-sm font-bold uppercase tracking-wider text-muted-foreground">
                         Overall Sentiment
                       </span>
                       <span
-                        className={`font-['Syne',sans-serif] text-base font-bold ${
+                        className={`font-['Syne',sans-serif] text-2xl font-bold ${
                           snapshot.options.sentiment === "Bullish"
                             ? "text-[hsl(160,80%,45%)]"
                             : snapshot.options.sentiment === "Bearish"
@@ -1634,10 +1634,10 @@ export default function LiveExecution() {
                         {snapshot.options.sentiment}
                       </span>
                     </div>
-                    <p className="mt-1 text-xs text-foreground/80">{snapshot.options.sentiment_explanation}</p>
+                    <p className="mt-2 text-base text-foreground/85">{snapshot.options.sentiment_explanation}</p>
                   </div>
 
-                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                     <OptionsTile
                       label="Put / Call Ratio"
                       tooltip="Total put-contract volume divided by total call-contract volume on the nearest expiration. Below ~0.7 leans bullish, above ~1.3 leans bearish, in between is balanced."
@@ -1668,21 +1668,21 @@ export default function LiveExecution() {
                   </div>
 
                   {snapshot.options.unusual_activity.length > 0 ? (
-                    <div className="rounded-lg border border-[hsl(40,85%,55%)]/30 bg-[hsl(40,85%,55%)]/10 p-3">
-                      <div className="mb-1 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-[hsl(40,85%,55%)]">
-                        <AlertTriangle size={11} /> Unusual Options Activity
+                    <div className="rounded-lg border border-[hsl(40,85%,55%)]/30 bg-[hsl(40,85%,55%)]/10 p-4">
+                      <div className="mb-2 flex items-center gap-1.5 text-sm font-bold uppercase tracking-wider text-[hsl(40,85%,55%)]">
+                        <AlertTriangle size={14} /> Unusual Options Activity
                       </div>
-                      <ul className="space-y-1 text-xs text-foreground/85">
+                      <ul className="space-y-1 text-base text-foreground/90">
                         {snapshot.options.unusual_activity.map((u, i) => (
                           <li key={i}>• {u}</li>
                         ))}
                       </ul>
-                      <p className="mt-2 text-[10px] text-muted-foreground">
+                      <p className="mt-2 text-xs text-muted-foreground">
                         Unusual = today's contract volume more than 3× the existing open interest at that strike.
                       </p>
                     </div>
                   ) : (
-                    <div className="rounded-lg border border-border/40 bg-muted/10 p-3 text-xs text-muted-foreground">
+                    <div className="rounded-lg border border-border/40 bg-muted/10 p-4 text-base text-muted-foreground">
                       No significant unusual options activity detected today.
                     </div>
                   )}
