@@ -1126,21 +1126,21 @@ export default function LiveExecution() {
             className="rounded-xl border border-border/60 bg-card/40 p-4 backdrop-blur-sm"
             style={{ background: "rgba(255,255,255,0.03)" }}
           >
-            <div className="mb-3 flex items-center gap-2">
-              <Zap size={14} className="text-primary" />
-              <h2 className="font-['Syne',sans-serif] text-sm font-semibold uppercase tracking-wider text-foreground">
+            <div className="mb-4 flex items-center gap-2">
+              <Zap size={20} className="text-primary" />
+              <h2 className="font-['Syne',sans-serif] text-2xl font-bold uppercase tracking-wider text-foreground">
                 Quick Trade Check
               </h2>
-              {rsLoading && <Loader2 size={12} className="animate-spin text-muted-foreground" />}
-              <div className="ml-auto flex items-center gap-1.5">
-                <span className="text-[10px] uppercase tracking-wider text-muted-foreground">Benchmark</span>
+              {rsLoading && <Loader2 size={16} className="animate-spin text-muted-foreground" />}
+              <div className="ml-auto flex items-center gap-2">
+                <span className="text-sm uppercase tracking-wider text-muted-foreground">Benchmark</span>
                 <div className="inline-flex rounded-md border border-border/60 bg-background/40 p-0.5">
                   {(["SPY", "QQQ"] as const).map((b) => (
                     <button
                       key={b}
                       type="button"
                       onClick={() => setBenchmark(b)}
-                      className={`rounded-sm px-2 py-0.5 font-mono text-[11px] font-semibold transition-colors ${
+                      className={`rounded-sm px-3 py-1 font-mono text-base font-bold transition-colors ${
                         benchmark === b
                           ? "bg-primary/20 text-primary"
                           : "text-muted-foreground hover:text-foreground"
@@ -1152,9 +1152,9 @@ export default function LiveExecution() {
                 </div>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <span className="inline-flex cursor-help"><Info size={11} className="text-muted-foreground" /></span>
+                    <span className="inline-flex cursor-help"><Info size={14} className="text-muted-foreground" /></span>
                   </TooltipTrigger>
-                  <TooltipContent className="max-w-xs text-xs">
+                  <TooltipContent className="max-w-xs text-sm">
                     Switch the benchmark used for relative strength (RS) comparisons. SPY tracks the S&amp;P 500 (broad market); QQQ tracks the Nasdaq-100 (tech-heavy). RS values below recompute live.
                   </TooltipContent>
                 </Tooltip>
@@ -1162,10 +1162,10 @@ export default function LiveExecution() {
                   type="button"
                   onClick={() => activeSymbol && submit(activeSymbol, { force: true })}
                   disabled={!activeSymbol || snapLoading}
-                  className="ml-1 inline-flex items-center gap-1 rounded-md border border-primary/40 bg-primary/10 px-2 py-1 text-[11px] font-semibold text-primary transition-colors hover:bg-primary/20 disabled:cursor-not-allowed disabled:opacity-40"
+                  className="ml-1 inline-flex items-center gap-1.5 rounded-md border border-primary/40 bg-primary/10 px-3 py-1.5 text-sm font-bold text-primary transition-colors hover:bg-primary/20 disabled:cursor-not-allowed disabled:opacity-40"
                   title="Force a fresh data pull from Yahoo (bypasses 24h cache)"
                 >
-                  <RefreshCw size={11} className={snapLoading ? "animate-spin" : ""} />
+                  <RefreshCw size={14} className={snapLoading ? "animate-spin" : ""} />
                   Refresh Data
                 </button>
               </div>
