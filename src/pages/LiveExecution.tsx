@@ -2103,16 +2103,16 @@ function ConvictionBreakdown({
     s >= 70 ? "bg-[hsl(160,80%,45%)]" : s >= 50 ? "bg-[hsl(40,85%,55%)]" : "bg-destructive";
 
   return (
-    <div className="rounded-lg border border-primary/30 bg-primary/5 p-3">
-      <div className="mb-2 flex items-center gap-2 flex-wrap">
-        <span className="text-[11px] font-semibold uppercase tracking-wider text-foreground">
+    <div className="rounded-lg border border-primary/30 bg-primary/5 p-4">
+      <div className="mb-3 flex items-center gap-2 flex-wrap">
+        <span className="font-['Syne',sans-serif] text-lg font-bold uppercase tracking-wider text-foreground">
           Overall Conviction Score
         </span>
         <Tooltip>
           <TooltipTrigger asChild>
-            <span className="inline-flex cursor-help"><Info size={11} className="text-muted-foreground" /></span>
+            <span className="inline-flex cursor-help"><Info size={14} className="text-muted-foreground" /></span>
           </TooltipTrigger>
-          <TooltipContent className="max-w-xs text-xs">
+          <TooltipContent className="max-w-xs text-sm">
             Weighted blend of the four sections below: 40% RS Rating, 30% Theme/Sector strength, 20% Fundamentals, 10% Options activity. Missing pillars are dropped and the weight is redistributed proportionally.
           </TooltipContent>
         </Tooltip>
@@ -2120,17 +2120,17 @@ function ConvictionBreakdown({
           <button
             type="button"
             onClick={onWhy}
-            className="inline-flex items-center gap-1 rounded-md border border-border/50 bg-background/60 px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground transition-colors hover:border-primary/40 hover:bg-primary/10 hover:text-primary"
+            className="inline-flex items-center gap-1 rounded-md border border-border/50 bg-background/60 px-2 py-1 text-sm font-bold text-muted-foreground transition-colors hover:border-primary/40 hover:bg-primary/10 hover:text-primary"
           >
-            <HelpCircle size={10} /> Why this score?
+            <HelpCircle size={12} /> Why this score?
           </button>
         )}
-        <span className="ml-auto font-mono text-2xl font-bold text-foreground">
-          {total} <span className="text-[11px] text-muted-foreground">/ 100</span>
+        <span className="ml-auto font-mono text-5xl font-extrabold text-foreground">
+          {total} <span className="text-base text-muted-foreground">/ 100</span>
         </span>
       </div>
-      {/* Segmented bar — width matches each pillar's weight; intensity matches its 0–100 score. */}
-      <div className="flex h-3 w-full overflow-hidden rounded-md border border-border/40 bg-background/60">
+      {/* Segmented bar */}
+      <div className="flex h-4 w-full overflow-hidden rounded-md border border-border/40 bg-background/60">
         {pillars.map((p) => (
           <div
             key={p.key}
@@ -2142,20 +2142,20 @@ function ConvictionBreakdown({
           </div>
         ))}
       </div>
-      <div className="mt-2 grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px]">
+      <div className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-2 text-sm">
         {pillars.map((p) => (
-          <div key={p.key} className="rounded border border-border/40 bg-background/40 p-2">
+          <div key={p.key} className="rounded border border-border/40 bg-background/40 p-3">
             <div className="flex items-center justify-between">
-              <span className="text-muted-foreground">{p.key} <span className="text-[9px]">({(p.weight * 100).toFixed(0)}%)</span></span>
-              <span className={`font-mono font-semibold ${ratingClass(p.value)}`}>{p.value ?? "—"}</span>
+              <span className="font-bold text-muted-foreground">{p.key} <span className="text-xs">({(p.weight * 100).toFixed(0)}%)</span></span>
+              <span className={`font-mono text-lg font-bold ${ratingClass(p.value)}`}>{p.value ?? "—"}</span>
             </div>
-            <div className="mt-0.5 truncate text-[10px] text-muted-foreground" title={p.sub}>{p.sub}</div>
+            <div className="mt-1 truncate text-xs text-muted-foreground" title={p.sub}>{p.sub}</div>
           </div>
         ))}
       </div>
-      <p className="mt-2 text-[11px] leading-snug text-foreground/75">
+      <p className="mt-3 text-sm leading-snug text-foreground/80">
         Final = {pillars.filter((p) => p.value !== null).map((p) => `${p.value} × ${(p.weight * 100).toFixed(0)}%`).join(" + ")}
-        {pillars.some((p) => p.value === null) && " (missing pillars dropped, weight redistributed)"} = <span className="font-semibold text-foreground">{total}</span>.
+        {pillars.some((p) => p.value === null) && " (missing pillars dropped, weight redistributed)"} = <span className="font-bold text-foreground">{total}</span>.
       </p>
     </div>
   );
