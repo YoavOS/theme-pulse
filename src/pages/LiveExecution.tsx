@@ -1235,19 +1235,24 @@ export default function LiveExecution() {
                   />
                 </div>
 
-                {/* Conviction Breakdown */}
+                {/* Overall Conviction Breakdown — 4 Pillars */}
                 {conviction && (
                   <ConvictionBreakdown
                     total={conviction.total}
-                    market={conviction.market}
-                    industry={conviction.industry}
-                    stock={conviction.stock}
+                    rs={conviction.rs}
+                    theme={conviction.theme}
+                    fund={conviction.fund}
+                    opt={conviction.opt}
                     benchmarkLabel={benchmark}
                     sectorName={snapshot?.industry?.sectorName ?? null}
                     sectorEtf={snapshot?.industry?.etfSymbol ?? null}
                     fundamentals={snapshot?.fundamentals ?? null}
+                    sectorPeAvg={(snapshot as any)?.sectorPeAvg ?? null}
+                    peJustified={conviction.fundDetail.peJustified}
                     hasIndustry={conviction.hasIndustry}
                     hasFund={conviction.hasFund}
+                    hasOptions={conviction.hasOptions}
+                    onWhy={() => setWhyTopic("conviction")}
                   />
                 )}
 
