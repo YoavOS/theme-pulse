@@ -108,14 +108,13 @@ async function fetchYahooQuote(symbol: string): Promise<QuoteSnapshot | null> {
   }
 }
 
-async function fetchBenchmarkSnapshot(symbol: string): Promise<BenchmarkSnapshot> {
+async function fetchBenchmarkSnapshot(symbol: string, forceRefresh = false): Promise<BenchmarkSnapshot> {
   const sb = makeServiceClient();
   const quote = await fetchYahooQuote(symbol);
-  // Fetch historical returns in parallel via shared helper.
   const periods: YahooPeriod[] = ["5d", "1mo", "3mo"];
   const hist = await Promise.all(
     periods.map((p) =>
-      getHistoricalData(sb, symbol, p, { todayPrice: quote?.price ?? null })
+      getHistoricalData(sb, symbol, p, { todayPrice: quote?.price ?? null, skipCache: forceRefresh })
     )
   );
   const [w, m, q] = hist;
