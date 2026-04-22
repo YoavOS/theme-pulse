@@ -1468,6 +1468,73 @@ export default function LiveExecution() {
             )}
           </section>
 
+          {/* ── RS Rating Section (40% pillar) ── */}
+          {snapshot && (
+            <section
+              className="rounded-xl border border-border/60 p-4"
+              style={{ background: "rgba(255,255,255,0.03)" }}
+            >
+              <div className="mb-3 flex items-center gap-2 flex-wrap">
+                <h2 className="font-['Syne',sans-serif] text-sm font-semibold uppercase tracking-wider text-foreground">
+                  RS Rating
+                </h2>
+                <span className="rounded border border-border/40 bg-background/40 px-1.5 py-0.5 text-[10px] uppercase tracking-wider text-muted-foreground">
+                  40% weight
+                </span>
+                <span className="text-[11px] text-muted-foreground">
+                  Leadership first: current rank, acceleration, and benchmark-relative strength.
+                </span>
+              </div>
+              <div className="grid gap-3 lg:grid-cols-[1.25fr_1fr]">
+                <div className="rounded-lg border border-border/40 bg-background/40 p-3">
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                    <MetricCard
+                      label="Current RS Rating"
+                      value={overallRating !== null ? `${overallRating}` : "—"}
+                      sub={universeRank ? `Rank ${universeRank.rank} / ${universeRank.total}` : "Insufficient data"}
+                      valueClass={ratingClass(overallRating)}
+                      onWhy={() => setWhyTopic("rs")}
+                    />
+                    <MetricCard
+                      label="RS Acceleration"
+                      value={accelDelta !== null ? `${accelDelta > 0 ? "+" : ""}${accelDelta.toFixed(1)}` : "—"}
+                      sub={accelDelta === null ? "Insufficient data" : accelDelta >= 5 ? "Improving" : accelDelta <= -5 ? "Decelerating" : "Stable"}
+                      valueClass={accelDelta === null ? "text-muted-foreground" : accelDelta >= 5 ? "text-[hsl(160,80%,45%)]" : accelDelta <= -5 ? "text-destructive" : "text-foreground"}
+                      onWhy={() => setWhyTopic("rs")}
+                    />
+                    <MetricCard
+                      label={`RS 1D vs ${benchmark}`}
+                      value={liveRs.rs1d !== null ? pct(liveRs.rs1d) : "—"}
+                      sub={liveRs.rs1d === null ? "Insufficient data" : liveRs.rs1d >= 0 ? "Outperforming today" : "Underperforming today"}
+                      valueClass={pctClass(liveRs.rs1d)}
+                    />
+                    <MetricCard
+                      label="Setup Quality"
+                      value={setupQuality !== null ? `${setupQuality}` : "—"}
+                      sub={setupQuality === null ? "Insufficient data" : setupQuality >= 70 ? "Clean setup" : setupQuality >= 50 ? "Balanced" : "Needs work"}
+                      valueClass={ratingClass(setupQuality)}
+                      onWhy={() => setWhyTopic("setup")}
+                    />
+                  </div>
+                </div>
+                <div className="rounded-lg border border-border/40 bg-background/40 p-3">
+                  <div className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    RS across timeframes
+                  </div>
+                  <div className="grid grid-cols-4 gap-2">
+                    <RsTrendCell label="1D" value={liveRs.rs1d} />
+                    <RsTrendCell label="1W" value={liveRs.rs1w} />
+                    <RsTrendCell label="1M" value={liveRs.rs1m} />
+                    <RsTrendCell label="3M" value={liveRs.rs3m} />
+                  </div>
+                  <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+                    This section tells you whether the stock is a true leader, whether that leadership is improving, and whether the latest move is still stronger than the selected benchmark.
+                  </p>
+                </div>
+              </div>
+            </section>
+          )}
+
           {/* ── Fundamentals (20% pillar) ── */}
           {snapshot && (
             <section
