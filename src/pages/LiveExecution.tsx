@@ -1971,3 +1971,86 @@ function ConvictionBreakdown({
     </div>
   );
 }
+
+function FundamentalsBlock({
+  fd,
+  sectorPeAvg,
+  sectorEtf,
+  peJustified,
+  onWhy,
+}: {
+  fd: import("@/hooks/useLiveSnapshot").LiveFundamentals;
+  sectorPeAvg: number | null;
+  sectorEtf: string | null;
+  peJustified: boolean;
+  onWhy: () => void;
+}) {
+  const pe = fd.forwardPe ?? fd.pe;
+  const peLabel = fd.forwardPe !== null ? "Forward P/E" : "Trailing P/E";
+  const peVsSector = pe !== null && sectorPeAvg ? pe / sectorPeAvg : null;
+  const peTone = peVsSector === null
+    ? "text-muted-foreground"
+    : peVsSector < 1.0 ? "text-[hsl(160,80%,45%)]"
+    : peVsSector < 1.5 ? "text-foreground"
+    : "text-[hsl(40,85%,55%)]";
+
+  const growthCard = (label: string, value: number | null, goodAt: number) => {
+    if (value === null) return { label, value: "—", tone: "text-muted-foreground", note: "Not reported" };
+    const v = value * 100;
+    const tone = v >= goodAt ? "text-[hsl(160,80%,45%)]" : v >= 0 ? "text-foreground" : "text-destructive";
+    const note = v >= goodAt ? "Strong" : v >= 0 ? "Positive but modest" : "Contracting";
+    return { label, value: `${v >= 0 ? "+" : ""}${v.toFixed(1)}%`, tone, note };
+  };
+  const eps = growthCard("EPS growth (YoY)", fd.epsGrowth, 25);
+  const rev = growthCard("Revenue growth (YoY)", fd.revenueGrowth, 15);
+
+  return (
+    <div className="space-y-3">
+      <p className="text-[11px] leading-relaxed text-muted-foreground">
+        Growth-focused read: are earnings and revenue actually growing, and is the price reasonable for that growth?
+        High P/E is acceptable when growth is strong — we don't penalise it.
+        <button onClick={onWhy} className="ml-1 underline decoration-dotted hover:text-foreground">Full breakdown</button>
+      </p>
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+        <div className="rounded-lg border border-border/40 bg-background/40 p-3">
+          <div className="mb-1 text-[10px] uppercase tracking-wider text-muted-foreground">{eps.label}</div>
+          <div className={`font-mono text-lg font-bold ${eps.tone}`}>{eps.value}</div>
+          <div className="mt-0.5 text-[10px] text-muted-foreground">{eps.note} · O'Neil target ≥ 25%</div>
+        </div>
+        <div className="rounded-lg border border-border/40 bg-background/40 p-3">
+          <div className="mb-1 text-[10px] uppercase tracking-wider text-muted-foreground">{rev.label}</div>
+          <div className={`font-mono text-lg font-bold ${rev.tone}`}>{rev.value}</div>
+          <div className="mt-0.5 text-[10px] text-muted-foreground">{rev.note} · target ≥ 15%</div>
+        </div>
+        <div className="rounded-lg border border-border/40 bg-background/40 p-3">
+          <div className="mb-1 text-[10px] uppercase tracking-wider text-muted-foreground">{peLabel} vs Sector</div>
+          <div className={`font-mono text-lg font-bold ${peTone}`}>
+            {pe !== null ? pe.toFixed(1) : "—"}
+            {sectorPeAvg && pe !== null && (
+              <span className="ml-1 text-[10px] font-normal text-muted-foreground">
+                vs {sectorEtf ?? "sector"} ~{sectorPeAvg}
+              </span>
+            )}
+          </div>
+          <div className="mt-0.5 text-[10px] text-muted-foreground">
+            {pe === null
+              ? "No P/E reported"
+              : peVsSector === null
+              ? "No sector benchmark"
+              : peVsSector < 1.0
+              ? "Trading below sector average"
+              : peVsSector < 1.5
+              ? "Slight premium to sector"
+              : "Notable premium to sector"}
+            {peJustified && " · justified by growth"}
+          </div>
+        </div>
+      </div>
+      {peJustified && pe !== null && (
+        <div className="rounded-md border border-[hsl(160,80%,45%)]/30 bg-[hsl(160,80%,45%)]/10 p-2 text-[11px] text-foreground/85">
+          ✓ The high P/E ({pe.toFixed(1)}) is being justified by strong growth (EPS ≥ 25% or Revenue ≥ 20% YoY) — no valuation penalty applied to the Fundamentals score.
+        </div>
+      )}
+    </div>
+  );
+}
