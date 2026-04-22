@@ -59,6 +59,13 @@ function ratingClass(r: number | null): string {
   if (r >= 40) return "text-[hsl(40,85%,55%)]";
   return "text-destructive";
 }
+function clampScore(v: number): number {
+  return Math.max(0, Math.min(100, v));
+}
+function scoreReturnTo100(v: number | null | undefined, perPctPoint = 5): number | null {
+  if (v === null || v === undefined || !Number.isFinite(v)) return null;
+  return clampScore(50 + v * perPctPoint);
+}
 
 interface VerdictFactor {
   label: string;
@@ -236,7 +243,16 @@ interface WhyArgs {
     hasFund: boolean;
     hasIndustry: boolean;
     hasOptions: boolean;
+    themeDetail: {
+      label: string | null;
+      matchedCount: number;
+      avgRating: number | null;
+      leaderPct: number | null;
+      etfBacked: boolean;
+    };
     fundDetail: { peScore: number | null; epsScore: number | null; revScore: number | null; peJustified: boolean };
+    effectiveWeights: { rs: number | null; theme: number | null; fund: number | null; opt: number | null };
+    contributions: { rs: number | null; theme: number | null; fund: number | null; opt: number | null };
   } | null;
   setupQuality: number | null;
   overallRating: number | null;
