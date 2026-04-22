@@ -418,6 +418,7 @@ Deno.serve(async (req) => {
       return ALLOWED_BENCHMARKS.has(b) ? b : "SPY";
     })();
     const sectorHint = typeof body?.sector === "string" ? body.sector : null;
+    const forceRefresh = body?.forceRefresh === true;
 
     if (!rawSymbol || !/^[A-Z][A-Z0-9.\-]{0,9}$/.test(rawSymbol)) {
       return new Response(JSON.stringify({ error: "Invalid symbol" }), {
@@ -429,9 +430,9 @@ Deno.serve(async (req) => {
     const [quote, options, benchmark, fundamentals, industry] = await Promise.all([
       fetchYahooQuote(rawSymbol),
       fetchYahooOptions(rawSymbol),
-      fetchBenchmarkSnapshot(benchmarkSymbol),
+      fetchBenchmarkSnapshot(benchmarkSymbol, forceRefresh),
       fetchFundamentalsSnapshot(rawSymbol),
-      fetchIndustrySnapshot(sectorHint),
+      fetchIndustrySnapshot(sectorHint, forceRefresh),
     ]);
 
     if (!quote || quote.price === null) {
@@ -441,7 +442,12 @@ Deno.serve(async (req) => {
       );
     }
 
-    const tickerHist = await fetchHistoricalForTicker(rawSymbol, quote.price);
+    const tickerHist = await fetchHistoricalForTicker(rawSymbol, quote.price, forceRefresh);
+
+    const sectorPeAvg =
+      industry?.etfSymbol && SECTOR_PE_BENCHMARK[industry.etfSymbol] !== undefined
+        ? SECTOR_PE_BENCHMARK[industry.etfSymbol]
+        : null;
 
     return new Response(
       JSON.stringify({
@@ -451,6 +457,7 @@ Deno.serve(async (req) => {
         benchmark,
         industry,
         fundamentals,
+        sectorPeAvg,
         tickerHistory: tickerHist,
         fetchedAt: new Date().toISOString(),
       }),
