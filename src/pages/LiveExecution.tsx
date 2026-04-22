@@ -698,7 +698,7 @@ export default function LiveExecution() {
       if (document.visibilityState !== "visible") return;
       const sector = stockMap.get(activeSymbol)?.sector ?? null;
       fetchSnapshot(activeSymbol, benchmark, sector);
-    }, 10_000);
+    }, 7_000);
     return () => window.clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeSymbol, benchmark]);
