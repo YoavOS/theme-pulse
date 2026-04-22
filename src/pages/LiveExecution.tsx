@@ -1555,7 +1555,7 @@ export default function LiveExecution() {
               {/* Conviction summary slot — sits below Fundamentals on the right column */}
               {conviction && (
                 <div
-                  className="rounded-xl border border-primary/30 p-4"
+                  className="rounded-xl border border-primary/30 p-5"
                   style={{ background: "rgba(60, 200, 255, 0.04)" }}
                 >
                   <ConvictionBreakdown
