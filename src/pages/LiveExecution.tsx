@@ -708,45 +708,48 @@ export default function LiveExecution() {
 
   const overallRating = activeSymbol ? ratingOverall.get(activeSymbol) ?? null : null;
 
-  // ── O'Neil weighted Conviction Score (0-100): 50% Market + 37% Industry + 13% Stock ──
+  // ── New 4-Pillar Overall Conviction Score (0-100) ──
+  // Weights: 40% RS · 30% Theme · 20% Fundamentals · 10% Options
+  // If a pillar has no data its weight is redistributed proportionally to the others.
   const conviction = useMemo(() => {
-    const bh = snapshot?.benchmark;
+    // 1) RS pillar (40%) — based on RS Rating, with a small acceleration boost.
+    let rsScore: number | null = null;
+    if (overallRating !== null) {
+      let s = overallRating;
+      if (accelDelta !== null) s += Math.max(-15, Math.min(15, accelDelta * 0.5));
+      rsScore = Math.max(0, Math.min(100, s));
+    }
+
+    // 2) Theme pillar (30%) — sector ETF strength across 1D / 1W / 1M.
+    const ih = snapshot?.industry;
     const scoreReturn = (r: number | null | undefined, perPctPoint = 5) => {
       if (r === null || r === undefined || !Number.isFinite(r)) return null;
       return Math.max(0, Math.min(100, 50 + (r as number) * perPctPoint));
     };
-    const mDay = scoreReturn(bh?.changePct, 10);
-    const mWeek = scoreReturn(bh?.return1w, 5);
-    const mMonth = scoreReturn(bh?.return1m, 3);
-    const mParts = [mDay, mWeek, mMonth].filter((v): v is number => v !== null);
-    const marketScore = mParts.length > 0 ? mParts.reduce((a, b) => a + b, 0) / mParts.length : 50;
+    let themeScore: number | null = null;
+    if (ih?.available) {
+      const parts = [
+        scoreReturn(ih.changePct, 10),
+        scoreReturn(ih.return1w, 5),
+        scoreReturn(ih.return1m, 3),
+      ].filter((v): v is number => v !== null);
+      if (parts.length > 0) themeScore = parts.reduce((a, b) => a + b, 0) / parts.length;
+    }
 
-    const ih = snapshot?.industry;
-    const iDay = scoreReturn(ih?.changePct, 10);
-    const iWeek = scoreReturn(ih?.return1w, 5);
-    const iMonth = scoreReturn(ih?.return1m, 3);
-    const iParts = [iDay, iWeek, iMonth].filter((v): v is number => v !== null);
-    const industryScore = iParts.length > 0
-      ? iParts.reduce((a, b) => a + b, 0) / iParts.length
-      : (ih?.available ? 50 : marketScore);
-
-    let rsPart: number | null = overallRating;
-    const accelPart = accelDelta === null ? null : Math.max(0, Math.min(100, 50 + accelDelta * 2));
-    const volPart = relVol === null ? null : Math.max(0, Math.min(100, relVol * 50));
+    // 3) Fundamentals pillar (20%) — growth-focused, growth-adjusted valuation.
     const fd = snapshot?.fundamentals;
-    let fundPart: number | null = null;
+    const sectorPeAvg = (snapshot as any)?.sectorPeAvg as number | null | undefined;
+    let fundScore: number | null = null;
+    let fundDetail: { peScore: number | null; epsScore: number | null; revScore: number | null; peJustified: boolean } = {
+      peScore: null, epsScore: null, revScore: null, peJustified: false,
+    };
     if (fd?.available) {
-      const pe = fd.forwardPe ?? fd.pe;
-      let peScore: number | null = null;
-      if (pe !== null && pe > 0) {
-        if (pe < 15) peScore = 90;
-        else if (pe < 25) peScore = 75;
-        else if (pe < 40) peScore = 60;
-        else if (pe < 60) peScore = 45;
-        else peScore = 30;
-      }
-      let epsScore: number | null = null;
       const eg = fd.epsGrowth;
+      const rg = fd.revenueGrowth;
+      const strongGrowth = (eg !== null && eg >= 0.25) || (rg !== null && rg >= 0.20);
+
+      // EPS growth score
+      let epsScore: number | null = null;
       if (eg !== null) {
         if (eg >= 0.5) epsScore = 95;
         else if (eg >= 0.25) epsScore = 80;
@@ -755,8 +758,8 @@ export default function LiveExecution() {
         else if (eg >= -0.15) epsScore = 40;
         else epsScore = 25;
       }
+      // Revenue growth score
       let revScore: number | null = null;
-      const rg = fd.revenueGrowth;
       if (rg !== null) {
         if (rg >= 0.30) revScore = 90;
         else if (rg >= 0.15) revScore = 75;
@@ -764,33 +767,69 @@ export default function LiveExecution() {
         else if (rg >= 0) revScore = 50;
         else revScore = 30;
       }
+      // Valuation score — compared to sector average if available, growth-adjusted.
+      let peScore: number | null = null;
+      const pe = fd.forwardPe ?? fd.pe;
+      if (pe !== null && pe > 0) {
+        const benchPe = sectorPeAvg ?? 22;
+        const ratio = pe / benchPe;
+        if (ratio < 0.7) peScore = 80;        // cheap vs sector
+        else if (ratio < 1.0) peScore = 70;   // fair / slight discount
+        else if (ratio < 1.3) peScore = 60;   // slight premium
+        else if (ratio < 1.7) peScore = 50;   // notable premium
+        else if (ratio < 2.5) peScore = 40;   // large premium
+        else peScore = 30;                    // extreme premium
+        if (strongGrowth) {
+          peScore = Math.max(peScore, 60);    // don't penalise high P/E if growth is strong
+          fundDetail.peJustified = true;
+        }
+      }
+      fundDetail = { peScore, epsScore, revScore, peJustified: fundDetail.peJustified };
       const parts = [peScore, epsScore, revScore].filter((v): v is number => v !== null);
-      if (parts.length > 0) fundPart = parts.reduce((a, b) => a + b, 0) / parts.length;
+      if (parts.length > 0) fundScore = parts.reduce((a, b) => a + b, 0) / parts.length;
     }
 
-    const techParts = [rsPart, accelPart, volPart].filter((v): v is number => v !== null);
-    const techScore = techParts.length > 0 ? techParts.reduce((a, b) => a + b, 0) / techParts.length : null;
-    const stockScore =
-      techScore === null && fundPart === null
-        ? null
-        : fundPart === null
-        ? techScore!
-        : techScore === null
-        ? fundPart
-        : techScore * 0.6 + fundPart * 0.4;
+    // 4) Options pillar (10%) — sentiment + IV reasonableness.
+    const opt = snapshot?.options;
+    let optScore: number | null = null;
+    if (opt?.available) {
+      let s = 50;
+      if (opt.sentiment === "Bullish") s = 70;
+      else if (opt.sentiment === "Bearish") s = 35;
+      // Mild penalty for very high IV (expensive premiums = crowded / risky entry).
+      if (opt.avg_iv !== null) {
+        if (opt.avg_iv > 0.8) s -= 10;
+        else if (opt.avg_iv > 0.6) s -= 5;
+      }
+      // Small bonus when bullish unusual activity is present.
+      if (opt.unusual_activity.length > 0 && opt.sentiment === "Bullish") s += 5;
+      optScore = Math.max(0, Math.min(100, s));
+    }
 
-    if (stockScore === null) return null;
+    // Weighted blend with redistribution.
+    const pillars = [
+      { key: "rs", w: 0.40, v: rsScore },
+      { key: "theme", w: 0.30, v: themeScore },
+      { key: "fund", w: 0.20, v: fundScore },
+      { key: "opt", w: 0.10, v: optScore },
+    ];
+    const present = pillars.filter((p) => p.v !== null);
+    if (present.length === 0) return null;
+    const wSum = present.reduce((a, p) => a + p.w, 0);
+    const total = present.reduce((a, p) => a + (p.v as number) * (p.w / wSum), 0);
 
-    const final = marketScore * 0.50 + industryScore * 0.37 + stockScore * 0.13;
     return {
-      total: Math.round(final),
-      market: Math.round(marketScore),
-      industry: Math.round(industryScore),
-      stock: Math.round(stockScore),
-      hasFund: fundPart !== null,
+      total: Math.round(total),
+      rs: rsScore === null ? null : Math.round(rsScore),
+      theme: themeScore === null ? null : Math.round(themeScore),
+      fund: fundScore === null ? null : Math.round(fundScore),
+      opt: optScore === null ? null : Math.round(optScore),
       hasIndustry: ih?.available ?? false,
+      hasFund: fd?.available ?? false,
+      hasOptions: opt?.available ?? false,
+      fundDetail,
     };
-  }, [snapshot, overallRating, accelDelta, relVol]);
+  }, [snapshot, overallRating, accelDelta]);
 
   // ── Setup Quality Score (0-100) ──
   const setupQuality = useMemo(() => {
