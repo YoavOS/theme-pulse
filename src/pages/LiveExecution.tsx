@@ -291,23 +291,22 @@ function buildWhyContent(args: WhyArgs): WhyContent {
         ],
       };
     }
-    const mDesc =
-      conviction.market >= 65 ? "strong (uptrend)" : conviction.market >= 45 ? "neutral" : "weak (downtrend)";
-    const iDesc = conviction.hasIndustry
-      ? conviction.industry >= 65
-        ? "leading"
-        : conviction.industry >= 45
-        ? "neutral"
-        : "lagging"
-      : "n/a (mirrored from market)";
-    const sDesc = conviction.stock >= 65 ? "leader-grade" : conviction.stock >= 45 ? "average" : "weak";
+    const desc = (s: number | null, name: string) =>
+      s === null ? `${name} not available — weight redistributed to other pillars` :
+      s >= 70 ? "strong" : s >= 50 ? "neutral" : "weak";
 
     const fundLines: { label: string; value: string; tone?: "pos" | "neg" | "neu" | "na" }[] = [];
     if (conviction.hasFund && fd) {
       const pe = fd.forwardPe ?? fd.pe;
+      const sectorPe = (snapshot as any)?.sectorPeAvg as number | null | undefined;
       if (pe !== null && pe > 0) {
-        const tone = pe < 25 ? "pos" : pe < 40 ? "neu" : "neg";
-        fundLines.push({ label: pe === fd.forwardPe ? "Forward P/E" : "P/E", value: pe.toFixed(1), tone });
+        const ratio = sectorPe ? pe / sectorPe : null;
+        const tone = ratio === null ? "neu" : ratio < 1.1 ? "pos" : ratio < 1.7 ? "neu" : "neg";
+        fundLines.push({
+          label: pe === fd.forwardPe ? "Forward P/E" : "P/E",
+          value: sectorPe ? `${pe.toFixed(1)} (sector avg ~${sectorPe.toFixed(0)})` : pe.toFixed(1),
+          tone,
+        });
       }
       if (fd.epsGrowth !== null) {
         const v = fd.epsGrowth * 100;
@@ -319,46 +318,50 @@ function buildWhyContent(args: WhyArgs): WhyContent {
         const tone = v >= 15 ? "pos" : v >= 0 ? "neu" : "neg";
         fundLines.push({ label: "Revenue growth (YoY)", value: `${v >= 0 ? "+" : ""}${v.toFixed(1)}%`, tone });
       }
+      if (conviction.fundDetail.peJustified) {
+        fundLines.push({ label: "Valuation note", value: "High P/E justified by strong growth — no penalty applied", tone: "pos" });
+      }
     }
 
     return {
-      title: `Conviction: ${conviction.total} / 100`,
-      subtitle: `O'Neil-weighted blend: 50% Market + 37% Industry + 13% Individual stock.`,
+      title: `Overall Conviction: ${conviction.total} / 100`,
+      subtitle: `Weighted blend — 40% RS · 30% Theme · 20% Fundamentals · 10% Options. Missing pillars are dropped (weight redistributed).`,
       sections: [
         {
-          heading: `Component breakdown for ${sym}`,
-          body: "Each component is scored 0–100, then weighted into the final number.",
+          heading: `Pillar breakdown for ${sym}`,
+          body: "Each pillar is scored 0–100 from real data and combined with the weights above.",
           rows: [
-            { label: `Market (${benchmark}) — 50%`, value: `${conviction.market} (${mDesc})`, tone: conviction.market >= 65 ? "pos" : conviction.market >= 45 ? "neu" : "neg" },
-            { label: `Industry${ih?.etfSymbol ? ` (${ih.etfSymbol})` : ""} — 37%`, value: `${conviction.industry} (${iDesc})`, tone: conviction.industry >= 65 ? "pos" : conviction.industry >= 45 ? "neu" : "neg" },
-            { label: "Individual stock — 13%", value: `${conviction.stock} (${sDesc})`, tone: conviction.stock >= 65 ? "pos" : conviction.stock >= 45 ? "neu" : "neg" },
+            { label: "RS Rating — 40%", value: conviction.rs !== null ? `${conviction.rs} (${desc(conviction.rs, "RS")})` : "n/a", tone: conviction.rs === null ? "na" : conviction.rs >= 70 ? "pos" : conviction.rs < 40 ? "neg" : "neu" },
+            { label: `Theme${ih?.etfSymbol ? ` (${ih.etfSymbol})` : ""} — 30%`, value: conviction.theme !== null ? `${conviction.theme} (${desc(conviction.theme, "Theme")})` : "n/a (no sector mapping)", tone: conviction.theme === null ? "na" : conviction.theme >= 70 ? "pos" : conviction.theme < 50 ? "neg" : "neu" },
+            { label: "Fundamentals — 20%", value: conviction.fund !== null ? `${conviction.fund} (${desc(conviction.fund, "Fundamentals")})` : "n/a (no fundamentals)", tone: conviction.fund === null ? "na" : conviction.fund >= 70 ? "pos" : conviction.fund < 50 ? "neg" : "neu" },
+            { label: "Options activity — 10%", value: conviction.opt !== null ? `${conviction.opt} (${desc(conviction.opt, "Options")})` : "n/a", tone: conviction.opt === null ? "na" : conviction.opt >= 70 ? "pos" : conviction.opt < 50 ? "neg" : "neu" },
           ],
         },
         {
-          heading: "Market component (50%)",
-          body: `Built from ${benchmark}'s 1D, 1W and 1M returns. Strong, broad market = higher score. O'Neil's rule: 3 of 4 stocks follow the general market direction, so this carries the most weight.`,
-        },
-        {
-          heading: "Industry component (37%)",
-          body: ih?.available
-            ? `Mapped to ${ih.sectorName ?? "the sector"} via ${ih.etfSymbol}. Built from the sector ETF's 1D, 1W and 1M returns. Half of a stock's move comes from its group, so this is the second-biggest weight.`
-            : "No reliable sector ETF mapping for this ticker right now — we mirror the market score so the conviction isn't artificially deflated.",
-        },
-        {
-          heading: "Individual stock component (13%)",
+          heading: "RS pillar (40%)",
           body:
-            "Blends technical (60%) and fundamental (40%, when available) signals.",
-          rows: [
-            { label: "RS Rating", value: overallRating !== null ? `${overallRating}` : "N/A", tone: overallRating === null ? "na" : overallRating >= 70 ? "pos" : overallRating < 40 ? "neg" : "neu" },
-            { label: "RS acceleration (1W − 1M)", value: accelDelta !== null ? `${accelDelta >= 0 ? "+" : ""}${accelDelta.toFixed(1)} pts` : "—", tone: accelDelta === null ? "na" : accelDelta >= 5 ? "pos" : accelDelta <= -5 ? "neg" : "neu" },
-            { label: "Relative volume", value: relVol !== null ? `${relVol.toFixed(2)}×` : "—", tone: relVol === null ? "na" : relVol >= 1.3 ? "pos" : relVol < 0.7 ? "neg" : "neu" },
-            ...fundLines,
-            ...(conviction.hasFund ? [] : [{ label: "Fundamentals", value: "Not available — using technicals only", tone: "na" as const }]),
-          ],
+            "Built directly from the RS Rating (1–99 rank within the qualified universe), with a small boost/penalty from RS acceleration (1W rating vs 1M rating). RS is the single best predictor of future relative performance, so it carries the largest weight.",
+        },
+        {
+          heading: "Theme pillar (30%)",
+          body: ih?.available
+            ? `Sector strength from ${ih.sectorName ?? "the sector"} (${ih.etfSymbol}) — averages 1D, 1W and 1M ETF returns. A leader inside a strong group has a structural tailwind.`
+            : "No reliable sector ETF mapping — this pillar is dropped and its weight is redistributed to the others.",
+        },
+        {
+          heading: "Fundamentals pillar (20%)",
+          body:
+            "Growth-focused, growth-adjusted. EPS growth and revenue growth carry equal weight with valuation. P/E is compared to the sector average; a high P/E is NOT penalised when EPS growth ≥ 25% or revenue growth ≥ 20%.",
+          rows: fundLines,
+        },
+        {
+          heading: "Options pillar (10%)",
+          body: conviction.hasOptions
+            ? "Based on the options-flow sentiment (Put/Call ratio) with a small adjustment for elevated implied volatility (premiums getting expensive = crowded entry)."
+            : "No usable options data today — this pillar is dropped and weight redistributes.",
         },
       ],
-      footer:
-        `Final = round(${conviction.market} × 0.50 + ${conviction.industry} × 0.37 + ${conviction.stock} × 0.13) = ${conviction.total}.`,
+      footer: `Weighted total = ${conviction.total} / 100. Missing pillars are dropped before weighting so the score isn't artificially deflated.`,
     };
   }
 
