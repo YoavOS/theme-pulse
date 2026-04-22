@@ -690,6 +690,16 @@ export default function LiveExecution() {
   }, [benchmark]);
 
   const activeStock = activeSymbol ? stockMap.get(activeSymbol) ?? null : null;
+  const resolvedTheme = useMemo(() => {
+    const rawLabel = activeStock?.sector ?? snapshot?.fundamentals?.industry ?? snapshot?.fundamentals?.sector ?? null;
+    const broadLabel = gicsForIndustry(rawLabel) ?? snapshot?.industry?.sectorName ?? rawLabel;
+    return {
+      rawLabel,
+      broadLabel,
+      etfSymbol: snapshot?.industry?.etfSymbol ?? null,
+    };
+  }, [activeStock, snapshot]);
+
   const universeRank = useMemo(() => {
     if (!activeStock || activeStock.rsOverall === null) return null;
     const better = stocks.filter(
@@ -732,6 +742,40 @@ export default function LiveExecution() {
 
   const overallRating = activeSymbol ? ratingOverall.get(activeSymbol) ?? null : null;
 
+  const themeUniverseMembers = useMemo(() => {
+    const rawMatch = resolvedTheme.rawLabel?.toLowerCase().trim() ?? null;
+    const broadMatch = resolvedTheme.broadLabel?.toLowerCase().trim() ?? null;
+    return stocks
+      .filter((s) => {
+        if (!s.sector || s.rsOverall === null) return false;
+        const sector = s.sector.toLowerCase().trim();
+        const broad = (gicsForIndustry(s.sector) ?? s.sector).toLowerCase().trim();
+        return (rawMatch !== null && sector === rawMatch) || (broadMatch !== null && broad === broadMatch);
+      })
+      .sort((a, b) => (b.rsOverall ?? -Infinity) - (a.rsOverall ?? -Infinity));
+  }, [stocks, resolvedTheme]);
+
+  const themeStats = useMemo(() => {
+    const ratings = themeUniverseMembers
+      .map((stock) => ratingOverall.get(stock.symbol.toUpperCase()) ?? null)
+      .filter((v): v is number => v !== null);
+    const avgRating = ratings.length > 0 ? ratings.reduce((sum, value) => sum + value, 0) / ratings.length : null;
+    const leaderPct = ratings.length > 0 ? (ratings.filter((value) => value >= 80).length / ratings.length) * 100 : null;
+    return {
+      matchedCount: themeUniverseMembers.length,
+      avgRating: avgRating === null ? null : Math.round(avgRating),
+      leaderPct: leaderPct === null ? null : Math.round(leaderPct),
+    };
+  }, [themeUniverseMembers, ratingOverall]);
+
+  const themeLeaders = useMemo(() => {
+    const top = themeUniverseMembers.slice(0, 10);
+    if (!activeStock || activeStock.rsOverall === null) return top;
+    return top.some((stock) => stock.symbol === activeStock.symbol)
+      ? top
+      : [activeStock, ...top].slice(0, 10);
+  }, [themeUniverseMembers, activeStock]);
+
   // ── New 4-Pillar Overall Conviction Score (0-100) ──
   // Weights: 40% RS · 30% Theme · 20% Fundamentals · 10% Options
   // If a pillar has no data its weight is redistributed proportionally to the others.
@@ -741,23 +785,27 @@ export default function LiveExecution() {
     if (overallRating !== null) {
       let s = overallRating;
       if (accelDelta !== null) s += Math.max(-15, Math.min(15, accelDelta * 0.5));
-      rsScore = Math.max(0, Math.min(100, s));
+      rsScore = clampScore(s);
     }
 
-    // 2) Theme pillar (30%) — sector ETF strength across 1D / 1W / 1M.
+    // 2) Theme pillar (30%) — sector ETF strength plus the RS of the theme members.
     const ih = snapshot?.industry;
-    const scoreReturn = (r: number | null | undefined, perPctPoint = 5) => {
-      if (r === null || r === undefined || !Number.isFinite(r)) return null;
-      return Math.max(0, Math.min(100, 50 + (r as number) * perPctPoint));
-    };
     let themeScore: number | null = null;
-    if (ih?.available) {
-      const parts = [
-        scoreReturn(ih.changePct, 10),
-        scoreReturn(ih.return1w, 5),
-        scoreReturn(ih.return1m, 3),
-      ].filter((v): v is number => v !== null);
-      if (parts.length > 0) themeScore = parts.reduce((a, b) => a + b, 0) / parts.length;
+    const etfParts = ih?.available
+      ? [
+          scoreReturnTo100(ih.changePct, 10),
+          scoreReturnTo100(ih.return1w, 5),
+          scoreReturnTo100(ih.return1m, 3),
+        ].filter((v): v is number => v !== null)
+      : [];
+    const etfScore = etfParts.length > 0 ? etfParts.reduce((a, b) => a + b, 0) / etfParts.length : null;
+    const peerScore =
+      themeStats.avgRating !== null || themeStats.leaderPct !== null
+        ? clampScore((themeStats.avgRating ?? 50) * 0.7 + (themeStats.leaderPct ?? 50) * 0.3)
+        : null;
+    const themeParts = [etfScore, peerScore].filter((v): v is number => v !== null);
+    if (themeParts.length > 0) {
+      themeScore = themeParts.reduce((a, b) => a + b, 0) / themeParts.length;
     }
 
     // 3) Fundamentals pillar (20%) — growth-focused, growth-adjusted valuation.
@@ -827,7 +875,7 @@ export default function LiveExecution() {
       }
       // Small bonus when bullish unusual activity is present.
       if (opt.unusual_activity.length > 0 && opt.sentiment === "Bullish") s += 5;
-      optScore = Math.max(0, Math.min(100, s));
+      optScore = clampScore(s);
     }
 
     // Weighted blend with redistribution.
@@ -841,6 +889,18 @@ export default function LiveExecution() {
     if (present.length === 0) return null;
     const wSum = present.reduce((a, p) => a + p.w, 0);
     const total = present.reduce((a, p) => a + (p.v as number) * (p.w / wSum), 0);
+    const effectiveWeights = {
+      rs: rsScore === null ? null : Math.round((0.4 / wSum) * 100),
+      theme: themeScore === null ? null : Math.round((0.3 / wSum) * 100),
+      fund: fundScore === null ? null : Math.round((0.2 / wSum) * 100),
+      opt: optScore === null ? null : Math.round((0.1 / wSum) * 100),
+    };
+    const contributions = {
+      rs: rsScore === null ? null : Math.round(rsScore * (0.4 / wSum) * 10) / 10,
+      theme: themeScore === null ? null : Math.round(themeScore * (0.3 / wSum) * 10) / 10,
+      fund: fundScore === null ? null : Math.round(fundScore * (0.2 / wSum) * 10) / 10,
+      opt: optScore === null ? null : Math.round(optScore * (0.1 / wSum) * 10) / 10,
+    };
 
     return {
       total: Math.round(total),
@@ -851,9 +911,18 @@ export default function LiveExecution() {
       hasIndustry: ih?.available ?? false,
       hasFund: fd?.available ?? false,
       hasOptions: opt?.available ?? false,
+      themeDetail: {
+        label: resolvedTheme.broadLabel,
+        matchedCount: themeStats.matchedCount,
+        avgRating: themeStats.avgRating,
+        leaderPct: themeStats.leaderPct,
+        etfBacked: ih?.available ?? false,
+      },
       fundDetail,
+      effectiveWeights,
+      contributions,
     };
-  }, [snapshot, overallRating, accelDelta]);
+  }, [snapshot, overallRating, accelDelta, themeStats, resolvedTheme]);
 
   // ── Setup Quality Score (0-100) ──
   const setupQuality = useMemo(() => {
