@@ -65,6 +65,8 @@ interface FundamentalsSnapshot {
   epsGrowth: number | null;       // earningsQuarterlyGrowth (yoy %, decimal)
   revenueGrowth: number | null;   // revenueQuarterlyGrowth (yoy %, decimal)
   profitMargin: number | null;    // decimal
+  sector: string | null;
+  industry: string | null;
   source: string;
 }
 
@@ -350,11 +352,12 @@ async function fetchFundamentalsSnapshot(symbol: string): Promise<FundamentalsSn
   const empty: FundamentalsSnapshot = {
     available: false, pe: null, forwardPe: null, pegRatio: null,
     epsGrowth: null, revenueGrowth: null, profitMargin: null,
+    sector: null, industry: null,
     source: "yahoo",
   };
   const auth = await getYahooAuth();
   if (!auth) return empty;
-  const modules = "summaryDetail,defaultKeyStatistics,financialData";
+  const modules = "summaryDetail,defaultKeyStatistics,financialData,assetProfile,price";
   const url = `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(symbol)}?modules=${modules}&crumb=${encodeURIComponent(auth.crumb)}`;
   try {
     const res = await fetch(url, {
@@ -367,6 +370,8 @@ async function fetchFundamentalsSnapshot(symbol: string): Promise<FundamentalsSn
     const sd = result.summaryDetail ?? {};
     const ks = result.defaultKeyStatistics ?? {};
     const fd = result.financialData ?? {};
+    const ps = result.price ?? {};
+    const profile = result.assetProfile ?? {};
     const raw = (x: any): number | null => {
       if (x === null || x === undefined) return null;
       const v = typeof x === "object" ? x.raw : x;
@@ -380,6 +385,8 @@ async function fetchFundamentalsSnapshot(symbol: string): Promise<FundamentalsSn
       epsGrowth: raw(ks.earningsQuarterlyGrowth) ?? raw(fd.earningsGrowth) ?? null,
       revenueGrowth: raw(fd.revenueGrowth) ?? null,
       profitMargin: raw(fd.profitMargins) ?? null,
+      sector: (profile.sector as string | undefined) ?? (ps.sector as string | undefined) ?? null,
+      industry: (profile.industry as string | undefined) ?? (ps.industry as string | undefined) ?? null,
       source: "yahoo",
     };
   } catch {
@@ -427,12 +434,11 @@ Deno.serve(async (req) => {
       });
     }
 
-    const [quote, options, benchmark, fundamentals, industry] = await Promise.all([
+    const [quote, options, benchmark, fundamentals] = await Promise.all([
       fetchYahooQuote(rawSymbol),
       fetchYahooOptions(rawSymbol),
       fetchBenchmarkSnapshot(benchmarkSymbol, forceRefresh),
       fetchFundamentalsSnapshot(rawSymbol),
-      fetchIndustrySnapshot(sectorHint, forceRefresh),
     ]);
 
     if (!quote || quote.price === null) {
@@ -442,6 +448,8 @@ Deno.serve(async (req) => {
       );
     }
 
+    const resolvedSectorHint = sectorHint ?? fundamentals.industry ?? fundamentals.sector ?? null;
+    const industry = await fetchIndustrySnapshot(resolvedSectorHint, forceRefresh);
     const tickerHist = await fetchHistoricalForTicker(rawSymbol, quote.price, forceRefresh);
 
     const sectorPeAvg =

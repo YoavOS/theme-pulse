@@ -26,6 +26,7 @@ import { computeRsRatings } from "@/components/rs/RsRatingBadge";
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import HelpButton from "@/components/HelpButton";
+import { gicsForIndustry } from "@/lib/sectorTaxonomy";
 
 // ───────────────────────── helpers ─────────────────────────
 
@@ -57,6 +58,13 @@ function ratingClass(r: number | null): string {
   if (r >= 60) return "text-[hsl(160,70%,55%)]";
   if (r >= 40) return "text-[hsl(40,85%,55%)]";
   return "text-destructive";
+}
+function clampScore(v: number): number {
+  return Math.max(0, Math.min(100, v));
+}
+function scoreReturnTo100(v: number | null | undefined, perPctPoint = 5): number | null {
+  if (v === null || v === undefined || !Number.isFinite(v)) return null;
+  return clampScore(50 + v * perPctPoint);
 }
 
 interface VerdictFactor {
@@ -235,7 +243,16 @@ interface WhyArgs {
     hasFund: boolean;
     hasIndustry: boolean;
     hasOptions: boolean;
+    themeDetail: {
+      label: string | null;
+      matchedCount: number;
+      avgRating: number | null;
+      leaderPct: number | null;
+      etfBacked: boolean;
+    };
     fundDetail: { peScore: number | null; epsScore: number | null; revScore: number | null; peJustified: boolean };
+    effectiveWeights: { rs: number | null; theme: number | null; fund: number | null; opt: number | null };
+    contributions: { rs: number | null; theme: number | null; fund: number | null; opt: number | null };
   } | null;
   setupQuality: number | null;
   overallRating: number | null;
@@ -673,6 +690,16 @@ export default function LiveExecution() {
   }, [benchmark]);
 
   const activeStock = activeSymbol ? stockMap.get(activeSymbol) ?? null : null;
+  const resolvedTheme = useMemo(() => {
+    const rawLabel = activeStock?.sector ?? snapshot?.fundamentals?.industry ?? snapshot?.fundamentals?.sector ?? null;
+    const broadLabel = gicsForIndustry(rawLabel) ?? snapshot?.industry?.sectorName ?? rawLabel;
+    return {
+      rawLabel,
+      broadLabel,
+      etfSymbol: snapshot?.industry?.etfSymbol ?? null,
+    };
+  }, [activeStock, snapshot]);
+
   const universeRank = useMemo(() => {
     if (!activeStock || activeStock.rsOverall === null) return null;
     const better = stocks.filter(
@@ -715,6 +742,40 @@ export default function LiveExecution() {
 
   const overallRating = activeSymbol ? ratingOverall.get(activeSymbol) ?? null : null;
 
+  const themeUniverseMembers = useMemo(() => {
+    const rawMatch = resolvedTheme.rawLabel?.toLowerCase().trim() ?? null;
+    const broadMatch = resolvedTheme.broadLabel?.toLowerCase().trim() ?? null;
+    return stocks
+      .filter((s) => {
+        if (!s.sector || s.rsOverall === null) return false;
+        const sector = s.sector.toLowerCase().trim();
+        const broad = (gicsForIndustry(s.sector) ?? s.sector).toLowerCase().trim();
+        return (rawMatch !== null && sector === rawMatch) || (broadMatch !== null && broad === broadMatch);
+      })
+      .sort((a, b) => (b.rsOverall ?? -Infinity) - (a.rsOverall ?? -Infinity));
+  }, [stocks, resolvedTheme]);
+
+  const themeStats = useMemo(() => {
+    const ratings = themeUniverseMembers
+      .map((stock) => ratingOverall.get(stock.symbol.toUpperCase()) ?? null)
+      .filter((v): v is number => v !== null);
+    const avgRating = ratings.length > 0 ? ratings.reduce((sum, value) => sum + value, 0) / ratings.length : null;
+    const leaderPct = ratings.length > 0 ? (ratings.filter((value) => value >= 80).length / ratings.length) * 100 : null;
+    return {
+      matchedCount: themeUniverseMembers.length,
+      avgRating: avgRating === null ? null : Math.round(avgRating),
+      leaderPct: leaderPct === null ? null : Math.round(leaderPct),
+    };
+  }, [themeUniverseMembers, ratingOverall]);
+
+  const themeLeaders = useMemo(() => {
+    const top = themeUniverseMembers.slice(0, 10);
+    if (!activeStock || activeStock.rsOverall === null) return top;
+    return top.some((stock) => stock.symbol === activeStock.symbol)
+      ? top
+      : [activeStock, ...top].slice(0, 10);
+  }, [themeUniverseMembers, activeStock]);
+
   // ── New 4-Pillar Overall Conviction Score (0-100) ──
   // Weights: 40% RS · 30% Theme · 20% Fundamentals · 10% Options
   // If a pillar has no data its weight is redistributed proportionally to the others.
@@ -724,23 +785,27 @@ export default function LiveExecution() {
     if (overallRating !== null) {
       let s = overallRating;
       if (accelDelta !== null) s += Math.max(-15, Math.min(15, accelDelta * 0.5));
-      rsScore = Math.max(0, Math.min(100, s));
+      rsScore = clampScore(s);
     }
 
-    // 2) Theme pillar (30%) — sector ETF strength across 1D / 1W / 1M.
+    // 2) Theme pillar (30%) — sector ETF strength plus the RS of the theme members.
     const ih = snapshot?.industry;
-    const scoreReturn = (r: number | null | undefined, perPctPoint = 5) => {
-      if (r === null || r === undefined || !Number.isFinite(r)) return null;
-      return Math.max(0, Math.min(100, 50 + (r as number) * perPctPoint));
-    };
     let themeScore: number | null = null;
-    if (ih?.available) {
-      const parts = [
-        scoreReturn(ih.changePct, 10),
-        scoreReturn(ih.return1w, 5),
-        scoreReturn(ih.return1m, 3),
-      ].filter((v): v is number => v !== null);
-      if (parts.length > 0) themeScore = parts.reduce((a, b) => a + b, 0) / parts.length;
+    const etfParts = ih?.available
+      ? [
+          scoreReturnTo100(ih.changePct, 10),
+          scoreReturnTo100(ih.return1w, 5),
+          scoreReturnTo100(ih.return1m, 3),
+        ].filter((v): v is number => v !== null)
+      : [];
+    const etfScore = etfParts.length > 0 ? etfParts.reduce((a, b) => a + b, 0) / etfParts.length : null;
+    const peerScore =
+      themeStats.avgRating !== null || themeStats.leaderPct !== null
+        ? clampScore((themeStats.avgRating ?? 50) * 0.7 + (themeStats.leaderPct ?? 50) * 0.3)
+        : null;
+    const themeParts = [etfScore, peerScore].filter((v): v is number => v !== null);
+    if (themeParts.length > 0) {
+      themeScore = themeParts.reduce((a, b) => a + b, 0) / themeParts.length;
     }
 
     // 3) Fundamentals pillar (20%) — growth-focused, growth-adjusted valuation.
@@ -810,7 +875,7 @@ export default function LiveExecution() {
       }
       // Small bonus when bullish unusual activity is present.
       if (opt.unusual_activity.length > 0 && opt.sentiment === "Bullish") s += 5;
-      optScore = Math.max(0, Math.min(100, s));
+      optScore = clampScore(s);
     }
 
     // Weighted blend with redistribution.
@@ -824,6 +889,18 @@ export default function LiveExecution() {
     if (present.length === 0) return null;
     const wSum = present.reduce((a, p) => a + p.w, 0);
     const total = present.reduce((a, p) => a + (p.v as number) * (p.w / wSum), 0);
+    const effectiveWeights = {
+      rs: rsScore === null ? null : Math.round((0.4 / wSum) * 100),
+      theme: themeScore === null ? null : Math.round((0.3 / wSum) * 100),
+      fund: fundScore === null ? null : Math.round((0.2 / wSum) * 100),
+      opt: optScore === null ? null : Math.round((0.1 / wSum) * 100),
+    };
+    const contributions = {
+      rs: rsScore === null ? null : Math.round(rsScore * (0.4 / wSum) * 10) / 10,
+      theme: themeScore === null ? null : Math.round(themeScore * (0.3 / wSum) * 10) / 10,
+      fund: fundScore === null ? null : Math.round(fundScore * (0.2 / wSum) * 10) / 10,
+      opt: optScore === null ? null : Math.round(optScore * (0.1 / wSum) * 10) / 10,
+    };
 
     return {
       total: Math.round(total),
@@ -834,9 +911,18 @@ export default function LiveExecution() {
       hasIndustry: ih?.available ?? false,
       hasFund: fd?.available ?? false,
       hasOptions: opt?.available ?? false,
+      themeDetail: {
+        label: resolvedTheme.broadLabel,
+        matchedCount: themeStats.matchedCount,
+        avgRating: themeStats.avgRating,
+        leaderPct: themeStats.leaderPct,
+        etfBacked: ih?.available ?? false,
+      },
       fundDetail,
+      effectiveWeights,
+      contributions,
     };
-  }, [snapshot, overallRating, accelDelta]);
+  }, [snapshot, overallRating, accelDelta, themeStats, resolvedTheme]);
 
   // ── Setup Quality Score (0-100) ──
   const setupQuality = useMemo(() => {
@@ -1164,7 +1250,7 @@ export default function LiveExecution() {
                 </div>
 
                 {/* Metric grid */}
-                <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 xl:grid-cols-5">
                   <MetricCard
                     label="RS Rating"
                     tooltip="Relative Strength rank from 1–99 within the qualified universe. 80+ = leader, 40-79 = average, <40 = laggard."
@@ -1178,36 +1264,41 @@ export default function LiveExecution() {
                     onWhy={() => setWhyTopic("rs")}
                   />
                   <MetricCard
-                    label="Conviction"
-                    tooltip="Overall Conviction (0-100): 40% RS Rating + 30% Theme/Sector strength + 20% Fundamentals (growth-adjusted) + 10% Options activity. Missing pillars are dropped and weight is redistributed."
-                    value={conviction !== null ? `${conviction.total}` : "—"}
+                    label="RS Acceleration"
+                    tooltip="Difference between the stock's 1W RS rating and 1M RS rating. Positive means near-term relative strength is improving."
+                    value={accelDelta !== null ? `${accelDelta > 0 ? "+" : ""}${accelDelta.toFixed(1)}` : "—"}
                     sub={
-                      conviction === null
-                        ? "Need RS data"
-                        : conviction.total >= 70
-                        ? "High conviction"
-                        : conviction.total >= 50
-                        ? "Medium"
-                        : "Low conviction"
+                      accelDelta === null
+                        ? "Insufficient data"
+                        : accelDelta >= 5
+                        ? "Improving"
+                        : accelDelta <= -5
+                        ? "Decelerating"
+                        : "Stable"
                     }
-                    valueClass={ratingClass(conviction?.total ?? null)}
-                    onWhy={() => setWhyTopic("conviction")}
+                    valueClass={
+                      accelDelta === null
+                        ? "text-muted-foreground"
+                        : accelDelta >= 5
+                        ? "text-[hsl(160,80%,45%)]"
+                        : accelDelta <= -5
+                        ? "text-destructive"
+                        : "text-foreground"
+                    }
+                    onWhy={() => setWhyTopic("rs")}
                   />
                   <MetricCard
-                    label="Setup Quality"
-                    tooltip="0-100 score for how clean the entry is RIGHT NOW: RS acceleration, volume confirmation, pullback depth in a strong trend, and theme alignment."
-                    value={setupQuality !== null ? `${setupQuality}` : "—"}
+                    label="Theme"
+                    tooltip="Broad theme or sector context derived from the stock's industry mapping plus sector ETF strength when available."
+                    value={resolvedTheme.broadLabel ?? "—"}
                     sub={
-                      setupQuality === null
-                        ? "Need RS data"
-                        : setupQuality >= 70
-                        ? "Clean setup"
-                        : setupQuality >= 50
-                        ? "Acceptable"
-                        : "Poor setup"
+                      themeStats.matchedCount > 0
+                        ? `${themeStats.matchedCount} qualified names`
+                        : resolvedTheme.etfSymbol
+                        ? `${resolvedTheme.etfSymbol} ETF context only`
+                        : "Insufficient data"
                     }
-                    valueClass={ratingClass(setupQuality)}
-                    onWhy={() => setWhyTopic("setup")}
+                    valueClass="text-foreground"
                   />
                   <MetricCard
                     label="Rel Volume"
@@ -1215,7 +1306,7 @@ export default function LiveExecution() {
                     value={relVol !== null ? `${relVol.toFixed(2)}×` : "—"}
                     sub={
                       relVol === null
-                        ? "—"
+                        ? "Insufficient data"
                         : relVol >= 1.5
                         ? "Above average"
                         : relVol < 0.6
@@ -1234,38 +1325,27 @@ export default function LiveExecution() {
                     onWhy={() => setWhyTopic("relVol")}
                   />
                   <MetricCard
-                    label="ADR%"
-                    tooltip="Average Daily Range — typical % move per day. Higher ADR = bigger swings, requires wider stops."
-                    value={activeStock?.adrPercent !== null && activeStock?.adrPercent !== undefined ? `${activeStock.adrPercent.toFixed(1)}%` : "—"}
+                    label="Options"
+                    tooltip="Simple options-flow read from the nearest expiration: sentiment, put/call balance, and implied volatility."
+                    value={snapshot.options.available ? snapshot.options.sentiment : "—"}
                     sub={
-                      activeStock?.adrPercent && activeStock.adrPercent >= 5
-                        ? "High volatility"
-                        : "Normal"
+                      snapshot.options.available
+                        ? snapshot.options.high_iv_alert
+                          ? "Elevated IV"
+                          : "Normal read"
+                        : "Insufficient data"
                     }
-                    valueClass="text-foreground"
+                    valueClass={
+                      !snapshot.options.available
+                        ? "text-muted-foreground"
+                        : snapshot.options.sentiment === "Bullish"
+                        ? "text-[hsl(160,80%,45%)]"
+                        : snapshot.options.sentiment === "Bearish"
+                        ? "text-destructive"
+                        : "text-foreground"
+                    }
                   />
                 </div>
-
-                {/* Overall Conviction Breakdown — 4 Pillars */}
-                {conviction && (
-                  <ConvictionBreakdown
-                    total={conviction.total}
-                    rs={conviction.rs}
-                    theme={conviction.theme}
-                    fund={conviction.fund}
-                    opt={conviction.opt}
-                    benchmarkLabel={benchmark}
-                    sectorName={snapshot?.industry?.sectorName ?? null}
-                    sectorEtf={snapshot?.industry?.etfSymbol ?? null}
-                    fundamentals={snapshot?.fundamentals ?? null}
-                    sectorPeAvg={(snapshot as any)?.sectorPeAvg ?? null}
-                    peJustified={conviction.fundDetail.peJustified}
-                    hasIndustry={conviction.hasIndustry}
-                    hasFund={conviction.hasFund}
-                    hasOptions={conviction.hasOptions}
-                    onWhy={() => setWhyTopic("conviction")}
-                  />
-                )}
 
                 {/* Pullback / Breakdown callout */}
                 {pullback && (
@@ -1387,6 +1467,182 @@ export default function LiveExecution() {
               </p>
             )}
           </section>
+
+          {/* ── RS Rating Section (40% pillar) ── */}
+          {snapshot && (
+            <section
+              className="rounded-xl border border-border/60 p-4"
+              style={{ background: "rgba(255,255,255,0.03)" }}
+            >
+              <div className="mb-3 flex items-center gap-2 flex-wrap">
+                <h2 className="font-['Syne',sans-serif] text-sm font-semibold uppercase tracking-wider text-foreground">
+                  RS Rating
+                </h2>
+                <span className="rounded border border-border/40 bg-background/40 px-1.5 py-0.5 text-[10px] uppercase tracking-wider text-muted-foreground">
+                  40% weight
+                </span>
+                <span className="text-[11px] text-muted-foreground">
+                  Leadership first: current rank, acceleration, and benchmark-relative strength.
+                </span>
+              </div>
+              <div className="grid gap-3 lg:grid-cols-[1.25fr_1fr]">
+                <div className="rounded-lg border border-border/40 bg-background/40 p-3">
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                    <MetricCard
+                      label="Current RS Rating"
+                      value={overallRating !== null ? `${overallRating}` : "—"}
+                      sub={universeRank ? `Rank ${universeRank.rank} / ${universeRank.total}` : "Insufficient data"}
+                      valueClass={ratingClass(overallRating)}
+                      onWhy={() => setWhyTopic("rs")}
+                    />
+                    <MetricCard
+                      label="RS Acceleration"
+                      value={accelDelta !== null ? `${accelDelta > 0 ? "+" : ""}${accelDelta.toFixed(1)}` : "—"}
+                      sub={accelDelta === null ? "Insufficient data" : accelDelta >= 5 ? "Improving" : accelDelta <= -5 ? "Decelerating" : "Stable"}
+                      valueClass={accelDelta === null ? "text-muted-foreground" : accelDelta >= 5 ? "text-[hsl(160,80%,45%)]" : accelDelta <= -5 ? "text-destructive" : "text-foreground"}
+                      onWhy={() => setWhyTopic("rs")}
+                    />
+                    <MetricCard
+                      label={`RS 1D vs ${benchmark}`}
+                      value={liveRs.rs1d !== null ? pct(liveRs.rs1d) : "—"}
+                      sub={liveRs.rs1d === null ? "Insufficient data" : liveRs.rs1d >= 0 ? "Outperforming today" : "Underperforming today"}
+                      valueClass={pctClass(liveRs.rs1d)}
+                    />
+                    <MetricCard
+                      label="Setup Quality"
+                      value={setupQuality !== null ? `${setupQuality}` : "—"}
+                      sub={setupQuality === null ? "Insufficient data" : setupQuality >= 70 ? "Clean setup" : setupQuality >= 50 ? "Balanced" : "Needs work"}
+                      valueClass={ratingClass(setupQuality)}
+                      onWhy={() => setWhyTopic("setup")}
+                    />
+                  </div>
+                </div>
+                <div className="rounded-lg border border-border/40 bg-background/40 p-3">
+                  <div className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    RS across timeframes
+                  </div>
+                  <div className="grid grid-cols-4 gap-2">
+                    <RsTrendCell label="1D" value={liveRs.rs1d} />
+                    <RsTrendCell label="1W" value={liveRs.rs1w} />
+                    <RsTrendCell label="1M" value={liveRs.rs1m} />
+                    <RsTrendCell label="3M" value={liveRs.rs3m} />
+                  </div>
+                  <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+                    This section tells you whether the stock is a true leader, whether that leadership is improving, and whether the latest move is still stronger than the selected benchmark.
+                  </p>
+                </div>
+              </div>
+            </section>
+          )}
+
+          {/* ── Theme Section (30% pillar) ── */}
+          {snapshot && (
+            <section
+              className="rounded-xl border border-border/60 p-4"
+              style={{ background: "rgba(255,255,255,0.03)" }}
+            >
+              <div className="mb-3 flex items-center gap-2 flex-wrap">
+                <h2 className="font-['Syne',sans-serif] text-sm font-semibold uppercase tracking-wider text-foreground">
+                  Theme
+                </h2>
+                <span className="rounded border border-border/40 bg-background/40 px-1.5 py-0.5 text-[10px] uppercase tracking-wider text-muted-foreground">
+                  30% weight
+                </span>
+                <span className="text-[11px] text-muted-foreground">
+                  Group strength: ETF trend plus the RS quality of the other names in the same theme.
+                </span>
+                {conviction?.theme !== null && conviction?.theme !== undefined && (
+                  <span className={`ml-auto font-mono text-base font-bold ${ratingClass(conviction.theme)}`}>
+                    {conviction.theme} <span className="text-[10px] text-muted-foreground">/ 100</span>
+                  </span>
+                )}
+              </div>
+              <div className="grid gap-3 lg:grid-cols-[0.95fr_1.05fr]">
+                <div className="space-y-3 rounded-lg border border-border/40 bg-background/40 p-3">
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                    <MetricCard
+                      label="Theme"
+                      value={resolvedTheme.broadLabel ?? "—"}
+                      sub={resolvedTheme.rawLabel ?? "Insufficient data"}
+                    />
+                    <MetricCard
+                      label="Avg RS Rating"
+                      value={themeStats.avgRating !== null ? `${themeStats.avgRating}` : "—"}
+                      sub={themeStats.matchedCount > 0 ? `${themeStats.matchedCount} qualified names` : "Insufficient data"}
+                      valueClass={ratingClass(themeStats.avgRating)}
+                    />
+                    <MetricCard
+                      label="Leaders"
+                      value={themeStats.leaderPct !== null ? `${themeStats.leaderPct}%` : "—"}
+                      sub="RS ≥ 80 inside theme"
+                      valueClass={themeStats.leaderPct !== null && themeStats.leaderPct >= 40 ? "text-[hsl(160,80%,45%)]" : themeStats.leaderPct !== null && themeStats.leaderPct < 15 ? "text-destructive" : "text-foreground"}
+                    />
+                    <MetricCard
+                      label="ETF Context"
+                      value={snapshot.industry?.etfSymbol ?? "—"}
+                      sub={snapshot.industry?.available ? `${pct(snapshot.industry.return1m)} · 1M` : "Insufficient data"}
+                      valueClass={pctClass(snapshot.industry?.return1m ?? null)}
+                    />
+                  </div>
+                  <p className="text-xs leading-relaxed text-muted-foreground">
+                    A stock is more trustworthy when it is leading inside a healthy theme. This section combines the sector ETF trend with the RS quality of the qualified names in the same group.
+                  </p>
+                </div>
+                <div className="rounded-lg border border-border/40 bg-background/40 p-3">
+                  <div className="mb-2 flex items-center justify-between gap-2">
+                    <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                      Top theme tickers by RS
+                    </div>
+                    <div className="text-[10px] text-muted-foreground">
+                      {themeLeaders.length > 0 ? `${themeLeaders.length} shown` : "No peers found"}
+                    </div>
+                  </div>
+                  {themeLeaders.length === 0 ? (
+                    <div className="rounded-md border border-border/30 bg-muted/10 p-3 text-xs text-muted-foreground">
+                      Insufficient data — this ticker could not be matched to a qualified theme peer set yet.
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-xs">
+                        <thead>
+                          <tr className="border-b border-border/30 text-[10px] uppercase tracking-wider text-muted-foreground">
+                            <th className="py-2 text-left">Ticker</th>
+                            <th className="py-2 text-right">RS Rating</th>
+                            <th className="py-2 text-right">RS 1M</th>
+                            <th className="py-2 text-right">1M Return</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {themeLeaders.map((stock) => {
+                            const rating = ratingOverall.get(stock.symbol.toUpperCase()) ?? null;
+                            const isActive = stock.symbol === activeSymbol;
+                            return (
+                              <tr key={stock.symbol} className="border-b border-border/20 last:border-0">
+                                <td className="py-2">
+                                  <button
+                                    onClick={() => {
+                                      setInput(stock.symbol);
+                                      submit(stock.symbol);
+                                    }}
+                                    className={`font-mono font-semibold ${isActive ? "text-foreground" : "text-primary hover:underline"}`}
+                                  >
+                                    {stock.symbol}
+                                  </button>
+                                </td>
+                                <td className={`py-2 text-right font-mono font-semibold ${ratingClass(rating)}`}>{rating ?? "—"}</td>
+                                <td className={`py-2 text-right font-mono ${pctClass(stock.rs1m)}`}>{pct(stock.rs1m)}</td>
+                                <td className={`py-2 text-right font-mono ${pctClass(stock.return1m)}`}>{pct(stock.return1m)}</td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </section>
+          )}
 
           {/* ── Fundamentals (20% pillar) ── */}
           {snapshot && (
@@ -1557,6 +1813,53 @@ export default function LiveExecution() {
                       No significant unusual options activity detected today.
                     </div>
                   )}
+                </div>
+              )}
+            </section>
+          )}
+
+          {/* ── Overall Conviction Score ── */}
+          {snapshot && (
+            <section
+              className="rounded-xl border border-border/60 p-4"
+              style={{ background: "rgba(255,255,255,0.03)" }}
+            >
+              <div className="mb-3 flex items-center gap-2 flex-wrap">
+                <h2 className="font-['Syne',sans-serif] text-sm font-semibold uppercase tracking-wider text-foreground">
+                  Overall Conviction Score
+                </h2>
+                <span className="text-[11px] text-muted-foreground">
+                  Final weighted read: 40% RS + 30% Theme + 20% Fundamentals + 10% Options.
+                </span>
+              </div>
+              {conviction ? (
+                <div className="space-y-3">
+                  <ConvictionBreakdown
+                    total={conviction.total}
+                    rs={conviction.rs}
+                    theme={conviction.theme}
+                    fund={conviction.fund}
+                    opt={conviction.opt}
+                    benchmarkLabel={benchmark}
+                    sectorName={resolvedTheme.broadLabel ?? snapshot?.industry?.sectorName ?? null}
+                    sectorEtf={snapshot?.industry?.etfSymbol ?? null}
+                    fundamentals={snapshot?.fundamentals ?? null}
+                    sectorPeAvg={(snapshot as any)?.sectorPeAvg ?? null}
+                    peJustified={conviction.fundDetail.peJustified}
+                    hasIndustry={conviction.hasIndustry}
+                    hasFund={conviction.hasFund}
+                    hasOptions={conviction.hasOptions}
+                    onWhy={() => setWhyTopic("conviction")}
+                  />
+                  <div className="rounded-lg border border-border/40 bg-background/40 p-3 text-xs text-muted-foreground">
+                    {snapshot.symbol} currently scores
+                    <span className="mx-1 font-mono font-semibold text-foreground">{conviction.total}/100</span>
+                    because RS contributes {conviction.contributions.rs ?? 0}, Theme {conviction.contributions.theme ?? 0}, Fundamentals {conviction.contributions.fund ?? 0}, and Options {conviction.contributions.opt ?? 0} points.
+                  </div>
+                </div>
+              ) : (
+                <div className="rounded-lg border border-border/40 bg-background/40 p-3 text-xs text-muted-foreground">
+                  Insufficient data — a final conviction score appears once at least one of the four sections has reliable real data.
                 </div>
               )}
             </section>
