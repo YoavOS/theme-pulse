@@ -1057,7 +1057,6 @@ export default function LiveExecution() {
   };
 
   // Fire Groq once per new active ticker (reset when ticker cleared/changed).
-  const lastAiSymbolRef = useRef<string | null>(null);
   useEffect(() => {
     if (!activeSymbol || !snapshot) return;
     if (lastAiSymbolRef.current === activeSymbol && aiTheme) return;
