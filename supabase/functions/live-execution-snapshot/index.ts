@@ -677,12 +677,17 @@ Deno.serve(async (req) => {
       });
     }
 
-    const [quote, options, benchmark, fundamentals] = await Promise.all([
+    const [quote, options, benchmark, fundamentalsYahoo] = await Promise.all([
       fetchYahooQuote(rawSymbol),
       fetchYahooOptions(rawSymbol),
       fetchBenchmarkSnapshot(benchmarkSymbol, forceRefresh),
       fetchFundamentalsSnapshot(rawSymbol),
     ]);
+
+    // FMP fallback — fills in any missing fundamentals when the API key is configured.
+    const fundamentals = fundamentalsHasGaps(fundamentalsYahoo)
+      ? await enrichFundamentalsWithFmp(rawSymbol, fundamentalsYahoo)
+      : fundamentalsYahoo;
 
     if (!quote || quote.price === null) {
       return new Response(
