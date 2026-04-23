@@ -1401,27 +1401,7 @@ export default function LiveExecution() {
                   </div>
                 )}
 
-                {/* Entry signals */}
-                {signals.length > 0 && (
-                  <div className="rounded-lg border border-border/40 bg-muted/10 p-3">
-                    <div className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                      <Activity size={11} /> Entry & Rotation Signals
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <span className="inline-flex cursor-help"><Info size={10} /></span>
-                        </TooltipTrigger>
-                        <TooltipContent className="max-w-xs text-xs">
-                          Pattern flags derived from RS, volume, and recent price action. They highlight conditions historically associated with good (or risky) entries — they are not buy/sell signals on their own.
-                        </TooltipContent>
-                      </Tooltip>
-                    </div>
-                    <ul className="space-y-1 text-xs text-foreground/85">
-                      {signals.map((s, i) => (
-                        <li key={i}>{s}</li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
+                {/* Entry & Rotation Signals box removed per latest cleanup. */}
               </div>
             )}
 
