@@ -57,16 +57,28 @@ interface OptionsSnapshot {
   iv_explanation: string;
 }
 
+export interface PeriodGrowth {
+  eps: number | null;       // decimal
+  revenue: number | null;   // decimal
+}
+
 interface FundamentalsSnapshot {
   available: boolean;
   pe: number | null;
   forwardPe: number | null;
   pegRatio: number | null;
-  epsGrowth: number | null;       // earningsQuarterlyGrowth (yoy %, decimal)
-  revenueGrowth: number | null;   // revenueQuarterlyGrowth (yoy %, decimal)
+  epsGrowth: number | null;       // earningsQuarterlyGrowth (yoy %, decimal) — kept for back-compat
+  revenueGrowth: number | null;   // revenueGrowth TTM YoY (decimal) — kept for back-compat
   profitMargin: number | null;    // decimal
   sector: string | null;
   industry: string | null;
+  // Growth broken down by period — null entries mean "not reported / not enough data"
+  growthByPeriod: {
+    ttm_yoy: PeriodGrowth;
+    annual_yoy: PeriodGrowth;
+    quarterly_yoy: PeriodGrowth;
+    quarterly_qoq: PeriodGrowth;
+  };
   source: string;
 }
 
@@ -349,15 +361,31 @@ async function fetchIndustrySnapshot(sector: string | null | undefined, forceRef
 }
 
 async function fetchFundamentalsSnapshot(symbol: string): Promise<FundamentalsSnapshot> {
+  const emptyPg: PeriodGrowth = { eps: null, revenue: null };
   const empty: FundamentalsSnapshot = {
     available: false, pe: null, forwardPe: null, pegRatio: null,
     epsGrowth: null, revenueGrowth: null, profitMargin: null,
     sector: null, industry: null,
+    growthByPeriod: {
+      ttm_yoy: { ...emptyPg },
+      annual_yoy: { ...emptyPg },
+      quarterly_yoy: { ...emptyPg },
+      quarterly_qoq: { ...emptyPg },
+    },
     source: "yahoo",
   };
   const auth = await getYahooAuth();
   if (!auth) return empty;
-  const modules = "summaryDetail,defaultKeyStatistics,financialData,assetProfile,price";
+  const modules = [
+    "summaryDetail",
+    "defaultKeyStatistics",
+    "financialData",
+    "assetProfile",
+    "price",
+    "earnings",
+    "incomeStatementHistory",
+    "incomeStatementHistoryQuarterly",
+  ].join(",");
   const url = `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(symbol)}?modules=${modules}&crumb=${encodeURIComponent(auth.crumb)}`;
   try {
     const res = await fetch(url, {
@@ -372,21 +400,87 @@ async function fetchFundamentalsSnapshot(symbol: string): Promise<FundamentalsSn
     const fd = result.financialData ?? {};
     const ps = result.price ?? {};
     const profile = result.assetProfile ?? {};
+    const earnings = result.earnings ?? {};
+    const annualHist: any[] = result.incomeStatementHistory?.incomeStatementHistory ?? [];
+    const qHist: any[] = result.incomeStatementHistoryQuarterly?.incomeStatementHistory ?? [];
+
     const raw = (x: any): number | null => {
       if (x === null || x === undefined) return null;
       const v = typeof x === "object" ? x.raw : x;
       return typeof v === "number" && Number.isFinite(v) ? v : null;
     };
+
+    const safeGrowth = (curr: number | null, prev: number | null): number | null => {
+      if (curr === null || prev === null || !Number.isFinite(prev) || prev === 0) return null;
+      // For negatives we use absolute value of the base so the sign of growth still makes sense
+      return (curr - prev) / Math.abs(prev);
+    };
+
+    // ── TTM YoY (from financialData) ──
+    const ttm: PeriodGrowth = {
+      eps: raw(fd.earningsGrowth) ?? null,       // TTM YoY
+      revenue: raw(fd.revenueGrowth) ?? null,    // TTM YoY
+    };
+
+    // ── Annual YoY (from incomeStatementHistory: latest vs prior fiscal year) ──
+    const annual: PeriodGrowth = { eps: null, revenue: null };
+    if (annualHist.length >= 2) {
+      const a0 = annualHist[0];
+      const a1 = annualHist[1];
+      annual.revenue = safeGrowth(raw(a0?.totalRevenue), raw(a1?.totalRevenue));
+      annual.eps = safeGrowth(raw(a0?.netIncome), raw(a1?.netIncome));
+    }
+
+    // ── Quarterly QoQ (from incomeStatementHistoryQuarterly: latest vs prior quarter) ──
+    const qoq: PeriodGrowth = { eps: null, revenue: null };
+    if (qHist.length >= 2) {
+      const q0 = qHist[0];
+      const q1 = qHist[1];
+      qoq.revenue = safeGrowth(raw(q0?.totalRevenue), raw(q1?.totalRevenue));
+      qoq.eps = safeGrowth(raw(q0?.netIncome), raw(q1?.netIncome));
+    }
+
+    // ── Quarterly YoY ──
+    // EPS: defaultKeyStatistics.earningsQuarterlyGrowth is precisely this.
+    // Revenue: try financialData.revenueQuarterlyGrowth (some responses), otherwise compute
+    //   from earnings.financialsChart.quarterly which contains 4 quarters labelled like "1Q2024".
+    let qyoyEps = raw(ks.earningsQuarterlyGrowth) ?? null;
+    let qyoyRev = raw((fd as any).revenueQuarterlyGrowth) ?? null;
+    if (qyoyRev === null) {
+      const qChart: any[] = earnings?.financialsChart?.quarterly ?? [];
+      // Find latest quarter and the same quarter a year earlier
+      if (qChart.length >= 2) {
+        const last = qChart[qChart.length - 1];
+        const lastDate: string = last?.date ?? "";
+        const m = lastDate.match(/^(\d)Q(\d{4})$/i);
+        if (m) {
+          const wantPrev = `${m[1]}Q${parseInt(m[2]) - 1}`;
+          const prior = qChart.find((q) => (q?.date ?? "").toLowerCase() === wantPrev.toLowerCase());
+          if (prior) {
+            qyoyRev = safeGrowth(raw(last?.revenue), raw(prior?.revenue));
+            if (qyoyEps === null) qyoyEps = safeGrowth(raw(last?.earnings), raw(prior?.earnings));
+          }
+        }
+      }
+    }
+    const quarterlyYoy: PeriodGrowth = { eps: qyoyEps, revenue: qyoyRev };
+
     return {
       available: true,
       pe: raw(sd.trailingPE) ?? raw(ks.trailingPE) ?? null,
       forwardPe: raw(sd.forwardPE) ?? raw(ks.forwardPE) ?? null,
       pegRatio: raw(ks.pegRatio) ?? null,
-      epsGrowth: raw(ks.earningsQuarterlyGrowth) ?? raw(fd.earningsGrowth) ?? null,
-      revenueGrowth: raw(fd.revenueGrowth) ?? null,
+      epsGrowth: quarterlyYoy.eps ?? raw(fd.earningsGrowth) ?? null,
+      revenueGrowth: ttm.revenue ?? null,
       profitMargin: raw(fd.profitMargins) ?? null,
       sector: (profile.sector as string | undefined) ?? (ps.sector as string | undefined) ?? null,
       industry: (profile.industry as string | undefined) ?? (ps.industry as string | undefined) ?? null,
+      growthByPeriod: {
+        ttm_yoy: ttm,
+        annual_yoy: annual,
+        quarterly_yoy: quarterlyYoy,
+        quarterly_qoq: qoq,
+      },
       source: "yahoo",
     };
   } catch {
