@@ -1023,35 +1023,73 @@ export default function LiveExecution() {
   const VerdictIcon = verdict.icon;
   const signals = buildEntrySignals(activeStock, snapshot, liveRs, benchmark);
 
-  // ── AI-suggested theme peers (fallback when the qualified universe doesn't have enough) ──
+  // ── AI-driven theme + peer set ──
+  // We ALWAYS call Groq once per active ticker (when first entered or on manual
+  // Refresh Data) to identify the specific theme + 8-15 peer tickers. The peer
+  // list is then intersected with the qualified RS universe so we can show
+  // both strong and weak names from the same theme. The 7s auto-refresh only
+  // updates prices/RS — it does NOT re-call Groq.
   type AiPeer = { symbol: string; shortName: string | null; price: number | null; changePct: number | null; return1m: number | null };
-  const [aiTheme, setAiTheme] = useState<{ theme: string | null; peers: AiPeer[] } | null>(null);
+  const [aiTheme, setAiTheme] = useState<{ theme: string | null; peers: AiPeer[]; suggested: string[] } | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
   const aiKeyRef = useRef<string | null>(null);
+  const aiFetchSeqRef = useRef(0);
 
-  useEffect(() => {
-    setAiTheme(null);
-    aiKeyRef.current = null;
-    if (!activeSymbol || !snapshot) return;
-    // Only use AI fallback when we have fewer than 3 qualified peers.
-    if (themeUniverseMembers.length >= 3) return;
-
-    const key = activeSymbol;
+  const fetchAiTheme = (sym: string, hint: string | null) => {
+    const key = `${sym}|${++aiFetchSeqRef.current}`;
     aiKeyRef.current = key;
+    setAiLoading(true);
+    supabase.functions
+      .invoke("live-theme-suggest", { body: { symbol: sym, hint } })
+      .then(({ data, error }) => {
+        if (aiKeyRef.current !== key) return;
+        if (error || !data) { setAiTheme(null); return; }
+        const peers = ((data as any).quotes ?? []) as AiPeer[];
+        const suggested = (((data as any).peers ?? []) as string[]).map((s) => s.toUpperCase());
+        setAiTheme({ theme: (data as any).theme ?? null, peers, suggested });
+      })
+      .finally(() => { if (aiKeyRef.current === key) setAiLoading(false); });
+  };
+
+  // Fire Groq once per new active ticker (reset when ticker cleared/changed).
+  const lastAiSymbolRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!activeSymbol || !snapshot) return;
+    if (lastAiSymbolRef.current === activeSymbol && aiTheme) return;
+    lastAiSymbolRef.current = activeSymbol;
     const hint = activeStock?.sector
       ?? snapshot.fundamentals?.industry
       ?? snapshot.fundamentals?.sector
       ?? null;
-    setAiLoading(true);
-    supabase.functions
-      .invoke("live-theme-suggest", { body: { symbol: activeSymbol, hint } })
-      .then(({ data, error }) => {
-        if (aiKeyRef.current !== key) return;
-        if (error || !data) { setAiTheme(null); return; }
-        setAiTheme({ theme: (data as any).theme ?? null, peers: ((data as any).quotes ?? []) as AiPeer[] });
-      })
-      .finally(() => { if (aiKeyRef.current === key) setAiLoading(false); });
-  }, [activeSymbol, snapshot, themeUniverseMembers.length, activeStock?.sector]);
+    fetchAiTheme(activeSymbol, hint);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeSymbol, snapshot]);
+
+  // Combined theme peer list = AI-suggested tickers ∩ qualified universe (full
+  // RS quality, both strong + weak), plus sector matches as backup. Active
+  // ticker is always pinned at top.
+  const combinedThemePeers = useMemo(() => {
+    const seen = new Set<string>();
+    const rows: RsStock[] = [];
+    if (activeStock) { seen.add(activeStock.symbol.toUpperCase()); rows.push(activeStock); }
+    const suggested = aiTheme?.suggested ?? [];
+    for (const sym of suggested) {
+      const u = sym.toUpperCase();
+      if (seen.has(u)) continue;
+      const s = stockMap.get(u);
+      if (s && s.rsOverall !== null) { seen.add(u); rows.push(s); }
+    }
+    // Backfill from sector members if we have very few.
+    for (const s of themeUniverseMembers) {
+      if (rows.length >= 15) break;
+      const u = s.symbol.toUpperCase();
+      if (seen.has(u)) continue;
+      seen.add(u); rows.push(s);
+    }
+    return rows;
+  }, [aiTheme, stockMap, themeUniverseMembers, activeStock]);
+
+  const themeDisplayLabel = aiTheme?.theme ?? resolvedTheme.broadLabel ?? null;
 
 
   // Peers: same sector, top 5 by overall RS, excluding active
