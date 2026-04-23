@@ -2234,6 +2234,24 @@ function FundamentalsBlock({
   peJustified: boolean;
   onWhy: () => void;
 }) {
+  type PeriodKey = "ttm_yoy" | "annual_yoy" | "quarterly_yoy" | "quarterly_qoq";
+  const PERIODS: { key: PeriodKey; short: string; label: string; help: string }[] = [
+    { key: "ttm_yoy",       short: "TTM YoY",       label: "TTM YoY",       help: "Trailing 12 months vs the prior trailing 12 months." },
+    { key: "annual_yoy",    short: "Annual YoY",    label: "Annual YoY",    help: "Latest fiscal year vs the previous fiscal year." },
+    { key: "quarterly_yoy", short: "Quarterly YoY", label: "Quarterly YoY", help: "Most recent quarter vs the same quarter one year ago (default)." },
+    { key: "quarterly_qoq", short: "Quarterly QoQ", label: "Quarterly QoQ", help: "Most recent quarter vs the immediately preceding quarter." },
+  ];
+  const [period, setPeriod] = useState<PeriodKey>("quarterly_yoy");
+
+  // Pull the chosen period's data, with a graceful fallback to legacy fields.
+  const gp = fd.growthByPeriod?.[period];
+  const epsRaw =
+    gp?.eps ??
+    (period === "quarterly_yoy" ? fd.epsGrowth : null);
+  const revRaw =
+    gp?.revenue ??
+    (period === "ttm_yoy" ? fd.revenueGrowth : null);
+
   const pe = fd.forwardPe ?? fd.pe;
   const peLabel = fd.forwardPe !== null ? "Forward P/E" : "Trailing P/E";
   const peVsSector = pe !== null && sectorPeAvg ? pe / sectorPeAvg : null;
@@ -2243,45 +2261,81 @@ function FundamentalsBlock({
     : peVsSector < 1.5 ? "text-foreground"
     : "text-[hsl(40,85%,55%)]";
 
+  const periodLabel = PERIODS.find((p) => p.key === period)?.label ?? "";
+
   const growthCard = (label: string, value: number | null, goodAt: number) => {
-    if (value === null) return { label, value: "—", tone: "text-muted-foreground", note: "Not reported" };
+    if (value === null) {
+      return { label, value: "Insufficient data", tone: "text-muted-foreground", note: `Not reported for ${periodLabel}` };
+    }
     const v = value * 100;
     const tone = v >= goodAt ? "text-[hsl(160,80%,45%)]" : v >= 0 ? "text-foreground" : "text-destructive";
     const note = v >= goodAt ? "Strong" : v >= 0 ? "Positive but modest" : "Contracting";
     return { label, value: `${v >= 0 ? "+" : ""}${v.toFixed(1)}%`, tone, note };
   };
-  const eps = growthCard("EPS growth (YoY)", fd.epsGrowth, 25);
-  const rev = growthCard("Revenue growth (YoY)", fd.revenueGrowth, 15);
+  const eps = growthCard(`EPS Growth (${periodLabel})`, epsRaw, 25);
+  const rev = growthCard(`Revenue Growth (${periodLabel})`, revRaw, 15);
 
   return (
-    <div className="space-y-3">
-      <p className="text-sm leading-relaxed text-muted-foreground">
+    <div className="space-y-4">
+      <p className="text-base leading-relaxed text-muted-foreground">
         Growth-focused read: are earnings and revenue actually growing, and is the price reasonable for that growth?
         High P/E is acceptable when growth is strong — we don't penalise it.
         <button onClick={onWhy} className="ml-1 underline decoration-dotted hover:text-foreground">Full breakdown</button>
       </p>
+
+      {/* ── Period selector ── */}
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Period:</span>
+        <div className="inline-flex flex-wrap rounded-lg border border-border/60 bg-background/40 p-1">
+          {PERIODS.map((p) => {
+            const active = period === p.key;
+            return (
+              <Tooltip key={p.key}>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    onClick={() => setPeriod(p.key)}
+                    className={`rounded-md px-3 py-1.5 text-sm font-semibold transition-colors ${
+                      active
+                        ? "bg-foreground text-background"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    {p.short}
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent className="max-w-xs text-sm">{p.help}</TooltipContent>
+              </Tooltip>
+            );
+          })}
+        </div>
+        <span className="ml-auto text-sm text-muted-foreground">
+          Showing: <span className="font-semibold text-foreground">{periodLabel}</span>
+        </span>
+      </div>
+
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <div className="rounded-lg border border-border/40 bg-background/40 p-4">
-          <div className="mb-1.5 text-sm font-bold uppercase tracking-wider text-muted-foreground">{eps.label}</div>
+          <div className="mb-2 text-base font-bold uppercase tracking-wider text-muted-foreground">{eps.label}</div>
           <div className={`font-mono text-3xl font-extrabold ${eps.tone}`}>{eps.value}</div>
-          <div className="mt-1.5 text-xs text-muted-foreground">{eps.note} · O'Neil target ≥ 25%</div>
+          <div className="mt-2 text-sm text-muted-foreground">{eps.note} · O'Neil target ≥ 25%</div>
         </div>
         <div className="rounded-lg border border-border/40 bg-background/40 p-4">
-          <div className="mb-1.5 text-sm font-bold uppercase tracking-wider text-muted-foreground">{rev.label}</div>
+          <div className="mb-2 text-base font-bold uppercase tracking-wider text-muted-foreground">{rev.label}</div>
           <div className={`font-mono text-3xl font-extrabold ${rev.tone}`}>{rev.value}</div>
-          <div className="mt-1.5 text-xs text-muted-foreground">{rev.note} · target ≥ 15%</div>
+          <div className="mt-2 text-sm text-muted-foreground">{rev.note} · target ≥ 15%</div>
         </div>
         <div className="rounded-lg border border-border/40 bg-background/40 p-4">
-          <div className="mb-1.5 text-sm font-bold uppercase tracking-wider text-muted-foreground">{peLabel} vs Sector</div>
+          <div className="mb-2 text-base font-bold uppercase tracking-wider text-muted-foreground">{peLabel} vs Sector</div>
           <div className={`font-mono text-3xl font-extrabold ${peTone}`}>
             {pe !== null ? pe.toFixed(1) : "—"}
             {sectorPeAvg && pe !== null && (
-              <span className="ml-1.5 text-xs font-normal text-muted-foreground">
+              <span className="ml-1.5 text-sm font-normal text-muted-foreground">
                 vs {sectorEtf ?? "sector"} ~{sectorPeAvg}
               </span>
             )}
           </div>
-          <div className="mt-1.5 text-xs text-muted-foreground">
+          <div className="mt-2 text-sm text-muted-foreground">
             {pe === null
               ? "No P/E reported"
               : peVsSector === null
@@ -2296,7 +2350,7 @@ function FundamentalsBlock({
         </div>
       </div>
       {peJustified && pe !== null && (
-        <div className="rounded-md border border-[hsl(160,80%,45%)]/30 bg-[hsl(160,80%,45%)]/10 p-3 text-sm text-foreground/90">
+        <div className="rounded-md border border-[hsl(160,80%,45%)]/30 bg-[hsl(160,80%,45%)]/10 p-3 text-base text-foreground/90">
           ✓ The high P/E ({pe.toFixed(1)}) is being justified by strong growth (EPS ≥ 25% or Revenue ≥ 20% YoY) — no valuation penalty applied to the Fundamentals score.
         </div>
       )}
