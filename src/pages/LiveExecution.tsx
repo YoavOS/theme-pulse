@@ -1142,7 +1142,7 @@ export default function LiveExecution() {
       <div className="min-h-screen bg-background">
         {/* Header */}
         <header className="sticky top-0 z-30 border-b border-border bg-background/80 backdrop-blur-md">
-          <div className="container flex items-center justify-between py-3">
+          <div className="w-full px-6 flex items-center justify-between py-3">
             <div className="flex items-center gap-3">
               <Link
                 to="/"
@@ -1163,7 +1163,7 @@ export default function LiveExecution() {
           </div>
         </header>
 
-        <main className="container py-5 space-y-5">
+        <main className="w-full px-6 py-5 space-y-5">
           {/* ── Quick Trade Check ── */}
           <section
             className="rounded-xl border border-border/60 bg-card/40 p-4 backdrop-blur-sm"
