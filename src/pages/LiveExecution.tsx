@@ -643,6 +643,7 @@ export default function LiveExecution() {
   const [benchmark, setBenchmark] = useState<BenchmarkSymbol>("SPY");
   const [whyTopic, setWhyTopic] = useState<WhyTopic | null>(null);
   const debounceRef = useRef<number | null>(null);
+  const lastAiSymbolRef = useRef<string | null>(null);
 
   // Build a per-symbol map of RS data + a per-timeframe rating using the qualified universe.
   const { stockMap, ratingOverall, rating1w, rating1m } = useMemo(() => {
@@ -668,6 +669,10 @@ export default function LiveExecution() {
     setActiveSymbol(sym);
     const sector = stockMap.get(sym)?.sector ?? null;
     fetchSnapshot(sym, benchmark, sector, opts.force === true);
+    if (opts.force) {
+      // Force a fresh Groq theme call on manual Refresh.
+      lastAiSymbolRef.current = null;
+    }
   };
 
   // Debounce input → auto-submit after 600ms when length >= 1
@@ -1023,35 +1028,73 @@ export default function LiveExecution() {
   const VerdictIcon = verdict.icon;
   const signals = buildEntrySignals(activeStock, snapshot, liveRs, benchmark);
 
-  // ── AI-suggested theme peers (fallback when the qualified universe doesn't have enough) ──
+  // ── AI-driven theme + peer set ──
+  // We ALWAYS call Groq once per active ticker (when first entered or on manual
+  // Refresh Data) to identify the specific theme + 8-15 peer tickers. The peer
+  // list is then intersected with the qualified RS universe so we can show
+  // both strong and weak names from the same theme. The 7s auto-refresh only
+  // updates prices/RS — it does NOT re-call Groq.
   type AiPeer = { symbol: string; shortName: string | null; price: number | null; changePct: number | null; return1m: number | null };
-  const [aiTheme, setAiTheme] = useState<{ theme: string | null; peers: AiPeer[] } | null>(null);
+  const [aiTheme, setAiTheme] = useState<{ theme: string | null; peers: AiPeer[]; suggested: string[] } | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
   const aiKeyRef = useRef<string | null>(null);
+  const aiFetchSeqRef = useRef(0);
 
-  useEffect(() => {
-    setAiTheme(null);
-    aiKeyRef.current = null;
-    if (!activeSymbol || !snapshot) return;
-    // Only use AI fallback when we have fewer than 3 qualified peers.
-    if (themeUniverseMembers.length >= 3) return;
-
-    const key = activeSymbol;
+  const fetchAiTheme = (sym: string, hint: string | null) => {
+    const key = `${sym}|${++aiFetchSeqRef.current}`;
     aiKeyRef.current = key;
+    setAiLoading(true);
+    supabase.functions
+      .invoke("live-theme-suggest", { body: { symbol: sym, hint } })
+      .then(({ data, error }) => {
+        if (aiKeyRef.current !== key) return;
+        if (error || !data) { setAiTheme(null); return; }
+        const peers = ((data as any).quotes ?? []) as AiPeer[];
+        const suggested = (((data as any).peers ?? []) as string[]).map((s) => s.toUpperCase());
+        setAiTheme({ theme: (data as any).theme ?? null, peers, suggested });
+      })
+      .finally(() => { if (aiKeyRef.current === key) setAiLoading(false); });
+  };
+
+  // Fire Groq once per new active ticker (reset when ticker cleared/changed).
+  useEffect(() => {
+    if (!activeSymbol || !snapshot) return;
+    if (lastAiSymbolRef.current === activeSymbol && aiTheme) return;
+    if (lastAiSymbolRef.current !== activeSymbol) setAiTheme(null);
+    lastAiSymbolRef.current = activeSymbol;
     const hint = activeStock?.sector
       ?? snapshot.fundamentals?.industry
       ?? snapshot.fundamentals?.sector
       ?? null;
-    setAiLoading(true);
-    supabase.functions
-      .invoke("live-theme-suggest", { body: { symbol: activeSymbol, hint } })
-      .then(({ data, error }) => {
-        if (aiKeyRef.current !== key) return;
-        if (error || !data) { setAiTheme(null); return; }
-        setAiTheme({ theme: (data as any).theme ?? null, peers: ((data as any).quotes ?? []) as AiPeer[] });
-      })
-      .finally(() => { if (aiKeyRef.current === key) setAiLoading(false); });
-  }, [activeSymbol, snapshot, themeUniverseMembers.length, activeStock?.sector]);
+    fetchAiTheme(activeSymbol, hint);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeSymbol, snapshot]);
+
+  // Combined theme peer list = AI-suggested tickers ∩ qualified universe (full
+  // RS quality, both strong + weak), plus sector matches as backup. Active
+  // ticker is always pinned at top.
+  const combinedThemePeers = useMemo(() => {
+    const seen = new Set<string>();
+    const rows: RsStock[] = [];
+    if (activeStock) { seen.add(activeStock.symbol.toUpperCase()); rows.push(activeStock); }
+    const suggested = aiTheme?.suggested ?? [];
+    for (const sym of suggested) {
+      const u = sym.toUpperCase();
+      if (seen.has(u)) continue;
+      const s = stockMap.get(u);
+      if (s && s.rsOverall !== null) { seen.add(u); rows.push(s); }
+    }
+    // Backfill from sector members if we have very few.
+    for (const s of themeUniverseMembers) {
+      if (rows.length >= 15) break;
+      const u = s.symbol.toUpperCase();
+      if (seen.has(u)) continue;
+      seen.add(u); rows.push(s);
+    }
+    return rows;
+  }, [aiTheme, stockMap, themeUniverseMembers, activeStock]);
+
+  const themeDisplayLabel = aiTheme?.theme ?? resolvedTheme.broadLabel ?? null;
 
 
   // Peers: same sector, top 5 by overall RS, excluding active
@@ -1099,7 +1142,7 @@ export default function LiveExecution() {
       <div className="min-h-screen bg-background">
         {/* Header */}
         <header className="sticky top-0 z-30 border-b border-border bg-background/80 backdrop-blur-md">
-          <div className="container flex items-center justify-between py-3">
+          <div className="w-full px-6 flex items-center justify-between py-3">
             <div className="flex items-center gap-3">
               <Link
                 to="/"
@@ -1120,7 +1163,7 @@ export default function LiveExecution() {
           </div>
         </header>
 
-        <main className="container py-5 space-y-5">
+        <main className="w-full px-6 py-5 space-y-5">
           {/* ── Quick Trade Check ── */}
           <section
             className="rounded-xl border border-border/60 bg-card/40 p-4 backdrop-blur-sm"
@@ -1242,57 +1285,59 @@ export default function LiveExecution() {
                   </div>
                 </div>
 
-                {/* Verdict badge */}
-                <div
-                  className={`flex items-start gap-3 rounded-lg border ${verdict.border} ${verdict.bg} p-4`}
-                >
-                  <VerdictIcon size={28} className={`shrink-0 ${verdict.color}`} />
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <div className={`font-['Syne',sans-serif] text-xl font-bold ${verdict.color}`}>
-                        {verdict.label}
-                      </div>
-                      <WhyButton onClick={() => setWhyTopic("verdict")} label="Why this verdict?" />
-                    </div>
-                    <p className="mt-1.5 text-base leading-relaxed text-foreground/85">{verdict.reason}</p>
-                    {/* Factor breakdown chips */}
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      {verdict.factors.map((f) => {
-                        const cls =
-                          f.status === "pos"
-                            ? "border-[hsl(160,80%,45%)]/40 bg-[hsl(160,80%,45%)]/10 text-[hsl(160,80%,45%)]"
-                            : f.status === "neg"
-                            ? "border-destructive/40 bg-destructive/10 text-destructive"
-                            : f.status === "na"
-                            ? "border-border/40 bg-muted/20 text-muted-foreground"
-                            : "border-border/40 bg-background/40 text-foreground/80";
-                        return (
-                          <span
-                            key={f.label}
-                            className={`rounded border px-2 py-1 text-sm ${cls}`}
-                          >
-                            <span className="font-bold">{f.label}:</span> {f.note}
-                          </span>
-                        );
-                      })}
-                    </div>
-                  </div>
-                  <button
-                    onClick={() =>
-                      hasWatch(snapshot.symbol)
-                        ? removeWatch(snapshot.symbol)
-                        : addWatch(snapshot.symbol)
-                    }
-                    className="shrink-0 rounded-md border border-border bg-background/60 p-2.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-                    title={hasWatch(snapshot.symbol) ? "Remove from live watchlist" : "Pin to live watchlist"}
+                {/* Verdict badge — hidden entirely for "Insufficient Data" so we don't show a noisy banner. */}
+                {verdict.label !== "Insufficient Data" && (
+                  <div
+                    className={`flex items-start gap-3 rounded-lg border ${verdict.border} ${verdict.bg} p-4`}
                   >
-                    {hasWatch(snapshot.symbol) ? (
-                      <Star size={18} className="fill-[hsl(40,85%,55%)] text-[hsl(40,85%,55%)]" />
-                    ) : (
-                      <StarOff size={18} />
-                    )}
-                  </button>
-                </div>
+                    <VerdictIcon size={28} className={`shrink-0 ${verdict.color}`} />
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <div className={`font-['Syne',sans-serif] text-xl font-bold ${verdict.color}`}>
+                          {verdict.label}
+                        </div>
+                        <WhyButton onClick={() => setWhyTopic("verdict")} label="Why this verdict?" />
+                      </div>
+                      <p className="mt-1.5 text-base leading-relaxed text-foreground/85">{verdict.reason}</p>
+                      {/* Factor breakdown chips */}
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {verdict.factors.map((f) => {
+                          const cls =
+                            f.status === "pos"
+                              ? "border-[hsl(160,80%,45%)]/40 bg-[hsl(160,80%,45%)]/10 text-[hsl(160,80%,45%)]"
+                              : f.status === "neg"
+                              ? "border-destructive/40 bg-destructive/10 text-destructive"
+                              : f.status === "na"
+                              ? "border-border/40 bg-muted/20 text-muted-foreground"
+                              : "border-border/40 bg-background/40 text-foreground/80";
+                          return (
+                            <span
+                              key={f.label}
+                              className={`rounded border px-2 py-1 text-sm ${cls}`}
+                            >
+                              <span className="font-bold">{f.label}:</span> {f.note}
+                            </span>
+                          );
+                        })}
+                      </div>
+                    </div>
+                    <button
+                      onClick={() =>
+                        hasWatch(snapshot.symbol)
+                          ? removeWatch(snapshot.symbol)
+                          : addWatch(snapshot.symbol)
+                      }
+                      className="shrink-0 rounded-md border border-border bg-background/60 p-2.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                      title={hasWatch(snapshot.symbol) ? "Remove from live watchlist" : "Pin to live watchlist"}
+                    >
+                      {hasWatch(snapshot.symbol) ? (
+                        <Star size={18} className="fill-[hsl(40,85%,55%)] text-[hsl(40,85%,55%)]" />
+                      ) : (
+                        <StarOff size={18} />
+                      )}
+                    </button>
+                  </div>
+                )}
 
                 {/* Pullback / Breakdown callout */}
                 {pullback && (
@@ -1356,27 +1401,7 @@ export default function LiveExecution() {
                   </div>
                 )}
 
-                {/* Entry signals */}
-                {signals.length > 0 && (
-                  <div className="rounded-lg border border-border/40 bg-muted/10 p-3">
-                    <div className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                      <Activity size={11} /> Entry & Rotation Signals
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <span className="inline-flex cursor-help"><Info size={10} /></span>
-                        </TooltipTrigger>
-                        <TooltipContent className="max-w-xs text-xs">
-                          Pattern flags derived from RS, volume, and recent price action. They highlight conditions historically associated with good (or risky) entries — they are not buy/sell signals on their own.
-                        </TooltipContent>
-                      </Tooltip>
-                    </div>
-                    <ul className="space-y-1 text-xs text-foreground/85">
-                      {signals.map((s, i) => (
-                        <li key={i}>{s}</li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
+                {/* Entry & Rotation Signals box removed per latest cleanup. */}
               </div>
             )}
 
@@ -1388,102 +1413,100 @@ export default function LiveExecution() {
           </section>
 
           {/*
-            ── New 4-section sketch layout ──
-            Row A: [1] Theme Tickers (tall left col)  |  [2] Fundamentals (top right) + Conviction summary
+            ── New 4-section layout (no Conviction Score, no Insufficient Data banner, no Entry signals) ──
+            Row A: [1] Theme Tickers (tall left col)  |  [2] Fundamentals (top right)
             Row B: [3] Options Activity (full width)
-            Row C: [4] RS Rating Across Timeframes (full width, raw % + RS score)
+            Row C: [4] RS vs Benchmark Across Timeframes (full width)
           */}
           {snapshot && (
-            <section className="grid gap-4 lg:grid-cols-[1.05fr_1fr]">
+            <section className="grid gap-5 lg:grid-cols-[1.15fr_1fr] items-start">
               {/* ── [1] Theme Tickers ── tall left column */}
               <div
-                className="rounded-xl border border-border/60 p-5 lg:row-span-2"
+                className="rounded-xl border border-border/60 p-5"
                 style={{ background: "rgba(255,255,255,0.03)" }}
               >
                 <div className="mb-3 flex items-center gap-2 flex-wrap">
                   <h2 className="font-['Syne',sans-serif] text-2xl font-bold uppercase tracking-wider text-foreground">
                     Theme Tickers
                   </h2>
-                  <span className="text-base font-bold text-primary">
-                    {(themeUniverseMembers.length > 0 ? resolvedTheme.broadLabel : aiTheme?.theme) ?? resolvedTheme.broadLabel ?? "—"}
+                  <span className="text-lg font-bold text-primary">
+                    {themeDisplayLabel ?? "—"}
                   </span>
-                  {snapLoading && <Loader2 size={14} className="animate-spin text-muted-foreground" />}
+                  {(snapLoading || aiLoading) && <Loader2 size={14} className="animate-spin text-muted-foreground" />}
                   <span className="ml-auto text-sm text-muted-foreground">
-                    {themeUniverseMembers.length > 0
-                      ? `${themeUniverseMembers.length} qualified peers`
-                      : aiTheme && aiTheme.peers.length > 0
-                      ? `${aiTheme.peers.length} AI-suggested peers`
+                    {combinedThemePeers.length > 0
+                      ? `${combinedThemePeers.length} peers`
                       : aiLoading
                       ? "Finding peers…"
                       : ""}
                   </span>
                 </div>
-                <p className="mb-4 text-sm leading-relaxed text-muted-foreground">
-                  All tickers in the same theme as <span className="font-mono font-bold text-foreground">{snapshot.symbol}</span>.
-                  Auto-refreshes every 7 s. When the qualified universe has fewer than 3 peers we fall back to an AI-suggested peer set with live Yahoo quotes.
+                <p className="mb-4 text-base leading-relaxed text-muted-foreground">
+                  Specific theme peers for <span className="font-mono font-bold text-foreground">{snapshot.symbol}</span>{" "}
+                  — AI-identified theme intersected with the qualified RS universe so you see <span className="text-foreground">both strong and weak</span> names. Prices &amp; RS auto-refresh every 7s; the theme list is locked until you press <span className="text-foreground">Refresh Data</span>.
                 </p>
 
-                {themeUniverseMembers.length > 0 ? (
+                {combinedThemePeers.length > 0 ? (
                   <div className="overflow-x-auto">
                     <table className="w-full text-base">
                       <thead>
                         <tr className="border-b border-border/40 text-xs uppercase tracking-wider text-muted-foreground">
-                          <th className="py-2.5 text-left">Ticker</th>
-                          <th className="py-2.5 text-right">RS Rating</th>
-                          <th className="py-2.5 text-right">1D</th>
-                          <th className="py-2.5 text-right">1M</th>
+                          <th className="py-3 text-left">Ticker</th>
+                          <th className="py-3 text-right">RS Rating</th>
+                          <th className="py-3 text-right">1D</th>
+                          <th className="py-3 text-right">1M</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {themeUniverseMembers.slice(0, 15).map((stock) => {
+                        {combinedThemePeers.slice(0, 15).map((stock) => {
                           const rating = ratingOverall.get(stock.symbol.toUpperCase()) ?? null;
                           const isActive = stock.symbol === activeSymbol;
                           const r1d = isActive ? snapshot.quote.changePct : (stock as any).return1d ?? null;
                           return (
-                            <tr key={stock.symbol} className="border-b border-border/20 hover:bg-muted/20">
+                            <tr key={stock.symbol} className={`border-b border-border/20 hover:bg-muted/20 ${isActive ? "bg-primary/5" : ""}`}>
                               <td className="py-3">
                                 <button
                                   onClick={() => { setInput(stock.symbol); submit(stock.symbol); }}
-                                  className={`font-mono text-base font-bold ${isActive ? "text-foreground" : "text-primary hover:underline"}`}
+                                  className={`font-mono text-lg font-bold ${isActive ? "text-foreground" : "text-primary hover:underline"}`}
                                 >
                                   {stock.symbol}
                                 </button>
                                 {stock.companyName && (
-                                  <div className="truncate text-xs text-muted-foreground max-w-[200px]">{stock.companyName}</div>
+                                  <div className="truncate text-xs text-muted-foreground max-w-[240px]">{stock.companyName}</div>
                                 )}
                               </td>
-                              <td className={`py-3 text-right font-mono text-base font-bold ${ratingClass(rating)}`}>{rating ?? "—"}</td>
-                              <td className={`py-3 text-right font-mono text-base ${pctClass(r1d)}`}>{pct(r1d)}</td>
-                              <td className={`py-3 text-right font-mono text-base ${pctClass(stock.return1m)}`}>{pct(stock.return1m)}</td>
+                              <td className={`py-3 text-right font-mono text-lg font-bold ${ratingClass(rating)}`}>{rating ?? "—"}</td>
+                              <td className={`py-3 text-right font-mono text-lg ${pctClass(r1d)}`}>{pct(r1d)}</td>
+                              <td className={`py-3 text-right font-mono text-lg ${pctClass(stock.return1m)}`}>{pct(stock.return1m)}</td>
                             </tr>
                           );
                         })}
                       </tbody>
                     </table>
-                    {themeUniverseMembers.length > 15 && (
+                    {combinedThemePeers.length > 15 && (
                       <div className="mt-2 text-center text-sm text-muted-foreground">
-                        Showing top 15 of {themeUniverseMembers.length} by RS Rating
+                        Showing top 15 of {combinedThemePeers.length} by RS Rating
                       </div>
                     )}
                   </div>
                 ) : aiLoading ? (
-                  <div className="flex items-center gap-2 rounded-md border border-border/30 bg-muted/10 p-4 text-sm text-muted-foreground">
+                  <div className="flex items-center gap-2 rounded-md border border-border/30 bg-muted/10 p-4 text-base text-muted-foreground">
                     <Loader2 size={14} className="animate-spin" /> AI is identifying the theme and peers…
                   </div>
                 ) : aiTheme && aiTheme.peers.length > 0 ? (
+                  // AI suggested tickers but none qualified — show raw AI quotes so the panel isn't empty.
                   <div className="space-y-2">
                     <div className="rounded-md border border-primary/20 bg-primary/5 p-3 text-sm text-foreground/85">
-                      🤖 No qualified peers in the RS universe — these peers were suggested by AI for the theme
-                      <span className="ml-1 font-bold">{aiTheme.theme ?? "—"}</span>, with live Yahoo quotes.
+                      🤖 AI-suggested peers for <span className="font-bold">{aiTheme.theme ?? "this theme"}</span> (none currently in the qualified RS universe — live Yahoo quotes shown).
                     </div>
                     <div className="overflow-x-auto">
                       <table className="w-full text-base">
                         <thead>
                           <tr className="border-b border-border/40 text-xs uppercase tracking-wider text-muted-foreground">
-                            <th className="py-2.5 text-left">Ticker</th>
-                            <th className="py-2.5 text-right">Price</th>
-                            <th className="py-2.5 text-right">1D</th>
-                            <th className="py-2.5 text-right">1M</th>
+                            <th className="py-3 text-left">Ticker</th>
+                            <th className="py-3 text-right">Price</th>
+                            <th className="py-3 text-right">1D</th>
+                            <th className="py-3 text-right">1M</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -1492,19 +1515,19 @@ export default function LiveExecution() {
                               <td className="py-3">
                                 <button
                                   onClick={() => { setInput(p.symbol); submit(p.symbol); }}
-                                  className="font-mono text-base font-bold text-primary hover:underline"
+                                  className="font-mono text-lg font-bold text-primary hover:underline"
                                 >
                                   {p.symbol}
                                 </button>
                                 {p.shortName && (
-                                  <div className="truncate text-xs text-muted-foreground max-w-[200px]">{p.shortName}</div>
+                                  <div className="truncate text-xs text-muted-foreground max-w-[240px]">{p.shortName}</div>
                                 )}
                               </td>
-                              <td className="py-3 text-right font-mono text-base text-foreground">
+                              <td className="py-3 text-right font-mono text-lg text-foreground">
                                 {p.price !== null ? `$${p.price.toFixed(2)}` : "—"}
                               </td>
-                              <td className={`py-3 text-right font-mono text-base ${pctClass(p.changePct)}`}>{pct(p.changePct)}</td>
-                              <td className={`py-3 text-right font-mono text-base ${pctClass(p.return1m)}`}>{pct(p.return1m)}</td>
+                              <td className={`py-3 text-right font-mono text-lg ${pctClass(p.changePct)}`}>{pct(p.changePct)}</td>
+                              <td className={`py-3 text-right font-mono text-lg ${pctClass(p.return1m)}`}>{pct(p.return1m)}</td>
                             </tr>
                           ))}
                         </tbody>
@@ -1512,8 +1535,8 @@ export default function LiveExecution() {
                     </div>
                   </div>
                 ) : (
-                  <div className="rounded-md border border-border/30 bg-muted/10 p-4 text-sm text-muted-foreground">
-                    Insufficient data — could not match this ticker to a theme peer set.
+                  <div className="rounded-md border border-border/30 bg-muted/10 p-4 text-base text-muted-foreground">
+                    No theme peers found yet — try Refresh Data.
                   </div>
                 )}
               </div>
@@ -1546,37 +1569,11 @@ export default function LiveExecution() {
                     onWhy={() => setWhyTopic("fundamentals")}
                   />
                 ) : (
-                  <div className="rounded-md border border-border/30 bg-muted/10 p-4 text-sm text-muted-foreground">
-                    Insufficient data — Yahoo did not return clean fundamentals for this ticker.
+                  <div className="rounded-md border border-border/30 bg-muted/10 p-4 text-base text-muted-foreground">
+                    Yahoo did not return clean fundamentals for this ticker.
                   </div>
                 )}
               </div>
-
-              {/* Conviction summary slot — sits below Fundamentals on the right column */}
-              {conviction && (
-                <div
-                  className="rounded-xl border border-primary/30 p-5"
-                  style={{ background: "rgba(60, 200, 255, 0.04)" }}
-                >
-                  <ConvictionBreakdown
-                    total={conviction.total}
-                    rs={conviction.rs}
-                    theme={conviction.theme}
-                    fund={conviction.fund}
-                    opt={conviction.opt}
-                    benchmarkLabel={benchmark}
-                    sectorName={resolvedTheme.broadLabel ?? snapshot?.industry?.sectorName ?? null}
-                    sectorEtf={snapshot?.industry?.etfSymbol ?? null}
-                    fundamentals={snapshot?.fundamentals ?? null}
-                    sectorPeAvg={(snapshot as any)?.sectorPeAvg ?? null}
-                    peJustified={conviction.fundDetail.peJustified}
-                    hasIndustry={conviction.hasIndustry}
-                    hasFund={conviction.hasFund}
-                    hasOptions={conviction.hasOptions}
-                    onWhy={() => setWhyTopic("conviction")}
-                  />
-                </div>
-              )}
             </section>
           )}
 
