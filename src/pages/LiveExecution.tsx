@@ -2316,16 +2316,17 @@ function FundamentalsBlock({
     { key: "quarterly_yoy", short: "Quarterly YoY", label: "Quarterly YoY", help: "Most recent quarter vs the same quarter one year ago (default)." },
     { key: "quarterly_qoq", short: "Quarterly QoQ", label: "Quarterly QoQ", help: "Most recent quarter vs the immediately preceding quarter." },
   ];
-  const [period, setPeriod] = useState<PeriodKey>("quarterly_yoy");
+  const [epsPeriod, setEpsPeriod] = useState<PeriodKey>("quarterly_yoy");
+  const [revPeriod, setRevPeriod] = useState<PeriodKey>("quarterly_yoy");
 
-  // Pull the chosen period's data, with a graceful fallback to legacy fields.
-  const gp = fd.growthByPeriod?.[period];
+  const labelFor = (k: PeriodKey) => PERIODS.find((p) => p.key === k)?.label ?? "";
+
   const epsRaw =
-    gp?.eps ??
-    (period === "quarterly_yoy" ? fd.epsGrowth : null);
+    fd.growthByPeriod?.[epsPeriod]?.eps ??
+    (epsPeriod === "quarterly_yoy" ? fd.epsGrowth : null);
   const revRaw =
-    gp?.revenue ??
-    (period === "ttm_yoy" ? fd.revenueGrowth : null);
+    fd.growthByPeriod?.[revPeriod]?.revenue ??
+    (revPeriod === "ttm_yoy" ? fd.revenueGrowth : null);
 
   const pe = fd.forwardPe ?? fd.pe;
   const peLabel = fd.forwardPe !== null ? "Forward P/E" : "Trailing P/E";
@@ -2336,74 +2337,119 @@ function FundamentalsBlock({
     : peVsSector < 1.5 ? "text-foreground"
     : "text-[hsl(40,85%,55%)]";
 
-  const periodLabel = PERIODS.find((p) => p.key === period)?.label ?? "";
+  const sourceBadge =
+    fd.source && fd.source !== "yahoo" ? (
+      <span className="ml-2 rounded bg-primary/15 px-2 py-0.5 text-xs font-semibold uppercase tracking-wider text-primary">
+        {fd.source.includes("fmp") ? "yahoo + FMP fallback" : fd.source}
+      </span>
+    ) : null;
 
-  const growthCard = (label: string, value: number | null, goodAt: number) => {
-    if (value === null) {
-      return { label, value: "Insufficient data", tone: "text-muted-foreground", note: `Not reported for ${periodLabel}` };
-    }
-    const v = value * 100;
-    const tone = v >= goodAt ? "text-[hsl(160,80%,45%)]" : v >= 0 ? "text-foreground" : "text-destructive";
-    const note = v >= goodAt ? "Strong" : v >= 0 ? "Positive but modest" : "Contracting";
-    return { label, value: `${v >= 0 ? "+" : ""}${v.toFixed(1)}%`, tone, note };
+  const PeriodPicker = ({
+    value,
+    onChange,
+  }: {
+    value: PeriodKey;
+    onChange: (k: PeriodKey) => void;
+  }) => (
+    <div className="inline-flex flex-wrap rounded-md border border-border/60 bg-background/40 p-0.5">
+      {PERIODS.map((p) => {
+        const active = value === p.key;
+        return (
+          <Tooltip key={p.key}>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                onClick={() => onChange(p.key)}
+                className={`rounded px-2 py-1 text-xs font-semibold transition-colors ${
+                  active ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {p.short}
+              </button>
+            </TooltipTrigger>
+            <TooltipContent className="max-w-xs text-sm">{p.help}</TooltipContent>
+          </Tooltip>
+        );
+      })}
+    </div>
+  );
+
+  const growthCard = (
+    label: string,
+    periodLabel: string,
+    value: number | null,
+    goodAt: number,
+    target: string,
+    picker: React.ReactNode,
+  ) => {
+    const hasData = value !== null;
+    const v = hasData ? value! * 100 : 0;
+    const tone = !hasData
+      ? "text-muted-foreground"
+      : v >= goodAt
+      ? "text-[hsl(160,80%,45%)]"
+      : v >= 0
+      ? "text-foreground"
+      : "text-destructive";
+    const note = !hasData
+      ? `Insufficient data for this period`
+      : v >= goodAt
+      ? "Strong"
+      : v >= 0
+      ? "Positive but modest"
+      : "Contracting";
+    return (
+      <div className="rounded-lg border border-border/40 bg-background/40 p-4">
+        <div className="mb-2 flex items-start justify-between gap-2">
+          <div className="text-base font-bold uppercase tracking-wider text-muted-foreground">
+            {label} <span className="text-foreground/70 normal-case">({periodLabel})</span>
+          </div>
+        </div>
+        <div className="mb-3">{picker}</div>
+        <div className={`font-mono text-3xl font-extrabold ${tone}`}>
+          {hasData ? `${v >= 0 ? "+" : ""}${v.toFixed(1)}%` : "Insufficient data"}
+        </div>
+        <div className="mt-2 text-sm text-muted-foreground">
+          {note}
+          {hasData && ` · target ${target}`}
+        </div>
+      </div>
+    );
   };
-  const eps = growthCard(`EPS Growth (${periodLabel})`, epsRaw, 25);
-  const rev = growthCard(`Revenue Growth (${periodLabel})`, revRaw, 15);
 
   return (
     <div className="space-y-4">
       <p className="text-base leading-relaxed text-muted-foreground">
         Growth-focused read: are earnings and revenue actually growing, and is the price reasonable for that growth?
         High P/E is acceptable when growth is strong — we don't penalise it.
+        {sourceBadge}
         <button onClick={onWhy} className="ml-1 underline decoration-dotted hover:text-foreground">Full breakdown</button>
       </p>
 
-      {/* ── Period selector ── */}
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Period:</span>
-        <div className="inline-flex flex-wrap rounded-lg border border-border/60 bg-background/40 p-1">
-          {PERIODS.map((p) => {
-            const active = period === p.key;
-            return (
-              <Tooltip key={p.key}>
-                <TooltipTrigger asChild>
-                  <button
-                    type="button"
-                    onClick={() => setPeriod(p.key)}
-                    className={`rounded-md px-3 py-1.5 text-sm font-semibold transition-colors ${
-                      active
-                        ? "bg-foreground text-background"
-                        : "text-muted-foreground hover:text-foreground"
-                    }`}
-                  >
-                    {p.short}
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent className="max-w-xs text-sm">{p.help}</TooltipContent>
-              </Tooltip>
-            );
-          })}
-        </div>
-        <span className="ml-auto text-sm text-muted-foreground">
-          Showing: <span className="font-semibold text-foreground">{periodLabel}</span>
-        </span>
-      </div>
-
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <div className="rounded-lg border border-border/40 bg-background/40 p-4">
-          <div className="mb-2 text-base font-bold uppercase tracking-wider text-muted-foreground">{eps.label}</div>
-          <div className={`font-mono text-3xl font-extrabold ${eps.tone}`}>{eps.value}</div>
-          <div className="mt-2 text-sm text-muted-foreground">{eps.note} · O'Neil target ≥ 25%</div>
-        </div>
-        <div className="rounded-lg border border-border/40 bg-background/40 p-4">
-          <div className="mb-2 text-base font-bold uppercase tracking-wider text-muted-foreground">{rev.label}</div>
-          <div className={`font-mono text-3xl font-extrabold ${rev.tone}`}>{rev.value}</div>
-          <div className="mt-2 text-sm text-muted-foreground">{rev.note} · target ≥ 15%</div>
-        </div>
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
+        {growthCard(
+          "EPS Growth",
+          labelFor(epsPeriod),
+          epsRaw,
+          25,
+          "≥ 25%",
+          <PeriodPicker value={epsPeriod} onChange={setEpsPeriod} />,
+        )}
+        {growthCard(
+          "Revenue Growth",
+          labelFor(revPeriod),
+          revRaw,
+          15,
+          "≥ 15%",
+          <PeriodPicker value={revPeriod} onChange={setRevPeriod} />,
+        )}
         <div className="rounded-lg border border-border/40 bg-background/40 p-4">
           <div className="mb-2 text-base font-bold uppercase tracking-wider text-muted-foreground">{peLabel} vs Sector</div>
+          <div className="mb-3 text-xs text-muted-foreground italic">
+            Long-term sector benchmark — independent of growth period.
+          </div>
           <div className={`font-mono text-3xl font-extrabold ${peTone}`}>
-            {pe !== null ? pe.toFixed(1) : "—"}
+            {pe !== null ? pe.toFixed(1) : "Insufficient data"}
             {sectorPeAvg && pe !== null && (
               <span className="ml-1.5 text-sm font-normal text-muted-foreground">
                 vs {sectorEtf ?? "sector"} ~{sectorPeAvg}
@@ -2412,7 +2458,7 @@ function FundamentalsBlock({
           </div>
           <div className="mt-2 text-sm text-muted-foreground">
             {pe === null
-              ? "No P/E reported"
+              ? "No P/E reported for this ticker"
               : peVsSector === null
               ? "No sector benchmark"
               : peVsSector < 1.0
