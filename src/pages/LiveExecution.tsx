@@ -645,6 +645,42 @@ export default function LiveExecution() {
   const debounceRef = useRef<number | null>(null);
   const lastAiSymbolRef = useRef<string | null>(null);
 
+  // Curated themes from the Theme dashboard (themes + theme_tickers tables).
+  // Loaded once. Used to short-circuit the Groq AI peer call when a ticker
+  // already belongs to one of our defined themes.
+  const [curatedThemes, setCuratedThemes] = useState<{
+    symbolToTheme: Map<string, string>;       // SYMBOL -> theme name
+    themeToSymbols: Map<string, string[]>;    // theme name -> [SYMBOLS]
+  }>({ symbolToTheme: new Map(), themeToSymbols: new Map() });
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const [{ data: themes }, { data: tickers }] = await Promise.all([
+        supabase.from("themes").select("id, name"),
+        supabase.from("theme_tickers").select("theme_id, ticker_symbol"),
+      ]);
+      if (cancelled || !themes || !tickers) return;
+      const idToName = new Map<string, string>();
+      for (const t of themes) idToName.set(t.id, t.name);
+      const symToTheme = new Map<string, string>();
+      const themeToSyms = new Map<string, string[]>();
+      for (const row of tickers) {
+        const themeName = idToName.get(row.theme_id);
+        if (!themeName) continue;
+        const sym = (row.ticker_symbol || "").toUpperCase();
+        if (!sym) continue;
+        // First theme wins for symbol→theme lookup (a ticker can be in multiple).
+        if (!symToTheme.has(sym)) symToTheme.set(sym, themeName);
+        const arr = themeToSyms.get(themeName) ?? [];
+        arr.push(sym);
+        themeToSyms.set(themeName, arr);
+      }
+      setCuratedThemes({ symbolToTheme: symToTheme, themeToSymbols: themeToSyms });
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
   // Build a per-symbol map of RS data + a per-timeframe rating using the qualified universe.
   const { stockMap, ratingOverall, rating1w, rating1m } = useMemo(() => {
     const map = new Map<string, RsStock>();
@@ -1056,19 +1092,35 @@ export default function LiveExecution() {
       .finally(() => { if (aiKeyRef.current === key) setAiLoading(false); });
   };
 
-  // Fire Groq once per new active ticker (reset when ticker cleared/changed).
+  // Fire theme resolution per active ticker. PRIORITY:
+  //   1) If ticker exists in a curated theme (themes / theme_tickers tables) → use it directly, NO Groq call.
+  //   2) Otherwise → fall back to Groq AI peer suggestion.
   useEffect(() => {
     if (!activeSymbol || !snapshot) return;
     if (lastAiSymbolRef.current === activeSymbol && aiTheme) return;
     if (lastAiSymbolRef.current !== activeSymbol) setAiTheme(null);
     lastAiSymbolRef.current = activeSymbol;
+
+    // 1) Curated theme lookup
+    const curatedThemeName = curatedThemes.symbolToTheme.get(activeSymbol.toUpperCase());
+    if (curatedThemeName) {
+      const symbols = curatedThemes.themeToSymbols.get(curatedThemeName) ?? [];
+      setAiTheme({
+        theme: curatedThemeName,
+        peers: [], // we use stockMap to render rows; no need for Yahoo quotes here
+        suggested: symbols,
+      });
+      return; // skip Groq entirely
+    }
+
+    // 2) Groq fallback
     const hint = activeStock?.sector
       ?? snapshot.fundamentals?.industry
       ?? snapshot.fundamentals?.sector
       ?? null;
     fetchAiTheme(activeSymbol, hint);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeSymbol, snapshot]);
+  }, [activeSymbol, snapshot, curatedThemes]);
 
   // Combined theme peer list = AI-suggested tickers ∩ qualified universe (full
   // RS quality, both strong + weak), plus sector matches as backup. Active
@@ -1432,6 +1484,15 @@ export default function LiveExecution() {
                   <span className="text-lg font-bold text-primary">
                     {themeDisplayLabel ?? "—"}
                   </span>
+                  {activeSymbol && curatedThemes.symbolToTheme.get(activeSymbol.toUpperCase()) ? (
+                    <span className="rounded-full border border-primary/40 bg-primary/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-primary">
+                      Curated theme
+                    </span>
+                  ) : aiTheme?.theme ? (
+                    <span className="rounded-full border border-border/60 bg-muted/40 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                      AI suggested
+                    </span>
+                  ) : null}
                   {(snapLoading || aiLoading) && <Loader2 size={14} className="animate-spin text-muted-foreground" />}
                   <span className="ml-auto text-sm text-muted-foreground">
                     {combinedThemePeers.length > 0
@@ -1443,7 +1504,9 @@ export default function LiveExecution() {
                 </div>
                 <p className="mb-4 text-base leading-relaxed text-muted-foreground">
                   Specific theme peers for <span className="font-mono font-bold text-foreground">{snapshot.symbol}</span>{" "}
-                  — AI-identified theme intersected with the qualified RS universe so you see <span className="text-foreground">both strong and weak</span> names. Prices &amp; RS auto-refresh every 7s; the theme list is locked until you press <span className="text-foreground">Refresh Data</span>.
+                  — {activeSymbol && curatedThemes.symbolToTheme.get(activeSymbol.toUpperCase())
+                    ? <>pulled directly from your <span className="text-foreground">curated Theme dashboard</span> and intersected with the qualified RS universe.</>
+                    : <>AI-identified theme intersected with the qualified RS universe so you see <span className="text-foreground">both strong and weak</span> names.</>} Prices &amp; RS auto-refresh every 7s; the theme list is locked until you press <span className="text-foreground">Refresh Data</span>.
                 </p>
 
                 {combinedThemePeers.length > 0 ? (
