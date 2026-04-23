@@ -645,6 +645,42 @@ export default function LiveExecution() {
   const debounceRef = useRef<number | null>(null);
   const lastAiSymbolRef = useRef<string | null>(null);
 
+  // Curated themes from the Theme dashboard (themes + theme_tickers tables).
+  // Loaded once. Used to short-circuit the Groq AI peer call when a ticker
+  // already belongs to one of our defined themes.
+  const [curatedThemes, setCuratedThemes] = useState<{
+    symbolToTheme: Map<string, string>;       // SYMBOL -> theme name
+    themeToSymbols: Map<string, string[]>;    // theme name -> [SYMBOLS]
+  }>({ symbolToTheme: new Map(), themeToSymbols: new Map() });
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const [{ data: themes }, { data: tickers }] = await Promise.all([
+        supabase.from("themes").select("id, name"),
+        supabase.from("theme_tickers").select("theme_id, ticker_symbol"),
+      ]);
+      if (cancelled || !themes || !tickers) return;
+      const idToName = new Map<string, string>();
+      for (const t of themes) idToName.set(t.id, t.name);
+      const symToTheme = new Map<string, string>();
+      const themeToSyms = new Map<string, string[]>();
+      for (const row of tickers) {
+        const themeName = idToName.get(row.theme_id);
+        if (!themeName) continue;
+        const sym = (row.ticker_symbol || "").toUpperCase();
+        if (!sym) continue;
+        // First theme wins for symbol→theme lookup (a ticker can be in multiple).
+        if (!symToTheme.has(sym)) symToTheme.set(sym, themeName);
+        const arr = themeToSyms.get(themeName) ?? [];
+        arr.push(sym);
+        themeToSyms.set(themeName, arr);
+      }
+      setCuratedThemes({ symbolToTheme: symToTheme, themeToSymbols: themeToSyms });
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
   // Build a per-symbol map of RS data + a per-timeframe rating using the qualified universe.
   const { stockMap, ratingOverall, rating1w, rating1m } = useMemo(() => {
     const map = new Map<string, RsStock>();
