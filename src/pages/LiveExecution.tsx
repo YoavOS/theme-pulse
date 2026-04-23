@@ -1092,19 +1092,35 @@ export default function LiveExecution() {
       .finally(() => { if (aiKeyRef.current === key) setAiLoading(false); });
   };
 
-  // Fire Groq once per new active ticker (reset when ticker cleared/changed).
+  // Fire theme resolution per active ticker. PRIORITY:
+  //   1) If ticker exists in a curated theme (themes / theme_tickers tables) → use it directly, NO Groq call.
+  //   2) Otherwise → fall back to Groq AI peer suggestion.
   useEffect(() => {
     if (!activeSymbol || !snapshot) return;
     if (lastAiSymbolRef.current === activeSymbol && aiTheme) return;
     if (lastAiSymbolRef.current !== activeSymbol) setAiTheme(null);
     lastAiSymbolRef.current = activeSymbol;
+
+    // 1) Curated theme lookup
+    const curatedThemeName = curatedThemes.symbolToTheme.get(activeSymbol.toUpperCase());
+    if (curatedThemeName) {
+      const symbols = curatedThemes.themeToSymbols.get(curatedThemeName) ?? [];
+      setAiTheme({
+        theme: curatedThemeName,
+        peers: [], // we use stockMap to render rows; no need for Yahoo quotes here
+        suggested: symbols,
+      });
+      return; // skip Groq entirely
+    }
+
+    // 2) Groq fallback
     const hint = activeStock?.sector
       ?? snapshot.fundamentals?.industry
       ?? snapshot.fundamentals?.sector
       ?? null;
     fetchAiTheme(activeSymbol, hint);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeSymbol, snapshot]);
+  }, [activeSymbol, snapshot, curatedThemes]);
 
   // Combined theme peer list = AI-suggested tickers ∩ qualified universe (full
   // RS quality, both strong + weak), plus sector matches as backup. Active
