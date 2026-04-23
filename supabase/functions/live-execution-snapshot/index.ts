@@ -488,6 +488,155 @@ async function fetchFundamentalsSnapshot(symbol: string): Promise<FundamentalsSn
   }
 }
 
+// ──────────────────────────────────────────────────────────────────────────
+// Financial Modeling Prep (FMP) fallback — used to fill in any missing
+// metric (Forward P/E, EPS / Revenue growth across all four periods).
+//
+// Activated automatically when the FMP_API_KEY secret is set. If the secret
+// is missing this function is a no-op and the Yahoo data is returned as-is.
+// ──────────────────────────────────────────────────────────────────────────
+async function fetchFmpJson(url: string): Promise<any | null> {
+  try {
+    const res = await fetch(url, { headers: { "User-Agent": UA, Accept: "application/json" } });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch {
+    return null;
+  }
+}
+
+async function enrichFundamentalsWithFmp(
+  symbol: string,
+  base: FundamentalsSnapshot,
+): Promise<FundamentalsSnapshot> {
+  const apiKey = Deno.env.get("FMP_API_KEY");
+  if (!apiKey) return base;
+
+  const sym = encodeURIComponent(symbol);
+
+  // Pull what we need in parallel
+  const [profile, qIncome, aIncome, qKeyMetrics] = await Promise.all([
+    fetchFmpJson(`https://financialmodelingprep.com/api/v3/profile/${sym}?apikey=${apiKey}`),
+    fetchFmpJson(`https://financialmodelingprep.com/api/v3/income-statement/${sym}?period=quarter&limit=8&apikey=${apiKey}`),
+    fetchFmpJson(`https://financialmodelingprep.com/api/v3/income-statement/${sym}?period=annual&limit=4&apikey=${apiKey}`),
+    fetchFmpJson(`https://financialmodelingprep.com/api/v3/key-metrics/${sym}?period=quarter&limit=8&apikey=${apiKey}`),
+  ]);
+
+  const safeGrowth = (curr: number | null, prev: number | null): number | null => {
+    if (curr === null || prev === null || !Number.isFinite(curr) || !Number.isFinite(prev) || prev === 0) return null;
+    return (curr - prev) / Math.abs(prev);
+  };
+  const num = (v: any): number | null =>
+    typeof v === "number" && Number.isFinite(v) ? v : null;
+
+  const out: FundamentalsSnapshot = {
+    ...base,
+    growthByPeriod: {
+      ttm_yoy: { ...base.growthByPeriod.ttm_yoy },
+      annual_yoy: { ...base.growthByPeriod.annual_yoy },
+      quarterly_yoy: { ...base.growthByPeriod.quarterly_yoy },
+      quarterly_qoq: { ...base.growthByPeriod.quarterly_qoq },
+    },
+    source: base.source === "yahoo" ? "yahoo+fmp" : base.source,
+  };
+
+  // Forward P/E from profile (FMP returns trailing pe; forward is in key-metrics-ttm)
+  if (out.forwardPe === null && Array.isArray(profile) && profile[0]) {
+    const p = profile[0];
+    if (out.pe === null) out.pe = num(p?.pe);
+  }
+
+  // Quarterly arrays from FMP come newest-first
+  const qs: any[] = Array.isArray(qIncome) ? qIncome : [];
+  const ans: any[] = Array.isArray(aIncome) ? aIncome : [];
+
+  // Quarterly YoY: q[0] vs q[4]
+  if (qs.length >= 5) {
+    const q0 = qs[0], q4 = qs[4];
+    if (out.growthByPeriod.quarterly_yoy.revenue === null) {
+      out.growthByPeriod.quarterly_yoy.revenue = safeGrowth(num(q0?.revenue), num(q4?.revenue));
+    }
+    if (out.growthByPeriod.quarterly_yoy.eps === null) {
+      out.growthByPeriod.quarterly_yoy.eps =
+        safeGrowth(num(q0?.epsdiluted ?? q0?.eps), num(q4?.epsdiluted ?? q4?.eps)) ??
+        safeGrowth(num(q0?.netIncome), num(q4?.netIncome));
+    }
+  }
+
+  // Quarterly QoQ: q[0] vs q[1]
+  if (qs.length >= 2) {
+    const q0 = qs[0], q1 = qs[1];
+    if (out.growthByPeriod.quarterly_qoq.revenue === null) {
+      out.growthByPeriod.quarterly_qoq.revenue = safeGrowth(num(q0?.revenue), num(q1?.revenue));
+    }
+    if (out.growthByPeriod.quarterly_qoq.eps === null) {
+      out.growthByPeriod.quarterly_qoq.eps =
+        safeGrowth(num(q0?.epsdiluted ?? q0?.eps), num(q1?.epsdiluted ?? q1?.eps)) ??
+        safeGrowth(num(q0?.netIncome), num(q1?.netIncome));
+    }
+  }
+
+  // Annual YoY: a[0] vs a[1]
+  if (ans.length >= 2) {
+    const a0 = ans[0], a1 = ans[1];
+    if (out.growthByPeriod.annual_yoy.revenue === null) {
+      out.growthByPeriod.annual_yoy.revenue = safeGrowth(num(a0?.revenue), num(a1?.revenue));
+    }
+    if (out.growthByPeriod.annual_yoy.eps === null) {
+      out.growthByPeriod.annual_yoy.eps =
+        safeGrowth(num(a0?.epsdiluted ?? a0?.eps), num(a1?.epsdiluted ?? a1?.eps)) ??
+        safeGrowth(num(a0?.netIncome), num(a1?.netIncome));
+    }
+  }
+
+  // TTM YoY: sum last 4 quarters vs preceding 4
+  if (qs.length >= 8) {
+    const sum = (arr: any[], key: string) =>
+      arr.reduce((acc, x) => acc + (num(x?.[key]) ?? 0), 0);
+    const recent = qs.slice(0, 4);
+    const prior = qs.slice(4, 8);
+    if (out.growthByPeriod.ttm_yoy.revenue === null) {
+      out.growthByPeriod.ttm_yoy.revenue = safeGrowth(sum(recent, "revenue"), sum(prior, "revenue"));
+    }
+    if (out.growthByPeriod.ttm_yoy.eps === null) {
+      const recentEps = recent.reduce((acc, x) => acc + (num(x?.epsdiluted ?? x?.eps) ?? 0), 0);
+      const priorEps = prior.reduce((acc, x) => acc + (num(x?.epsdiluted ?? x?.eps) ?? 0), 0);
+      out.growthByPeriod.ttm_yoy.eps =
+        safeGrowth(recentEps, priorEps) ??
+        safeGrowth(sum(recent, "netIncome"), sum(prior, "netIncome"));
+    }
+  }
+
+  // Refresh legacy fields from the freshly-filled period buckets
+  out.epsGrowth = out.growthByPeriod.quarterly_yoy.eps ?? out.epsGrowth;
+  out.revenueGrowth = out.growthByPeriod.ttm_yoy.revenue ?? out.revenueGrowth;
+  if (!out.available && (
+    out.growthByPeriod.quarterly_yoy.revenue !== null ||
+    out.growthByPeriod.ttm_yoy.revenue !== null ||
+    out.pe !== null
+  )) {
+    out.available = true;
+  }
+
+  return out;
+}
+
+function fundamentalsHasGaps(f: FundamentalsSnapshot): boolean {
+  if (!f.available) return true;
+  if (f.forwardPe === null && f.pe === null) return true;
+  const g = f.growthByPeriod;
+  return (
+    g.quarterly_yoy.revenue === null ||
+    g.quarterly_yoy.eps === null ||
+    g.ttm_yoy.revenue === null ||
+    g.ttm_yoy.eps === null ||
+    g.annual_yoy.revenue === null ||
+    g.annual_yoy.eps === null ||
+    g.quarterly_qoq.revenue === null ||
+    g.quarterly_qoq.eps === null
+  );
+}
+
 async function fetchHistoricalForTicker(symbol: string, todayPrice: number | null, forceRefresh = false) {
   const sb = makeServiceClient();
   const periods: YahooPeriod[] = ["5d", "1mo", "3mo"];
