@@ -1060,6 +1060,7 @@ export default function LiveExecution() {
   useEffect(() => {
     if (!activeSymbol || !snapshot) return;
     if (lastAiSymbolRef.current === activeSymbol && aiTheme) return;
+    if (lastAiSymbolRef.current !== activeSymbol) setAiTheme(null);
     lastAiSymbolRef.current = activeSymbol;
     const hint = activeStock?.sector
       ?? snapshot.fundamentals?.industry
