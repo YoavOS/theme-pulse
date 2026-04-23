@@ -57,16 +57,28 @@ interface OptionsSnapshot {
   iv_explanation: string;
 }
 
+export interface PeriodGrowth {
+  eps: number | null;       // decimal
+  revenue: number | null;   // decimal
+}
+
 interface FundamentalsSnapshot {
   available: boolean;
   pe: number | null;
   forwardPe: number | null;
   pegRatio: number | null;
-  epsGrowth: number | null;       // earningsQuarterlyGrowth (yoy %, decimal)
-  revenueGrowth: number | null;   // revenueQuarterlyGrowth (yoy %, decimal)
+  epsGrowth: number | null;       // earningsQuarterlyGrowth (yoy %, decimal) — kept for back-compat
+  revenueGrowth: number | null;   // revenueGrowth TTM YoY (decimal) — kept for back-compat
   profitMargin: number | null;    // decimal
   sector: string | null;
   industry: string | null;
+  // Growth broken down by period — null entries mean "not reported / not enough data"
+  growthByPeriod: {
+    ttm_yoy: PeriodGrowth;
+    annual_yoy: PeriodGrowth;
+    quarterly_yoy: PeriodGrowth;
+    quarterly_qoq: PeriodGrowth;
+  };
   source: string;
 }
 
