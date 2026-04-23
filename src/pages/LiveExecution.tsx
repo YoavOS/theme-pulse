@@ -1510,48 +1510,13 @@ export default function LiveExecution() {
                 </p>
 
                 {combinedThemePeers.length > 0 ? (
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-base">
-                      <thead>
-                        <tr className="border-b border-border/40 text-xs uppercase tracking-wider text-muted-foreground">
-                          <th className="py-3 text-left">Ticker</th>
-                          <th className="py-3 text-right">RS Rating</th>
-                          <th className="py-3 text-right">1D</th>
-                          <th className="py-3 text-right">1M</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {combinedThemePeers.slice(0, 15).map((stock) => {
-                          const rating = ratingOverall.get(stock.symbol.toUpperCase()) ?? null;
-                          const isActive = stock.symbol === activeSymbol;
-                          const r1d = isActive ? snapshot.quote.changePct : (stock as any).return1d ?? null;
-                          return (
-                            <tr key={stock.symbol} className={`border-b border-border/20 hover:bg-muted/20 ${isActive ? "bg-primary/5" : ""}`}>
-                              <td className="py-3">
-                                <button
-                                  onClick={() => { setInput(stock.symbol); submit(stock.symbol); }}
-                                  className={`font-mono text-lg font-bold ${isActive ? "text-foreground" : "text-primary hover:underline"}`}
-                                >
-                                  {stock.symbol}
-                                </button>
-                                {stock.companyName && (
-                                  <div className="truncate text-xs text-muted-foreground max-w-[240px]">{stock.companyName}</div>
-                                )}
-                              </td>
-                              <td className={`py-3 text-right font-mono text-lg font-bold ${ratingClass(rating)}`}>{rating ?? "—"}</td>
-                              <td className={`py-3 text-right font-mono text-lg ${pctClass(r1d)}`}>{pct(r1d)}</td>
-                              <td className={`py-3 text-right font-mono text-lg ${pctClass(stock.return1m)}`}>{pct(stock.return1m)}</td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                    {combinedThemePeers.length > 15 && (
-                      <div className="mt-2 text-center text-sm text-muted-foreground">
-                        Showing top 15 of {combinedThemePeers.length} by RS Rating
-                      </div>
-                    )}
-                  </div>
+                  <ThemeTickersTable
+                    peers={combinedThemePeers}
+                    activeSymbol={activeSymbol}
+                    snapshotChangePct={snapshot.quote.changePct}
+                    ratingOverall={ratingOverall}
+                    onPick={(sym) => { setInput(sym); submit(sym); }}
+                  />
                 ) : aiLoading ? (
                   <div className="flex items-center gap-2 rounded-md border border-border/30 bg-muted/10 p-4 text-base text-muted-foreground">
                     <Loader2 size={14} className="animate-spin" /> AI is identifying the theme and peers…
@@ -2217,6 +2182,116 @@ function ConvictionBreakdown({
         Final = {pillars.filter((p) => p.value !== null).map((p) => `${p.value} × ${(p.weight * 100).toFixed(0)}%`).join(" + ")}
         {pillars.some((p) => p.value === null) && " (missing pillars dropped, weight redistributed)"} = <span className="font-bold text-foreground">{total}</span>.
       </p>
+    </div>
+  );
+}
+
+// ───────────────────────── Theme Tickers Table (sortable) ─────────────────────────
+
+type ThemeSortKey = "rating" | "r1d" | "r1m";
+
+function ThemeTickersTable({
+  peers,
+  activeSymbol,
+  snapshotChangePct,
+  ratingOverall,
+  onPick,
+}: {
+  peers: RsStock[];
+  activeSymbol: string | null;
+  snapshotChangePct: number | null;
+  ratingOverall: Map<string, number>;
+  onPick: (sym: string) => void;
+}) {
+  const [sortKey, setSortKey] = useState<ThemeSortKey>("rating");
+
+  // Build enriched rows once, then sort. Auto-refresh works because when `peers`,
+  // `snapshotChangePct` or `ratingOverall` change, useMemo re-runs with the new data.
+  const rows = useMemo(() => {
+    const enriched = peers.map((stock) => {
+      const sym = stock.symbol;
+      const rating = ratingOverall.get(sym.toUpperCase()) ?? null;
+      const isActive = sym === activeSymbol;
+      const r1d = isActive ? snapshotChangePct : ((stock as any).return1d ?? null);
+      const r1m = stock.return1m ?? null;
+      return { stock, sym, rating, isActive, r1d, r1m };
+    });
+    const cmp = (a: number | null, b: number | null) => {
+      if (a === null && b === null) return 0;
+      if (a === null) return 1;
+      if (b === null) return -1;
+      return b - a; // always descending
+    };
+    enriched.sort((a, b) => {
+      if (sortKey === "rating") return cmp(a.rating, b.rating);
+      if (sortKey === "r1d") return cmp(a.r1d, b.r1d);
+      return cmp(a.r1m, b.r1m);
+    });
+    return enriched;
+  }, [peers, activeSymbol, snapshotChangePct, ratingOverall, sortKey]);
+
+  const SortHeader = ({
+    label,
+    keyName,
+  }: {
+    label: string;
+    keyName: ThemeSortKey;
+  }) => {
+    const active = sortKey === keyName;
+    return (
+      <th className="py-3 text-right">
+        <button
+          type="button"
+          onClick={() => setSortKey(keyName)}
+          className={`inline-flex items-center gap-1 text-xs uppercase tracking-wider transition-colors ${
+            active ? "text-foreground" : "text-muted-foreground hover:text-foreground"
+          }`}
+          title={`Sort by ${label} (descending)`}
+        >
+          {label}
+          <span className={`text-[10px] leading-none ${active ? "opacity-100" : "opacity-30"}`}>↓</span>
+        </button>
+      </th>
+    );
+  };
+
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-base">
+        <thead>
+          <tr className="border-b border-border/40">
+            <th className="py-3 text-left text-xs uppercase tracking-wider text-muted-foreground">Ticker</th>
+            <SortHeader label="RS Rating" keyName="rating" />
+            <SortHeader label="1D" keyName="r1d" />
+            <SortHeader label="1M" keyName="r1m" />
+          </tr>
+        </thead>
+        <tbody>
+          {rows.slice(0, 15).map(({ stock, sym, rating, isActive, r1d, r1m }) => (
+            <tr key={sym} className={`border-b border-border/20 hover:bg-muted/20 ${isActive ? "bg-primary/5" : ""}`}>
+              <td className="py-3">
+                <button
+                  onClick={() => onPick(sym)}
+                  className={`font-mono text-lg font-bold ${isActive ? "text-foreground" : "text-primary hover:underline"}`}
+                >
+                  {sym}
+                </button>
+                {stock.companyName && (
+                  <div className="truncate text-xs text-muted-foreground max-w-[240px]">{stock.companyName}</div>
+                )}
+              </td>
+              <td className={`py-3 text-right font-mono text-lg font-bold ${ratingClass(rating)}`}>{rating ?? "—"}</td>
+              <td className={`py-3 text-right font-mono text-lg ${pctClass(r1d)}`}>{pct(r1d)}</td>
+              <td className={`py-3 text-right font-mono text-lg ${pctClass(r1m)}`}>{pct(r1m)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {rows.length > 15 && (
+        <div className="mt-2 text-center text-sm text-muted-foreground">
+          Showing top 15 of {rows.length} sorted by {sortKey === "rating" ? "RS Rating" : sortKey === "r1d" ? "1D" : "1M"} ↓
+        </div>
+      )}
     </div>
   );
 }
