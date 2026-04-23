@@ -643,6 +643,7 @@ export default function LiveExecution() {
   const [benchmark, setBenchmark] = useState<BenchmarkSymbol>("SPY");
   const [whyTopic, setWhyTopic] = useState<WhyTopic | null>(null);
   const debounceRef = useRef<number | null>(null);
+  const lastAiSymbolRef = useRef<string | null>(null);
 
   // Build a per-symbol map of RS data + a per-timeframe rating using the qualified universe.
   const { stockMap, ratingOverall, rating1w, rating1m } = useMemo(() => {
@@ -668,6 +669,10 @@ export default function LiveExecution() {
     setActiveSymbol(sym);
     const sector = stockMap.get(sym)?.sector ?? null;
     fetchSnapshot(sym, benchmark, sector, opts.force === true);
+    if (opts.force) {
+      // Force a fresh Groq theme call on manual Refresh.
+      lastAiSymbolRef.current = null;
+    }
   };
 
   // Debounce input → auto-submit after 600ms when length >= 1
