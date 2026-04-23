@@ -46,16 +46,28 @@ export interface LiveTickerHistory {
   return3m: number | null;
 }
 
+export interface PeriodGrowth {
+  eps: number | null;
+  revenue: number | null;
+}
+
+export type FundamentalsPeriodKey =
+  | "ttm_yoy"
+  | "annual_yoy"
+  | "quarterly_yoy"
+  | "quarterly_qoq";
+
 export interface LiveFundamentals {
   available: boolean;
   pe: number | null;
   forwardPe: number | null;
   pegRatio: number | null;
-  epsGrowth: number | null;       // decimal (e.g. 0.25 = +25%)
-  revenueGrowth: number | null;   // decimal
-  profitMargin: number | null;    // decimal
+  epsGrowth: number | null;       // legacy — quarterly YoY EPS
+  revenueGrowth: number | null;   // legacy — TTM YoY revenue
+  profitMargin: number | null;
   sector: string | null;
   industry: string | null;
+  growthByPeriod?: Record<FundamentalsPeriodKey, PeriodGrowth>;
   source: string;
 }
 
