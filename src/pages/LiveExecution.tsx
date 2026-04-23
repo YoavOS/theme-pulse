@@ -1285,57 +1285,59 @@ export default function LiveExecution() {
                   </div>
                 </div>
 
-                {/* Verdict badge */}
-                <div
-                  className={`flex items-start gap-3 rounded-lg border ${verdict.border} ${verdict.bg} p-4`}
-                >
-                  <VerdictIcon size={28} className={`shrink-0 ${verdict.color}`} />
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <div className={`font-['Syne',sans-serif] text-xl font-bold ${verdict.color}`}>
-                        {verdict.label}
-                      </div>
-                      <WhyButton onClick={() => setWhyTopic("verdict")} label="Why this verdict?" />
-                    </div>
-                    <p className="mt-1.5 text-base leading-relaxed text-foreground/85">{verdict.reason}</p>
-                    {/* Factor breakdown chips */}
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      {verdict.factors.map((f) => {
-                        const cls =
-                          f.status === "pos"
-                            ? "border-[hsl(160,80%,45%)]/40 bg-[hsl(160,80%,45%)]/10 text-[hsl(160,80%,45%)]"
-                            : f.status === "neg"
-                            ? "border-destructive/40 bg-destructive/10 text-destructive"
-                            : f.status === "na"
-                            ? "border-border/40 bg-muted/20 text-muted-foreground"
-                            : "border-border/40 bg-background/40 text-foreground/80";
-                        return (
-                          <span
-                            key={f.label}
-                            className={`rounded border px-2 py-1 text-sm ${cls}`}
-                          >
-                            <span className="font-bold">{f.label}:</span> {f.note}
-                          </span>
-                        );
-                      })}
-                    </div>
-                  </div>
-                  <button
-                    onClick={() =>
-                      hasWatch(snapshot.symbol)
-                        ? removeWatch(snapshot.symbol)
-                        : addWatch(snapshot.symbol)
-                    }
-                    className="shrink-0 rounded-md border border-border bg-background/60 p-2.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-                    title={hasWatch(snapshot.symbol) ? "Remove from live watchlist" : "Pin to live watchlist"}
+                {/* Verdict badge — hidden entirely for "Insufficient Data" so we don't show a noisy banner. */}
+                {verdict.label !== "Insufficient Data" && (
+                  <div
+                    className={`flex items-start gap-3 rounded-lg border ${verdict.border} ${verdict.bg} p-4`}
                   >
-                    {hasWatch(snapshot.symbol) ? (
-                      <Star size={18} className="fill-[hsl(40,85%,55%)] text-[hsl(40,85%,55%)]" />
-                    ) : (
-                      <StarOff size={18} />
-                    )}
-                  </button>
-                </div>
+                    <VerdictIcon size={28} className={`shrink-0 ${verdict.color}`} />
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <div className={`font-['Syne',sans-serif] text-xl font-bold ${verdict.color}`}>
+                          {verdict.label}
+                        </div>
+                        <WhyButton onClick={() => setWhyTopic("verdict")} label="Why this verdict?" />
+                      </div>
+                      <p className="mt-1.5 text-base leading-relaxed text-foreground/85">{verdict.reason}</p>
+                      {/* Factor breakdown chips */}
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {verdict.factors.map((f) => {
+                          const cls =
+                            f.status === "pos"
+                              ? "border-[hsl(160,80%,45%)]/40 bg-[hsl(160,80%,45%)]/10 text-[hsl(160,80%,45%)]"
+                              : f.status === "neg"
+                              ? "border-destructive/40 bg-destructive/10 text-destructive"
+                              : f.status === "na"
+                              ? "border-border/40 bg-muted/20 text-muted-foreground"
+                              : "border-border/40 bg-background/40 text-foreground/80";
+                          return (
+                            <span
+                              key={f.label}
+                              className={`rounded border px-2 py-1 text-sm ${cls}`}
+                            >
+                              <span className="font-bold">{f.label}:</span> {f.note}
+                            </span>
+                          );
+                        })}
+                      </div>
+                    </div>
+                    <button
+                      onClick={() =>
+                        hasWatch(snapshot.symbol)
+                          ? removeWatch(snapshot.symbol)
+                          : addWatch(snapshot.symbol)
+                      }
+                      className="shrink-0 rounded-md border border-border bg-background/60 p-2.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                      title={hasWatch(snapshot.symbol) ? "Remove from live watchlist" : "Pin to live watchlist"}
+                    >
+                      {hasWatch(snapshot.symbol) ? (
+                        <Star size={18} className="fill-[hsl(40,85%,55%)] text-[hsl(40,85%,55%)]" />
+                      ) : (
+                        <StarOff size={18} />
+                      )}
+                    </button>
+                  </div>
+                )}
 
                 {/* Pullback / Breakdown callout */}
                 {pullback && (
