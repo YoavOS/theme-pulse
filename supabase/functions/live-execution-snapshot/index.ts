@@ -513,13 +513,14 @@ async function enrichFundamentalsWithFmp(
   if (!apiKey) return base;
 
   const sym = encodeURIComponent(symbol);
+  const FMP = "https://financialmodelingprep.com/stable";
 
-  // Pull what we need in parallel
-  const [profile, qIncome, aIncome, qKeyMetrics] = await Promise.all([
-    fetchFmpJson(`https://financialmodelingprep.com/api/v3/profile/${sym}?apikey=${apiKey}`),
-    fetchFmpJson(`https://financialmodelingprep.com/api/v3/income-statement/${sym}?period=quarter&limit=8&apikey=${apiKey}`),
-    fetchFmpJson(`https://financialmodelingprep.com/api/v3/income-statement/${sym}?period=annual&limit=4&apikey=${apiKey}`),
-    fetchFmpJson(`https://financialmodelingprep.com/api/v3/key-metrics/${sym}?period=quarter&limit=8&apikey=${apiKey}`),
+  // FMP free tier caps `limit` at 5, so we ask for 5 quarters (covers Q-YoY: q[0] vs q[4])
+  // and 4 annuals (covers Annual YoY and a 4-quarter TTM proxy if needed).
+  const [profile, qIncome, aIncome] = await Promise.all([
+    fetchFmpJson(`${FMP}/profile?symbol=${sym}&apikey=${apiKey}`),
+    fetchFmpJson(`${FMP}/income-statement?symbol=${sym}&period=quarter&limit=5&apikey=${apiKey}`),
+    fetchFmpJson(`${FMP}/income-statement?symbol=${sym}&period=annual&limit=4&apikey=${apiKey}`),
   ]);
 
   const safeGrowth = (curr: number | null, prev: number | null): number | null => {
@@ -528,6 +529,9 @@ async function enrichFundamentalsWithFmp(
   };
   const num = (v: any): number | null =>
     typeof v === "number" && Number.isFinite(v) ? v : null;
+  // FMP field name varies by tier — accept both the stable (`epsDiluted`) and legacy (`epsdiluted`) spellings.
+  const epsOf = (q: any): number | null =>
+    num(q?.epsDiluted) ?? num(q?.epsdiluted) ?? num(q?.eps);
 
   const out: FundamentalsSnapshot = {
     ...base,
@@ -540,17 +544,19 @@ async function enrichFundamentalsWithFmp(
     source: base.source === "yahoo" ? "yahoo+fmp" : base.source,
   };
 
-  // Forward P/E from profile (FMP returns trailing pe; forward is in key-metrics-ttm)
-  if (out.forwardPe === null && Array.isArray(profile) && profile[0]) {
+  // Profile fallback for P/E and sector/industry
+  if (Array.isArray(profile) && profile[0]) {
     const p = profile[0];
     if (out.pe === null) out.pe = num(p?.pe);
+    if (!out.sector && typeof p?.sector === "string") out.sector = p.sector;
+    if (!out.industry && typeof p?.industry === "string") out.industry = p.industry;
   }
 
   // Quarterly arrays from FMP come newest-first
   const qs: any[] = Array.isArray(qIncome) ? qIncome : [];
   const ans: any[] = Array.isArray(aIncome) ? aIncome : [];
 
-  // Quarterly YoY: q[0] vs q[4]
+  // Quarterly YoY: q[0] vs q[4]  (needs 5 quarters)
   if (qs.length >= 5) {
     const q0 = qs[0], q4 = qs[4];
     if (out.growthByPeriod.quarterly_yoy.revenue === null) {
@@ -558,7 +564,7 @@ async function enrichFundamentalsWithFmp(
     }
     if (out.growthByPeriod.quarterly_yoy.eps === null) {
       out.growthByPeriod.quarterly_yoy.eps =
-        safeGrowth(num(q0?.epsdiluted ?? q0?.eps), num(q4?.epsdiluted ?? q4?.eps)) ??
+        safeGrowth(epsOf(q0), epsOf(q4)) ??
         safeGrowth(num(q0?.netIncome), num(q4?.netIncome));
     }
   }
@@ -571,7 +577,7 @@ async function enrichFundamentalsWithFmp(
     }
     if (out.growthByPeriod.quarterly_qoq.eps === null) {
       out.growthByPeriod.quarterly_qoq.eps =
-        safeGrowth(num(q0?.epsdiluted ?? q0?.eps), num(q1?.epsdiluted ?? q1?.eps)) ??
+        safeGrowth(epsOf(q0), epsOf(q1)) ??
         safeGrowth(num(q0?.netIncome), num(q1?.netIncome));
     }
   }
@@ -584,27 +590,20 @@ async function enrichFundamentalsWithFmp(
     }
     if (out.growthByPeriod.annual_yoy.eps === null) {
       out.growthByPeriod.annual_yoy.eps =
-        safeGrowth(num(a0?.epsdiluted ?? a0?.eps), num(a1?.epsdiluted ?? a1?.eps)) ??
+        safeGrowth(epsOf(a0), epsOf(a1)) ??
         safeGrowth(num(a0?.netIncome), num(a1?.netIncome));
     }
   }
 
-  // TTM YoY: sum last 4 quarters vs preceding 4
-  if (qs.length >= 8) {
-    const sum = (arr: any[], key: string) =>
-      arr.reduce((acc, x) => acc + (num(x?.[key]) ?? 0), 0);
-    const recent = qs.slice(0, 4);
-    const prior = qs.slice(4, 8);
-    if (out.growthByPeriod.ttm_yoy.revenue === null) {
-      out.growthByPeriod.ttm_yoy.revenue = safeGrowth(sum(recent, "revenue"), sum(prior, "revenue"));
-    }
-    if (out.growthByPeriod.ttm_yoy.eps === null) {
-      const recentEps = recent.reduce((acc, x) => acc + (num(x?.epsdiluted ?? x?.eps) ?? 0), 0);
-      const priorEps = prior.reduce((acc, x) => acc + (num(x?.epsdiluted ?? x?.eps) ?? 0), 0);
-      out.growthByPeriod.ttm_yoy.eps =
-        safeGrowth(recentEps, priorEps) ??
-        safeGrowth(sum(recent, "netIncome"), sum(prior, "netIncome"));
-    }
+  // TTM YoY: best signal is the latest fiscal year vs the prior fiscal year
+  // (free tier doesn't allow 8 quarters). Only fill if Yahoo had nothing.
+  if (out.growthByPeriod.ttm_yoy.revenue === null && ans.length >= 2) {
+    out.growthByPeriod.ttm_yoy.revenue = safeGrowth(num(ans[0]?.revenue), num(ans[1]?.revenue));
+  }
+  if (out.growthByPeriod.ttm_yoy.eps === null && ans.length >= 2) {
+    out.growthByPeriod.ttm_yoy.eps =
+      safeGrowth(epsOf(ans[0]), epsOf(ans[1])) ??
+      safeGrowth(num(ans[0]?.netIncome), num(ans[1]?.netIncome));
   }
 
   // Refresh legacy fields from the freshly-filled period buckets
