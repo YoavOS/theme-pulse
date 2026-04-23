@@ -1484,6 +1484,15 @@ export default function LiveExecution() {
                   <span className="text-lg font-bold text-primary">
                     {themeDisplayLabel ?? "—"}
                   </span>
+                  {activeSymbol && curatedThemes.symbolToTheme.get(activeSymbol.toUpperCase()) ? (
+                    <span className="rounded-full border border-primary/40 bg-primary/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-primary">
+                      Curated theme
+                    </span>
+                  ) : aiTheme?.theme ? (
+                    <span className="rounded-full border border-border/60 bg-muted/40 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                      AI suggested
+                    </span>
+                  ) : null}
                   {(snapLoading || aiLoading) && <Loader2 size={14} className="animate-spin text-muted-foreground" />}
                   <span className="ml-auto text-sm text-muted-foreground">
                     {combinedThemePeers.length > 0
@@ -1495,7 +1504,9 @@ export default function LiveExecution() {
                 </div>
                 <p className="mb-4 text-base leading-relaxed text-muted-foreground">
                   Specific theme peers for <span className="font-mono font-bold text-foreground">{snapshot.symbol}</span>{" "}
-                  — AI-identified theme intersected with the qualified RS universe so you see <span className="text-foreground">both strong and weak</span> names. Prices &amp; RS auto-refresh every 7s; the theme list is locked until you press <span className="text-foreground">Refresh Data</span>.
+                  — {activeSymbol && curatedThemes.symbolToTheme.get(activeSymbol.toUpperCase())
+                    ? <>pulled directly from your <span className="text-foreground">curated Theme dashboard</span> and intersected with the qualified RS universe.</>
+                    : <>AI-identified theme intersected with the qualified RS universe so you see <span className="text-foreground">both strong and weak</span> names.</>} Prices &amp; RS auto-refresh every 7s; the theme list is locked until you press <span className="text-foreground">Refresh Data</span>.
                 </p>
 
                 {combinedThemePeers.length > 0 ? (
