@@ -702,6 +702,8 @@ export default function RsAlpha() {
         getReturnField={getReturnField}
         isOtcSymbol={isOtcSymbol}
       />
+
+      <FundamentalsCoverageModal open={coverageOpen} onClose={() => setCoverageOpen(false)} />
     </div>
   );
 }
