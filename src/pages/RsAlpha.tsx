@@ -434,6 +434,48 @@ export default function RsAlpha() {
           </div>
         )}
 
+        {/* Fundamentals scan progress bar */}
+        {(fundScan.isRunning || fundScan.isPaused || (fundScan.progress.totalQueued > 0 && fundScan.progress.processed < fundScan.progress.totalQueued)) && (
+          <div className="container pb-2">
+            <div className={`rounded-md border px-3 py-2 text-xs ${fundScan.isPaused ? "border-amber-500/30 bg-amber-500/5" : "border-accent/30 bg-accent/5"}`}>
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-foreground font-medium">
+                  {fundScan.isPaused ? <Pause size={11} className="mr-1 inline text-amber-500" /> : <Database size={11} className="mr-1 inline" />}
+                  {fundScan.isPaused ? "Fundamentals scan paused" : "Pulling fundamentals (Yahoo + Finnhub)"} — {fundScan.progress.totalQueued > 0 ? Math.min(100, Math.round((fundScan.progress.processed / fundScan.progress.totalQueued) * 100)) : 0}%
+                </span>
+                <span className="text-muted-foreground">
+                  {fundScan.progress.processed.toLocaleString()} / {fundScan.progress.totalQueued.toLocaleString()} stocks · {fundScan.progress.succeeded} saved · {fundScan.progress.failed} failed
+                </span>
+              </div>
+              <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
+                <div
+                  className={`h-full transition-all ${fundScan.isPaused ? "bg-amber-500/60" : "bg-accent"}`}
+                  style={{ width: `${fundScan.progress.totalQueued > 0 ? Math.min(100, (fundScan.progress.processed / fundScan.progress.totalQueued) * 100) : 0}%` }}
+                />
+              </div>
+              <div className="mt-1.5 flex items-center justify-between text-[10px] text-muted-foreground">
+                <span>
+                  {fundScan.isPaused
+                    ? "Click Resume Fundamentals to continue from where it stopped."
+                    : "~50 symbols/min · runs server-side · safe to close this tab."}
+                </span>
+                {!fundScan.isPaused && fundScan.progress.etaSeconds !== null && (
+                  <span className="font-medium">{formatEta(fundScan.progress.etaSeconds)}</span>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {fundScan.progress.status === "complete" && fundScan.progress.totalQueued > 0 && !fundScan.isRunning && (
+          <div className="container pb-2">
+            <div className="rounded-md border border-[hsl(160,70%,50%)]/30 bg-[hsl(160,70%,50%)]/5 px-3 py-1.5 text-xs text-[hsl(160,70%,50%)] flex items-center justify-between">
+              <span>✓ Fundamentals scan complete — {fundScan.progress.succeeded} stocks saved · {fundScan.progress.failed} failed.</span>
+              <button onClick={() => setCoverageOpen(true)} className="text-foreground underline-offset-2 hover:underline">View Coverage →</button>
+            </div>
+          </div>
+        )}
+
         {/* Tabs */}
         <div className="container pb-2">
           <div className="flex items-center gap-1 rounded-lg bg-muted/30 p-1 w-fit">
