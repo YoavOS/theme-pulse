@@ -22,6 +22,8 @@ import {
 } from "lucide-react";
 import { useRsAlpha, type RsStock } from "@/hooks/useRsAlpha";
 import { useLiveSnapshot, useLiveWatchlist, type LiveSnapshot, type BenchmarkSymbol } from "@/hooks/useLiveSnapshot";
+import { getCachedFundamentals, setCachedFundamentals, clearCachedFundamentals } from "@/lib/fundamentalsCache";
+import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { computeRsRatings } from "@/components/rs/RsRatingBadge";
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip";
@@ -635,7 +637,8 @@ function WhyButton({ onClick, label = "Why?" }: { onClick: () => void; label?: s
 
 export default function LiveExecution() {
   const { stocks, isLoading: rsLoading } = useRsAlpha();
-  const { snapshot, isLoading: snapLoading, error: snapError, fetchSnapshot, clear } = useLiveSnapshot();
+  const { snapshot, isLoading: snapLoading, error: snapError, fetchSnapshot, clear, seedFundamentals } = useLiveSnapshot();
+  const [fundLoading, setFundLoading] = useState(false);
   const { tickers: watchTickers, add: addWatch, remove: removeWatch, has: hasWatch } = useLiveWatchlist();
 
   const [input, setInput] = useState("");
@@ -699,16 +702,35 @@ export default function LiveExecution() {
     return { stockMap: map, ratingOverall: ratingByOverall, rating1w: ratingBy1w, rating1m: ratingBy1m };
   }, [stocks]);
 
-  const submit = (raw: string, opts: { force?: boolean } = {}) => {
+  const submit = (raw: string, opts: { force?: boolean; refreshFundamentals?: boolean } = {}) => {
     const sym = raw.trim().toUpperCase();
     if (!sym) return;
     setActiveSymbol(sym);
     const sector = stockMap.get(sym)?.sector ?? null;
-    fetchSnapshot(sym, benchmark, sector, opts.force === true);
+    // Fundamentals are expensive — only fetch them when:
+    //   1) we don't have a cached entry for this symbol, OR
+    //   2) the user explicitly clicked "Refresh Fundamentals" / "Refresh Data"
+    const cached = getCachedFundamentals(sym);
+    const wantsFreshFund = opts.force === true || opts.refreshFundamentals === true || !cached;
+    if (!wantsFreshFund && cached) {
+      // Seed the hook so the upcoming skipFundamentals fetch keeps the cached values.
+      seedFundamentals(sym, cached.fundamentals, cached.sectorPeAvg);
+    }
+    fetchSnapshot(sym, benchmark, sector, opts.force === true, { skipFundamentals: !wantsFreshFund });
     if (opts.force) {
-      // Force a fresh Groq theme call on manual Refresh.
       lastAiSymbolRef.current = null;
     }
+  };
+
+  // Manual "Refresh Fundamentals" — clears cache then re-fetches with full fundamentals.
+  const refreshFundamentals = async () => {
+    if (!activeSymbol) return;
+    clearCachedFundamentals(activeSymbol);
+    setFundLoading(true);
+    const sector = stockMap.get(activeSymbol)?.sector ?? null;
+    await fetchSnapshot(activeSymbol, benchmark, sector, true, { skipFundamentals: false });
+    setFundLoading(false);
+    toast.success("Fundamentals refreshed");
   };
 
   // Debounce input → auto-submit after 600ms when length >= 1
@@ -723,26 +745,40 @@ export default function LiveExecution() {
   }, [input]);
 
   // Re-fetch snapshot when benchmark toggle changes (so RS values use the new baseline).
+  // Benchmark only affects RS / prices — fundamentals are independent, so skip them
+  // and reuse the cached values.
   useEffect(() => {
     if (activeSymbol) {
       const sector = stockMap.get(activeSymbol)?.sector ?? null;
-      fetchSnapshot(activeSymbol, benchmark, sector);
+      fetchSnapshot(activeSymbol, benchmark, sector, false, { skipFundamentals: true });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [benchmark]);
 
-  // Auto-refresh the live snapshot every 10 s while a ticker is active.
-  // Pauses while the tab is hidden so we don't burn API calls in the background.
+  // Auto-refresh the live snapshot every 7 s while a ticker is active.
+  // IMPORTANT: skipFundamentals = true so the loop only refreshes prices,
+  // RS / benchmark and options — NOT yfinance/FMP fundamentals (which are cached).
   useEffect(() => {
     if (!activeSymbol) return;
     const id = window.setInterval(() => {
       if (document.visibilityState !== "visible") return;
       const sector = stockMap.get(activeSymbol)?.sector ?? null;
-      fetchSnapshot(activeSymbol, benchmark, sector);
+      fetchSnapshot(activeSymbol, benchmark, sector, false, { skipFundamentals: true });
     }, 7_000);
     return () => window.clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeSymbol, benchmark]);
+
+  // Persist freshly-fetched fundamentals to local cache so re-searching the same
+  // ticker (or returning later) does not re-hit yfinance / FMP.
+  useEffect(() => {
+    if (!snapshot?.symbol || !snapshot.fundamentals?.available) return;
+    setCachedFundamentals(
+      snapshot.symbol,
+      snapshot.fundamentals,
+      (snapshot as any).sectorPeAvg ?? null,
+    );
+  }, [snapshot?.symbol, snapshot?.fundamentals]);
 
   const activeStock = activeSymbol ? stockMap.get(activeSymbol) ?? null : null;
   const resolvedTheme = useMemo(() => {
@@ -1587,6 +1623,16 @@ export default function LiveExecution() {
                     </TooltipContent>
                   </Tooltip>
                   <span className="ml-auto text-sm text-muted-foreground">Source: Yahoo Finance</span>
+                  <button
+                    type="button"
+                    onClick={refreshFundamentals}
+                    disabled={fundLoading || !activeSymbol}
+                    title="Fundamentals are cached locally and only refresh when you click this button. Auto-refresh (7s) only updates prices & RS."
+                    className="inline-flex items-center gap-1.5 rounded-md border border-border/60 bg-background/40 px-2.5 py-1 text-xs font-medium text-foreground/80 transition hover:bg-background/70 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <RefreshCw size={12} className={fundLoading ? "animate-spin" : ""} />
+                    Refresh Fundamentals
+                  </button>
                 </div>
                 {snapshot.fundamentals?.available ? (
                   <FundamentalsBlock

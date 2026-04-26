@@ -98,32 +98,55 @@ export function useLiveSnapshot() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const lastKeyRef = useRef<string | null>(null);
+  // Optional seed used when fundamentals are skipped on the very first fetch
+  // for a symbol (i.e. the caller already has cached fundamentals).
+  const seedRef = useRef<{ symbol: string; fundamentals: LiveFundamentals; sectorPeAvg: number | null } | null>(null);
+
+  const seedFundamentals = useCallback((symbol: string, fundamentals: LiveFundamentals, sectorPeAvg: number | null) => {
+    seedRef.current = { symbol: symbol.toUpperCase(), fundamentals, sectorPeAvg };
+  }, []);
 
   const fetchSnapshot = useCallback(async (
     symbol: string,
     benchmark: BenchmarkSymbol = "SPY",
     sector?: string | null,
     forceRefresh = false,
+    opts: { skipFundamentals?: boolean } = {},
   ) => {
     const sym = symbol.trim().toUpperCase();
     if (!sym) return;
-    const key = `${sym}|${benchmark}|${sector ?? ""}|${forceRefresh ? "f" : ""}`;
+    const skipFundamentals = opts.skipFundamentals === true;
+    const key = `${sym}|${benchmark}|${sector ?? ""}|${forceRefresh ? "f" : ""}|${skipFundamentals ? "s" : ""}`;
     lastKeyRef.current = key;
     setIsLoading(true);
     setError(null);
     try {
       const { data, error: fnErr } = await supabase.functions.invoke("live-execution-snapshot", {
-        body: { symbol: sym, benchmark, sector: sector ?? null, forceRefresh },
+        body: { symbol: sym, benchmark, sector: sector ?? null, forceRefresh, skipFundamentals },
       });
       if (fnErr) throw new Error(fnErr.message);
       if (data?.error) throw new Error(data.error);
       if (lastKeyRef.current === key) {
-        setSnapshot(data as LiveSnapshot);
+        setSnapshot((prev) => {
+          const next = data as LiveSnapshot;
+          if (skipFundamentals) {
+            // Prefer fundamentals from the previous snapshot for the same symbol;
+            // otherwise fall back to a caller-provided seed (cache hit on first search).
+            if (prev && prev.symbol === next.symbol && prev.fundamentals) {
+              return { ...next, fundamentals: prev.fundamentals, sectorPeAvg: prev.sectorPeAvg };
+            }
+            const seed = seedRef.current;
+            if (seed && seed.symbol === next.symbol) {
+              return { ...next, fundamentals: seed.fundamentals, sectorPeAvg: seed.sectorPeAvg };
+            }
+          }
+          return next;
+        });
       }
     } catch (e) {
       if (lastKeyRef.current === key) {
         setError(e instanceof Error ? e.message : String(e));
-        setSnapshot(null);
+        if (!skipFundamentals) setSnapshot(null);
       }
     } finally {
       if (lastKeyRef.current === key) setIsLoading(false);
@@ -134,9 +157,10 @@ export function useLiveSnapshot() {
     setSnapshot(null);
     setError(null);
     lastKeyRef.current = null;
+    seedRef.current = null;
   }, []);
 
-  return { snapshot, isLoading, error, fetchSnapshot, clear };
+  return { snapshot, isLoading, error, fetchSnapshot, clear, seedFundamentals };
 }
 
 // ── Live watchlist persisted in localStorage ──

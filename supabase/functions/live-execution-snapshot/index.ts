@@ -668,6 +668,10 @@ Deno.serve(async (req) => {
     })();
     const sectorHint = typeof body?.sector === "string" ? body.sector : null;
     const forceRefresh = body?.forceRefresh === true;
+    // When true, skip the (expensive) fundamentals + FMP fallback fetch.
+    // Used by the 7s auto-refresh loop so prices/RS update live without
+    // burning yfinance/FMP credits on data that almost never changes intraday.
+    const skipFundamentals = body?.skipFundamentals === true;
 
     if (!rawSymbol || !/^[A-Z][A-Z0-9.\-]{0,9}$/.test(rawSymbol)) {
       return new Response(JSON.stringify({ error: "Invalid symbol" }), {
@@ -680,13 +684,15 @@ Deno.serve(async (req) => {
       fetchYahooQuote(rawSymbol),
       fetchYahooOptions(rawSymbol),
       fetchBenchmarkSnapshot(benchmarkSymbol, forceRefresh),
-      fetchFundamentalsSnapshot(rawSymbol),
+      skipFundamentals ? Promise.resolve(null) : fetchFundamentalsSnapshot(rawSymbol),
     ]);
 
     // FMP fallback — fills in any missing fundamentals when the API key is configured.
-    const fundamentals = fundamentalsHasGaps(fundamentalsYahoo)
-      ? await enrichFundamentalsWithFmp(rawSymbol, fundamentalsYahoo)
-      : fundamentalsYahoo;
+    const fundamentals = skipFundamentals
+      ? null
+      : (fundamentalsHasGaps(fundamentalsYahoo!)
+          ? await enrichFundamentalsWithFmp(rawSymbol, fundamentalsYahoo!)
+          : fundamentalsYahoo);
 
     if (!quote || quote.price === null) {
       return new Response(
@@ -695,14 +701,15 @@ Deno.serve(async (req) => {
       );
     }
 
-    const resolvedSectorHint = sectorHint ?? fundamentals.industry ?? fundamentals.sector ?? null;
+    const resolvedSectorHint = sectorHint ?? fundamentals?.industry ?? fundamentals?.sector ?? null;
     const industry = await fetchIndustrySnapshot(resolvedSectorHint, forceRefresh);
     const tickerHist = await fetchHistoricalForTicker(rawSymbol, quote.price, forceRefresh);
 
-    const sectorPeAvg =
-      industry?.etfSymbol && SECTOR_PE_BENCHMARK[industry.etfSymbol] !== undefined
-        ? SECTOR_PE_BENCHMARK[industry.etfSymbol]
-        : null;
+    const sectorPeAvg = skipFundamentals
+      ? null
+      : (industry?.etfSymbol && SECTOR_PE_BENCHMARK[industry.etfSymbol] !== undefined
+          ? SECTOR_PE_BENCHMARK[industry.etfSymbol]
+          : null);
 
     return new Response(
       JSON.stringify({
@@ -714,6 +721,7 @@ Deno.serve(async (req) => {
         fundamentals,
         sectorPeAvg,
         tickerHistory: tickerHist,
+        fundamentalsSkipped: skipFundamentals,
         fetchedAt: new Date().toISOString(),
       }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
