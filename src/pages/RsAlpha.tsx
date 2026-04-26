@@ -312,6 +312,55 @@ export default function RsAlpha() {
                 <><RefreshCw size={12} /> Recalculate RS Scores</>
               )}
             </button>
+
+            {/* ── Pull Fundamentals for Universe ── */}
+            {!fundScan.isRunning && (
+              <button
+                onClick={() => {
+                  if (stocks.length === 0) {
+                    toast.error("Run 'Update Stock List' first to build the qualified universe.");
+                    return;
+                  }
+                  // If no progress yet, start fresh; otherwise resume
+                  const mode = fundScan.progress.totalQueued === 0 ? "restart" : "resume";
+                  fundScan.startScan(mode);
+                }}
+                disabled={fundScan.isMutating || stocks.length === 0}
+                className="inline-flex items-center gap-1.5 rounded-md border border-accent/40 bg-accent/10 px-3 py-1.5 text-xs font-semibold text-foreground transition-colors hover:bg-accent/20 disabled:opacity-50"
+                title="Pull fundamentals (EPS, revenue, P/E, margins...) from Yahoo + Finnhub for every qualified stock. Runs in background."
+              >
+                {fundScan.isMutating ? (
+                  <><Loader2 size={12} className="animate-spin" /> Working…</>
+                ) : fundScan.isPaused ? (
+                  <><Play size={12} /> Resume Fundamentals</>
+                ) : fundScan.progress.totalQueued > 0 && fundScan.progress.processed < fundScan.progress.totalQueued ? (
+                  <><Play size={12} /> Continue Fundamentals</>
+                ) : (
+                  <><Database size={12} /> Pull Fundamentals for Universe</>
+                )}
+              </button>
+            )}
+            {fundScan.isRunning && (
+              <button
+                onClick={() => fundScan.pauseScan()}
+                disabled={fundScan.isMutating}
+                className="inline-flex items-center gap-1.5 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-1.5 text-xs font-medium text-amber-500 transition-colors hover:bg-amber-500/20 disabled:opacity-50"
+                title="Pause the fundamentals scan (resumable later)"
+              >
+                {fundScan.isMutating ? <Loader2 size={12} className="animate-spin" /> : <Pause size={12} />}
+                Pause Fundamentals
+              </button>
+            )}
+            {fundScan.progress.totalQueued > 0 && (
+              <button
+                onClick={() => setCoverageOpen(true)}
+                className="inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                title="View % coverage per metric across the scanned universe"
+              >
+                <BarChart3 size={12} /> Coverage
+              </button>
+            )}
+
             <HelpButton />
           </div>
         </div>
