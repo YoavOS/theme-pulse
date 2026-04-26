@@ -98,6 +98,13 @@ export function useLiveSnapshot() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const lastKeyRef = useRef<string | null>(null);
+  // Optional seed used when fundamentals are skipped on the very first fetch
+  // for a symbol (i.e. the caller already has cached fundamentals).
+  const seedRef = useRef<{ symbol: string; fundamentals: LiveFundamentals; sectorPeAvg: number | null } | null>(null);
+
+  const seedFundamentals = useCallback((symbol: string, fundamentals: LiveFundamentals, sectorPeAvg: number | null) => {
+    seedRef.current = { symbol: symbol.toUpperCase(), fundamentals, sectorPeAvg };
+  }, []);
 
   const fetchSnapshot = useCallback(async (
     symbol: string,
@@ -120,16 +127,18 @@ export function useLiveSnapshot() {
       if (fnErr) throw new Error(fnErr.message);
       if (data?.error) throw new Error(data.error);
       if (lastKeyRef.current === key) {
-        // When fundamentals were intentionally skipped (auto-refresh loop), preserve
-        // the previously loaded fundamentals/sectorPeAvg so the UI doesn't go blank.
         setSnapshot((prev) => {
           const next = data as LiveSnapshot;
-          if (skipFundamentals && prev && prev.symbol === next.symbol) {
-            return {
-              ...next,
-              fundamentals: prev.fundamentals,
-              sectorPeAvg: prev.sectorPeAvg,
-            };
+          if (skipFundamentals) {
+            // Prefer fundamentals from the previous snapshot for the same symbol;
+            // otherwise fall back to a caller-provided seed (cache hit on first search).
+            if (prev && prev.symbol === next.symbol && prev.fundamentals) {
+              return { ...next, fundamentals: prev.fundamentals, sectorPeAvg: prev.sectorPeAvg };
+            }
+            const seed = seedRef.current;
+            if (seed && seed.symbol === next.symbol) {
+              return { ...next, fundamentals: seed.fundamentals, sectorPeAvg: seed.sectorPeAvg };
+            }
           }
           return next;
         });
@@ -137,7 +146,6 @@ export function useLiveSnapshot() {
     } catch (e) {
       if (lastKeyRef.current === key) {
         setError(e instanceof Error ? e.message : String(e));
-        // Don't wipe the snapshot on a transient auto-refresh failure.
         if (!skipFundamentals) setSnapshot(null);
       }
     } finally {
@@ -149,9 +157,10 @@ export function useLiveSnapshot() {
     setSnapshot(null);
     setError(null);
     lastKeyRef.current = null;
+    seedRef.current = null;
   }, []);
 
-  return { snapshot, isLoading, error, fetchSnapshot, clear };
+  return { snapshot, isLoading, error, fetchSnapshot, clear, seedFundamentals };
 }
 
 // ── Live watchlist persisted in localStorage ──
