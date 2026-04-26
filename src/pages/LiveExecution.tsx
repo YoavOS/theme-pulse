@@ -745,26 +745,40 @@ export default function LiveExecution() {
   }, [input]);
 
   // Re-fetch snapshot when benchmark toggle changes (so RS values use the new baseline).
+  // Benchmark only affects RS / prices — fundamentals are independent, so skip them
+  // and reuse the cached values.
   useEffect(() => {
     if (activeSymbol) {
       const sector = stockMap.get(activeSymbol)?.sector ?? null;
-      fetchSnapshot(activeSymbol, benchmark, sector);
+      fetchSnapshot(activeSymbol, benchmark, sector, false, { skipFundamentals: true });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [benchmark]);
 
-  // Auto-refresh the live snapshot every 10 s while a ticker is active.
-  // Pauses while the tab is hidden so we don't burn API calls in the background.
+  // Auto-refresh the live snapshot every 7 s while a ticker is active.
+  // IMPORTANT: skipFundamentals = true so the loop only refreshes prices,
+  // RS / benchmark and options — NOT yfinance/FMP fundamentals (which are cached).
   useEffect(() => {
     if (!activeSymbol) return;
     const id = window.setInterval(() => {
       if (document.visibilityState !== "visible") return;
       const sector = stockMap.get(activeSymbol)?.sector ?? null;
-      fetchSnapshot(activeSymbol, benchmark, sector);
+      fetchSnapshot(activeSymbol, benchmark, sector, false, { skipFundamentals: true });
     }, 7_000);
     return () => window.clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeSymbol, benchmark]);
+
+  // Persist freshly-fetched fundamentals to local cache so re-searching the same
+  // ticker (or returning later) does not re-hit yfinance / FMP.
+  useEffect(() => {
+    if (!snapshot?.symbol || !snapshot.fundamentals?.available) return;
+    setCachedFundamentals(
+      snapshot.symbol,
+      snapshot.fundamentals,
+      (snapshot as any).sectorPeAvg ?? null,
+    );
+  }, [snapshot?.symbol, snapshot?.fundamentals]);
 
   const activeStock = activeSymbol ? stockMap.get(activeSymbol) ?? null : null;
   const resolvedTheme = useMemo(() => {
