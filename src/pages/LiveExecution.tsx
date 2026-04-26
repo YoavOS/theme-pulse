@@ -637,7 +637,8 @@ function WhyButton({ onClick, label = "Why?" }: { onClick: () => void; label?: s
 
 export default function LiveExecution() {
   const { stocks, isLoading: rsLoading } = useRsAlpha();
-  const { snapshot, isLoading: snapLoading, error: snapError, fetchSnapshot, clear } = useLiveSnapshot();
+  const { snapshot, isLoading: snapLoading, error: snapError, fetchSnapshot, clear, seedFundamentals } = useLiveSnapshot();
+  const [fundLoading, setFundLoading] = useState(false);
   const { tickers: watchTickers, add: addWatch, remove: removeWatch, has: hasWatch } = useLiveWatchlist();
 
   const [input, setInput] = useState("");
