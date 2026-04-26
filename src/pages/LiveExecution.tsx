@@ -1623,6 +1623,16 @@ export default function LiveExecution() {
                     </TooltipContent>
                   </Tooltip>
                   <span className="ml-auto text-sm text-muted-foreground">Source: Yahoo Finance</span>
+                  <button
+                    type="button"
+                    onClick={refreshFundamentals}
+                    disabled={fundLoading || !activeSymbol}
+                    title="Fundamentals are cached locally and only refresh when you click this button. Auto-refresh (7s) only updates prices & RS."
+                    className="inline-flex items-center gap-1.5 rounded-md border border-border/60 bg-background/40 px-2.5 py-1 text-xs font-medium text-foreground/80 transition hover:bg-background/70 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <RefreshCw size={12} className={fundLoading ? "animate-spin" : ""} />
+                    Refresh Fundamentals
+                  </button>
                 </div>
                 {snapshot.fundamentals?.available ? (
                   <FundamentalsBlock
