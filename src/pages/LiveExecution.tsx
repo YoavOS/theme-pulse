@@ -702,16 +702,35 @@ export default function LiveExecution() {
     return { stockMap: map, ratingOverall: ratingByOverall, rating1w: ratingBy1w, rating1m: ratingBy1m };
   }, [stocks]);
 
-  const submit = (raw: string, opts: { force?: boolean } = {}) => {
+  const submit = (raw: string, opts: { force?: boolean; refreshFundamentals?: boolean } = {}) => {
     const sym = raw.trim().toUpperCase();
     if (!sym) return;
     setActiveSymbol(sym);
     const sector = stockMap.get(sym)?.sector ?? null;
-    fetchSnapshot(sym, benchmark, sector, opts.force === true);
+    // Fundamentals are expensive — only fetch them when:
+    //   1) we don't have a cached entry for this symbol, OR
+    //   2) the user explicitly clicked "Refresh Fundamentals" / "Refresh Data"
+    const cached = getCachedFundamentals(sym);
+    const wantsFreshFund = opts.force === true || opts.refreshFundamentals === true || !cached;
+    if (!wantsFreshFund && cached) {
+      // Seed the hook so the upcoming skipFundamentals fetch keeps the cached values.
+      seedFundamentals(sym, cached.fundamentals, cached.sectorPeAvg);
+    }
+    fetchSnapshot(sym, benchmark, sector, opts.force === true, { skipFundamentals: !wantsFreshFund });
     if (opts.force) {
-      // Force a fresh Groq theme call on manual Refresh.
       lastAiSymbolRef.current = null;
     }
+  };
+
+  // Manual "Refresh Fundamentals" — clears cache then re-fetches with full fundamentals.
+  const refreshFundamentals = async () => {
+    if (!activeSymbol) return;
+    clearCachedFundamentals(activeSymbol);
+    setFundLoading(true);
+    const sector = stockMap.get(activeSymbol)?.sector ?? null;
+    await fetchSnapshot(activeSymbol, benchmark, sector, true, { skipFundamentals: false });
+    setFundLoading(false);
+    toast.success("Fundamentals refreshed");
   };
 
   // Debounce input → auto-submit after 600ms when length >= 1
