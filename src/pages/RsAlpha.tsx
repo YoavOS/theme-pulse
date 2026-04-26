@@ -1,8 +1,9 @@
 import { useState, useMemo, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { ArrowLeft, RefreshCw, Loader2, Info, ChevronDown, ChevronUp, ArrowUpDown, Filter, Hammer, Pause, Play, RotateCcw, Copy, Download, Settings2, PieChart as PieChartIcon } from "lucide-react";
+import { ArrowLeft, RefreshCw, Loader2, Info, ChevronDown, ChevronUp, ArrowUpDown, Filter, Hammer, Pause, Play, RotateCcw, Copy, Download, Settings2, PieChart as PieChartIcon, Database, BarChart3 } from "lucide-react";
 import { toast } from "sonner";
 import { useRsAlpha, RsStock, RS_FILTER_THRESHOLDS } from "@/hooks/useRsAlpha";
+import { useFundamentalsScan } from "@/hooks/useFundamentalsScan";
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip";
 import { Skeleton } from "@/components/ui/skeleton";
 import HelpButton from "@/components/HelpButton";
@@ -10,6 +11,7 @@ import OverallWeightsPanel, { RsWeights, DEFAULT_RS_WEIGHTS, normalizeWeights } 
 import RsRatingBadge, { computeRsRatings } from "@/components/rs/RsRatingBadge";
 import CustomTradingViewListModal from "@/components/rs/CustomTradingViewListModal";
 import SectorDistributionModal from "@/components/rs/SectorDistributionModal";
+import FundamentalsCoverageModal from "@/components/rs/FundamentalsCoverageModal";
 
 type TabId = "overall" | "1d" | "1w" | "1m" | "3m" | "6m";
 type SortField = "rank" | "symbol" | "company" | "rs" | "rating" | "stockReturn" | "spyReturn" | "price";
@@ -84,12 +86,14 @@ export default function RsAlpha() {
     isRecalculating, recalcStatus,
     error, progress, rebuildUniverse, pauseScan, recalculateRs,
   } = useRsAlpha();
+  const fundScan = useFundamentalsScan();
   const [activeTab, setActiveTab] = useState<TabId>("overall");
   const [showAll, setShowAll] = useState(false);
   const [sortField, setSortField] = useState<SortField>("rs");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [customListOpen, setCustomListOpen] = useState(false);
   const [sectorDistOpen, setSectorDistOpen] = useState(false);
+  const [coverageOpen, setCoverageOpen] = useState(false);
   const [hideOtc, setHideOtc] = useState<boolean>(() => {
     const saved = typeof window !== "undefined" ? localStorage.getItem("rs-hide-otc") : null;
     return saved === null ? true : saved === "true";
@@ -308,6 +312,55 @@ export default function RsAlpha() {
                 <><RefreshCw size={12} /> Recalculate RS Scores</>
               )}
             </button>
+
+            {/* ── Pull Fundamentals for Universe ── */}
+            {!fundScan.isRunning && (
+              <button
+                onClick={() => {
+                  if (stocks.length === 0) {
+                    toast.error("Run 'Update Stock List' first to build the qualified universe.");
+                    return;
+                  }
+                  // If no progress yet, start fresh; otherwise resume
+                  const mode = fundScan.progress.totalQueued === 0 ? "restart" : "resume";
+                  fundScan.startScan(mode);
+                }}
+                disabled={fundScan.isMutating || stocks.length === 0}
+                className="inline-flex items-center gap-1.5 rounded-md border border-accent/40 bg-accent/10 px-3 py-1.5 text-xs font-semibold text-foreground transition-colors hover:bg-accent/20 disabled:opacity-50"
+                title="Pull fundamentals (EPS, revenue, P/E, margins...) from Yahoo + Finnhub for every qualified stock. Runs in background."
+              >
+                {fundScan.isMutating ? (
+                  <><Loader2 size={12} className="animate-spin" /> Working…</>
+                ) : fundScan.isPaused ? (
+                  <><Play size={12} /> Resume Fundamentals</>
+                ) : fundScan.progress.totalQueued > 0 && fundScan.progress.processed < fundScan.progress.totalQueued ? (
+                  <><Play size={12} /> Continue Fundamentals</>
+                ) : (
+                  <><Database size={12} /> Pull Fundamentals for Universe</>
+                )}
+              </button>
+            )}
+            {fundScan.isRunning && (
+              <button
+                onClick={() => fundScan.pauseScan()}
+                disabled={fundScan.isMutating}
+                className="inline-flex items-center gap-1.5 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-1.5 text-xs font-medium text-amber-500 transition-colors hover:bg-amber-500/20 disabled:opacity-50"
+                title="Pause the fundamentals scan (resumable later)"
+              >
+                {fundScan.isMutating ? <Loader2 size={12} className="animate-spin" /> : <Pause size={12} />}
+                Pause Fundamentals
+              </button>
+            )}
+            {fundScan.progress.totalQueued > 0 && (
+              <button
+                onClick={() => setCoverageOpen(true)}
+                className="inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                title="View % coverage per metric across the scanned universe"
+              >
+                <BarChart3 size={12} /> Coverage
+              </button>
+            )}
+
             <HelpButton />
           </div>
         </div>
@@ -377,6 +430,48 @@ export default function RsAlpha() {
           <div className="container pb-2">
             <div className="rounded-md border border-[hsl(160,70%,50%)]/30 bg-[hsl(160,70%,50%)]/5 px-3 py-1.5 text-xs text-[hsl(160,70%,50%)]">
               ✓ Universe rebuild complete — {progress.qualified} stocks meet all four criteria.
+            </div>
+          </div>
+        )}
+
+        {/* Fundamentals scan progress bar */}
+        {(fundScan.isRunning || fundScan.isPaused || (fundScan.progress.totalQueued > 0 && fundScan.progress.processed < fundScan.progress.totalQueued)) && (
+          <div className="container pb-2">
+            <div className={`rounded-md border px-3 py-2 text-xs ${fundScan.isPaused ? "border-amber-500/30 bg-amber-500/5" : "border-accent/30 bg-accent/5"}`}>
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-foreground font-medium">
+                  {fundScan.isPaused ? <Pause size={11} className="mr-1 inline text-amber-500" /> : <Database size={11} className="mr-1 inline" />}
+                  {fundScan.isPaused ? "Fundamentals scan paused" : "Pulling fundamentals (Yahoo + Finnhub)"} — {fundScan.progress.totalQueued > 0 ? Math.min(100, Math.round((fundScan.progress.processed / fundScan.progress.totalQueued) * 100)) : 0}%
+                </span>
+                <span className="text-muted-foreground">
+                  {fundScan.progress.processed.toLocaleString()} / {fundScan.progress.totalQueued.toLocaleString()} stocks · {fundScan.progress.succeeded} saved · {fundScan.progress.failed} failed
+                </span>
+              </div>
+              <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
+                <div
+                  className={`h-full transition-all ${fundScan.isPaused ? "bg-amber-500/60" : "bg-accent"}`}
+                  style={{ width: `${fundScan.progress.totalQueued > 0 ? Math.min(100, (fundScan.progress.processed / fundScan.progress.totalQueued) * 100) : 0}%` }}
+                />
+              </div>
+              <div className="mt-1.5 flex items-center justify-between text-[10px] text-muted-foreground">
+                <span>
+                  {fundScan.isPaused
+                    ? "Click Resume Fundamentals to continue from where it stopped."
+                    : "~50 symbols/min · runs server-side · safe to close this tab."}
+                </span>
+                {!fundScan.isPaused && fundScan.progress.etaSeconds !== null && (
+                  <span className="font-medium">{formatEta(fundScan.progress.etaSeconds)}</span>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {fundScan.progress.status === "complete" && fundScan.progress.totalQueued > 0 && !fundScan.isRunning && (
+          <div className="container pb-2">
+            <div className="rounded-md border border-[hsl(160,70%,50%)]/30 bg-[hsl(160,70%,50%)]/5 px-3 py-1.5 text-xs text-[hsl(160,70%,50%)] flex items-center justify-between">
+              <span>✓ Fundamentals scan complete — {fundScan.progress.succeeded} stocks saved · {fundScan.progress.failed} failed.</span>
+              <button onClick={() => setCoverageOpen(true)} className="text-foreground underline-offset-2 hover:underline">View Coverage →</button>
             </div>
           </div>
         )}
@@ -607,6 +702,8 @@ export default function RsAlpha() {
         getReturnField={getReturnField}
         isOtcSymbol={isOtcSymbol}
       />
+
+      <FundamentalsCoverageModal open={coverageOpen} onClose={() => setCoverageOpen(false)} />
     </div>
   );
 }

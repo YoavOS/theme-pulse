@@ -299,6 +299,66 @@ export type Database = {
         }
         Relationships: []
       }
+      fundamentals_scan_progress: {
+        Row: {
+          failed: number
+          id: number
+          last_updated: string
+          processed: number
+          started_at: string | null
+          status: string
+          succeeded: number
+          total_queued: number
+        }
+        Insert: {
+          failed?: number
+          id?: number
+          last_updated?: string
+          processed?: number
+          started_at?: string | null
+          status?: string
+          succeeded?: number
+          total_queued?: number
+        }
+        Update: {
+          failed?: number
+          id?: number
+          last_updated?: string
+          processed?: number
+          started_at?: string | null
+          status?: string
+          succeeded?: number
+          total_queued?: number
+        }
+        Relationships: []
+      }
+      fundamentals_scan_queue: {
+        Row: {
+          attempts: number
+          enqueued_at: string
+          last_error: string | null
+          processed_at: string | null
+          status: string
+          symbol: string
+        }
+        Insert: {
+          attempts?: number
+          enqueued_at?: string
+          last_error?: string | null
+          processed_at?: string | null
+          status?: string
+          symbol: string
+        }
+        Update: {
+          attempts?: number
+          enqueued_at?: string
+          last_error?: string | null
+          processed_at?: string | null
+          status?: string
+          symbol?: string
+        }
+        Relationships: []
+      }
       last_scan_cache: {
         Row: {
           id: number
@@ -485,6 +545,111 @@ export type Database = {
           started_at?: string | null
           status?: string
           total_queued?: number
+        }
+        Relationships: []
+      }
+      stock_fundamentals: {
+        Row: {
+          company_name: string | null
+          current_ratio: number | null
+          debt_to_equity: number | null
+          eps_annual_yoy: number | null
+          eps_quarterly_qoq: number | null
+          eps_quarterly_yoy: number | null
+          eps_ttm_yoy: number | null
+          fetched_at: string
+          forward_pe: number | null
+          gross_margin: number | null
+          market_cap: number | null
+          net_margin: number | null
+          operating_margin: number | null
+          pb_ratio: number | null
+          pe_ratio: number | null
+          peg_ratio: number | null
+          price: number | null
+          ps_ratio: number | null
+          raw_finnhub: Json | null
+          raw_yahoo: Json | null
+          revenue_annual_yoy: number | null
+          revenue_quarterly_qoq: number | null
+          revenue_quarterly_yoy: number | null
+          revenue_ttm_yoy: number | null
+          roa: number | null
+          roe: number | null
+          sector: string | null
+          source_eps: string | null
+          source_revenue: string | null
+          source_valuation: string | null
+          symbol: string
+          updated_at: string
+        }
+        Insert: {
+          company_name?: string | null
+          current_ratio?: number | null
+          debt_to_equity?: number | null
+          eps_annual_yoy?: number | null
+          eps_quarterly_qoq?: number | null
+          eps_quarterly_yoy?: number | null
+          eps_ttm_yoy?: number | null
+          fetched_at?: string
+          forward_pe?: number | null
+          gross_margin?: number | null
+          market_cap?: number | null
+          net_margin?: number | null
+          operating_margin?: number | null
+          pb_ratio?: number | null
+          pe_ratio?: number | null
+          peg_ratio?: number | null
+          price?: number | null
+          ps_ratio?: number | null
+          raw_finnhub?: Json | null
+          raw_yahoo?: Json | null
+          revenue_annual_yoy?: number | null
+          revenue_quarterly_qoq?: number | null
+          revenue_quarterly_yoy?: number | null
+          revenue_ttm_yoy?: number | null
+          roa?: number | null
+          roe?: number | null
+          sector?: string | null
+          source_eps?: string | null
+          source_revenue?: string | null
+          source_valuation?: string | null
+          symbol: string
+          updated_at?: string
+        }
+        Update: {
+          company_name?: string | null
+          current_ratio?: number | null
+          debt_to_equity?: number | null
+          eps_annual_yoy?: number | null
+          eps_quarterly_qoq?: number | null
+          eps_quarterly_yoy?: number | null
+          eps_ttm_yoy?: number | null
+          fetched_at?: string
+          forward_pe?: number | null
+          gross_margin?: number | null
+          market_cap?: number | null
+          net_margin?: number | null
+          operating_margin?: number | null
+          pb_ratio?: number | null
+          pe_ratio?: number | null
+          peg_ratio?: number | null
+          price?: number | null
+          ps_ratio?: number | null
+          raw_finnhub?: Json | null
+          raw_yahoo?: Json | null
+          revenue_annual_yoy?: number | null
+          revenue_quarterly_qoq?: number | null
+          revenue_quarterly_yoy?: number | null
+          revenue_ttm_yoy?: number | null
+          roa?: number | null
+          roe?: number | null
+          sector?: string | null
+          source_eps?: string | null
+          source_revenue?: string | null
+          source_valuation?: string | null
+          symbol?: string
+          updated_at?: string
         }
         Relationships: []
       }
@@ -773,6 +938,10 @@ export type Database = {
           symbol: string
           timeframe: string
         }[]
+      }
+      set_fundamentals_cron_active: {
+        Args: { p_active: boolean }
+        Returns: undefined
       }
       set_universe_cron_active: {
         Args: { p_active: boolean }
