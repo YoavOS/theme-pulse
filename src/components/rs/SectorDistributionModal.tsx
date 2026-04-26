@@ -281,19 +281,67 @@ export default function SectorDistributionModal({
             {/* Expanded sector details */}
             {expandedDatum && (
               <div className="animate-fade-in rounded-lg border border-primary/30 bg-card p-3">
-                <div className="mb-2 flex items-center justify-between">
+                <div className="mb-2 flex items-start justify-between gap-3">
                   <div>
                     <div className="text-sm font-semibold text-foreground">{expandedDatum.gics}</div>
                     <div className="text-[11px] text-muted-foreground">
                       {expandedDatum.count} stocks · {expandedDatum.pct.toFixed(1)}% of selection
                     </div>
                   </div>
-                  <button
-                    onClick={() => setExpandedSlice(null)}
-                    className="rounded-md border border-border px-2 py-0.5 text-[10px] text-muted-foreground hover:bg-accent hover:text-foreground"
-                  >
-                    Close
-                  </button>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      onClick={async () => {
+                        const syms = expandedDatum.stocks.map(s => s.symbol);
+                        try {
+                          await navigator.clipboard.writeText(syms.join(","));
+                          toast.success(`${syms.length} symbols copied to clipboard.`, {
+                            description: "Paste into TradingView Watchlist → Import symbols.",
+                          });
+                        } catch {
+                          toast.error("Could not copy to clipboard.");
+                        }
+                      }}
+                      className="inline-flex items-center gap-1 rounded-md border border-primary/40 bg-primary/10 px-2 py-1 text-[10px] font-medium text-primary hover:bg-primary/20"
+                      title="Copy all tickers in this sector"
+                    >
+                      <Copy size={11} /> Copy
+                    </button>
+                    <button
+                      onClick={() => {
+                        const syms = expandedDatum.stocks.map(s => s.symbol);
+                        const blob = new Blob([syms.join("\n") + "\n"], { type: "text/plain;charset=utf-8" });
+                        const url = URL.createObjectURL(blob);
+                        const safeTab = tabLabel.replace(/\s+/g, "");
+                        const safeSec = expandedDatum.gics.replace(/\s+/g, "");
+                        const a = document.createElement("a");
+                        a.href = url;
+                        a.download = `RS_${safeSec}_${safeTab}_${syms.length}tickers.txt`;
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                        URL.revokeObjectURL(url);
+                        toast.success(`Downloaded ${syms.length} symbols.`, {
+                          description: "One ticker per line — ready for TradingView import.",
+                        });
+                      }}
+                      className="inline-flex items-center gap-1 rounded-md border border-border bg-background px-2 py-1 text-[10px] font-medium text-foreground hover:bg-accent"
+                      title="Download all tickers in this sector as .txt"
+                    >
+                      <Download size={11} /> .txt
+                    </button>
+                    <span className="hidden lg:inline text-[10px] font-medium text-muted-foreground px-1">
+                      Export Sector to TradingView
+                    </span>
+                    <button
+                      onClick={() => setExpandedSlice(null)}
+                      className="rounded-md border border-border px-2 py-0.5 text-[10px] text-muted-foreground hover:bg-accent hover:text-foreground"
+                    >
+                      Close
+                    </button>
+                  </div>
+                </div>
+                <div className="mb-2 text-[10px] italic text-muted-foreground">
+                  Exports all {expandedDatum.count} tickers in this sector from the current timeframe list ({tabLabel}).
                 </div>
                 <div className="max-h-72 overflow-y-auto">
                   <table className="w-full text-xs">
