@@ -104,26 +104,41 @@ export function useLiveSnapshot() {
     benchmark: BenchmarkSymbol = "SPY",
     sector?: string | null,
     forceRefresh = false,
+    opts: { skipFundamentals?: boolean } = {},
   ) => {
     const sym = symbol.trim().toUpperCase();
     if (!sym) return;
-    const key = `${sym}|${benchmark}|${sector ?? ""}|${forceRefresh ? "f" : ""}`;
+    const skipFundamentals = opts.skipFundamentals === true;
+    const key = `${sym}|${benchmark}|${sector ?? ""}|${forceRefresh ? "f" : ""}|${skipFundamentals ? "s" : ""}`;
     lastKeyRef.current = key;
     setIsLoading(true);
     setError(null);
     try {
       const { data, error: fnErr } = await supabase.functions.invoke("live-execution-snapshot", {
-        body: { symbol: sym, benchmark, sector: sector ?? null, forceRefresh },
+        body: { symbol: sym, benchmark, sector: sector ?? null, forceRefresh, skipFundamentals },
       });
       if (fnErr) throw new Error(fnErr.message);
       if (data?.error) throw new Error(data.error);
       if (lastKeyRef.current === key) {
-        setSnapshot(data as LiveSnapshot);
+        // When fundamentals were intentionally skipped (auto-refresh loop), preserve
+        // the previously loaded fundamentals/sectorPeAvg so the UI doesn't go blank.
+        setSnapshot((prev) => {
+          const next = data as LiveSnapshot;
+          if (skipFundamentals && prev && prev.symbol === next.symbol) {
+            return {
+              ...next,
+              fundamentals: prev.fundamentals,
+              sectorPeAvg: prev.sectorPeAvg,
+            };
+          }
+          return next;
+        });
       }
     } catch (e) {
       if (lastKeyRef.current === key) {
         setError(e instanceof Error ? e.message : String(e));
-        setSnapshot(null);
+        // Don't wipe the snapshot on a transient auto-refresh failure.
+        if (!skipFundamentals) setSnapshot(null);
       }
     } finally {
       if (lastKeyRef.current === key) setIsLoading(false);
