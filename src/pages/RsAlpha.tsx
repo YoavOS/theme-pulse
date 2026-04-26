@@ -86,12 +86,14 @@ export default function RsAlpha() {
     isRecalculating, recalcStatus,
     error, progress, rebuildUniverse, pauseScan, recalculateRs,
   } = useRsAlpha();
+  const fundScan = useFundamentalsScan();
   const [activeTab, setActiveTab] = useState<TabId>("overall");
   const [showAll, setShowAll] = useState(false);
   const [sortField, setSortField] = useState<SortField>("rs");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [customListOpen, setCustomListOpen] = useState(false);
   const [sectorDistOpen, setSectorDistOpen] = useState(false);
+  const [coverageOpen, setCoverageOpen] = useState(false);
   const [hideOtc, setHideOtc] = useState<boolean>(() => {
     const saved = typeof window !== "undefined" ? localStorage.getItem("rs-hide-otc") : null;
     return saved === null ? true : saved === "true";
