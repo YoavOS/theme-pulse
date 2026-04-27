@@ -8,6 +8,13 @@ import { Slider } from "@/components/ui/slider";
 import { Checkbox } from "@/components/ui/checkbox";
 import { RsStock } from "@/hooks/useRsAlpha";
 import { ALL_GICS_SECTORS, GICS_SECTORS, expandSelectedToIndustries } from "@/lib/sectorTaxonomy";
+import type { StockFundamentals } from "@/hooks/useStockFundamentalsMap";
+import {
+  DEFAULT_GROWTH_FILTERS,
+  GrowthFiltersState,
+  passesAllActiveFilters,
+  anyActive,
+} from "@/lib/growthFilters";
 
 export type CustomListTab = "overall" | "1d" | "1w" | "1m" | "3m" | "6m";
 type SortBy = "rs" | "rating" | "return";
