@@ -95,6 +95,7 @@ export default function RsAlpha() {
     error, progress, rebuildUniverse, pauseScan, recalculateRs,
   } = useRsAlpha();
   const fundScan = useFundamentalsScan();
+  const { map: fundamentalsMap } = useStockFundamentalsMap();
   const [activeTab, setActiveTab] = useState<TabId>("overall");
   const [showAll, setShowAll] = useState(false);
   const [sortField, setSortField] = useState<SortField>("rs");
@@ -105,6 +106,21 @@ export default function RsAlpha() {
   const [hideOtc, setHideOtc] = useState<boolean>(() => {
     const saved = typeof window !== "undefined" ? localStorage.getItem("rs-hide-otc") : null;
     return saved === null ? true : saved === "true";
+  });
+  const [growthFilters, setGrowthFilters] = useState<GrowthFiltersState>(() => {
+    if (typeof window === "undefined") return { ...DEFAULT_GROWTH_FILTERS };
+    try {
+      const raw = localStorage.getItem(GROWTH_FILTERS_KEY);
+      if (!raw) return { ...DEFAULT_GROWTH_FILTERS };
+      const parsed = JSON.parse(raw);
+      return {
+        growth: !!parsed.growth,
+        highGrowth: !!parsed.highGrowth,
+        oneil: !!parsed.oneil,
+      };
+    } catch {
+      return { ...DEFAULT_GROWTH_FILTERS };
+    }
   });
   const [weights, setWeights] = useState<RsWeights>(() => {
     if (typeof window === "undefined") return { ...DEFAULT_RS_WEIGHTS };
