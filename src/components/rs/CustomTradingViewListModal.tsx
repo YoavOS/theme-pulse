@@ -8,6 +8,13 @@ import { Slider } from "@/components/ui/slider";
 import { Checkbox } from "@/components/ui/checkbox";
 import { RsStock } from "@/hooks/useRsAlpha";
 import { ALL_GICS_SECTORS, GICS_SECTORS, expandSelectedToIndustries } from "@/lib/sectorTaxonomy";
+import type { StockFundamentals } from "@/hooks/useStockFundamentalsMap";
+import {
+  DEFAULT_GROWTH_FILTERS,
+  GrowthFiltersState,
+  passesAllActiveFilters,
+  anyActive,
+} from "@/lib/growthFilters";
 
 export type CustomListTab = "overall" | "1d" | "1w" | "1m" | "3m" | "6m";
 type SortBy = "rs" | "rating" | "return";
@@ -25,11 +32,12 @@ interface Props {
   getRsForTab: (s: RsStock, t: CustomListTab) => number | null;
   getReturnField: (s: RsStock, t: CustomListTab) => number | null;
   isOtcSymbol: (sym: string) => boolean;
+  fundamentalsMap?: Map<string, StockFundamentals>;
 }
 
 export default function CustomTradingViewListModal({
   open, onOpenChange, tabId, tabLabel, stocks, ratingMap,
-  getRsForTab, getReturnField, isOtcSymbol,
+  getRsForTab, getReturnField, isOtcSymbol, fundamentalsMap,
 }: Props) {
   const [minRating, setMinRating] = useState<number>(60);
   const [topN, setTopN] = useState<number>(50);
@@ -41,6 +49,9 @@ export default function CustomTradingViewListModal({
   const [excludedSectors, setExcludedSectors] = useState<Set<string>>(new Set());
   const [sectorSearch, setSectorSearch] = useState<string>("");
   const [sectorPopoverOpen, setSectorPopoverOpen] = useState<boolean>(false);
+  const [growthFilters, setGrowthFilters] = useState<GrowthFiltersState>({ ...DEFAULT_GROWTH_FILTERS });
+  const growthActive = anyActive(growthFilters);
+  const fundamentalsAvailable = (fundamentalsMap?.size ?? 0) > 0;
 
   // Industries actually present in the qualified universe (used to show counts and an "Other" group)
   const universeIndustries = useMemo(() => {
@@ -109,6 +120,10 @@ export default function CustomTradingViewListModal({
         const expanded = expandedExclusions;
         if (s.sector && expanded.has(s.sector.toLowerCase().trim())) return false;
       }
+      if (growthActive) {
+        const f = fundamentalsMap?.get(s.symbol);
+        if (!passesAllActiveFilters(growthFilters, f)) return false;
+      }
       return true;
     });
 
@@ -120,7 +135,7 @@ export default function CustomTradingViewListModal({
 
     if (topN < TOPN_MAX) list = list.slice(0, topN);
     return list;
-  }, [stocks, ratingMap, minRating, minAdr, acceleratingOnly, excludeOtc, sortBy, topN, tabId, getRsForTab, getReturnField, isOtcSymbol, excludeSectorsOn, excludedSectors]);
+  }, [stocks, ratingMap, minRating, minAdr, acceleratingOnly, excludeOtc, sortBy, topN, tabId, getRsForTab, getReturnField, isOtcSymbol, excludeSectorsOn, excludedSectors, growthFilters, growthActive, fundamentalsMap, expandedExclusions]);
 
   const symbols = filtered.map(s => s.symbol);
 
@@ -264,6 +279,69 @@ export default function CustomTradingViewListModal({
                 <span className="block text-[10px] text-muted-foreground">Hide foreign / pink sheets</span>
               </span>
             </label>
+          </div>
+
+          {/* Growth Filters */}
+          <div className="space-y-2 rounded-md border border-border bg-muted/20 px-3 py-2.5">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-medium text-foreground">Growth Filters</span>
+              {!fundamentalsAvailable && (
+                <span className="text-[10px] italic text-muted-foreground">
+                  Run "Pull Fundamentals" to enable
+                </span>
+              )}
+              {growthActive && fundamentalsAvailable && (
+                <button
+                  onClick={() => setGrowthFilters({ ...DEFAULT_GROWTH_FILTERS })}
+                  className="text-[10px] font-medium text-primary hover:underline"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+              <label className={`flex items-start gap-2 rounded-md border border-border bg-background/40 px-2.5 py-2 text-xs ${fundamentalsAvailable ? "cursor-pointer" : "opacity-50 cursor-not-allowed"}`}>
+                <Checkbox
+                  checked={growthFilters.growth}
+                  disabled={!fundamentalsAvailable}
+                  onCheckedChange={(v) => setGrowthFilters(p => ({ ...p, growth: !!v }))}
+                />
+                <span>
+                  <span className="font-medium text-foreground">Growth Stocks Only</span>
+                  <span className="block text-[10px] text-muted-foreground leading-tight">
+                    2 of 3: Rev Q≥20% / TTM≥15% · EPS Q≥25% / TTM≥25% · ROE≥15% / NM≥10%
+                  </span>
+                </span>
+              </label>
+
+              <label className={`flex items-start gap-2 rounded-md border border-border bg-background/40 px-2.5 py-2 text-xs ${fundamentalsAvailable ? "cursor-pointer" : "opacity-50 cursor-not-allowed"}`}>
+                <Checkbox
+                  checked={growthFilters.highGrowth}
+                  disabled={!fundamentalsAvailable}
+                  onCheckedChange={(v) => setGrowthFilters(p => ({ ...p, highGrowth: !!v }))}
+                />
+                <span>
+                  <span className="font-medium text-foreground">High Growth</span>
+                  <span className="block text-[10px] text-muted-foreground leading-tight">
+                    Rev Q≥25% · EPS Q≥40% (if data) · ROE≥20%
+                  </span>
+                </span>
+              </label>
+
+              <label className={`flex items-start gap-2 rounded-md border border-border bg-background/40 px-2.5 py-2 text-xs ${fundamentalsAvailable ? "cursor-pointer" : "opacity-50 cursor-not-allowed"}`}>
+                <Checkbox
+                  checked={growthFilters.oneil}
+                  disabled={!fundamentalsAvailable}
+                  onCheckedChange={(v) => setGrowthFilters(p => ({ ...p, oneil: !!v }))}
+                />
+                <span>
+                  <span className="font-medium text-foreground">O'Neil Growth</span>
+                  <span className="block text-[10px] text-muted-foreground leading-tight">
+                    4 of 5: EPS Q≥30% · Rev Q≥25% · ROE≥17% · D/E low · NM&gt;0
+                  </span>
+                </span>
+              </label>
+            </div>
           </div>
 
           {/* Exclude Sector / Industry */}
