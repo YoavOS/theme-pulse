@@ -321,8 +321,11 @@ export default function RsAlpha() {
                     toast.error("Run 'Update Stock List' first to build the qualified universe.");
                     return;
                   }
-                  // If no progress yet, start fresh; otherwise resume
-                  const mode = fundScan.progress.totalQueued === 0 ? "restart" : "resume";
+                  // Completed → restart fresh; otherwise resume existing queue
+                  const mode =
+                    fundScan.isComplete || fundScan.progress.totalQueued === 0
+                      ? "restart"
+                      : "resume";
                   fundScan.startScan(mode);
                 }}
                 disabled={fundScan.isMutating || stocks.length === 0}
@@ -331,6 +334,8 @@ export default function RsAlpha() {
               >
                 {fundScan.isMutating ? (
                   <><Loader2 size={12} className="animate-spin" /> Working…</>
+                ) : fundScan.isComplete ? (
+                  <><RefreshCw size={12} /> Re-scan Fundamentals</>
                 ) : fundScan.isPaused ? (
                   <><Play size={12} /> Resume Fundamentals</>
                 ) : fundScan.progress.totalQueued > 0 && fundScan.progress.processed < fundScan.progress.totalQueued ? (
