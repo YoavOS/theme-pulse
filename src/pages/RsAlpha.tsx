@@ -436,7 +436,135 @@ export default function RsAlpha() {
           </div>
         </div>
 
-        {/* Rebuild progress bar */}
+        {/* Growth Filters bar */}
+        <div className="container pb-1.5">
+          <div className="flex flex-wrap items-center gap-3 rounded-md border border-border/50 bg-muted/10 px-3 py-1.5 text-[11px]">
+            <div className="flex items-center gap-1.5 text-muted-foreground shrink-0">
+              <Filter size={11} />
+              <span className="font-medium text-foreground">Growth Filters</span>
+              <TooltipProvider delayDuration={150}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="cursor-help"><Info size={11} /></span>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom" className="max-w-[320px] text-xs">
+                    Filters use the latest fundamentals from the universe scan (Yahoo + Finnhub).
+                    Stocks without fundamentals data are excluded when any filter is active.
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </div>
+
+            <TooltipProvider delayDuration={150}>
+              {/* Growth Stocks Only */}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <label className="flex items-center gap-1.5 cursor-pointer select-none">
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={growthFilters.growth}
+                      onClick={() => setGrowthFilters(p => ({ ...p, growth: !p.growth }))}
+                      className={`relative inline-flex h-4 w-7 items-center rounded-full transition-colors ${growthFilters.growth ? "bg-primary" : "bg-muted-foreground/30"}`}
+                    >
+                      <span className={`inline-block h-3 w-3 transform rounded-full bg-background transition-transform ${growthFilters.growth ? "translate-x-3.5" : "translate-x-0.5"}`} />
+                    </button>
+                    <span className={growthFilters.growth ? "text-foreground font-medium" : "text-muted-foreground"}>
+                      Growth Stocks Only
+                    </span>
+                  </label>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="max-w-[340px] text-xs">
+                  <p className="font-semibold mb-1">Growth Stocks Only — needs 2 of 3</p>
+                  <ul className="text-muted-foreground space-y-0.5 list-disc pl-4">
+                    <li>Revenue: Quarterly YoY ≥ 20% OR TTM YoY ≥ 15%</li>
+                    <li>EPS: Quarterly YoY ≥ 25% OR TTM YoY ≥ 25% (only if data exists)</li>
+                    <li>Profitability: ROE ≥ 15% OR Net Margin ≥ 10%</li>
+                  </ul>
+                </TooltipContent>
+              </Tooltip>
+
+              {/* High Growth */}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <label className="flex items-center gap-1.5 cursor-pointer select-none">
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={growthFilters.highGrowth}
+                      onClick={() => setGrowthFilters(p => ({ ...p, highGrowth: !p.highGrowth }))}
+                      className={`relative inline-flex h-4 w-7 items-center rounded-full transition-colors ${growthFilters.highGrowth ? "bg-[hsl(280,70%,55%)]" : "bg-muted-foreground/30"}`}
+                    >
+                      <span className={`inline-block h-3 w-3 transform rounded-full bg-background transition-transform ${growthFilters.highGrowth ? "translate-x-3.5" : "translate-x-0.5"}`} />
+                    </button>
+                    <span className={growthFilters.highGrowth ? "text-foreground font-medium" : "text-muted-foreground"}>
+                      High Growth
+                    </span>
+                  </label>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="max-w-[340px] text-xs">
+                  <p className="font-semibold mb-1">High Growth — strict, all required</p>
+                  <ul className="text-muted-foreground space-y-0.5 list-disc pl-4">
+                    <li>Revenue Quarterly YoY ≥ 25%</li>
+                    <li>EPS Quarterly YoY ≥ 40% (only if data available)</li>
+                    <li>ROE ≥ 20%</li>
+                  </ul>
+                </TooltipContent>
+              </Tooltip>
+
+              {/* O'Neil Growth */}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <label className="flex items-center gap-1.5 cursor-pointer select-none">
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={growthFilters.oneil}
+                      onClick={() => setGrowthFilters(p => ({ ...p, oneil: !p.oneil }))}
+                      className={`relative inline-flex h-4 w-7 items-center rounded-full transition-colors ${growthFilters.oneil ? "bg-[hsl(160,70%,45%)]" : "bg-muted-foreground/30"}`}
+                    >
+                      <span className={`inline-block h-3 w-3 transform rounded-full bg-background transition-transform ${growthFilters.oneil ? "translate-x-3.5" : "translate-x-0.5"}`} />
+                    </button>
+                    <span className={growthFilters.oneil ? "text-foreground font-medium" : "text-muted-foreground"}>
+                      O'Neil Growth
+                    </span>
+                  </label>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="max-w-[360px] text-xs">
+                  <p className="font-semibold mb-1">O'Neil Growth — needs 4 of 5</p>
+                  <ul className="text-muted-foreground space-y-0.5 list-disc pl-4">
+                    <li>EPS Quarterly YoY ≥ 30% (falls back to TTM YoY)</li>
+                    <li>Revenue Quarterly YoY ≥ 25% (falls back to TTM YoY)</li>
+                    <li>ROE ≥ 17%</li>
+                    <li>Debt/Equity is low (≤ 1.5)</li>
+                    <li>Net Margin is positive</li>
+                  </ul>
+                  <p className="mt-1.5 text-[10px] text-muted-foreground">No max P/E — high P/E growth leaders allowed.</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+
+            {growthActive && (
+              <div className="ml-auto flex items-center gap-2 text-[10px] text-muted-foreground">
+                {growthFilteredOutCount > 0 && (
+                  <span>{growthFilteredOutCount.toLocaleString()} excluded by growth filter</span>
+                )}
+                <button
+                  onClick={() => setGrowthFilters({ ...DEFAULT_GROWTH_FILTERS })}
+                  className="rounded border border-border px-2 py-0.5 hover:bg-accent hover:text-foreground"
+                >
+                  Clear
+                </button>
+              </div>
+            )}
+
+            {!growthActive && fundamentalsMap.size === 0 && (
+              <span className="ml-auto text-[10px] text-muted-foreground italic">
+                Run "Pull Fundamentals for Universe" to enable growth filters.
+              </span>
+            )}
+          </div>
+        </div>
         {(isRebuilding || isPaused || (progress.totalQueued > 0 && progress.processed < progress.totalQueued)) && (
           <div className="container pb-2">
             <div className={`rounded-md border px-3 py-2 text-xs ${isPaused ? "border-amber-500/30 bg-amber-500/5" : "border-accent/30 bg-accent/5"}`}>
