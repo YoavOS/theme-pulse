@@ -321,8 +321,11 @@ export default function RsAlpha() {
                     toast.error("Run 'Update Stock List' first to build the qualified universe.");
                     return;
                   }
-                  // If no progress yet, start fresh; otherwise resume
-                  const mode = fundScan.progress.totalQueued === 0 ? "restart" : "resume";
+                  // Completed → restart fresh; otherwise resume existing queue
+                  const mode =
+                    fundScan.isComplete || fundScan.progress.totalQueued === 0
+                      ? "restart"
+                      : "resume";
                   fundScan.startScan(mode);
                 }}
                 disabled={fundScan.isMutating || stocks.length === 0}
@@ -331,6 +334,8 @@ export default function RsAlpha() {
               >
                 {fundScan.isMutating ? (
                   <><Loader2 size={12} className="animate-spin" /> Working…</>
+                ) : fundScan.isComplete ? (
+                  <><RefreshCw size={12} /> Re-scan Fundamentals</>
                 ) : fundScan.isPaused ? (
                   <><Play size={12} /> Resume Fundamentals</>
                 ) : fundScan.progress.totalQueued > 0 && fundScan.progress.processed < fundScan.progress.totalQueued ? (
@@ -435,7 +440,7 @@ export default function RsAlpha() {
         )}
 
         {/* Fundamentals scan progress bar */}
-        {(fundScan.isRunning || fundScan.isPaused || (fundScan.progress.totalQueued > 0 && fundScan.progress.processed < fundScan.progress.totalQueued)) && (
+        {!fundScan.isComplete && (fundScan.isRunning || fundScan.isPaused || (fundScan.progress.totalQueued > 0 && fundScan.progress.processed < fundScan.progress.totalQueued)) && (
           <div className="container pb-2">
             <div className={`rounded-md border px-3 py-2 text-xs ${fundScan.isPaused ? "border-amber-500/30 bg-amber-500/5" : "border-accent/30 bg-accent/5"}`}>
               <div className="flex items-center justify-between mb-1.5">
@@ -467,10 +472,10 @@ export default function RsAlpha() {
           </div>
         )}
 
-        {fundScan.progress.status === "complete" && fundScan.progress.totalQueued > 0 && !fundScan.isRunning && (
+        {fundScan.isComplete && fundScan.progress.totalQueued > 0 && !fundScan.isRunning && (
           <div className="container pb-2">
             <div className="rounded-md border border-[hsl(160,70%,50%)]/30 bg-[hsl(160,70%,50%)]/5 px-3 py-1.5 text-xs text-[hsl(160,70%,50%)] flex items-center justify-between">
-              <span>✓ Fundamentals scan complete — {fundScan.progress.succeeded} stocks saved · {fundScan.progress.failed} failed.</span>
+              <span>✓ Fundamentals scan completed — {fundScan.progress.processed.toLocaleString()} stocks processed · {fundScan.progress.succeeded.toLocaleString()} saved · {fundScan.progress.failed} failed.</span>
               <button onClick={() => setCoverageOpen(true)} className="text-foreground underline-offset-2 hover:underline">View Coverage →</button>
             </div>
           </div>

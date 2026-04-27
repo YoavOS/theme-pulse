@@ -110,7 +110,11 @@ export function useFundamentalsScan() {
   }, []);
 
   const isRunning = progress.status === "running";
-  const isPaused = progress.status === "paused";
+  const isComplete =
+    progress.status === "complete" ||
+    (progress.totalQueued > 0 && progress.processed >= progress.totalQueued && progress.status !== "running");
+  // Only treat as paused if there's still work left
+  const isPaused = progress.status === "paused" && !isComplete;
 
-  return { progress, isRunning, isPaused, isMutating, error, startScan, pauseScan, fetchCoverage };
+  return { progress, isRunning, isPaused, isComplete, isMutating, error, startScan, pauseScan, fetchCoverage };
 }
