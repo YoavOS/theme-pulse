@@ -178,11 +178,21 @@ export default function RsAlpha() {
     else { setSortField(field); setSortDir("desc"); }
   };
 
+  const growthActive = anyActive(growthFilters);
+
   // Filter, then compute RS Rating (1-99) by ranking within the filtered list for the active timeframe.
-  const { sortedStocks, ratingMap } = useMemo(() => {
+  const { sortedStocks, ratingMap, growthFilteredOutCount } = useMemo(() => {
+    let droppedByGrowth = 0;
     const filtered = stocks.filter(s => {
       if (getRsForTab(s, activeTab) === null) return false;
       if (hideOtc && isOtcSymbol(s.symbol)) return false;
+      if (growthActive) {
+        const f = fundamentalsMap.get(s.symbol);
+        if (!passesAllActiveFilters(growthFilters, f)) {
+          droppedByGrowth++;
+          return false;
+        }
+      }
       return true;
     });
     const rsValues = filtered.map(s => getRsForTab(s, activeTab));
@@ -203,9 +213,9 @@ export default function RsAlpha() {
         default: return 0;
       }
     });
-    return { sortedStocks: sorted, ratingMap: map };
+    return { sortedStocks: sorted, ratingMap: map, growthFilteredOutCount: droppedByGrowth };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stocks, activeTab, sortField, sortDir, hideOtc, weights]);
+  }, [stocks, activeTab, sortField, sortDir, hideOtc, weights, growthFilters, fundamentalsMap]);
 
   const otcHiddenCount = useMemo(
     () => hideOtc ? stocks.filter(s => isOtcSymbol(s.symbol) && getRsForTab(s, activeTab) !== null).length : 0,
