@@ -25,6 +25,7 @@ type SortField = "rank" | "symbol" | "company" | "rs" | "rating" | "stockReturn"
 type SortDir = "asc" | "desc";
 
 const RS_WEIGHTS_KEY = "rs-overall-weights-v2";
+const GROWTH_FILTERS_KEY = "rs-growth-filters-v1";
 
 const TABS: { id: TabId; label: string }[] = [
   { id: "overall", label: "Overall" },
