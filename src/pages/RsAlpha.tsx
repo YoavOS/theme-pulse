@@ -440,7 +440,7 @@ export default function RsAlpha() {
         )}
 
         {/* Fundamentals scan progress bar */}
-        {(fundScan.isRunning || fundScan.isPaused || (fundScan.progress.totalQueued > 0 && fundScan.progress.processed < fundScan.progress.totalQueued)) && (
+        {!fundScan.isComplete && (fundScan.isRunning || fundScan.isPaused || (fundScan.progress.totalQueued > 0 && fundScan.progress.processed < fundScan.progress.totalQueued)) && (
           <div className="container pb-2">
             <div className={`rounded-md border px-3 py-2 text-xs ${fundScan.isPaused ? "border-amber-500/30 bg-amber-500/5" : "border-accent/30 bg-accent/5"}`}>
               <div className="flex items-center justify-between mb-1.5">
