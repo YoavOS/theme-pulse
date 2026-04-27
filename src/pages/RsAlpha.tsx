@@ -12,6 +12,13 @@ import RsRatingBadge, { computeRsRatings } from "@/components/rs/RsRatingBadge";
 import CustomTradingViewListModal from "@/components/rs/CustomTradingViewListModal";
 import SectorDistributionModal from "@/components/rs/SectorDistributionModal";
 import FundamentalsCoverageModal from "@/components/rs/FundamentalsCoverageModal";
+import { useStockFundamentalsMap } from "@/hooks/useStockFundamentalsMap";
+import {
+  DEFAULT_GROWTH_FILTERS,
+  GrowthFiltersState,
+  passesAllActiveFilters,
+  anyActive,
+} from "@/lib/growthFilters";
 
 type TabId = "overall" | "1d" | "1w" | "1m" | "3m" | "6m";
 type SortField = "rank" | "symbol" | "company" | "rs" | "rating" | "stockReturn" | "spyReturn" | "price";
