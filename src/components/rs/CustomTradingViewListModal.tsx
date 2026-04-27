@@ -49,6 +49,9 @@ export default function CustomTradingViewListModal({
   const [excludedSectors, setExcludedSectors] = useState<Set<string>>(new Set());
   const [sectorSearch, setSectorSearch] = useState<string>("");
   const [sectorPopoverOpen, setSectorPopoverOpen] = useState<boolean>(false);
+  const [growthFilters, setGrowthFilters] = useState<GrowthFiltersState>({ ...DEFAULT_GROWTH_FILTERS });
+  const growthActive = anyActive(growthFilters);
+  const fundamentalsAvailable = (fundamentalsMap?.size ?? 0) > 0;
 
   // Industries actually present in the qualified universe (used to show counts and an "Other" group)
   const universeIndustries = useMemo(() => {
