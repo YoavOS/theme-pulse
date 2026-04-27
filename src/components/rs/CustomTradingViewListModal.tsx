@@ -32,11 +32,12 @@ interface Props {
   getRsForTab: (s: RsStock, t: CustomListTab) => number | null;
   getReturnField: (s: RsStock, t: CustomListTab) => number | null;
   isOtcSymbol: (sym: string) => boolean;
+  fundamentalsMap?: Map<string, StockFundamentals>;
 }
 
 export default function CustomTradingViewListModal({
   open, onOpenChange, tabId, tabLabel, stocks, ratingMap,
-  getRsForTab, getReturnField, isOtcSymbol,
+  getRsForTab, getReturnField, isOtcSymbol, fundamentalsMap,
 }: Props) {
   const [minRating, setMinRating] = useState<number>(60);
   const [topN, setTopN] = useState<number>(50);
