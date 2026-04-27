@@ -143,6 +143,7 @@ export default function RsAlpha() {
   useEffect(() => { setShowAll(false); }, [activeTab]);
   useEffect(() => { localStorage.setItem("rs-hide-otc", String(hideOtc)); }, [hideOtc]);
   useEffect(() => { localStorage.setItem(RS_WEIGHTS_KEY, JSON.stringify(weights)); }, [weights]);
+  useEffect(() => { localStorage.setItem(GROWTH_FILTERS_KEY, JSON.stringify(growthFilters)); }, [growthFilters]);
 
   // Heuristic: 5-letter all-caps tickers ending in 'F' are typically foreign OTC (e.g., FKURF).
   // Also defensively block any symbol with OTC suffixes that may have slipped through historically.
