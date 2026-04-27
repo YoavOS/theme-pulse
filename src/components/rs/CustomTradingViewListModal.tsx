@@ -281,6 +281,69 @@ export default function CustomTradingViewListModal({
             </label>
           </div>
 
+          {/* Growth Filters */}
+          <div className="space-y-2 rounded-md border border-border bg-muted/20 px-3 py-2.5">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-medium text-foreground">Growth Filters</span>
+              {!fundamentalsAvailable && (
+                <span className="text-[10px] italic text-muted-foreground">
+                  Run "Pull Fundamentals" to enable
+                </span>
+              )}
+              {growthActive && fundamentalsAvailable && (
+                <button
+                  onClick={() => setGrowthFilters({ ...DEFAULT_GROWTH_FILTERS })}
+                  className="text-[10px] font-medium text-primary hover:underline"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+              <label className={`flex items-start gap-2 rounded-md border border-border bg-background/40 px-2.5 py-2 text-xs ${fundamentalsAvailable ? "cursor-pointer" : "opacity-50 cursor-not-allowed"}`}>
+                <Checkbox
+                  checked={growthFilters.growth}
+                  disabled={!fundamentalsAvailable}
+                  onCheckedChange={(v) => setGrowthFilters(p => ({ ...p, growth: !!v }))}
+                />
+                <span>
+                  <span className="font-medium text-foreground">Growth Stocks Only</span>
+                  <span className="block text-[10px] text-muted-foreground leading-tight">
+                    2 of 3: Rev Q≥20% / TTM≥15% · EPS Q≥25% / TTM≥25% · ROE≥15% / NM≥10%
+                  </span>
+                </span>
+              </label>
+
+              <label className={`flex items-start gap-2 rounded-md border border-border bg-background/40 px-2.5 py-2 text-xs ${fundamentalsAvailable ? "cursor-pointer" : "opacity-50 cursor-not-allowed"}`}>
+                <Checkbox
+                  checked={growthFilters.highGrowth}
+                  disabled={!fundamentalsAvailable}
+                  onCheckedChange={(v) => setGrowthFilters(p => ({ ...p, highGrowth: !!v }))}
+                />
+                <span>
+                  <span className="font-medium text-foreground">High Growth</span>
+                  <span className="block text-[10px] text-muted-foreground leading-tight">
+                    Rev Q≥25% · EPS Q≥40% (if data) · ROE≥20%
+                  </span>
+                </span>
+              </label>
+
+              <label className={`flex items-start gap-2 rounded-md border border-border bg-background/40 px-2.5 py-2 text-xs ${fundamentalsAvailable ? "cursor-pointer" : "opacity-50 cursor-not-allowed"}`}>
+                <Checkbox
+                  checked={growthFilters.oneil}
+                  disabled={!fundamentalsAvailable}
+                  onCheckedChange={(v) => setGrowthFilters(p => ({ ...p, oneil: !!v }))}
+                />
+                <span>
+                  <span className="font-medium text-foreground">O'Neil Growth</span>
+                  <span className="block text-[10px] text-muted-foreground leading-tight">
+                    4 of 5: EPS Q≥30% · Rev Q≥25% · ROE≥17% · D/E low · NM&gt;0
+                  </span>
+                </span>
+              </label>
+            </div>
+          </div>
+
           {/* Exclude Sector / Industry */}
           <div className="space-y-2 rounded-md border border-border bg-muted/20 px-3 py-2.5">
             <div className="flex items-center justify-between">
