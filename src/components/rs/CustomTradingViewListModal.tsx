@@ -120,6 +120,10 @@ export default function CustomTradingViewListModal({
         const expanded = expandedExclusions;
         if (s.sector && expanded.has(s.sector.toLowerCase().trim())) return false;
       }
+      if (growthActive) {
+        const f = fundamentalsMap?.get(s.symbol);
+        if (!passesAllActiveFilters(growthFilters, f)) return false;
+      }
       return true;
     });
 
@@ -131,7 +135,7 @@ export default function CustomTradingViewListModal({
 
     if (topN < TOPN_MAX) list = list.slice(0, topN);
     return list;
-  }, [stocks, ratingMap, minRating, minAdr, acceleratingOnly, excludeOtc, sortBy, topN, tabId, getRsForTab, getReturnField, isOtcSymbol, excludeSectorsOn, excludedSectors]);
+  }, [stocks, ratingMap, minRating, minAdr, acceleratingOnly, excludeOtc, sortBy, topN, tabId, getRsForTab, getReturnField, isOtcSymbol, excludeSectorsOn, excludedSectors, growthFilters, growthActive, fundamentalsMap, expandedExclusions]);
 
   const symbols = filtered.map(s => s.symbol);
 
