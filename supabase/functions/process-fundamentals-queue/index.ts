@@ -403,26 +403,42 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Update progress
+    // Derive counters from queue (avoids double-counting on retries / requeues)
+    const { count: doneCount } = await supabase
+      .from("fundamentals_scan_queue")
+      .select("*", { count: "exact", head: true })
+      .eq("status", "done");
+    const { count: failedCount } = await supabase
+      .from("fundamentals_scan_queue")
+      .select("*", { count: "exact", head: true })
+      .eq("status", "failed");
+    const { count: skippedCount } = await supabase
+      .from("fundamentals_scan_queue")
+      .select("*", { count: "exact", head: true })
+      .eq("status", "skipped");
+    const { count: pendingCount } = await supabase
+      .from("fundamentals_scan_queue")
+      .select("*", { count: "exact", head: true })
+      .in("status", ["pending", "processing"]);
+    const { count: totalCount } = await supabase
+      .from("fundamentals_scan_queue")
+      .select("*", { count: "exact", head: true });
+
+    const newProcessed = (doneCount ?? 0) + (failedCount ?? 0) + (skippedCount ?? 0);
+    const newSucceeded = doneCount ?? 0;
+    const newFailed = failedCount ?? 0;
+
     const { data: progRow } = await supabase
       .from("fundamentals_scan_progress")
-      .select("*")
+      .select("status")
       .eq("id", 1)
       .maybeSingle();
 
-    const newProcessed = (progRow?.processed ?? 0) + processedCount;
-    const newSucceeded = (progRow?.succeeded ?? 0) + succeeded;
-    const newFailed = (progRow?.failed ?? 0) + failed;
-
-    const { count: remaining } = await supabase
-      .from("fundamentals_scan_queue")
-      .select("*", { count: "exact", head: true })
-      .eq("status", "pending");
-
+    const isDone = (pendingCount ?? 0) === 0;
     const newStatus =
-      progRow?.status === "paused"
+      progRow?.status === "paused" && !isDone
         ? "paused"
-        : (remaining ?? 0) === 0
+        : isDone
           ? "complete"
           : "running";
 
@@ -432,10 +448,20 @@ Deno.serve(async (req) => {
         processed: newProcessed,
         succeeded: newSucceeded,
         failed: newFailed,
+        total_queued: totalCount ?? newProcessed,
         status: newStatus,
         last_updated: new Date().toISOString(),
       })
       .eq("id", 1);
+
+    // If complete, deactivate cron to stop unnecessary invocations
+    if (isDone) {
+      try {
+        await supabase.rpc("set_fundamentals_cron_active", { p_active: false });
+      } catch (e) {
+        console.error("Failed to deactivate cron:", e);
+      }
+    }
 
     return new Response(
       JSON.stringify({
@@ -444,7 +470,8 @@ Deno.serve(async (req) => {
         processed: processedCount,
         succeeded,
         failed,
-        remaining_pending: remaining,
+        remaining_pending: pendingCount,
+        status: newStatus,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
