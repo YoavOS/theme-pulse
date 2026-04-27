@@ -857,6 +857,7 @@ export default function RsAlpha() {
         getRsForTab={getRsForTab}
         getReturnField={getReturnField}
         isOtcSymbol={isOtcSymbol}
+        fundamentalsMap={fundamentalsMap}
       />
 
       <SectorDistributionModal
