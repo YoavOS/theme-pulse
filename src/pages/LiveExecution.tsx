@@ -1646,7 +1646,7 @@ export default function LiveExecution() {
                     peers={combinedThemePeers}
                     activeSymbol={activeSymbol}
                     snapshotChangePct={snapshot.quote.changePct}
-                    ratingOverall={ratingOverall}
+                    ratingOverall={themeRatingOverall}
                     onPick={(sym) => { setInput(sym); submit(sym); }}
                   />
                 ) : aiLoading ? (
