@@ -26,6 +26,7 @@ import { getCachedFundamentals, setCachedFundamentals, clearCachedFundamentals }
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { computeRsRatings } from "@/components/rs/RsRatingBadge";
+import { useExtraThemeRs } from "@/hooks/useExtraThemeRs";
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import HelpButton from "@/components/HelpButton";
@@ -1168,6 +1169,26 @@ export default function LiveExecution() {
     () => !!(activeSymbol && curatedThemes.symbolToTheme.get(activeSymbol.toUpperCase())),
     [activeSymbol, curatedThemes],
   );
+
+  // Curated-theme tickers that are NOT in the qualified RS universe still
+  // need RS Rating / 1D / 1M data. We pull return_1d/1w/1m straight from
+  // public.eod_prices and derive RS values vs SPY, so the Theme Tickers
+  // panel never shows blank "—" cells for valid curated members.
+  const missingCuratedSymbols = useMemo(() => {
+    if (!isCuratedTheme) return [] as string[];
+    const suggested = aiTheme?.suggested ?? [];
+    const out: string[] = [];
+    for (const sym of suggested) {
+      const u = sym.toUpperCase();
+      if (activeStock && activeStock.symbol.toUpperCase() === u) continue;
+      const s = stockMap.get(u);
+      if (!s || s.rsOverall === null) out.push(u);
+    }
+    return out;
+  }, [isCuratedTheme, aiTheme, stockMap, activeStock]);
+
+  const { data: extraRsData } = useExtraThemeRs(missingCuratedSymbols);
+
   const combinedThemePeers = useMemo(() => {
     const seen = new Set<string>();
     const rows: RsStock[] = [];
@@ -1179,19 +1200,35 @@ export default function LiveExecution() {
       const s = stockMap.get(u);
       if (s && s.rsOverall !== null) { seen.add(u); rows.push(s); continue; }
       // Curated theme: include the ticker even if not in qualified RS universe,
-      // so the panel reflects the dashboard's exact membership. Synthesize a
-      // minimal row from whatever data we have (or skip if truly unknown).
+      // so the panel reflects the dashboard's exact membership. Backfill with
+      // EOD-derived returns so the row shows real 1D/1M/RS values.
       if (isCuratedTheme) {
         seen.add(u);
+        const extra = extraRsData.get(u);
+        // If we have a partial stockMap entry (fell out of universe but row
+        // exists), prefer those static fields (companyName, sector, price).
+        const base = s ?? null;
         rows.push({
           symbol: u,
-          companyName: u,
-          sector: null,
-          price: null, marketCap: null, avgDollarVolume: null,
-          adrPercent: null, adrSource: null,
-          return1d: null, return1w: null, return1m: null, return3m: null, return6m: null,
+          companyName: base?.companyName ?? u,
+          sector: base?.sector ?? null,
+          price: base?.price ?? null,
+          marketCap: base?.marketCap ?? null,
+          avgDollarVolume: base?.avgDollarVolume ?? null,
+          adrPercent: base?.adrPercent ?? null,
+          adrSource: base?.adrSource ?? null,
+          return1d: extra?.return_1d ?? null,
+          return1w: extra?.return_1w ?? null,
+          return1m: extra?.return_1m ?? null,
+          return3m: null,
+          return6m: null,
           spyReturn1d: null, spyReturn1w: null, spyReturn1m: null, spyReturn3m: null, spyReturn6m: null,
-          rs1d: null, rs1w: null, rs1m: null, rs3m: null, rs6m: null, rsOverall: null,
+          rs1d: extra?.rs_1d ?? null,
+          rs1w: extra?.rs_1w ?? null,
+          rs1m: extra?.rs_1m ?? null,
+          rs3m: null,
+          rs6m: null,
+          rsOverall: extra?.rs_overall ?? null,
           rsCalculatedAt: null,
         });
       }
@@ -1207,9 +1244,41 @@ export default function LiveExecution() {
       }
     }
     return rows;
-  }, [aiTheme, stockMap, themeUniverseMembers, activeStock, isCuratedTheme]);
+  }, [aiTheme, stockMap, themeUniverseMembers, activeStock, isCuratedTheme, extraRsData]);
+
+  // Extended rating map: ratingOverall covers the qualified universe; for
+  // extra curated tickers (not in the universe), compute their rating by
+  // inserting their rs_overall into the universe distribution and ranking.
+  const themeRatingOverall = useMemo(() => {
+    if (extraRsData.size === 0) return ratingOverall;
+    const merged = new Map(ratingOverall);
+    // Build a sorted list of universe rs_overall values once.
+    const universeRs = stocks
+      .map((s) => s.rsOverall)
+      .filter((v): v is number => v !== null && Number.isFinite(v))
+      .sort((a, b) => a - b);
+    if (universeRs.length === 0) return merged;
+    const n = universeRs.length;
+    for (const [sym, extra] of extraRsData.entries()) {
+      if (merged.has(sym) && merged.get(sym) != null) continue;
+      const v = extra.rs_overall;
+      if (v === null || !Number.isFinite(v)) { merged.set(sym, null); continue; }
+      // Binary search for rank (count of universe values <= v).
+      let lo = 0, hi = n;
+      while (lo < hi) {
+        const mid = (lo + hi) >> 1;
+        if (universeRs[mid] <= v) lo = mid + 1;
+        else hi = mid;
+      }
+      const rank = lo; // 0..n
+      const rating = Math.max(1, Math.min(99, Math.round(1 + (rank / n) * 98)));
+      merged.set(sym, rating);
+    }
+    return merged;
+  }, [extraRsData, ratingOverall, stocks]);
 
   const themeDisplayLabel = aiTheme?.theme ?? resolvedTheme.broadLabel ?? null;
+
 
 
   // Peers: same sector, top 5 by overall RS, excluding active
@@ -1577,7 +1646,7 @@ export default function LiveExecution() {
                     peers={combinedThemePeers}
                     activeSymbol={activeSymbol}
                     snapshotChangePct={snapshot.quote.changePct}
-                    ratingOverall={ratingOverall}
+                    ratingOverall={themeRatingOverall}
                     onPick={(sym) => { setInput(sym); submit(sym); }}
                   />
                 ) : aiLoading ? (
