@@ -1,4 +1,5 @@
 import { useMemo, useState, useCallback } from "react";
+import { Info } from "lucide-react";
 import { ThemeData } from "@/data/themeData";
 import { ThemeDemandSignals } from "@/hooks/useVolumeData";
 
