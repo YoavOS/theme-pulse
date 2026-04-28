@@ -26,6 +26,7 @@ import { getCachedFundamentals, setCachedFundamentals, clearCachedFundamentals }
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { computeRsRatings } from "@/components/rs/RsRatingBadge";
+import { useExtraThemeRs } from "@/hooks/useExtraThemeRs";
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import HelpButton from "@/components/HelpButton";
