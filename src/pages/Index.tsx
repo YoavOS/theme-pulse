@@ -140,6 +140,34 @@ export default function Index() {
     setNewsPanelSentiment(sent);
   }, [fetchThemeNews, getAiSummary, getThemeSentiment]);
 
+  // ── Theme Momentum Index slide-in panel ─────────────────────────────────
+  // Triggered by the "i" button on a heatmap card. We reuse the same news +
+  // AI summary plumbing as the news badge so the panel always shows the
+  // freshest narrative.
+  const [momentumPanelTheme, setMomentumPanelTheme] = useState<ThemeData | null>(null);
+  const [momentumPanelArticles, setMomentumPanelArticles] = useState<import("@/hooks/useThemeNews").NewsArticle[]>([]);
+  const [momentumPanelSummary, setMomentumPanelSummary] = useState<string | null>(null);
+  const [momentumPanelSummaryLoading, setMomentumPanelSummaryLoading] = useState(false);
+  const [momentumPanelSentiment, setMomentumPanelSentiment] = useState<import("@/hooks/useThemeNews").SentimentData | null>(null);
+
+  // Pull stock fundamentals (small one-off load — same hook RS Alpha uses).
+  const { map: stockFundamentalsMap } = useStockFundamentalsMap();
+
+  const handleMomentumInfoClick = useCallback(async (theme: ThemeData) => {
+    setMomentumPanelTheme(theme);
+    setMomentumPanelArticles([]);
+    setMomentumPanelSummary(null);
+    setMomentumPanelSummaryLoading(true);
+    setMomentumPanelSentiment(null);
+    const symbols = theme.tickers.map(t => t.symbol);
+    const articles = await fetchThemeNews(symbols);
+    setMomentumPanelArticles(articles);
+    const summary = await getAiSummary(theme.theme_name, articles);
+    setMomentumPanelSummary(summary || null);
+    setMomentumPanelSummaryLoading(false);
+    setMomentumPanelSentiment(getThemeSentiment(theme.theme_name));
+  }, [fetchThemeNews, getAiSummary, getThemeSentiment]);
+
   const themes = useMemo(() => {
     if (showPlaceholders) return allThemes;
     return allThemes.filter(
