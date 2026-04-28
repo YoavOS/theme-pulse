@@ -32,8 +32,11 @@ function pctChange(end: number | null, start: number | null): number | null {
 
 function findCloseAt(rows: { date: string; close: number }[], targetIdx: number): number | null {
   // rows sorted DESC by date. targetIdx is # of trading days back from latest (0 = latest).
-  if (rows.length <= targetIdx) return null;
-  return rows[targetIdx].close;
+  // If we don't have that many bars, fall back to the OLDEST available bar so
+  // we still produce a directional return instead of a blank cell.
+  if (rows.length === 0) return null;
+  if (rows.length > targetIdx) return rows[targetIdx].close;
+  return rows[rows.length - 1].close;
 }
 
 export function useExtraThemeRs(missingSymbols: string[]): {
