@@ -1182,20 +1182,18 @@ export default function LiveExecution() {
       // so the panel reflects the dashboard's exact membership. Synthesize a
       // minimal row from whatever data we have (or skip if truly unknown).
       if (isCuratedTheme) {
-        const fallback = stockMap.get(u);
-        if (fallback) { seen.add(u); rows.push(fallback); }
-        else {
-          seen.add(u);
-          rows.push({
-            symbol: u,
-            companyName: u,
-            sector: null,
-            rsOverall: null,
-            rs1d: null, rs1w: null, rs1m: null, rs3m: null, rs6m: null,
-            return1d: null, return1w: null, return1m: null, return3m: null, return6m: null,
-            price: null, marketCap: null, avgDollarVolume: null, adrPercent: null,
-          } as unknown as RsStock);
-        }
+        seen.add(u);
+        rows.push({
+          symbol: u,
+          companyName: u,
+          sector: null,
+          price: null, marketCap: null, avgDollarVolume: null,
+          adrPercent: null, adrSource: null,
+          return1d: null, return1w: null, return1m: null, return3m: null, return6m: null,
+          spyReturn1d: null, spyReturn1w: null, spyReturn1m: null, spyReturn3m: null, spyReturn6m: null,
+          rs1d: null, rs1w: null, rs1m: null, rs3m: null, rs6m: null, rsOverall: null,
+          rsCalculatedAt: null,
+        });
       }
     }
     // Backfill from sector members ONLY when we fell back to Groq (no curated
