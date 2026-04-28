@@ -951,6 +951,7 @@ export default function Index() {
             <HeatmapGridView
               themes={themes}
               onCardClick={setDrilldownTheme}
+              onInfoClick={handleMomentumInfoClick}
               getThemeSignals={getThemeSignals}
               dimmedThemes={searchMatchSet}
             />
