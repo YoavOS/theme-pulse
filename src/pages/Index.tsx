@@ -168,6 +168,16 @@ export default function Index() {
     setMomentumPanelSentiment(getThemeSentiment(theme.theme_name));
   }, [fetchThemeNews, getAiSummary, getThemeSentiment]);
 
+  const relVolBySymbol = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const [sym, v] of Object.entries(volumeMap)) {
+      if (v && v.avg_20d > 0 && v.today_vol > 0) {
+        m.set(sym.toUpperCase(), v.today_vol / v.avg_20d);
+      }
+    }
+    return m;
+  }, [volumeMap]);
+
   const themes = useMemo(() => {
     if (showPlaceholders) return allThemes;
     return allThemes.filter(
