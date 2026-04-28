@@ -1,4 +1,5 @@
 import { useMemo, useState, useCallback } from "react";
+import { Info } from "lucide-react";
 import { ThemeData } from "@/data/themeData";
 import { ThemeDemandSignals } from "@/hooks/useVolumeData";
 
@@ -57,11 +58,13 @@ function getSustainedVolColor(val: number) {
 export default function HeatmapGridView({
   themes,
   onCardClick,
+  onInfoClick,
   getThemeSignals,
   dimmedThemes,
 }: {
   themes: ThemeData[];
   onCardClick?: (theme: ThemeData) => void;
+  onInfoClick?: (theme: ThemeData) => void;
   getThemeSignals?: (symbols: string[]) => ThemeDemandSignals;
   dimmedThemes?: Set<string> | null;
 }) {
@@ -171,6 +174,22 @@ export default function HeatmapGridView({
                   {sign}{t.performance_pct.toFixed(1)}%
                 </span>
               </div>
+
+              {/* "i" Info button — opens the Theme Momentum Index slide-in */}
+              {onInfoClick && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onInfoClick(t);
+                  }}
+                  className="absolute top-0.5 right-0.5 z-20 rounded p-0.5 text-white/55 hover:text-white hover:bg-white/15 transition-colors"
+                  title="Theme Momentum Index"
+                  aria-label={`Open Momentum Index for ${t.theme_name}`}
+                >
+                  <Info size={11} />
+                </button>
+              )}
 
               {/* Fixed position tooltip */}
               {isHovered && tooltipPos && (

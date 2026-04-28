@@ -25,6 +25,8 @@ import { useThemeSearch } from "@/hooks/useThemeSearch";
 import { useThemeNews } from "@/hooks/useThemeNews";
 import { useFundamentals } from "@/hooks/useFundamentals";
 import NewsPanel from "@/components/NewsPanel";
+import ThemeMomentumPanel from "@/components/dashboard/ThemeMomentumPanel";
+import { useStockFundamentalsMap } from "@/hooks/useStockFundamentalsMap";
 import { useUnreadAlertCount } from "@/hooks/useUnreadAlertCount";
 
 const TIMEFRAMES = ["Today", "1W", "1M", "3M", "YTD"] as const;
@@ -59,7 +61,7 @@ export default function Index() {
   useEffect(() => { localStorage.setItem("enhancedView", String(enhancedView)); }, [enhancedView]);
   const { pinned, alerts, getAlert } = useWatchlist();
   const unreadAlertCount = useUnreadAlertCount();
-  const { fetchVolume, getThemeSignals } = useVolumeData();
+  const { fetchVolume, getThemeSignals, volumeMap } = useVolumeData();
   const { fetchThemeNews, prefetchTopThemes, prefetchedThemes, getThemeNewsCount, getThemeArticles, hasNegativeNews, getAiSummary, marketNews, getThemeSentiment } = useThemeNews();
   const [newsPanelTheme, setNewsPanelTheme] = useState<ThemeData | null>(null);
   const [newsPanelSummary, setNewsPanelSummary] = useState<string | null>(null);
@@ -137,6 +139,44 @@ export default function Index() {
     const sent = getThemeSentiment(theme.theme_name);
     setNewsPanelSentiment(sent);
   }, [fetchThemeNews, getAiSummary, getThemeSentiment]);
+
+  // ── Theme Momentum Index slide-in panel ─────────────────────────────────
+  // Triggered by the "i" button on a heatmap card. We reuse the same news +
+  // AI summary plumbing as the news badge so the panel always shows the
+  // freshest narrative.
+  const [momentumPanelTheme, setMomentumPanelTheme] = useState<ThemeData | null>(null);
+  const [momentumPanelArticles, setMomentumPanelArticles] = useState<import("@/hooks/useThemeNews").NewsArticle[]>([]);
+  const [momentumPanelSummary, setMomentumPanelSummary] = useState<string | null>(null);
+  const [momentumPanelSummaryLoading, setMomentumPanelSummaryLoading] = useState(false);
+  const [momentumPanelSentiment, setMomentumPanelSentiment] = useState<import("@/hooks/useThemeNews").SentimentData | null>(null);
+
+  // Pull stock fundamentals (small one-off load — same hook RS Alpha uses).
+  const { map: stockFundamentalsMap } = useStockFundamentalsMap();
+
+  const handleMomentumInfoClick = useCallback(async (theme: ThemeData) => {
+    setMomentumPanelTheme(theme);
+    setMomentumPanelArticles([]);
+    setMomentumPanelSummary(null);
+    setMomentumPanelSummaryLoading(true);
+    setMomentumPanelSentiment(null);
+    const symbols = theme.tickers.map(t => t.symbol);
+    const articles = await fetchThemeNews(symbols);
+    setMomentumPanelArticles(articles);
+    const summary = await getAiSummary(theme.theme_name, articles);
+    setMomentumPanelSummary(summary || null);
+    setMomentumPanelSummaryLoading(false);
+    setMomentumPanelSentiment(getThemeSentiment(theme.theme_name));
+  }, [fetchThemeNews, getAiSummary, getThemeSentiment]);
+
+  const relVolBySymbol = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const [sym, v] of Object.entries(volumeMap)) {
+      if (v && v.avg_20d > 0 && v.today_vol > 0) {
+        m.set(sym.toUpperCase(), v.today_vol / v.avg_20d);
+      }
+    }
+    return m;
+  }, [volumeMap]);
 
   const themes = useMemo(() => {
     if (showPlaceholders) return allThemes;
@@ -921,6 +961,7 @@ export default function Index() {
             <HeatmapGridView
               themes={themes}
               onCardClick={setDrilldownTheme}
+              onInfoClick={handleMomentumInfoClick}
               getThemeSignals={getThemeSignals}
               dimmedThemes={searchMatchSet}
             />
@@ -970,6 +1011,19 @@ export default function Index() {
           sentiment={newsPanelSentiment}
         />
       )}
+
+      {/* Theme Momentum Index slide-in panel */}
+      <ThemeMomentumPanel
+        theme={momentumPanelTheme}
+        open={!!momentumPanelTheme}
+        onClose={() => { setMomentumPanelTheme(null); setMomentumPanelSentiment(null); }}
+        articles={momentumPanelArticles}
+        aiSummary={momentumPanelSummary}
+        isLoadingSummary={momentumPanelSummaryLoading}
+        sentiment={momentumPanelSentiment}
+        fundamentalsBySymbol={stockFundamentalsMap}
+        relVolBySymbol={relVolBySymbol}
+      />
       </div>
     </div>
   );
