@@ -61,7 +61,7 @@ export default function Index() {
   useEffect(() => { localStorage.setItem("enhancedView", String(enhancedView)); }, [enhancedView]);
   const { pinned, alerts, getAlert } = useWatchlist();
   const unreadAlertCount = useUnreadAlertCount();
-  const { fetchVolume, getThemeSignals } = useVolumeData();
+  const { fetchVolume, getThemeSignals, volumeMap } = useVolumeData();
   const { fetchThemeNews, prefetchTopThemes, prefetchedThemes, getThemeNewsCount, getThemeArticles, hasNegativeNews, getAiSummary, marketNews, getThemeSentiment } = useThemeNews();
   const [newsPanelTheme, setNewsPanelTheme] = useState<ThemeData | null>(null);
   const [newsPanelSummary, setNewsPanelSummary] = useState<string | null>(null);
