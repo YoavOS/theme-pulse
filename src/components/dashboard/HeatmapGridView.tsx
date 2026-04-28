@@ -58,11 +58,13 @@ function getSustainedVolColor(val: number) {
 export default function HeatmapGridView({
   themes,
   onCardClick,
+  onInfoClick,
   getThemeSignals,
   dimmedThemes,
 }: {
   themes: ThemeData[];
   onCardClick?: (theme: ThemeData) => void;
+  onInfoClick?: (theme: ThemeData) => void;
   getThemeSignals?: (symbols: string[]) => ThemeDemandSignals;
   dimmedThemes?: Set<string> | null;
 }) {
