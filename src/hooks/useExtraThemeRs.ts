@@ -32,11 +32,13 @@ function pctChange(end: number | null, start: number | null): number | null {
 
 function findCloseAt(rows: { date: string; close: number }[], targetIdx: number): number | null {
   // rows sorted DESC by date. targetIdx is # of trading days back from latest (0 = latest).
-  // If we don't have that many bars, fall back to the OLDEST available bar so
-  // we still produce a directional return instead of a blank cell.
   if (rows.length === 0) return null;
   if (rows.length > targetIdx) return rows[targetIdx].close;
-  return rows[rows.length - 1].close;
+  // For multi-day windows (>=5d), if we don't have enough history, fall back
+  // to the oldest available bar so we still produce a directional return
+  // rather than a blank cell. For 1D (targetIdx=1) we require at least 2 bars.
+  if (targetIdx >= 5) return rows[rows.length - 1].close;
+  return null;
 }
 
 export function useExtraThemeRs(missingSymbols: string[]): {
