@@ -1158,9 +1158,16 @@ export default function LiveExecution() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeSymbol, snapshot, curatedThemes]);
 
-  // Combined theme peer list = AI-suggested tickers ∩ qualified universe (full
-  // RS quality, both strong + weak), plus sector matches as backup. Active
-  // ticker is always pinned at top.
+  // Combined theme peer list. PRIORITY:
+  //   1) If active ticker matched a CURATED theme → show STRICTLY only that
+  //      theme's tickers (no Groq, no sector backfill, no mixing).
+  //   2) Otherwise (Groq fallback) → AI-suggested tickers ∩ qualified universe,
+  //      with sector members as backup to reach a useful row count.
+  // Active ticker is always pinned at top.
+  const isCuratedTheme = useMemo(
+    () => !!(activeSymbol && curatedThemes.symbolToTheme.get(activeSymbol.toUpperCase())),
+    [activeSymbol, curatedThemes],
+  );
   const combinedThemePeers = useMemo(() => {
     const seen = new Set<string>();
     const rows: RsStock[] = [];
@@ -1170,17 +1177,39 @@ export default function LiveExecution() {
       const u = sym.toUpperCase();
       if (seen.has(u)) continue;
       const s = stockMap.get(u);
-      if (s && s.rsOverall !== null) { seen.add(u); rows.push(s); }
+      if (s && s.rsOverall !== null) { seen.add(u); rows.push(s); continue; }
+      // Curated theme: include the ticker even if not in qualified RS universe,
+      // so the panel reflects the dashboard's exact membership. Synthesize a
+      // minimal row from whatever data we have (or skip if truly unknown).
+      if (isCuratedTheme) {
+        const fallback = stockMap.get(u);
+        if (fallback) { seen.add(u); rows.push(fallback); }
+        else {
+          seen.add(u);
+          rows.push({
+            symbol: u,
+            companyName: u,
+            sector: null,
+            rsOverall: null,
+            rs1d: null, rs1w: null, rs1m: null, rs3m: null, rs6m: null,
+            return1d: null, return1w: null, return1m: null, return3m: null, return6m: null,
+            price: null, marketCap: null, avgDollarVolume: null, adrPercent: null,
+          } as unknown as RsStock);
+        }
+      }
     }
-    // Backfill from sector members if we have very few.
-    for (const s of themeUniverseMembers) {
-      if (rows.length >= 15) break;
-      const u = s.symbol.toUpperCase();
-      if (seen.has(u)) continue;
-      seen.add(u); rows.push(s);
+    // Backfill from sector members ONLY when we fell back to Groq (no curated
+    // theme). Curated themes must remain strict.
+    if (!isCuratedTheme) {
+      for (const s of themeUniverseMembers) {
+        if (rows.length >= 15) break;
+        const u = s.symbol.toUpperCase();
+        if (seen.has(u)) continue;
+        seen.add(u); rows.push(s);
+      }
     }
     return rows;
-  }, [aiTheme, stockMap, themeUniverseMembers, activeStock]);
+  }, [aiTheme, stockMap, themeUniverseMembers, activeStock, isCuratedTheme]);
 
   const themeDisplayLabel = aiTheme?.theme ?? resolvedTheme.broadLabel ?? null;
 
