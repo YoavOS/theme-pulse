@@ -7,7 +7,11 @@ const corsHeaders = {
 };
 
 const FINNHUB_KEY = Deno.env.get("FINNHUB_API_KEY") || "";
-const CALL_DELAY_MS = 1100; // 1 call/sec — safe for 60/min free tier
+const NEWSDATA_KEY = Deno.env.get("NEWSDATA_API_KEY") || "";
+const FINNHUB_DELAY_MS = 1100;
+const NEWSDATA_DELAY_MS = 1200;
+// Cache window — 45 minutes for combined news (per user request: 30-60 min)
+const CACHE_TTL_MS = 45 * 60 * 1000;
 
 function delay(ms: number) {
   return new Promise((r) => setTimeout(r, ms));
@@ -20,16 +24,190 @@ function jsonResponse(body: Record<string, unknown>, status = 200) {
   });
 }
 
+interface Article {
+  symbol: string | null;
+  category: string | null;
+  headline: string;
+  summary: string | null;
+  url: string;
+  source: string | null;
+  published_at: string | null;
+}
+
 interface FinnhubNews {
   category?: string;
   datetime?: number;
   headline?: string;
-  id?: number;
   image?: string;
   related?: string;
   source?: string;
   summary?: string;
   url?: string;
+}
+
+interface NewsDataItem {
+  article_id?: string;
+  title?: string;
+  link?: string;
+  description?: string;
+  pubDate?: string;
+  source_id?: string;
+  source_name?: string;
+  category?: string[];
+}
+
+// Normalize a headline for dedupe (lowercase, strip non-alpha, collapse spaces)
+function normalizeForDedupe(s: string): string {
+  return s
+    .toLowerCase()
+    .replace(/[^a-z0-9 ]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 80);
+}
+
+function dedupeArticles(articles: Article[]): Article[] {
+  const seenUrl = new Set<string>();
+  const seenKey = new Set<string>();
+  const out: Article[] = [];
+  for (const a of articles) {
+    if (!a.headline || !a.url) continue;
+    if (seenUrl.has(a.url)) continue;
+    const key = `${normalizeForDedupe(a.headline)}|${(a.source || "").toLowerCase()}|${(a.published_at || "").slice(0, 10)}`;
+    if (seenKey.has(key)) continue;
+    seenUrl.add(a.url);
+    seenKey.add(key);
+    out.push(a);
+  }
+  return out;
+}
+
+function rankArticles(articles: Article[]): Article[] {
+  const now = Date.now();
+  return articles
+    .map((a) => {
+      const t = a.published_at ? new Date(a.published_at).getTime() : 0;
+      const ageHours = t ? (now - t) / 3600000 : 999;
+      // Recency-weighted score; newer = higher
+      const score = Math.max(0, 100 - ageHours);
+      return { a, score };
+    })
+    .sort((x, y) => y.score - x.score)
+    .map((x) => x.a);
+}
+
+// ---- NewsData.io fetchers ----
+// Free plan: 200 credits/day, 1 request/sec. We'll keep it minimal.
+async function fetchNewsDataForSymbols(symbols: string[]): Promise<Article[]> {
+  if (!NEWSDATA_KEY || symbols.length === 0) return [];
+  // Single query covering up to 5 symbols (NewsData supports OR via comma in q, max 100 chars)
+  const q = symbols.slice(0, 5).join(" OR ");
+  const url = `https://newsdata.io/api/1/latest?apikey=${NEWSDATA_KEY}&q=${encodeURIComponent(q)}&language=en&size=10`;
+  try {
+    const res = await fetch(url);
+    if (!res.ok) {
+      console.log(`NewsData symbols query failed [${res.status}]`);
+      return [];
+    }
+    const json = await res.json();
+    const results: NewsDataItem[] = json.results || [];
+    return results
+      .filter((r) => r.title && r.link)
+      .map((r) => ({
+        symbol: null, // matched by query, not 1:1 to symbol
+        category: "newsdata",
+        headline: r.title!,
+        summary: r.description || null,
+        url: r.link!,
+        source: r.source_name || r.source_id || null,
+        published_at: r.pubDate ? new Date(r.pubDate).toISOString() : null,
+      }));
+  } catch (e) {
+    console.log(`NewsData symbols error: ${e}`);
+    return [];
+  }
+}
+
+async function fetchNewsDataForCategory(category: string): Promise<Article[]> {
+  if (!NEWSDATA_KEY) return [];
+  // Map our 'general' to broad business/world coverage
+  const cat = category === "general" ? "business,world,politics" : category;
+  const url = `https://newsdata.io/api/1/latest?apikey=${NEWSDATA_KEY}&category=${encodeURIComponent(cat)}&language=en&size=10`;
+  try {
+    const res = await fetch(url);
+    if (!res.ok) {
+      console.log(`NewsData category query failed [${res.status}]`);
+      return [];
+    }
+    const json = await res.json();
+    const results: NewsDataItem[] = json.results || [];
+    return results
+      .filter((r) => r.title && r.link)
+      .map((r) => ({
+        symbol: null,
+        category,
+        headline: r.title!,
+        summary: r.description || null,
+        url: r.link!,
+        source: r.source_name || r.source_id || null,
+        published_at: r.pubDate ? new Date(r.pubDate).toISOString() : null,
+      }));
+  } catch (e) {
+    console.log(`NewsData category error: ${e}`);
+    return [];
+  }
+}
+
+// ---- Finnhub fetchers ----
+async function fetchFinnhubForSymbol(sym: string, fromDate: string, toDate: string, sevenDaysAgoMs: number): Promise<Article[]> {
+  if (!FINNHUB_KEY) return [];
+  try {
+    const res = await fetch(
+      `https://finnhub.io/api/v1/company-news?symbol=${encodeURIComponent(sym)}&from=${fromDate}&to=${toDate}&token=${FINNHUB_KEY}`
+    );
+    if (res.status === 429) {
+      console.log(`Finnhub rate limited on ${sym}`);
+      return [];
+    }
+    if (!res.ok) return [];
+    const data: FinnhubNews[] = await res.json();
+    return data
+      .filter((n) => n.url && n.headline && (!n.datetime || n.datetime * 1000 >= sevenDaysAgoMs))
+      .slice(0, 10)
+      .map((n) => ({
+        symbol: sym,
+        category: null,
+        headline: n.headline!,
+        summary: n.summary || null,
+        url: n.url!,
+        source: n.source || null,
+        published_at: n.datetime ? new Date(n.datetime * 1000).toISOString() : null,
+      }));
+  } catch (e) {
+    console.log(`Finnhub fetch failed for ${sym}: ${e}`);
+    return [];
+  }
+}
+
+async function fetchFinnhubForCategory(cat: string): Promise<Article[]> {
+  if (!FINNHUB_KEY) return [];
+  try {
+    const res = await fetch(`https://finnhub.io/api/v1/news?category=${encodeURIComponent(cat)}&token=${FINNHUB_KEY}`);
+    if (!res.ok) return [];
+    const data: FinnhubNews[] = await res.json();
+    return data.slice(0, 15).map((n) => ({
+      symbol: null,
+      category: cat,
+      headline: n.headline || "",
+      summary: n.summary || null,
+      url: n.url || "",
+      source: n.source || null,
+      published_at: n.datetime ? new Date(n.datetime * 1000).toISOString() : null,
+    }));
+  } catch (e) {
+    console.log(`Finnhub category fetch failed for ${cat}: ${e}`);
+    return [];
+  }
 }
 
 Deno.serve(async (req) => {
@@ -51,66 +229,33 @@ Deno.serve(async (req) => {
 
     const { symbols = [], categories = [] } = payload;
     const sevenDaysAgo = new Date(Date.now() - 7 * 86400000);
-    const fourHoursAgo = new Date(Date.now() - 4 * 3600000).toISOString();
+    const cacheCutoff = new Date(Date.now() - CACHE_TTL_MS).toISOString();
     const fromDate = sevenDaysAgo.toISOString().split("T")[0];
     const toDate = new Date().toISOString().split("T")[0];
 
-    const allArticles: {
-      symbol: string | null;
-      category: string | null;
-      headline: string;
-      summary: string | null;
-      url: string;
-      source: string | null;
-      published_at: string | null;
-    }[] = [];
-    const seenUrls = new Set<string>();
+    const symbolsToFetch: string[] = (symbols as string[]).slice(0, 8);
+    const allArticles: Article[] = [];
 
-    const addArticles = (items: FinnhubNews[], sym: string | null, cat: string | null) => {
-      for (const item of items) {
-        if (!item.url || !item.headline) continue;
-        if (seenUrls.has(item.url)) continue;
-        if (item.datetime && item.datetime * 1000 < sevenDaysAgo.getTime()) continue;
-        seenUrls.add(item.url);
-        allArticles.push({
-          symbol: sym,
-          category: cat,
-          headline: item.headline,
-          summary: item.summary || null,
-          url: item.url,
-          source: item.source || null,
-          published_at: item.datetime ? new Date(item.datetime * 1000).toISOString() : null,
-        });
-      }
-    };
-
-    // 1. Check cache first for each symbol
-    const symbolsToFetch = (symbols as string[]).slice(0, 8); // max 8 symbols per call
+    // ---------- 1. Per-symbol cache check (Finnhub-style stored per symbol) ----------
     const symbolsNeedingFetch: string[] = [];
-
     for (const sym of symbolsToFetch) {
       const { data: cached } = await sb
         .from("news_cache")
         .select("symbol, category, headline, summary, url, source, published_at")
         .eq("symbol", sym)
-        .gte("fetched_at", fourHoursAgo)
-        .limit(10);
-
+        .gte("fetched_at", cacheCutoff)
+        .limit(15);
       if (cached && cached.length > 0) {
-        // Serve from cache
         for (const row of cached) {
-          if (row.url && !seenUrls.has(row.url)) {
-            seenUrls.add(row.url);
-            allArticles.push({
-              symbol: row.symbol,
-              category: row.category,
-              headline: row.headline,
-              summary: row.summary,
-              url: row.url,
-              source: row.source,
-              published_at: row.published_at,
-            });
-          }
+          allArticles.push({
+            symbol: row.symbol,
+            category: row.category,
+            headline: row.headline,
+            summary: row.summary,
+            url: row.url || "",
+            source: row.source,
+            published_at: row.published_at,
+          });
         }
         console.log(`Cache hit for ${sym}: ${cached.length} articles`);
       } else {
@@ -118,99 +263,163 @@ Deno.serve(async (req) => {
       }
     }
 
-    // 2. Fetch from Finnhub only for uncached symbols
-    for (const sym of symbolsNeedingFetch) {
-      try {
-        const res = await fetch(
-          `https://finnhub.io/api/v1/company-news?symbol=${encodeURIComponent(sym)}&from=${fromDate}&to=${toDate}&token=${FINNHUB_KEY}`
-        );
-        if (res.status === 429) {
-          console.log(`Rate limited on ${sym}, stopping symbol fetches`);
-          break; // Stop fetching more symbols on rate limit
+    // ---------- 2. Cached NewsData (broad query) — keyed by category 'newsdata' + first symbol ----------
+    let needsNewsDataSymbols = symbolsToFetch.length > 0;
+    if (needsNewsDataSymbols && symbolsToFetch.length > 0) {
+      const ndKey = `newsdata:${symbolsToFetch.slice(0, 5).sort().join(",")}`;
+      const { data: ndCached } = await sb
+        .from("news_cache")
+        .select("symbol, category, headline, summary, url, source, published_at")
+        .eq("category", ndKey)
+        .gte("fetched_at", cacheCutoff)
+        .limit(15);
+      if (ndCached && ndCached.length > 0) {
+        for (const row of ndCached) {
+          allArticles.push({
+            symbol: null,
+            category: row.category,
+            headline: row.headline,
+            summary: row.summary,
+            url: row.url || "",
+            source: row.source,
+            published_at: row.published_at,
+          });
         }
-        if (res.ok) {
-          const data: FinnhubNews[] = await res.json();
-          addArticles(data.slice(0, 10), sym, null);
-          console.log(`Fetched ${Math.min(data.length, 10)} articles for ${sym}`);
-        }
-      } catch (e) {
-        console.log(`News fetch failed for ${sym}: ${e}`);
+        console.log(`Cache hit for NewsData broad query: ${ndCached.length} articles`);
+        needsNewsDataSymbols = false;
       }
-      await delay(CALL_DELAY_MS);
     }
 
-    // 3. Fetch market news by category (also cache-checked)
-    for (const cat of (categories as string[])) {
-      const { data: cached } = await sb
+    // ---------- 3. Parallel fetch from both sources for what's missing ----------
+    const fetchTasks: Promise<{ articles: Article[]; cacheKey?: string }>[] = [];
+
+    // Finnhub per symbol (sequential under task to respect rate limit)
+    if (symbolsNeedingFetch.length > 0) {
+      fetchTasks.push((async () => {
+        const out: Article[] = [];
+        for (const sym of symbolsNeedingFetch) {
+          const arts = await fetchFinnhubForSymbol(sym, fromDate, toDate, sevenDaysAgo.getTime());
+          out.push(...arts);
+          await delay(FINNHUB_DELAY_MS);
+        }
+        return { articles: out };
+      })());
+    }
+
+    // NewsData broad symbol query (single call)
+    if (needsNewsDataSymbols && symbolsToFetch.length > 0) {
+      const ndKey = `newsdata:${symbolsToFetch.slice(0, 5).sort().join(",")}`;
+      fetchTasks.push((async () => {
+        const arts = await fetchNewsDataForSymbols(symbolsToFetch);
+        return { articles: arts.map((a) => ({ ...a, category: ndKey })), cacheKey: ndKey };
+      })());
+    }
+
+    // Categories — query both providers in parallel
+    for (const cat of categories as string[]) {
+      // Cache check first
+      const { data: catCached } = await sb
         .from("news_cache")
         .select("symbol, category, headline, summary, url, source, published_at")
         .eq("category", cat)
         .is("symbol", null)
-        .gte("fetched_at", fourHoursAgo)
-        .limit(15);
-
-      if (cached && cached.length > 0) {
-        for (const row of cached) {
-          if (row.url && !seenUrls.has(row.url)) {
-            seenUrls.add(row.url);
-            allArticles.push({
-              symbol: null,
-              category: row.category,
-              headline: row.headline,
-              summary: row.summary,
-              url: row.url,
-              source: row.source,
-              published_at: row.published_at,
-            });
-          }
+        .gte("fetched_at", cacheCutoff)
+        .limit(20);
+      if (catCached && catCached.length > 0) {
+        for (const row of catCached) {
+          allArticles.push({
+            symbol: null,
+            category: row.category,
+            headline: row.headline,
+            summary: row.summary,
+            url: row.url || "",
+            source: row.source,
+            published_at: row.published_at,
+          });
         }
-        console.log(`Cache hit for category ${cat}: ${cached.length} articles`);
+        console.log(`Cache hit for category ${cat}: ${catCached.length} articles`);
       } else {
-        try {
-          const res = await fetch(
-            `https://finnhub.io/api/v1/news?category=${encodeURIComponent(cat)}&token=${FINNHUB_KEY}`
-          );
-          if (res.ok) {
-            const data: FinnhubNews[] = await res.json();
-            addArticles(data.slice(0, 15), null, cat);
-          }
-        } catch (e) {
-          console.log(`Market news fetch failed for ${cat}: ${e}`);
-        }
-        await delay(CALL_DELAY_MS);
+        fetchTasks.push((async () => {
+          const [fh, nd] = await Promise.all([
+            fetchFinnhubForCategory(cat),
+            fetchNewsDataForCategory(cat),
+          ]);
+          return { articles: [...fh, ...nd] };
+        })());
       }
     }
 
-    // 4. Upsert new articles into cache
-    const newArticles = allArticles.filter(a => !a.published_at || true); // upsert all
-    if (newArticles.length > 0) {
-      for (let i = 0; i < newArticles.length; i += 50) {
-        const batch = newArticles.slice(i, i + 50).map(a => ({
-          ...a,
+    const results = await Promise.all(fetchTasks);
+    for (const r of results) allArticles.push(...r.articles);
+
+    // ---------- 4. Dedupe + rank ----------
+    const deduped = dedupeArticles(allArticles);
+    const ranked = rankArticles(deduped);
+
+    // ---------- 5. Persist newly fetched (avoid re-storing cache hits — upsert is idempotent on URL) ----------
+    const fetchedNew = ranked.filter((a) => a.url);
+    if (fetchedNew.length > 0) {
+      for (let i = 0; i < fetchedNew.length; i += 50) {
+        const batch = fetchedNew.slice(i, i + 50).map((a) => ({
+          symbol: a.symbol,
+          category: a.category,
+          headline: a.headline,
+          summary: a.summary,
+          url: a.url,
+          source: a.source,
+          published_at: a.published_at,
           fetched_at: new Date().toISOString(),
         }));
         await sb.from("news_cache").upsert(batch, { onConflict: "url", ignoreDuplicates: true });
       }
     }
 
-    // Group results
-    const bySymbol: Record<string, typeof allArticles> = {};
-    const market: typeof allArticles = [];
-    for (const a of allArticles) {
+    // ---------- 6. Group results ----------
+    const bySymbol: Record<string, Article[]> = {};
+    const market: Article[] = [];
+    // Articles tagged with a specific symbol go to that bucket; everything else (NewsData broad,
+    // category news) is shared across all requested symbols so the UI can surface thematic context.
+    const sharedThematic: Article[] = [];
+    for (const a of ranked) {
       if (a.symbol) {
         if (!bySymbol[a.symbol]) bySymbol[a.symbol] = [];
         bySymbol[a.symbol].push(a);
+      } else if (a.category && (a.category.startsWith("newsdata") || symbolsToFetch.length > 0)) {
+        sharedThematic.push(a);
       } else {
         market.push(a);
       }
     }
+    // Distribute shared thematic news across requested symbols (so theme view sees broader context)
+    for (const sym of symbolsToFetch) {
+      if (!bySymbol[sym]) bySymbol[sym] = [];
+      // Add up to 5 thematic articles per symbol bucket without duplicating existing URLs
+      const existingUrls = new Set(bySymbol[sym].map((a) => a.url));
+      let added = 0;
+      for (const a of sharedThematic) {
+        if (added >= 5) break;
+        if (!existingUrls.has(a.url)) {
+          bySymbol[sym].push(a);
+          existingUrls.add(a.url);
+          added++;
+        }
+      }
+    }
+    // Anything truly market-wide
+    market.push(...sharedThematic.filter((a) => symbolsToFetch.length === 0));
 
-    console.log(`Returning ${allArticles.length} articles (${symbolsNeedingFetch.length} fetched from API, ${symbolsToFetch.length - symbolsNeedingFetch.length} from cache)`);
+    console.log(
+      `Returning ${ranked.length} articles (Finnhub+NewsData, ${symbolsNeedingFetch.length} symbols fetched live, ${symbolsToFetch.length - symbolsNeedingFetch.length} from cache)`
+    );
 
     return jsonResponse({
       bySymbol,
       market,
-      totalArticles: allArticles.length,
+      totalArticles: ranked.length,
+      sources: {
+        finnhub: !!FINNHUB_KEY,
+        newsdata: !!NEWSDATA_KEY,
+      },
     });
   } catch (e) {
     console.error("Unhandled error in fetch-theme-news:", e);
