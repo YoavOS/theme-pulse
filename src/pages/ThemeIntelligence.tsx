@@ -1,28 +1,18 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { ArrowLeft, BarChart3, TrendingUp, LineChart, Grid3X3, Sparkles, Activity, FlaskConical, RefreshCw } from "lucide-react";
+import { ArrowLeft, BarChart3, Waves, RefreshCw } from "lucide-react";
 import { useThemeIntelligence } from "@/hooks/useThemeIntelligence";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import OverviewTab from "@/components/intelligence/OverviewTab";
-import MomentumTab from "@/components/intelligence/MomentumTab";
-import BreadthTab from "@/components/intelligence/BreadthTab";
-import InsightsTab from "@/components/intelligence/InsightsTab";
-import TrendsTab from "@/components/intelligence/TrendsTab";
-import HeatmapTab from "@/components/intelligence/HeatmapTab";
-import FundamentalsIntelTab from "@/components/intelligence/FundamentalsIntelTab";
+import MoneyFlowTab from "@/components/intelligence/MoneyFlowTab";
 import React from "react";
 import HelpButton from "@/components/HelpButton";
 import { CollapsibleProvider, ExpandCollapseAll } from "@/components/intelligence/CollapsibleSection";
 
 const SUB_TABS = [
   { id: "overview", label: "Overview", icon: BarChart3 },
-  { id: "momentum", label: "Momentum", icon: TrendingUp },
-  { id: "breadth", label: "Breadth", icon: Activity },
-  { id: "trends", label: "Trends", icon: LineChart },
-  { id: "heatmap", label: "Heatmap", icon: Grid3X3 },
-  { id: "fundamentals", label: "Fundamentals", icon: FlaskConical },
-  { id: "insights", label: "Insights", icon: Sparkles },
+  { id: "moneyflow", label: "Money Flow", icon: Waves },
 ] as const;
 
 type SubTabId = typeof SUB_TABS[number]["id"];
