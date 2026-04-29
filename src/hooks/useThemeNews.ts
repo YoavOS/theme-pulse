@@ -194,14 +194,34 @@ export function useThemeNews() {
 
     if (articles.length === 0) return null;
 
+    // Rank articles: prioritize recency + geopolitical/catalyst keywords, then take top 20
+    const HIGH_RELEVANCE_KEYWORDS = [
+      "hormuz", "iran", "russia", "ukraine", "opec", "sanction", "tariff", "war", "conflict",
+      "fed", "rate", "inflation", "earnings", "guidance", "contract", "deal", "merger", "acquisition",
+      "fda", "approval", "lawsuit", "investigation", "downgrade", "upgrade", "beat", "miss",
+      "capex", "investment", "billion", "ai ", "chip", "supply", "shortage", "ban", "export",
+    ];
+    const now = Date.now();
+    const scored = articles.map(a => {
+      const ageHours = a.published_at ? (now - new Date(a.published_at).getTime()) / 3_600_000 : 999;
+      const recencyScore = Math.max(0, 100 - ageHours); // newer = higher
+      const text = `${a.headline} ${a.summary || ""}`.toLowerCase();
+      const relevanceBoost = HIGH_RELEVANCE_KEYWORDS.reduce((acc, kw) => acc + (text.includes(kw) ? 15 : 0), 0);
+      return { a, score: recencyScore + relevanceBoost };
+    });
+    scored.sort((x, y) => y.score - x.score);
+    const ranked = scored.slice(0, 20).map(s => s.a);
+
     try {
       const result = await supabase.functions.invoke("summarize-theme-news", {
         body: {
           themeName,
-          headlines: articles.slice(0, 10).map(a => ({
+          headlines: ranked.map(a => ({
             headline: a.headline,
             source: a.source,
             symbol: a.symbol,
+            summary: a.summary,
+            published_at: a.published_at,
           })),
         },
       });
