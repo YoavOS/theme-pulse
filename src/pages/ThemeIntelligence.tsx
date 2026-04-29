@@ -119,31 +119,10 @@ export default function ThemeIntelligence() {
             {activeTab === "overview" && (
               <OverviewTab themes={themes} isLoading={isLoading} />
             )}
-            {activeTab === "momentum" && (
-              <MomentumTab accelerating={accelerating} fading={fading} isLoading={isLoading} />
-            )}
-            {activeTab === "breadth" && (
-              <ErrorBoundary label="Breadth">
-                <BreadthTab themes={themes} isLoading={isLoading} />
+            {activeTab === "moneyflow" && (
+              <ErrorBoundary label="Money Flow">
+                <MoneyFlowTab themes={themes} isLoading={isLoading} />
               </ErrorBoundary>
-            )}
-            {activeTab === "trends" && (
-              <ErrorBoundary label="Trends">
-                <TrendsTab />
-              </ErrorBoundary>
-            )}
-            {activeTab === "heatmap" && (
-              <ErrorBoundary label="Heatmap">
-                <HeatmapTab />
-              </ErrorBoundary>
-            )}
-            {activeTab === "fundamentals" && (
-              <ErrorBoundary label="Fundamentals">
-                <FundamentalsIntelTab themes={themes} isLoading={isLoading} />
-              </ErrorBoundary>
-            )}
-            {activeTab === "insights" && (
-              <InsightsTab themes={themes} accelerating={accelerating} fading={fading} isLoading={isLoading} />
             )}
           </div>
         </main>
