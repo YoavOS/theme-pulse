@@ -95,12 +95,27 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: "bad_request", message: "Missing themeName or headlines" }, 400);
     }
 
+    const fmtDate = (iso?: string | null) => {
+      if (!iso) return "";
+      const d = new Date(iso);
+      if (isNaN(d.getTime())) return "";
+      const hrs = Math.round((Date.now() - d.getTime()) / 3_600_000);
+      if (hrs < 1) return " (just now)";
+      if (hrs < 48) return ` (${hrs}h ago)`;
+      return ` (${Math.round(hrs / 24)}d ago)`;
+    };
+
     const headlineText = (headlines as any[])
-      .slice(0, 10)
-      .map((h: any, i: number) => `${i + 1}. [${h.source || "Unknown"}] ${h.headline}`)
+      .slice(0, 20)
+      .map((h: any, i: number) => {
+        const sym = h.symbol ? ` {${h.symbol}}` : "";
+        const when = fmtDate(h.published_at);
+        const snippet = h.summary ? `\n   ↳ ${String(h.summary).slice(0, 280).replace(/\s+/g, " ").trim()}` : "";
+        return `${i + 1}. [${h.source || "Unknown"}${when}]${sym} ${h.headline}${snippet}`;
+      })
       .join("\n");
 
-    const userMessage = `Theme: ${themeName}\n\nRecent headlines:\n${headlineText}\n\nWrite your summary, then the sentiment JSON on the last line.`;
+    const userMessage = `Theme: ${themeName}\n\nRecent ranked headlines (most recent + most relevant first; geopolitical and macro context included):\n${headlineText}\n\nWrite your 3–4 sentence summary grounded in the SPECIFIC catalysts shown above (name regions, policies, events, dollar amounts), then the sentiment JSON on the last line.`;
 
     let response: Response;
     try {
@@ -112,7 +127,7 @@ Deno.serve(async (req) => {
         },
         body: JSON.stringify({
           model: "llama-3.3-70b-versatile",
-          max_tokens: 350,
+          max_tokens: 500,
           messages: [
             { role: "system", content: SYSTEM_PROMPT },
             { role: "user", content: userMessage },
