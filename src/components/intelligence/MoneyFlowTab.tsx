@@ -1,197 +1,79 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// MoneyFlowTab — "smart money radar"
+// MoneyFlowTab — Theme RS approach
 //
-// Left  – ranked themes with: Score, Rotation Strength (1W vs 3M RS),
-//         Growth %, Volume Confirmation, Catalyst Strength
-// Right – deep context panel: Score + verdict, Key Drivers, sharp AI Summary,
-//         Catalyst Breakdown, Top Stocks to Watch, analytical "Why" section,
-//         and a small legend.
+// Left  – Themes ranked by Theme RS for the selected timeframe
+//         (Overall | 1W | 1M | 3M | 6M). Columns: Theme RS (0-99),
+//         Performance vs SPY %, Avg stock RS, % Growth Stocks, Rel Vol, Trend.
+// Right – Selected theme: RS score, sparkline vs SPY, AI summary, recent news,
+//         "Why Money is Flowing" rationale grounded in RS + growth + volume.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { useEffect, useMemo, useState } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Bot, Newspaper, ExternalLink, Sparkles, TrendingUp, Activity,
-  Flame, Zap, Info, Target, ArrowUpRight, ArrowDownRight,
+  Zap, Info, Target, ArrowUpRight, ArrowDownRight, Minus,
 } from "lucide-react";
 import type { ThemeIntelData } from "@/hooks/useThemeIntelligence";
 import { useSpyBenchmark } from "@/hooks/useSpyBenchmark";
 import { useStockFundamentalsMap } from "@/hooks/useStockFundamentalsMap";
 import { useQualifiedRsMap } from "@/hooks/useQualifiedRsMap";
+import { computeRsRatings } from "@/components/rs/RsRatingBadge";
 import { passesGrowth } from "@/lib/growthFilters";
 import {
   useThemeNews,
   type NewsArticle,
-  POSITIVE_KEYWORDS,
-  NEGATIVE_HEADLINE_KEYWORDS,
 } from "@/hooks/useThemeNews";
 
 const DM_MONO = "'DM Mono', monospace";
 const SYNE = "'Syne', sans-serif";
 
-type Timeframe = "Today" | "1W" | "1M";
+type RsTimeframe = "overall" | "1w" | "1m" | "3m" | "6m";
 
-interface VolumeConfirm {
-  label: "Strong" | "Confirming" | "Neutral" | "Thin";
-  detail: string;
-  color: string;
-  score: number; // 0-100 (just for scaling bar)
-}
+const TF_LABELS: Record<RsTimeframe, string> = {
+  overall: "Overall",
+  "1w": "1W",
+  "1m": "1M",
+  "3m": "3M",
+  "6m": "6M",
+};
 
-interface CatalystSummary {
-  label: "Hot" | "Active" | "Quiet" | "—";
-  detail: string;
-  color: string;
-  count: number;
-}
+const TF_ORDER: RsTimeframe[] = ["overall", "1w", "1m", "3m", "6m"];
 
-interface ScoredTheme {
+interface ThemeRow {
   theme: ThemeIntelData;
-  score: number;            // 0-100 Money Flow Score
-  band: "strong" | "building" | "weakening";
-  rsVsSpy: number | null;   // perf - SPY for selected timeframe
+  // Raw average RS rating across constituent tickers for the active timeframe.
+  // Comes from qualified_rs_universe (RS pts vs SPY, NOT 0-99).
+  rawAvgRs: number | null;
+  // 0-99 Theme RS score derived by ranking themes' rawAvgRs against each other.
+  themeRs: number | null;
+  // Average rs_overall (0-99 scale already, just averaged) for "Avg RS of stocks".
+  avgStockRs: number | null;
+  // Performance % vs SPY for the active timeframe (theme avg perf - SPY perf).
+  perfVsSpy: number | null;
+  // % Growth-passing stocks
   growthPct: number | null;
   growthPass: number;
   growthEval: number;
-  avgRs: number | null;            // avg rs_overall (1-99)
-  rotation: number | null;         // avg(rs_1w - rs_3m)
-  volume: VolumeConfirm;
-  catalyst: CatalystSummary;
-  topStocks: TopStock[];
-  signal: string;
+  // Relative volume
+  relVol: number | null;
+  // Trend: change in 1W RS vs 3M RS (>0 improving)
+  trend: number | null;
 }
 
-interface TopStock {
-  symbol: string;
-  rs: number | null;
-  perf_1d: number;
-  perf_1w: number;
-  isGrowth: boolean;
+function trendIcon(trend: number | null) {
+  if (trend === null) return { icon: <Minus size={11} />, color: "hsl(var(--muted-foreground))", label: "—" };
+  if (trend >= 3) return { icon: <ArrowUpRight size={12} />, color: "hsl(170, 80%, 50%)", label: "Improving" };
+  if (trend <= -3) return { icon: <ArrowDownRight size={12} />, color: "hsl(0, 70%, 60%)", label: "Weakening" };
+  return { icon: <Minus size={11} />, color: "hsl(var(--muted-foreground))", label: "Stable" };
 }
 
-const HIGH_RELEVANCE_KW = [
-  "hormuz", "iran", "russia", "ukraine", "opec", "sanction", "tariff", "war", "conflict",
-  "fed", "rate", "inflation", "earnings", "guidance", "contract", "deal", "merger",
-  "acquisition", "fda", "approval", "lawsuit", "investigation", "downgrade", "upgrade",
-  "beat", "miss", "capex", "billion", "ai ", "chip", "supply", "shortage", "ban", "export",
-];
-
-function clamp(v: number, lo = 0, hi = 100): number {
-  return Math.max(lo, Math.min(hi, v));
-}
-
-function scoreColors(score: number, band: ScoredTheme["band"]) {
-  if (band === "strong") return { fg: "hsl(170, 90%, 50%)", bg: "rgba(0, 245, 196, 0.10)", border: "rgba(0, 245, 196, 0.28)" };
-  if (band === "building") return { fg: "hsl(40, 90%, 55%)", bg: "rgba(245, 166, 35, 0.10)", border: "rgba(245, 166, 35, 0.28)" };
-  return { fg: "hsl(0, 75%, 60%)", bg: "rgba(239, 68, 68, 0.10)", border: "rgba(239, 68, 68, 0.28)" };
-}
-
-function bandLabel(b: ScoredTheme["band"]): string {
-  if (b === "strong") return "Strong inflow";
-  if (b === "building") return "Building";
-  return "Weakening";
-}
-
-function verdict(s: ScoredTheme): string {
-  if (s.band === "strong") {
-    if (s.rotation !== null && s.rotation >= 5) return "Smart money rotating in — accelerating leadership.";
-    return "Strong inflow with broad confirmation.";
-  }
-  if (s.band === "building") {
-    if (s.rotation !== null && s.rotation >= 3) return "Building momentum — early-stage rotation in.";
-    return "Mixed but constructive — watch for a confirming push.";
-  }
-  if (s.rotation !== null && s.rotation <= -3) return "Rotation OUT — capital leaving the theme.";
-  return "Weak flow — capital is sitting out.";
-}
-
-function tfPerf(t: ThemeIntelData, tf: Timeframe): number {
-  if (tf === "1W") return t.perf_1w;
-  if (tf === "1M") return t.perf_1m;
-  return t.perf_1d;
-}
-
-function tfHasData(t: ThemeIntelData, tf: Timeframe): boolean {
-  if (tf === "Today") return true;
-  return t.hasEodHistory;
-}
-
-function relSpyToScore(delta: number | null): number | null {
-  if (delta === null || !Number.isFinite(delta)) return null;
-  return clamp(50 + delta * 10);
-}
-
-function relVolToScore(rv: number | null): number | null {
-  if (rv === null || !Number.isFinite(rv)) return null;
-  return clamp(rv * 50);
-}
-
-function rotationToScore(r: number | null): number | null {
-  if (r === null || !Number.isFinite(r)) return null;
-  // ±15 RS pts → ±50 around midpoint
-  return clamp(50 + (r / 15) * 50);
-}
-
-function classifyVolume(t: ThemeIntelData): VolumeConfirm {
-  const rv = t.avgRelVol;
-  const up = t.volumeSpikingUp;
-  if (rv === null) {
-    return { label: "Neutral", detail: "no volume data", color: "hsl(var(--muted-foreground))", score: 50 };
-  }
-  if (rv >= 1.6 || up >= 4) {
-    return { label: "Strong", detail: `${rv.toFixed(2)}× · ${up} spikes`, color: "hsl(170, 80%, 50%)", score: 85 };
-  }
-  if (rv >= 1.2) {
-    return { label: "Confirming", detail: `${rv.toFixed(2)}×`, color: "hsl(170, 65%, 55%)", score: 65 };
-  }
-  if (rv < 0.85) {
-    return { label: "Thin", detail: `${rv.toFixed(2)}×`, color: "hsl(0, 70%, 60%)", score: 30 };
-  }
-  return { label: "Neutral", detail: `${rv.toFixed(2)}×`, color: "hsl(var(--muted-foreground))", score: 50 };
-}
-
-function scoreArticle(a: NewsArticle): number {
-  const text = `${a.headline} ${a.summary || ""}`.toLowerCase();
-  let s = 0;
-  for (const k of HIGH_RELEVANCE_KW) if (text.includes(k)) s += 12;
-  for (const k of POSITIVE_KEYWORDS) if (text.includes(k)) s += 6;
-  for (const k of NEGATIVE_HEADLINE_KEYWORDS) if (text.includes(k)) s += 6;
-  if (a.published_at) {
-    const ageH = (Date.now() - new Date(a.published_at).getTime()) / 3_600_000;
-    s += Math.max(0, 30 - ageH); // recency boost (0–30)
-  }
-  return s;
-}
-
-function classifyCatalyst(articles: NewsArticle[]): CatalystSummary {
-  if (!articles || articles.length === 0) {
-    return { label: "—", detail: "no news fetched", color: "hsl(var(--muted-foreground))", count: 0 };
-  }
-  const since = Date.now() - 48 * 3_600_000;
-  const recent = articles.filter(
-    a => a.published_at && new Date(a.published_at).getTime() >= since
-  );
-  let high = 0;
-  for (const a of recent) {
-    const text = `${a.headline} ${a.summary || ""}`.toLowerCase();
-    if (HIGH_RELEVANCE_KW.some(k => text.includes(k))) high++;
-  }
-  if (high >= 4) return { label: "Hot", detail: `${high} catalysts · 48h`, color: "hsl(0, 80%, 62%)", count: high };
-  if (high >= 1) return { label: "Active", detail: `${high} catalyst${high > 1 ? "s" : ""}`, color: "hsl(40, 90%, 55%)", count: high };
-  return { label: "Quiet", detail: `${recent.length} headlines`, color: "hsl(var(--muted-foreground))", count: 0 };
-}
-
-function buildSignal(s: Omit<ScoredTheme, "signal">): string {
-  const drivers: string[] = [];
-  if (s.rsVsSpy !== null && s.rsVsSpy >= 0.5) drivers.push(`+${s.rsVsSpy.toFixed(1)}% vs SPY`);
-  else if (s.rsVsSpy !== null && s.rsVsSpy <= -0.5) drivers.push(`${s.rsVsSpy.toFixed(1)}% vs SPY`);
-  if (s.rotation !== null && Math.abs(s.rotation) >= 3) {
-    drivers.push(`${s.rotation > 0 ? "+" : ""}${s.rotation.toFixed(1)} RS rotation`);
-  }
-  if (s.theme.avgRelVol !== null && s.theme.avgRelVol >= 1.4) drivers.push(`${s.theme.avgRelVol.toFixed(1)}× vol`);
-  if (s.growthPct !== null && s.growthPct >= 60) drivers.push(`${Math.round(s.growthPct)}% growth`);
-  if (drivers.length === 0) return "Mixed signals";
-  return drivers.slice(0, 3).join(" · ");
+function rsColor(r: number | null): string {
+  if (r === null) return "hsl(var(--muted-foreground))";
+  if (r >= 80) return "hsl(170, 90%, 50%)";
+  if (r >= 60) return "hsl(170, 65%, 55%)";
+  if (r >= 40) return "hsl(40, 90%, 55%)";
+  return "hsl(0, 75%, 60%)";
 }
 
 function timeAgo(d: string | null | undefined): string {
@@ -204,6 +86,39 @@ function timeAgo(d: string | null | undefined): string {
   return `${Math.floor(h / 24)}d ago`;
 }
 
+// Average a numeric field over a list, ignoring null/non-finite.
+function avgField(values: (number | null | undefined)[]): number | null {
+  const nums = values.filter((v): v is number => typeof v === "number" && Number.isFinite(v));
+  if (nums.length === 0) return null;
+  return nums.reduce((a, b) => a + b, 0) / nums.length;
+}
+
+// Pick the right per-ticker RS field for a given timeframe.
+function rsFieldForTf(tf: RsTimeframe): "rs_overall" | "rs_1w" | "rs_1m" | "rs_3m" | "rs_6m" {
+  if (tf === "overall") return "rs_overall";
+  if (tf === "1w") return "rs_1w";
+  if (tf === "1m") return "rs_1m";
+  if (tf === "3m") return "rs_3m";
+  return "rs_6m";
+}
+
+// Pick the right per-ticker performance field for a given timeframe.
+function perfFieldForTf(tf: RsTimeframe): "perf_1w" | "perf_1m" | "perf_3m" | "perf_ytd" | null {
+  if (tf === "1w") return "perf_1w";
+  if (tf === "1m") return "perf_1m";
+  if (tf === "3m") return "perf_3m";
+  // overall + 6m: no native theme perf available → use perf_3m as the
+  // closest available gauge for the vs-SPY column (or null when missing).
+  if (tf === "overall") return "perf_3m";
+  return null; // 6m
+}
+
+function spyPerfForTf(spy: ReturnType<typeof useSpyBenchmark>["spy"], tf: RsTimeframe): number | null {
+  const f = perfFieldForTf(tf);
+  if (!f) return null;
+  return spy[f] ?? null;
+}
+
 export default function MoneyFlowTab({
   themes,
   isLoading,
@@ -211,8 +126,7 @@ export default function MoneyFlowTab({
   themes: ThemeIntelData[];
   isLoading: boolean;
 }) {
-  const [tf, setTf] = useState<Timeframe>("1W");
-  const [growthOnly, setGrowthOnly] = useState(false);
+  const [tf, setTf] = useState<RsTimeframe>("overall");
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const { spy } = useSpyBenchmark();
@@ -226,51 +140,49 @@ export default function MoneyFlowTab({
   const [loadingNews, setLoadingNews] = useState(false);
   const [loadingSummary, setLoadingSummary] = useState(false);
 
-  // Cached articles per theme (for catalyst column on left). We fetch on selection,
-  // so themes the user has viewed get a real catalyst badge; others fall back to "—".
-  const cachedArticlesByTheme = useMemo(() => {
-    const map = new Map<string, NewsArticle[]>();
-    for (const t of themes) {
-      const arts = getThemeArticles(t.symbols.slice(0, 8));
-      if (arts.length > 0) map.set(t.themeId, arts);
-    }
-    return map;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [themes, articles]);
-
-  // ── Score + rank themes ────────────────────────────────────────────────
-  const scored: ScoredTheme[] = useMemo(() => {
+  // ── Compute per-theme metrics for the active timeframe ─────────────────
+  const rows: ThemeRow[] = useMemo(() => {
     if (themes.length === 0) return [];
-    const spyVal =
-      tf === "1W" ? spy.perf_1w : tf === "1M" ? spy.perf_1m : spy.perf_1d;
 
-    const out: ScoredTheme[] = themes.map((t) => {
-      const perf = tfPerf(t, tf);
-      const hasPerf = tfHasData(t, tf);
-      const rsVsSpy =
-        spyVal !== null && spyVal !== undefined && hasPerf
-          ? Math.round((perf - spyVal) * 100) / 100
+    const rsField = rsFieldForTf(tf);
+    const perfField = perfFieldForTf(tf);
+    const spyVal = spyPerfForTf(spy, tf);
+
+    // Step 1: compute rawAvgRs per theme (for the active TF).
+    const partials = themes.map((t) => {
+      const rsValues: number[] = [];
+      const overallValues: number[] = [];
+      const rs1wValues: number[] = [];
+      const rs3mValues: number[] = [];
+      for (const sym of t.symbols) {
+        const r = rsMap.get(sym);
+        if (!r) continue;
+        const v = r[rsField];
+        if (v !== null && v !== undefined && Number.isFinite(v as number)) rsValues.push(v as number);
+        if (r.rs_overall !== null && Number.isFinite(r.rs_overall)) overallValues.push(r.rs_overall);
+        if (r.rs_1w !== null && Number.isFinite(r.rs_1w)) rs1wValues.push(r.rs_1w);
+        if (r.rs_3m !== null && Number.isFinite(r.rs_3m)) rs3mValues.push(r.rs_3m);
+      }
+      const rawAvgRs = avgField(rsValues);
+      const avgStockRs = avgField(overallValues);
+      const avg1w = avgField(rs1wValues);
+      const avg3m = avgField(rs3mValues);
+      const trend = avg1w !== null && avg3m !== null ? avg1w - avg3m : null;
+
+      // Theme avg perf for vs-SPY
+      let themePerf: number | null = null;
+      if (perfField) {
+        const perfs = t.tickers
+          .filter((tk) => tk.status === "done")
+          .map((tk) => tk[perfField] as number);
+        themePerf = avgField(perfs);
+      }
+      const perfVsSpy =
+        themePerf !== null && spyVal !== null && Number.isFinite(spyVal)
+          ? Math.round((themePerf - spyVal) * 100) / 100
           : null;
 
-      // ── per-symbol RS aggregation
-      const rsOveralls: number[] = [];
-      const rotations: number[] = [];
-      for (const s of t.symbols) {
-        const r = rsMap.get(s);
-        if (!r) continue;
-        if (r.rs_overall !== null && Number.isFinite(r.rs_overall)) rsOveralls.push(r.rs_overall);
-        if (r.rs_1w !== null && r.rs_3m !== null && Number.isFinite(r.rs_1w) && Number.isFinite(r.rs_3m)) {
-          rotations.push(r.rs_1w - r.rs_3m);
-        }
-      }
-      const avgRs = rsOveralls.length > 0
-        ? Math.round(rsOveralls.reduce((a, b) => a + b, 0) / rsOveralls.length)
-        : null;
-      const rotation = rotations.length > 0
-        ? Math.round((rotations.reduce((a, b) => a + b, 0) / rotations.length) * 10) / 10
-        : null;
-
-      // ── Growth %
+      // Growth %
       let growthPass = 0;
       let growthEval = 0;
       for (const tk of t.tickers) {
@@ -282,80 +194,42 @@ export default function MoneyFlowTab({
       }
       const growthPct = growthEval > 0 ? (growthPass / growthEval) * 100 : null;
 
-      // ── volume + catalyst
-      const volume = classifyVolume(t);
-      const arts = cachedArticlesByTheme.get(t.themeId) || [];
-      const catalyst = classifyCatalyst(arts);
-
-      // ── Money Flow Score (weights tilted to flow evidence + rotation)
-      const cRel = relSpyToScore(rsVsSpy);
-      const cVol = relVolToScore(t.avgRelVol);
-      const cMomentum = clamp(t.momentumScore);
-      const cBreadth = t.breadthTotal > 0 ? clamp((t.breadthUp / t.breadthTotal) * 100) : null;
-      const cGrowth = growthPct;
-      const cRot = rotationToScore(rotation);
-
-      const weights = { rel: 0.26, rot: 0.20, vol: 0.18, momentum: 0.14, breadth: 0.14, growth: 0.08 };
-      const parts: { v: number; w: number }[] = [];
-      if (cRel !== null) parts.push({ v: cRel, w: weights.rel });
-      if (cRot !== null) parts.push({ v: cRot, w: weights.rot });
-      if (cVol !== null) parts.push({ v: cVol, w: weights.vol });
-      parts.push({ v: cMomentum, w: weights.momentum });
-      if (cBreadth !== null) parts.push({ v: cBreadth, w: weights.breadth });
-      if (cGrowth !== null) parts.push({ v: cGrowth, w: weights.growth });
-      const totalW = parts.reduce((s, p) => s + p.w, 0);
-      const score = totalW > 0
-        ? Math.round(parts.reduce((s, p) => s + p.v * p.w, 0) / totalW)
-        : 0;
-
-      const band: ScoredTheme["band"] =
-        score >= 65 ? "strong" : score >= 45 ? "building" : "weakening";
-
-      // ── top stocks: highest RS, ties broken by 1W perf; mark growth
-      const stocks: TopStock[] = t.tickers
-        .filter(tk => tk.status === "done")
-        .map(tk => {
-          const r = rsMap.get(tk.symbol);
-          const f = fundamentalsMap.get(tk.symbol);
-          return {
-            symbol: tk.symbol,
-            rs: r?.rs_overall ?? null,
-            perf_1d: tk.perf_1d,
-            perf_1w: tk.perf_1w,
-            isGrowth: f ? passesGrowth(f) : false,
-          };
-        })
-        .sort((a, b) => {
-          const ra = a.rs ?? -1;
-          const rb = b.rs ?? -1;
-          if (rb !== ra) return rb - ra;
-          return b.perf_1w - a.perf_1w;
-        })
-        .slice(0, 5);
-
-      const partial: Omit<ScoredTheme, "signal"> = {
-        theme: t, score, band, rsVsSpy, growthPct, growthPass, growthEval,
-        avgRs, rotation, volume, catalyst, topStocks: stocks,
+      return {
+        theme: t,
+        rawAvgRs,
+        avgStockRs: avgStockRs !== null ? Math.round(avgStockRs) : null,
+        perfVsSpy,
+        growthPct,
+        growthPass,
+        growthEval,
+        relVol: t.avgRelVol,
+        trend: trend !== null ? Math.round(trend * 10) / 10 : null,
       };
-      return { ...partial, signal: buildSignal(partial) };
     });
 
-    out.sort((a, b) => b.score - a.score);
-    return out;
-  }, [themes, tf, spy, fundamentalsMap, rsMap, cachedArticlesByTheme]);
+    // Step 2: rank rawAvgRs across themes → Theme RS 0-99 (same logic as RS Alpha).
+    const rawValues = partials.map((p) => (p.rawAvgRs !== null ? p.rawAvgRs : null));
+    const ratings = computeRsRatings(rawValues);
 
-  const filtered = useMemo(() => {
-    if (!growthOnly) return scored;
-    return scored.filter((s) => s.growthPct !== null && s.growthPct >= 50);
-  }, [scored, growthOnly]);
+    const out: ThemeRow[] = partials.map((p, i) => ({ ...p, themeRs: ratings[i] }));
+
+    // Sort by Theme RS desc (nulls last)
+    out.sort((a, b) => {
+      if (a.themeRs === null && b.themeRs === null) return 0;
+      if (a.themeRs === null) return 1;
+      if (b.themeRs === null) return -1;
+      return b.themeRs - a.themeRs;
+    });
+    return out;
+  }, [themes, tf, spy, rsMap, fundamentalsMap]);
 
   useEffect(() => {
-    if (!selectedId && filtered.length > 0) setSelectedId(filtered[0].theme.themeId);
-  }, [filtered, selectedId]);
+    if (!selectedId && rows.length > 0) setSelectedId(rows[0].theme.themeId);
+  }, [rows, selectedId]);
 
   const selected = useMemo(
-    () => filtered.find((s) => s.theme.themeId === selectedId) ?? filtered[0] ?? null,
-    [filtered, selectedId]
+    () => rows.find((r) => r.theme.themeId === selectedId) ?? rows[0] ?? null,
+    [rows, selectedId]
   );
 
   // ── Load news + AI summary when selection changes ──────────────────────
@@ -399,79 +273,58 @@ export default function MoneyFlowTab({
   const aiSummary = selected ? aiSummaries[selected.theme.themeName]?.summary ?? null : null;
   const sentiment = selected ? getThemeSentiment(selected.theme.themeName) : null;
 
-  // Top catalyst articles for selected theme (max 3)
-  const topCatalysts: NewsArticle[] = useMemo(() => {
-    if (!articles.length) return [];
-    return [...articles]
-      .map(a => ({ a, s: scoreArticle(a) }))
-      .sort((x, y) => y.s - x.s)
-      .slice(0, 3)
-      .map(x => x.a);
-  }, [articles]);
+  // ── Sparkline: theme avg perf vs SPY (5d closes from cached sparklineData)
+  // ThemeIntelData.sparklineData is the theme's perf series; SPY's series is
+  // not directly available here, so we draw the theme series and overlay a
+  // flat zero line as the "vs SPY" reference. This stays lightweight.
+  const sparkline = selected?.theme.sparklineData ?? [];
 
-  // Build Key Drivers bullet list
-  const keyDrivers: { icon: JSX.Element; text: string; tone: "pos" | "neg" | "neu" }[] = useMemo(() => {
+  // Build "Why Money is Flowing" rationale from RS + growth + volume signals.
+  const whyFlowing: string[] = useMemo(() => {
     if (!selected) return [];
-    const out: { icon: JSX.Element; text: string; tone: "pos" | "neg" | "neu" }[] = [];
-    const t = selected.theme;
-    if (selected.rsVsSpy !== null) {
-      if (selected.rsVsSpy >= 0.3)
-        out.push({ icon: <ArrowUpRight size={12} />, tone: "pos",
-          text: `RS vs SPY +${selected.rsVsSpy.toFixed(2)}% (${tf}) — outperforming the market.` });
-      else if (selected.rsVsSpy <= -0.3)
-        out.push({ icon: <ArrowDownRight size={12} />, tone: "neg",
-          text: `RS vs SPY ${selected.rsVsSpy.toFixed(2)}% (${tf}) — underperforming.` });
+    const out: string[] = [];
+    const tfLabel = TF_LABELS[tf];
+    if (selected.themeRs !== null) {
+      if (selected.themeRs >= 80) out.push(`Theme RS ${selected.themeRs}/99 (${tfLabel}) — top-decile leadership across constituents.`);
+      else if (selected.themeRs >= 60) out.push(`Theme RS ${selected.themeRs}/99 (${tfLabel}) — solid relative strength vs other themes.`);
+      else if (selected.themeRs <= 30) out.push(`Theme RS ${selected.themeRs}/99 (${tfLabel}) — laggard group, capital is rotating away.`);
     }
-    if (selected.rotation !== null) {
-      if (selected.rotation >= 3)
-        out.push({ icon: <TrendingUp size={12} />, tone: "pos",
-          text: `Rotation +${selected.rotation.toFixed(1)} RS (1W vs 3M) — leadership accelerating.` });
-      else if (selected.rotation <= -3)
-        out.push({ icon: <ArrowDownRight size={12} />, tone: "neg",
-          text: `Rotation ${selected.rotation.toFixed(1)} RS (1W vs 3M) — momentum fading.` });
-      else
-        out.push({ icon: <Activity size={12} />, tone: "neu",
-          text: `Stable rotation (${selected.rotation > 0 ? "+" : ""}${selected.rotation.toFixed(1)} RS) — no major shift.` });
+    if (selected.perfVsSpy !== null) {
+      if (selected.perfVsSpy >= 0.5) out.push(`Outperforming SPY by ${selected.perfVsSpy >= 0 ? "+" : ""}${selected.perfVsSpy.toFixed(2)}% (${tfLabel}).`);
+      else if (selected.perfVsSpy <= -0.5) out.push(`Underperforming SPY by ${selected.perfVsSpy.toFixed(2)}% (${tfLabel}).`);
     }
-    if (t.avgRelVol !== null) {
-      if (t.avgRelVol >= 1.4)
-        out.push({ icon: <Zap size={12} />, tone: "pos",
-          text: `Volume ${t.avgRelVol.toFixed(2)}× avg with ${t.volumeSpikingUp} ticker spike${t.volumeSpikingUp === 1 ? "" : "s"} — institutional confirmation.` });
-      else if (t.avgRelVol < 0.85)
-        out.push({ icon: <ArrowDownRight size={12} />, tone: "neg",
-          text: `Volume only ${t.avgRelVol.toFixed(2)}× avg — flow is thin.` });
+    if (selected.trend !== null) {
+      if (selected.trend >= 3) out.push(`Trend improving — 1W RS ${selected.trend > 0 ? "+" : ""}${selected.trend.toFixed(1)} pts above 3M RS.`);
+      else if (selected.trend <= -3) out.push(`Trend weakening — 1W RS ${selected.trend.toFixed(1)} pts below 3M RS.`);
     }
     if (selected.growthPct !== null && selected.growthEval >= 3) {
-      const tone: "pos" | "neg" | "neu" =
-        selected.growthPct >= 60 ? "pos" : selected.growthPct >= 35 ? "neu" : "neg";
-      out.push({ icon: <Target size={12} />, tone,
-        text: `${selected.growthPass}/${selected.growthEval} stocks pass Growth filter (${Math.round(selected.growthPct)}%).` });
+      if (selected.growthPct >= 60) out.push(`${selected.growthPass}/${selected.growthEval} stocks (${Math.round(selected.growthPct)}%) pass the Growth filter — fundamentals support the move.`);
+      else if (selected.growthPct <= 25) out.push(`Only ${selected.growthPass}/${selected.growthEval} stocks pass Growth — flow is technical, not fundamental.`);
     }
-    if (t.breadthTotal > 0) {
-      const bp = Math.round((t.breadthUp / t.breadthTotal) * 100);
-      const tone: "pos" | "neg" | "neu" = bp >= 60 ? "pos" : bp <= 35 ? "neg" : "neu";
-      out.push({ icon: <Activity size={12} />, tone,
-        text: `Breadth ${t.breadthUp}/${t.breadthTotal} advancing (${bp}%) — ${bp >= 60 ? "broad participation" : bp <= 35 ? "narrow move" : "mixed participation"}.` });
+    if (selected.relVol !== null) {
+      if (selected.relVol >= 1.4) out.push(`Volume ${selected.relVol.toFixed(2)}× average — institutional confirmation.`);
+      else if (selected.relVol < 0.85) out.push(`Volume only ${selected.relVol.toFixed(2)}× average — flow is thin.`);
     }
-    if (selected.avgRs !== null) {
-      const tone: "pos" | "neg" | "neu" =
-        selected.avgRs >= 70 ? "pos" : selected.avgRs <= 40 ? "neg" : "neu";
-      out.push({ icon: <Sparkles size={12} />, tone,
-        text: `Average RS rating ${selected.avgRs}/99 — ${selected.avgRs >= 70 ? "leadership group" : selected.avgRs <= 40 ? "laggard group" : "mid-pack"}.` });
+    if (selected.avgStockRs !== null) {
+      if (selected.avgStockRs >= 70) out.push(`Average constituent RS ${selected.avgStockRs}/99 — broad leadership group.`);
+      else if (selected.avgStockRs <= 40) out.push(`Average constituent RS ${selected.avgStockRs}/99 — weak underlying group.`);
     }
     return out.slice(0, 6);
   }, [selected, tf]);
 
   return (
     <div className="space-y-3">
-      {/* Toolbar */}
+      {/* Toolbar — timeframe selector */}
       <div
         className="flex flex-wrap items-center justify-between gap-2 rounded-lg px-3 py-2"
         style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}
       >
         <div className="flex items-center gap-3">
+          <span className="text-[10px] uppercase tracking-wider text-muted-foreground" style={{ fontFamily: SYNE }}>
+            Theme RS
+          </span>
           <div className="flex items-center gap-1 rounded-lg bg-[rgba(255,255,255,0.03)] p-0.5">
-            {(["Today", "1W", "1M"] as Timeframe[]).map((opt) => (
+            {TF_ORDER.map((opt) => (
               <button
                 key={opt}
                 onClick={() => setTf(opt)}
@@ -481,28 +334,19 @@ export default function MoneyFlowTab({
                     : "text-muted-foreground hover:text-foreground hover:bg-[rgba(255,255,255,0.04)]"
                 }`}
               >
-                {opt}
+                {TF_LABELS[opt]}
               </button>
             ))}
           </div>
-          <label className="flex cursor-pointer items-center gap-1.5 text-[11px] text-muted-foreground">
-            <input
-              type="checkbox"
-              checked={growthOnly}
-              onChange={(e) => setGrowthOnly(e.target.checked)}
-              className="h-3 w-3 cursor-pointer accent-primary"
-            />
-            Growth Stocks Only
-          </label>
         </div>
         <div className="text-[10px] text-muted-foreground" style={{ fontFamily: DM_MONO }}>
-          {filtered.length} themes · smart-money radar
+          {rows.length} themes · ranked by Theme RS
         </div>
       </div>
 
       {/* Two-column layout */}
-      <div className="grid grid-cols-1 gap-3 lg:grid-cols-[1.25fr_1fr]">
-        {/* LEFT — Ranked list */}
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-[1.3fr_1fr]">
+        {/* LEFT — Ranked theme RS table */}
         <div
           className="overflow-hidden rounded-lg"
           style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}
@@ -510,7 +354,7 @@ export default function MoneyFlowTab({
           <div className="flex items-center justify-between border-b border-[rgba(255,255,255,0.08)] px-3 py-2">
             <h3 className="text-xs font-semibold text-foreground" style={{ fontFamily: SYNE }}>
               <TrendingUp size={12} className="inline mr-1.5 text-primary" />
-              Themes Ranked by Money Flow
+              Themes Ranked by Theme RS · {TF_LABELS[tf]}
             </h3>
           </div>
           <div className="max-h-[72vh] overflow-y-auto">
@@ -519,85 +363,110 @@ export default function MoneyFlowTab({
                 <tr className="border-b border-[rgba(255,255,255,0.08)] text-[9.5px] uppercase tracking-wider text-muted-foreground">
                   <th className="px-2 py-2 text-left font-medium w-7">#</th>
                   <th className="px-2 py-2 text-left font-medium">Theme</th>
-                  <th className="px-2 py-2 text-left font-medium">Score</th>
-                  <th className="px-2 py-2 text-right font-medium" title="1W RS minus 3M RS — positive = accelerating into leadership">Rotation</th>
+                  <th className="px-2 py-2 text-left font-medium" title="Theme RS rating 0-99 — relative rank vs all themes for this timeframe">Theme RS</th>
+                  <th className="px-2 py-2 text-right font-medium" title="Theme average performance minus SPY performance for this timeframe">vs SPY</th>
+                  <th className="px-2 py-2 text-right font-medium" title="Average rs_overall of constituent stocks (0-99)">Avg RS</th>
                   <th className="px-2 py-2 text-right font-medium" title="% of theme stocks passing the Growth filter">Growth</th>
-                  <th className="px-2 py-2 text-left font-medium" title="Volume confirmation from relative volume + spike count">Volume</th>
-                  <th className="px-2 py-2 text-left font-medium" title="High-relevance catalysts in news (last 48h)">Catalyst</th>
+                  <th className="px-2 py-2 text-right font-medium" title="Relative volume — today vs 20-day average">Rel Vol</th>
+                  <th className="px-2 py-2 text-left font-medium" title="1W RS minus 3M RS — improving / weakening / stable">Trend</th>
                 </tr>
               </thead>
               <tbody>
                 {isLoading ? (
                   Array.from({ length: 8 }).map((_, i) => (
                     <tr key={i} className="border-b border-[rgba(255,255,255,0.04)]">
-                      <td colSpan={7} className="px-3 py-2"><Skeleton className="h-5 w-full" /></td>
+                      <td colSpan={8} className="px-3 py-2"><Skeleton className="h-5 w-full" /></td>
                     </tr>
                   ))
-                ) : filtered.length === 0 ? (
+                ) : rows.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="px-4 py-10 text-center text-xs text-muted-foreground">
-                      No themes match the current filter.
+                    <td colSpan={8} className="px-4 py-10 text-center text-xs text-muted-foreground">
+                      No themes available.
                     </td>
                   </tr>
                 ) : (
-                  filtered.map((s, i) => {
-                    const c = scoreColors(s.score, s.band);
-                    const isSel = selected?.theme.themeId === s.theme.themeId;
-                    const rotColor = s.rotation === null
-                      ? "hsl(var(--muted-foreground))"
-                      : s.rotation >= 3
-                      ? "hsl(170, 80%, 50%)"
-                      : s.rotation <= -3
-                      ? "hsl(0, 70%, 60%)"
-                      : "hsl(var(--foreground))";
+                  rows.map((r, i) => {
+                    const isSel = selected?.theme.themeId === r.theme.themeId;
+                    const trs = trendIcon(r.trend);
+                    const themeRsClr = rsColor(r.themeRs);
                     return (
                       <tr
-                        key={s.theme.themeId}
-                        onClick={() => setSelectedId(s.theme.themeId)}
+                        key={r.theme.themeId}
+                        onClick={() => setSelectedId(r.theme.themeId)}
                         className={`cursor-pointer border-b border-[rgba(255,255,255,0.04)] transition-colors ${
                           isSel ? "bg-[rgba(0,245,196,0.06)]" : "hover:bg-[rgba(255,255,255,0.04)]"
                         }`}
-                        style={{ borderLeft: isSel ? `2px solid ${c.fg}` : "2px solid transparent" }}
+                        style={{ borderLeft: isSel ? `2px solid ${themeRsClr}` : "2px solid transparent" }}
                       >
                         <td className="px-2 py-2 text-[11px] text-muted-foreground" style={{ fontFamily: DM_MONO }}>
                           {i + 1}
                         </td>
                         <td className="px-2 py-2">
                           <div className="text-[12px] font-semibold leading-tight text-foreground" style={{ fontFamily: SYNE }}>
-                            {s.theme.themeName}
+                            {r.theme.themeName}
                           </div>
                           <div className="mt-0.5 text-[9px] text-muted-foreground" style={{ fontFamily: DM_MONO }}>
-                            {s.theme.symbols.length} tickers
-                            {s.avgRs !== null ? ` · avg RS ${s.avgRs}` : ""}
+                            {r.theme.symbols.length} tickers
                           </div>
                         </td>
                         <td className="px-2 py-2">
                           <div className="flex items-center gap-1.5">
-                            <span className="text-base font-bold tabular-nums" style={{ fontFamily: DM_MONO, color: c.fg }}>
-                              {s.score}
+                            <span className="text-base font-bold tabular-nums" style={{ fontFamily: DM_MONO, color: themeRsClr }}>
+                              {r.themeRs ?? "—"}
                             </span>
                             <div className="h-1.5 w-10 overflow-hidden rounded-full" style={{ background: "rgba(255,255,255,0.06)" }}>
-                              <div className="h-full rounded-full transition-all" style={{ width: `${s.score}%`, background: c.fg }} />
+                              <div className="h-full rounded-full transition-all" style={{ width: `${r.themeRs ?? 0}%`, background: themeRsClr }} />
                             </div>
                           </div>
-                          <div className="text-[9px] text-muted-foreground mt-0.5">{bandLabel(s.band)}</div>
                         </td>
-                        <td className="px-2 py-2 text-right text-[11.5px] tabular-nums" style={{ fontFamily: DM_MONO, color: rotColor }}>
-                          {s.rotation === null ? "—" : `${s.rotation >= 0 ? "+" : ""}${s.rotation.toFixed(1)}`}
+                        <td className="px-2 py-2 text-right text-[11.5px] tabular-nums" style={{
+                          fontFamily: DM_MONO,
+                          color: r.perfVsSpy === null
+                            ? "hsl(var(--muted-foreground))"
+                            : r.perfVsSpy >= 0 ? "hsl(170, 80%, 50%)" : "hsl(0, 70%, 60%)",
+                        }}>
+                          {r.perfVsSpy === null ? "—" : `${r.perfVsSpy >= 0 ? "+" : ""}${r.perfVsSpy.toFixed(2)}%`}
                         </td>
-                        <td className="px-2 py-2 text-right text-[11.5px] tabular-nums text-foreground" style={{ fontFamily: DM_MONO }}>
-                          {s.growthPct === null ? "—" : `${Math.round(s.growthPct)}%`}
+                        <td className="px-2 py-2 text-right text-[11.5px] tabular-nums" style={{
+                          fontFamily: DM_MONO,
+                          color: rsColor(r.avgStockRs),
+                        }}>
+                          {r.avgStockRs ?? "—"}
+                        </td>
+                        <td className="px-2 py-2 text-right">
+                          {r.growthPct === null ? (
+                            <span className="text-[11.5px] text-muted-foreground" style={{ fontFamily: DM_MONO }}>—</span>
+                          ) : r.growthPct >= 60 ? (
+                            <span className="rounded px-1.5 py-0.5 text-[10px] font-bold" style={{
+                              background: "rgba(0,245,196,0.12)", color: "hsl(170, 90%, 50%)",
+                              border: "1px solid rgba(0,245,196,0.28)", fontFamily: DM_MONO,
+                            }}>
+                              {Math.round(r.growthPct)}%
+                            </span>
+                          ) : (
+                            <span className="text-[11.5px] tabular-nums text-foreground" style={{ fontFamily: DM_MONO }}>
+                              {Math.round(r.growthPct)}%
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-2 py-2 text-right text-[11.5px] tabular-nums" style={{
+                          fontFamily: DM_MONO,
+                          color: r.relVol === null
+                            ? "hsl(var(--muted-foreground))"
+                            : r.relVol >= 1.4 ? "hsl(170, 80%, 50%)"
+                            : r.relVol < 0.85 ? "hsl(0, 70%, 60%)"
+                            : "hsl(var(--foreground))",
+                        }}>
+                          {r.relVol === null ? "—" : `${r.relVol.toFixed(2)}×`}
                         </td>
                         <td className="px-2 py-2">
-                          <div className="text-[10.5px] font-semibold" style={{ color: s.volume.color }}>{s.volume.label}</div>
-                          <div className="text-[9px] text-muted-foreground" style={{ fontFamily: DM_MONO }}>{s.volume.detail}</div>
-                        </td>
-                        <td className="px-2 py-2">
-                          <div className="text-[10.5px] font-semibold" style={{ color: s.catalyst.color }}>
-                            {s.catalyst.label === "Hot" && <Flame size={9} className="inline mr-0.5" />}
-                            {s.catalyst.label}
+                          <div className="flex items-center gap-1 text-[10.5px] font-semibold" style={{ color: trs.color }}>
+                            {trs.icon}
+                            <span>{trs.label}</span>
                           </div>
-                          <div className="text-[9px] text-muted-foreground" style={{ fontFamily: DM_MONO }}>{s.catalyst.detail}</div>
+                          <div className="text-[9px] text-muted-foreground" style={{ fontFamily: DM_MONO }}>
+                            {r.trend === null ? "no data" : `${r.trend >= 0 ? "+" : ""}${r.trend.toFixed(1)} RS`}
+                          </div>
                         </td>
                       </tr>
                     );
@@ -610,84 +479,72 @@ export default function MoneyFlowTab({
           {/* Legend */}
           <div className="border-t border-[rgba(255,255,255,0.08)] px-3 py-2 text-[9.5px] text-muted-foreground space-y-0.5">
             <div className="flex items-center gap-3 flex-wrap">
-              <span><span className="font-semibold" style={{ color: "hsl(170, 90%, 50%)" }}>65+</span> Strong inflow</span>
-              <span><span className="font-semibold" style={{ color: "hsl(40, 90%, 55%)" }}>45–64</span> Building</span>
-              <span><span className="font-semibold" style={{ color: "hsl(0, 75%, 60%)" }}>&lt;45</span> Weakening</span>
+              <span><span className="font-semibold" style={{ color: "hsl(170, 90%, 50%)" }}>80+</span> Very Strong</span>
+              <span><span className="font-semibold" style={{ color: "hsl(170, 65%, 55%)" }}>60–79</span> Strong</span>
+              <span><span className="font-semibold" style={{ color: "hsl(40, 90%, 55%)" }}>40–59</span> Neutral</span>
+              <span><span className="font-semibold" style={{ color: "hsl(0, 75%, 60%)" }}>&lt;40</span> Weak</span>
               <span className="opacity-60">|</span>
-              <span><b>Rotation</b> = avg(1W RS − 3M RS), &gt;+3 accelerating</span>
-              <span><b>Catalyst</b> = high-relevance news in last 48h</span>
+              <span><b>Theme RS</b> = themes ranked 1-99 by avg constituent RS for selected timeframe</span>
             </div>
           </div>
         </div>
 
-        {/* RIGHT — Deep context */}
+        {/* RIGHT — Context panel */}
         <div className="space-y-3">
           {!selected ? (
             <div
               className="rounded-lg p-8 text-center text-xs text-muted-foreground"
               style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}
             >
-              Select a theme on the left to see its narrative.
+              Select a theme on the left to see its context.
             </div>
           ) : (
             <>
-              {/* Header — Score + verdict */}
+              {/* Header — Theme + Theme RS */}
               <div
                 className="rounded-lg px-4 py-3"
                 style={{
-                  background: scoreColors(selected.score, selected.band).bg,
-                  border: `1px solid ${scoreColors(selected.score, selected.band).border}`,
+                  background: "rgba(0, 245, 196, 0.06)",
+                  border: "1px solid rgba(0, 245, 196, 0.18)",
                 }}
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
-                      Money Flow Score · {tf}
+                      Theme RS · {TF_LABELS[tf]}
                     </div>
                     <h2 className="mt-0.5 text-base font-bold text-foreground truncate" style={{ fontFamily: SYNE }}>
                       {selected.theme.themeName}
                     </h2>
                   </div>
                   <div className="text-right shrink-0">
-                    <div className="text-3xl font-bold leading-none tabular-nums" style={{ fontFamily: DM_MONO, color: scoreColors(selected.score, selected.band).fg }}>
-                      {selected.score}
-                      <span className="text-xs text-muted-foreground font-medium ml-1">/100</span>
-                    </div>
-                    <div className="mt-1 text-[10px] font-bold uppercase tracking-wider" style={{ color: scoreColors(selected.score, selected.band).fg }}>
-                      {bandLabel(selected.band)}
+                    <div className="text-3xl font-bold leading-none tabular-nums" style={{ fontFamily: DM_MONO, color: rsColor(selected.themeRs) }}>
+                      {selected.themeRs ?? "—"}
+                      <span className="text-xs text-muted-foreground font-medium ml-1">/99</span>
                     </div>
                   </div>
                 </div>
-                <p className="mt-2 text-[11.5px] text-foreground/90 leading-snug">{verdict(selected)}</p>
-                {/* Quick stats strip */}
-                <div className="mt-2 grid grid-cols-4 gap-2 text-[9.5px] uppercase tracking-wider text-muted-foreground">
-                  <Stat label="vs SPY" value={selected.rsVsSpy === null ? "—" : `${selected.rsVsSpy >= 0 ? "+" : ""}${selected.rsVsSpy.toFixed(2)}%`} pos={selected.rsVsSpy !== null && selected.rsVsSpy >= 0} neg={selected.rsVsSpy !== null && selected.rsVsSpy < 0} />
-                  <Stat label="Rotation" value={selected.rotation === null ? "—" : `${selected.rotation >= 0 ? "+" : ""}${selected.rotation.toFixed(1)}`} pos={selected.rotation !== null && selected.rotation >= 3} neg={selected.rotation !== null && selected.rotation <= -3} />
-                  <Stat label="Avg RS" value={selected.avgRs === null ? "—" : `${selected.avgRs}`} pos={selected.avgRs !== null && selected.avgRs >= 70} neg={selected.avgRs !== null && selected.avgRs <= 40} />
-                  <Stat label="Rel Vol" value={selected.theme.avgRelVol === null ? "—" : `${selected.theme.avgRelVol.toFixed(2)}×`} pos={selected.theme.avgRelVol !== null && selected.theme.avgRelVol >= 1.4} neg={selected.theme.avgRelVol !== null && selected.theme.avgRelVol < 0.85} />
+                {/* Quick stats */}
+                <div className="mt-3 grid grid-cols-4 gap-2 text-[9.5px] uppercase tracking-wider text-muted-foreground">
+                  <Stat label="vs SPY" value={selected.perfVsSpy === null ? "—" : `${selected.perfVsSpy >= 0 ? "+" : ""}${selected.perfVsSpy.toFixed(2)}%`} pos={selected.perfVsSpy !== null && selected.perfVsSpy >= 0} neg={selected.perfVsSpy !== null && selected.perfVsSpy < 0} />
+                  <Stat label="Avg RS" value={selected.avgStockRs === null ? "—" : `${selected.avgStockRs}`} pos={selected.avgStockRs !== null && selected.avgStockRs >= 70} neg={selected.avgStockRs !== null && selected.avgStockRs <= 40} />
+                  <Stat label="Growth" value={selected.growthPct === null ? "—" : `${Math.round(selected.growthPct)}%`} pos={selected.growthPct !== null && selected.growthPct >= 60} neg={selected.growthPct !== null && selected.growthPct < 25} />
+                  <Stat label="Rel Vol" value={selected.relVol === null ? "—" : `${selected.relVol.toFixed(2)}×`} pos={selected.relVol !== null && selected.relVol >= 1.4} neg={selected.relVol !== null && selected.relVol < 0.85} />
                 </div>
               </div>
 
-              {/* Key Drivers */}
+              {/* Sparkline — theme perf vs SPY (zero) */}
               <div className="rounded-lg p-3" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}>
-                <div className="mb-1.5 flex items-center gap-1.5">
-                  <Zap size={12} className="text-primary" />
-                  <span className="text-[10px] font-semibold uppercase tracking-wider text-primary">Key Drivers</span>
+                <div className="mb-1.5 flex items-center justify-between">
+                  <div className="flex items-center gap-1.5">
+                    <Activity size={12} className="text-primary" />
+                    <span className="text-[10px] font-semibold uppercase tracking-wider text-primary">Theme vs SPY</span>
+                  </div>
+                  <span className="text-[9.5px] text-muted-foreground" style={{ fontFamily: DM_MONO }}>
+                    last {sparkline.length || 0} pts
+                  </span>
                 </div>
-                {keyDrivers.length === 0 ? (
-                  <p className="text-xs text-muted-foreground">Not enough signal data yet.</p>
-                ) : (
-                  <ul className="space-y-1">
-                    {keyDrivers.map((d, i) => (
-                      <li key={i} className="flex items-start gap-1.5 text-[11.5px] leading-snug text-foreground/90">
-                        <span style={{ color: d.tone === "pos" ? "hsl(170, 80%, 50%)" : d.tone === "neg" ? "hsl(0, 70%, 60%)" : "hsl(var(--muted-foreground))" }} className="mt-0.5 shrink-0">
-                          {d.icon}
-                        </span>
-                        <span>{d.text}</span>
-                      </li>
-                    ))}
-                  </ul>
-                )}
+                <Sparkline data={sparkline} />
               </div>
 
               {/* AI Summary */}
@@ -722,35 +579,29 @@ export default function MoneyFlowTab({
                 )}
               </div>
 
-              {/* Catalyst Breakdown */}
+              {/* Recent News */}
               <div className="rounded-lg p-3" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}>
-                <div className="mb-2 flex items-center justify-between">
-                  <div className="flex items-center gap-1.5">
-                    <Flame size={12} style={{ color: "hsl(0, 80%, 62%)" }} />
-                    <span className="text-[10px] font-semibold uppercase tracking-wider text-primary">Catalyst Breakdown</span>
-                  </div>
-                  <span className="text-[9.5px] text-muted-foreground" style={{ fontFamily: DM_MONO }}>
-                    {selected.catalyst.label} · {selected.catalyst.detail}
-                  </span>
+                <div className="mb-2 flex items-center gap-1.5">
+                  <Newspaper size={12} className="text-primary" />
+                  <span className="text-[10px] font-semibold uppercase tracking-wider text-primary">Recent News</span>
+                  <span className="text-[9px] text-muted-foreground ml-auto">{articles.length} fetched</span>
                 </div>
-                {loadingNews && topCatalysts.length === 0 ? (
+                {loadingNews && articles.length === 0 ? (
                   <Skeleton className="h-12 w-full" />
-                ) : topCatalysts.length === 0 ? (
-                  <p className="text-xs text-muted-foreground">No notable catalysts detected.</p>
+                ) : articles.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">No recent headlines.</p>
                 ) : (
                   <div className="space-y-1.5">
-                    {topCatalysts.map((a, i) => (
+                    {articles.slice(0, 5).map((a, i) => (
                       <a
                         key={i}
                         href={a.url}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="group block rounded-md p-2 transition-colors hover:bg-accent/40"
-                        style={{ background: i === 0 ? "rgba(245, 166, 35, 0.06)" : "transparent", border: i === 0 ? "1px solid rgba(245, 166, 35, 0.18)" : "1px solid transparent" }}
                       >
                         <div className="flex items-start justify-between gap-2">
                           <p className="flex-1 text-[12px] font-medium text-foreground leading-snug group-hover:text-primary transition-colors">
-                            {i === 0 && <Flame size={10} className="inline mr-1" style={{ color: "hsl(40, 90%, 55%)" }} />}
                             {a.headline}
                           </p>
                           <ExternalLink size={10} className="shrink-0 mt-0.5 text-muted-foreground opacity-0 group-hover:opacity-100" />
@@ -770,62 +621,34 @@ export default function MoneyFlowTab({
                 )}
               </div>
 
-              {/* Top Stocks to Watch */}
+              {/* Why Money Is Flowing */}
               <div className="rounded-lg p-3" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}>
-                <div className="mb-2 flex items-center gap-1.5">
-                  <Target size={12} className="text-primary" />
-                  <span className="text-[10px] font-semibold uppercase tracking-wider text-primary">Top Stocks to Watch</span>
-                  <span className="text-[9px] text-muted-foreground ml-auto">RS-ranked</span>
+                <div className="mb-1.5 flex items-center gap-1.5">
+                  <Zap size={12} className="text-primary" />
+                  <span className="text-[10px] font-semibold uppercase tracking-wider text-primary">Why Money is Flowing</span>
                 </div>
-                {selected.topStocks.length === 0 ? (
-                  <p className="text-xs text-muted-foreground">No qualified stocks in this theme.</p>
+                {whyFlowing.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">Not enough RS / fundamentals data yet.</p>
                 ) : (
-                  <table className="w-full text-[11.5px]">
-                    <thead>
-                      <tr className="text-[9px] uppercase tracking-wider text-muted-foreground border-b border-[rgba(255,255,255,0.06)]">
-                        <th className="text-left py-1 font-medium">Ticker</th>
-                        <th className="text-right py-1 font-medium">RS</th>
-                        <th className="text-right py-1 font-medium">1D %</th>
-                        <th className="text-right py-1 font-medium">1W %</th>
-                        <th className="text-right py-1 font-medium">Tag</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {selected.topStocks.map((st) => (
-                        <tr key={st.symbol} className="border-b border-[rgba(255,255,255,0.04)]">
-                          <td className="py-1.5 font-bold text-foreground" style={{ fontFamily: DM_MONO }}>{st.symbol}</td>
-                          <td className="py-1.5 text-right tabular-nums" style={{ fontFamily: DM_MONO, color: st.rs === null ? "hsl(var(--muted-foreground))" : st.rs >= 70 ? "hsl(170, 80%, 50%)" : st.rs <= 40 ? "hsl(0, 70%, 60%)" : "hsl(var(--foreground))" }}>
-                            {st.rs === null ? "—" : st.rs}
-                          </td>
-                          <td className="py-1.5 text-right tabular-nums" style={{ fontFamily: DM_MONO, color: st.perf_1d >= 0 ? "hsl(170, 80%, 50%)" : "hsl(0, 70%, 60%)" }}>
-                            {st.perf_1d >= 0 ? "+" : ""}{st.perf_1d.toFixed(2)}%
-                          </td>
-                          <td className="py-1.5 text-right tabular-nums" style={{ fontFamily: DM_MONO, color: st.perf_1w >= 0 ? "hsl(170, 80%, 50%)" : "hsl(0, 70%, 60%)" }}>
-                            {st.perf_1w >= 0 ? "+" : ""}{st.perf_1w.toFixed(2)}%
-                          </td>
-                          <td className="py-1.5 text-right">
-                            {st.isGrowth ? (
-                              <span className="rounded px-1.5 py-0.5 text-[9px] font-bold uppercase" style={{ background: "rgba(0,245,196,0.12)", color: "hsl(170, 90%, 50%)", border: "1px solid rgba(0,245,196,0.28)" }}>
-                                Growth
-                              </span>
-                            ) : (
-                              <span className="text-[9px] text-muted-foreground">—</span>
-                            )}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                  <ul className="space-y-1">
+                    {whyFlowing.map((text, i) => (
+                      <li key={i} className="flex items-start gap-1.5 text-[11.5px] leading-snug text-foreground/90">
+                        <Sparkles size={10} className="text-primary mt-1 shrink-0" />
+                        <span>{text}</span>
+                      </li>
+                    ))}
+                  </ul>
                 )}
               </div>
 
-              {/* Footer note + legend */}
+              {/* Footer note */}
               <div className="flex items-start gap-1.5 text-[10px] text-muted-foreground px-1 leading-snug">
                 <Info size={10} className="text-primary mt-0.5 shrink-0" />
                 <span>
-                  Score blends vs-SPY (26%), Rotation (20%), Volume (18%), Momentum (14%),
-                  Breadth (14%), Growth (8%). "Catalyst" only populates after a theme's news
-                  is loaded.
+                  Theme RS is computed by averaging the per-stock RS rating
+                  ({TF_LABELS[tf]} timeframe) of constituent tickers, then
+                  ranking the resulting averages 1–99 across all themes.
+                  Same methodology as the RS Alpha tab — applied at theme level.
                 </span>
               </div>
             </>
@@ -845,5 +668,31 @@ function Stat({ label, value, pos, neg }: { label: string; value: string; pos?: 
         {value}
       </div>
     </div>
+  );
+}
+
+function Sparkline({ data }: { data: number[] }) {
+  if (!data || data.length < 2) {
+    return <div className="h-10 flex items-center justify-center text-[10px] text-muted-foreground">Not enough data</div>;
+  }
+  const w = 240;
+  const h = 40;
+  const min = Math.min(...data, 0);
+  const max = Math.max(...data, 0);
+  const range = max - min || 1;
+  const stepX = w / (data.length - 1);
+  const points = data
+    .map((v, i) => `${i * stepX},${h - ((v - min) / range) * h}`)
+    .join(" ");
+  const lastUp = data[data.length - 1] >= 0;
+  const stroke = lastUp ? "hsl(170, 80%, 50%)" : "hsl(0, 70%, 60%)";
+  // Zero-line y position
+  const zeroY = h - ((0 - min) / range) * h;
+  return (
+    <svg viewBox={`0 0 ${w} ${h}`} className="w-full h-10" preserveAspectRatio="none">
+      {/* SPY reference line at 0 */}
+      <line x1="0" y1={zeroY} x2={w} y2={zeroY} stroke="hsl(var(--muted-foreground))" strokeOpacity="0.4" strokeDasharray="3,3" strokeWidth="1" />
+      <polyline fill="none" stroke={stroke} strokeWidth="1.5" points={points} />
+    </svg>
   );
 }
