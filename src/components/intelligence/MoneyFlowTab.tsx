@@ -368,19 +368,18 @@ export default function MoneyFlowTab({
                   <th className="px-2 py-2 text-right font-medium" title="Average rs_overall of constituent stocks (0-99)">Avg RS</th>
                   <th className="px-2 py-2 text-right font-medium" title="% of theme stocks passing the Growth filter">Growth</th>
                   <th className="px-2 py-2 text-right font-medium" title="Relative volume — today vs 20-day average">Rel Vol</th>
-                  <th className="px-2 py-2 text-left font-medium" title="1W RS minus 3M RS — improving / weakening / stable">Trend</th>
                 </tr>
               </thead>
               <tbody>
                 {isLoading ? (
                   Array.from({ length: 8 }).map((_, i) => (
                     <tr key={i} className="border-b border-[rgba(255,255,255,0.04)]">
-                      <td colSpan={8} className="px-3 py-2"><Skeleton className="h-5 w-full" /></td>
+                      <td colSpan={7} className="px-3 py-2"><Skeleton className="h-5 w-full" /></td>
                     </tr>
                   ))
                 ) : rows.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="px-4 py-10 text-center text-xs text-muted-foreground">
+                    <td colSpan={7} className="px-4 py-10 text-center text-xs text-muted-foreground">
                       No themes available.
                     </td>
                   </tr>
