@@ -458,15 +458,6 @@ export default function MoneyFlowTab({
                         }}>
                           {r.relVol === null ? "—" : `${r.relVol.toFixed(2)}×`}
                         </td>
-                        <td className="px-2 py-2">
-                          <div className="flex items-center gap-1 text-[10.5px] font-semibold" style={{ color: trs.color }}>
-                            {trs.icon}
-                            <span>{trs.label}</span>
-                          </div>
-                          <div className="text-[9px] text-muted-foreground" style={{ fontFamily: DM_MONO }}>
-                            {r.trend === null ? "no data" : `${r.trend >= 0 ? "+" : ""}${r.trend.toFixed(1)} RS`}
-                          </div>
-                        </td>
                       </tr>
                     );
                   })
