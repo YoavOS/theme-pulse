@@ -18,7 +18,19 @@ import {
   GrowthFiltersState,
   passesAllActiveFilters,
   anyActive,
+  passesGrowth,
+  passesHighGrowth,
+  passesONeil,
 } from "@/lib/growthFilters";
+
+// Strongest-first: Rocket (High Growth) > Fire (Growth) > Diamond (O'Neil).
+function growthBadge(f: ReturnType<typeof useStockFundamentalsMap>["map"] extends Map<string, infer T> ? T | undefined : never): { emoji: string; label: string } | null {
+  if (!f) return null;
+  if (passesHighGrowth(f)) return { emoji: "🚀", label: "High Growth" };
+  if (passesGrowth(f)) return { emoji: "🔥", label: "Growth Stock" };
+  if (passesONeil(f)) return { emoji: "💎", label: "O'Neil Growth" };
+  return null;
+}
 
 type TabId = "overall" | "1d" | "1w" | "1m" | "3m" | "6m";
 type SortField = "rank" | "symbol" | "company" | "rs" | "rating" | "stockReturn" | "spyReturn" | "price";
