@@ -387,7 +387,6 @@ export default function MoneyFlowTab({
                 ) : (
                   rows.map((r, i) => {
                     const isSel = selected?.theme.themeId === r.theme.themeId;
-                    const trs = trendIcon(r.trend);
                     const themeRsClr = rsColor(r.themeRs);
                     return (
                       <tr
