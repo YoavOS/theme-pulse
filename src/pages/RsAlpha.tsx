@@ -793,6 +793,15 @@ export default function RsAlpha() {
               </div>
             )}
 
+            {/* Growth badges legend */}
+            <div className="mb-2 flex flex-wrap items-center gap-3 rounded-md border border-border bg-card px-3 py-1.5 text-[11px] text-muted-foreground">
+              <span className="font-semibold text-foreground">Growth badges:</span>
+              <span><span className="mr-1">🚀</span>High Growth</span>
+              <span><span className="mr-1">🔥</span>Growth Stock</span>
+              <span><span className="mr-1">💎</span>O'Neil Growth</span>
+              <span className="opacity-60">· strongest badge shown per ticker</span>
+            </div>
+
             {/* Table */}
             <div className="overflow-hidden rounded-lg border border-border bg-card">
               <div className="overflow-x-auto">
