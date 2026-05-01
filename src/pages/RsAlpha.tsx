@@ -18,7 +18,19 @@ import {
   GrowthFiltersState,
   passesAllActiveFilters,
   anyActive,
+  passesGrowth,
+  passesHighGrowth,
+  passesONeil,
 } from "@/lib/growthFilters";
+
+// Strongest-first: Rocket (High Growth) > Fire (Growth) > Diamond (O'Neil).
+function growthBadge(f: ReturnType<typeof useStockFundamentalsMap>["map"] extends Map<string, infer T> ? T | undefined : never): { emoji: string; label: string } | null {
+  if (!f) return null;
+  if (passesHighGrowth(f)) return { emoji: "🚀", label: "High Growth" };
+  if (passesGrowth(f)) return { emoji: "🔥", label: "Growth Stock" };
+  if (passesONeil(f)) return { emoji: "💎", label: "O'Neil Growth" };
+  return null;
+}
 
 type TabId = "overall" | "1d" | "1w" | "1m" | "3m" | "6m";
 type SortField = "rank" | "symbol" | "company" | "rs" | "rating" | "stockReturn" | "spyReturn" | "price";
@@ -781,6 +793,15 @@ export default function RsAlpha() {
               </div>
             )}
 
+            {/* Growth badges legend */}
+            <div className="mb-2 flex flex-wrap items-center gap-3 rounded-md border border-border bg-card px-3 py-1.5 text-[11px] text-muted-foreground">
+              <span className="font-semibold text-foreground">Growth badges:</span>
+              <span><span className="mr-1">🚀</span>High Growth</span>
+              <span><span className="mr-1">🔥</span>Growth Stock</span>
+              <span><span className="mr-1">💎</span>O'Neil Growth</span>
+              <span className="opacity-60">· strongest badge shown per ticker</span>
+            </div>
+
             {/* Table */}
             <div className="overflow-hidden rounded-lg border border-border bg-card">
               <div className="overflow-x-auto">
@@ -803,10 +824,20 @@ export default function RsAlpha() {
                       const ret = getReturnField(stock, activeTab);
                       const spy = getSpyField(stock, activeTab);
                       const rating = ratingMap.get(stock.symbol) ?? null;
+                      const badge = growthBadge(fundamentalsMap.get(stock.symbol));
                       return (
                         <tr key={stock.symbol} className={`border-b border-border/50 transition-colors hover:bg-muted/20 ${rsBg(rs)}`}>
                           <td className="px-3 py-2 text-xs text-muted-foreground">{idx + 1}</td>
-                          <td className="px-3 py-2 font-mono font-semibold text-foreground">{stock.symbol}</td>
+                          <td className="px-3 py-2 font-mono font-semibold text-foreground">
+                            <span className="inline-flex items-center gap-1.5">
+                              {stock.symbol}
+                              {badge && (
+                                <span title={badge.label} className="text-[13px] leading-none">
+                                  {badge.emoji}
+                                </span>
+                              )}
+                            </span>
+                          </td>
                           <td className="px-3 py-2 text-center"><RsRatingBadge rating={rating} /></td>
                           <td className="px-3 py-2 text-muted-foreground max-w-[240px] truncate" title={stock.companyName ?? ""}>
                             {stock.companyName ?? stock.sector ?? "—"}

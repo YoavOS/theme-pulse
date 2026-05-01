@@ -8,6 +8,10 @@ export interface QualifiedRsRow {
   rs_1m: number | null;
   rs_3m: number | null;
   rs_6m: number | null;
+  return_1w: number | null;
+  return_1m: number | null;
+  return_3m: number | null;
+  return_6m: number | null;
 }
 
 const PAGE = 1000;
@@ -28,7 +32,7 @@ export function useQualifiedRsMap() {
       for (let from = 0; ; from += PAGE) {
         const { data, error } = await supabase
           .from("qualified_rs_universe")
-          .select("symbol, rs_overall, rs_1w, rs_1m, rs_3m, rs_6m")
+          .select("symbol, rs_overall, rs_1w, rs_1m, rs_3m, rs_6m, return_1w, return_1m, return_3m, return_6m")
           .range(from, from + PAGE - 1);
         if (error) throw error;
         if (!data || data.length === 0) break;

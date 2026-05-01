@@ -13,6 +13,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import {
   Bot, Newspaper, ExternalLink, Sparkles, TrendingUp, Activity,
   Zap, Info, Target, ArrowUpRight, ArrowDownRight, Minus, Layers,
+  ChevronDown, ChevronUp, ArrowUpDown,
 } from "lucide-react";
 import type { ThemeIntelData } from "@/hooks/useThemeIntelligence";
 import { useSpyBenchmark } from "@/hooks/useSpyBenchmark";
@@ -368,26 +369,24 @@ export default function MoneyFlowTab({
                   <th className="px-2 py-2 text-right font-medium" title="Average rs_overall of constituent stocks (0-99)">Avg RS</th>
                   <th className="px-2 py-2 text-right font-medium" title="% of theme stocks passing the Growth filter">Growth</th>
                   <th className="px-2 py-2 text-right font-medium" title="Relative volume — today vs 20-day average">Rel Vol</th>
-                  <th className="px-2 py-2 text-left font-medium" title="1W RS minus 3M RS — improving / weakening / stable">Trend</th>
                 </tr>
               </thead>
               <tbody>
                 {isLoading ? (
                   Array.from({ length: 8 }).map((_, i) => (
                     <tr key={i} className="border-b border-[rgba(255,255,255,0.04)]">
-                      <td colSpan={8} className="px-3 py-2"><Skeleton className="h-5 w-full" /></td>
+                      <td colSpan={7} className="px-3 py-2"><Skeleton className="h-5 w-full" /></td>
                     </tr>
                   ))
                 ) : rows.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="px-4 py-10 text-center text-xs text-muted-foreground">
+                    <td colSpan={7} className="px-4 py-10 text-center text-xs text-muted-foreground">
                       No themes available.
                     </td>
                   </tr>
                 ) : (
                   rows.map((r, i) => {
                     const isSel = selected?.theme.themeId === r.theme.themeId;
-                    const trs = trendIcon(r.trend);
                     const themeRsClr = rsColor(r.themeRs);
                     return (
                       <tr
@@ -458,15 +457,6 @@ export default function MoneyFlowTab({
                             : "hsl(var(--foreground))",
                         }}>
                           {r.relVol === null ? "—" : `${r.relVol.toFixed(2)}×`}
-                        </td>
-                        <td className="px-2 py-2">
-                          <div className="flex items-center gap-1 text-[10.5px] font-semibold" style={{ color: trs.color }}>
-                            {trs.icon}
-                            <span>{trs.label}</span>
-                          </div>
-                          <div className="text-[9px] text-muted-foreground" style={{ fontFamily: DM_MONO }}>
-                            {r.trend === null ? "no data" : `${r.trend >= 0 ? "+" : ""}${r.trend.toFixed(1)} RS`}
-                          </div>
                         </td>
                       </tr>
                     );
@@ -557,66 +547,8 @@ export default function MoneyFlowTab({
                     {selected.theme.tickers.filter((t) => t.status === "done").length} / {selected.theme.symbols.length}
                   </span>
                 </div>
-                {(() => {
-                  const ticks = selected.theme.tickers
-                    .filter((t) => t.status === "done")
-                    .map((t) => {
-                      const r = rsMap.get(t.symbol);
-                      return {
-                        sym: t.symbol,
-                        rs: r?.rs_overall ?? null,
-                        d1: t.perf_1d,
-                        m1: t.perf_1m,
-                      };
-                    })
-                    .sort((a, b) => {
-                      if (a.rs === null && b.rs === null) return 0;
-                      if (a.rs === null) return 1;
-                      if (b.rs === null) return -1;
-                      return b.rs - a.rs;
-                    });
-                  if (ticks.length === 0) {
-                    return <p className="text-xs text-muted-foreground">No ticker data available.</p>;
-                  }
-                  return (
-                    <div className="max-h-[260px] overflow-y-auto">
-                      <table className="w-full text-sm">
-                        <thead className="sticky top-0 bg-background/95 backdrop-blur">
-                          <tr className="border-b border-[rgba(255,255,255,0.08)] text-[9px] uppercase tracking-wider text-muted-foreground">
-                            <th className="px-1.5 py-1.5 text-left font-medium">Ticker</th>
-                            <th className="px-1.5 py-1.5 text-right font-medium" title="RS Overall (0-99)">RS</th>
-                            <th className="px-1.5 py-1.5 text-right font-medium">1D %</th>
-                            <th className="px-1.5 py-1.5 text-right font-medium">1M %</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {ticks.map((t) => (
-                            <tr key={t.sym} className="border-b border-[rgba(255,255,255,0.04)]">
-                              <td className="px-1.5 py-1 text-[11.5px] font-bold text-foreground" style={{ fontFamily: DM_MONO }}>
-                                {t.sym}
-                              </td>
-                              <td className="px-1.5 py-1 text-right text-[11px] font-bold tabular-nums" style={{ fontFamily: DM_MONO, color: rsColor(t.rs) }}>
-                                {t.rs ?? "—"}
-                              </td>
-                              <td className="px-1.5 py-1 text-right text-[11px] tabular-nums" style={{
-                                fontFamily: DM_MONO,
-                                color: !Number.isFinite(t.d1) ? "hsl(var(--muted-foreground))" : t.d1 > 0 ? "hsl(170, 80%, 50%)" : t.d1 < 0 ? "hsl(0, 70%, 60%)" : "hsl(var(--muted-foreground))",
-                              }}>
-                                {Number.isFinite(t.d1) ? `${t.d1 >= 0 ? "+" : ""}${t.d1.toFixed(2)}%` : "—"}
-                              </td>
-                              <td className="px-1.5 py-1 text-right text-[11px] tabular-nums" style={{
-                                fontFamily: DM_MONO,
-                                color: !Number.isFinite(t.m1) ? "hsl(var(--muted-foreground))" : t.m1 > 0 ? "hsl(170, 80%, 50%)" : t.m1 < 0 ? "hsl(0, 70%, 60%)" : "hsl(var(--muted-foreground))",
-                              }}>
-                                {Number.isFinite(t.m1) ? `${t.m1 >= 0 ? "+" : ""}${t.m1.toFixed(2)}%` : "—"}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  );
-                })()}
+                <StocksInThemeTable theme={selected.theme} rsMap={rsMap} />
+
               </div>
 
               {/* AI Summary */}
@@ -766,5 +698,121 @@ function Sparkline({ data }: { data: number[] }) {
       <line x1="0" y1={zeroY} x2={w} y2={zeroY} stroke="hsl(var(--muted-foreground))" strokeOpacity="0.4" strokeDasharray="3,3" strokeWidth="1" />
       <polyline fill="none" stroke={stroke} strokeWidth="1.5" points={points} />
     </svg>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// StocksInThemeTable — sortable per-stock table for the selected theme.
+// Columns: Ticker | RS | 1W % | 1M % | 3M % | 6M % (default sort: RS desc).
+// ─────────────────────────────────────────────────────────────────────────────
+type StockSortField = "sym" | "rs" | "w1" | "m1" | "m3" | "m6";
+
+function StocksInThemeTable({
+  theme,
+  rsMap,
+}: {
+  theme: ThemeIntelData;
+  rsMap: Map<string, import("@/hooks/useQualifiedRsMap").QualifiedRsRow>;
+}) {
+  const [sortField, setSortField] = useState<StockSortField>("rs");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+
+  const ticks = useMemo(() => {
+    return theme.tickers
+      .filter((t) => t.status === "done")
+      .map((t) => {
+        const r = rsMap.get(t.symbol);
+        return {
+          sym: t.symbol,
+          rs: r?.rs_overall ?? null,
+          w1: r?.return_1w ?? (Number.isFinite(t.perf_1w) ? t.perf_1w : null),
+          m1: r?.return_1m ?? (Number.isFinite(t.perf_1m) ? t.perf_1m : null),
+          m3: r?.return_3m ?? (Number.isFinite(t.perf_3m) ? t.perf_3m : null),
+          m6: r?.return_6m ?? null,
+        };
+      });
+  }, [theme, rsMap]);
+
+  const sorted = useMemo(() => {
+    const mul = sortDir === "desc" ? -1 : 1;
+    const arr = [...ticks];
+    arr.sort((a, b) => {
+      if (sortField === "sym") return mul * a.sym.localeCompare(b.sym);
+      const av = a[sortField] as number | null;
+      const bv = b[sortField] as number | null;
+      if (av === null && bv === null) return 0;
+      if (av === null) return 1; // nulls always last
+      if (bv === null) return -1;
+      return mul * (av - bv);
+    });
+    return arr;
+  }, [ticks, sortField, sortDir]);
+
+  const toggleSort = (f: StockSortField) => {
+    if (sortField === f) setSortDir((d) => (d === "desc" ? "asc" : "desc"));
+    else { setSortField(f); setSortDir("desc"); }
+  };
+
+  if (ticks.length === 0) {
+    return <p className="text-xs text-muted-foreground">No ticker data available.</p>;
+  }
+
+  const SortHead = ({ field, label, align = "right" }: { field: StockSortField; label: string; align?: "left" | "right" }) => (
+    <th className={`px-1.5 py-1.5 ${align === "right" ? "text-right" : "text-left"} font-medium`}>
+      <button
+        onClick={() => toggleSort(field)}
+        className={`inline-flex items-center gap-0.5 uppercase tracking-wider text-muted-foreground hover:text-foreground transition-colors ${align === "right" ? "justify-end" : ""}`}
+      >
+        {label}
+        {sortField === field ? (
+          sortDir === "desc" ? <ChevronDown size={10} /> : <ChevronUp size={10} />
+        ) : (
+          <ArrowUpDown size={9} className="opacity-40" />
+        )}
+      </button>
+    </th>
+  );
+
+  const cellColor = (v: number | null) =>
+    v === null || !Number.isFinite(v)
+      ? "hsl(var(--muted-foreground))"
+      : v > 0 ? "hsl(170, 80%, 50%)"
+      : v < 0 ? "hsl(0, 70%, 60%)"
+      : "hsl(var(--muted-foreground))";
+
+  const fmt = (v: number | null) =>
+    v === null || !Number.isFinite(v) ? "—" : `${v >= 0 ? "+" : ""}${v.toFixed(2)}%`;
+
+  return (
+    <div className="max-h-[320px] overflow-y-auto">
+      <table className="w-full text-sm">
+        <thead className="sticky top-0 bg-background/95 backdrop-blur">
+          <tr className="border-b border-[rgba(255,255,255,0.08)] text-[9px]">
+            <SortHead field="sym" label="Ticker" align="left" />
+            <SortHead field="rs" label="RS" />
+            <SortHead field="w1" label="1W %" />
+            <SortHead field="m1" label="1M %" />
+            <SortHead field="m3" label="3M %" />
+            <SortHead field="m6" label="6M %" />
+          </tr>
+        </thead>
+        <tbody>
+          {sorted.map((t) => (
+            <tr key={t.sym} className="border-b border-[rgba(255,255,255,0.04)]">
+              <td className="px-1.5 py-1 text-[11.5px] font-bold text-foreground" style={{ fontFamily: DM_MONO }}>
+                {t.sym}
+              </td>
+              <td className="px-1.5 py-1 text-right text-[11px] font-bold tabular-nums" style={{ fontFamily: DM_MONO, color: rsColor(t.rs) }}>
+                {t.rs ?? "—"}
+              </td>
+              <td className="px-1.5 py-1 text-right text-[11px] tabular-nums" style={{ fontFamily: DM_MONO, color: cellColor(t.w1) }}>{fmt(t.w1)}</td>
+              <td className="px-1.5 py-1 text-right text-[11px] tabular-nums" style={{ fontFamily: DM_MONO, color: cellColor(t.m1) }}>{fmt(t.m1)}</td>
+              <td className="px-1.5 py-1 text-right text-[11px] tabular-nums" style={{ fontFamily: DM_MONO, color: cellColor(t.m3) }}>{fmt(t.m3)}</td>
+              <td className="px-1.5 py-1 text-right text-[11px] tabular-nums" style={{ fontFamily: DM_MONO, color: cellColor(t.m6) }}>{fmt(t.m6)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
