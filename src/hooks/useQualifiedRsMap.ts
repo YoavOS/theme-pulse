@@ -32,7 +32,7 @@ export function useQualifiedRsMap() {
       for (let from = 0; ; from += PAGE) {
         const { data, error } = await supabase
           .from("qualified_rs_universe")
-          .select("symbol, rs_overall, rs_1w, rs_1m, rs_3m, rs_6m")
+          .select("symbol, rs_overall, rs_1w, rs_1m, rs_3m, rs_6m, return_1w, return_1m, return_3m, return_6m")
           .range(from, from + PAGE - 1);
         if (error) throw error;
         if (!data || data.length === 0) break;
