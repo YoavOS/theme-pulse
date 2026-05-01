@@ -548,66 +548,8 @@ export default function MoneyFlowTab({
                     {selected.theme.tickers.filter((t) => t.status === "done").length} / {selected.theme.symbols.length}
                   </span>
                 </div>
-                {(() => {
-                  const ticks = selected.theme.tickers
-                    .filter((t) => t.status === "done")
-                    .map((t) => {
-                      const r = rsMap.get(t.symbol);
-                      return {
-                        sym: t.symbol,
-                        rs: r?.rs_overall ?? null,
-                        d1: t.perf_1d,
-                        m1: t.perf_1m,
-                      };
-                    })
-                    .sort((a, b) => {
-                      if (a.rs === null && b.rs === null) return 0;
-                      if (a.rs === null) return 1;
-                      if (b.rs === null) return -1;
-                      return b.rs - a.rs;
-                    });
-                  if (ticks.length === 0) {
-                    return <p className="text-xs text-muted-foreground">No ticker data available.</p>;
-                  }
-                  return (
-                    <div className="max-h-[260px] overflow-y-auto">
-                      <table className="w-full text-sm">
-                        <thead className="sticky top-0 bg-background/95 backdrop-blur">
-                          <tr className="border-b border-[rgba(255,255,255,0.08)] text-[9px] uppercase tracking-wider text-muted-foreground">
-                            <th className="px-1.5 py-1.5 text-left font-medium">Ticker</th>
-                            <th className="px-1.5 py-1.5 text-right font-medium" title="RS Overall (0-99)">RS</th>
-                            <th className="px-1.5 py-1.5 text-right font-medium">1D %</th>
-                            <th className="px-1.5 py-1.5 text-right font-medium">1M %</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {ticks.map((t) => (
-                            <tr key={t.sym} className="border-b border-[rgba(255,255,255,0.04)]">
-                              <td className="px-1.5 py-1 text-[11.5px] font-bold text-foreground" style={{ fontFamily: DM_MONO }}>
-                                {t.sym}
-                              </td>
-                              <td className="px-1.5 py-1 text-right text-[11px] font-bold tabular-nums" style={{ fontFamily: DM_MONO, color: rsColor(t.rs) }}>
-                                {t.rs ?? "—"}
-                              </td>
-                              <td className="px-1.5 py-1 text-right text-[11px] tabular-nums" style={{
-                                fontFamily: DM_MONO,
-                                color: !Number.isFinite(t.d1) ? "hsl(var(--muted-foreground))" : t.d1 > 0 ? "hsl(170, 80%, 50%)" : t.d1 < 0 ? "hsl(0, 70%, 60%)" : "hsl(var(--muted-foreground))",
-                              }}>
-                                {Number.isFinite(t.d1) ? `${t.d1 >= 0 ? "+" : ""}${t.d1.toFixed(2)}%` : "—"}
-                              </td>
-                              <td className="px-1.5 py-1 text-right text-[11px] tabular-nums" style={{
-                                fontFamily: DM_MONO,
-                                color: !Number.isFinite(t.m1) ? "hsl(var(--muted-foreground))" : t.m1 > 0 ? "hsl(170, 80%, 50%)" : t.m1 < 0 ? "hsl(0, 70%, 60%)" : "hsl(var(--muted-foreground))",
-                              }}>
-                                {Number.isFinite(t.m1) ? `${t.m1 >= 0 ? "+" : ""}${t.m1.toFixed(2)}%` : "—"}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  );
-                })()}
+                <StocksInThemeTable theme={selected.theme} rsMap={rsMap} />
+
               </div>
 
               {/* AI Summary */}
