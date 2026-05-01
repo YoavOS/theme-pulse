@@ -13,6 +13,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import {
   Bot, Newspaper, ExternalLink, Sparkles, TrendingUp, Activity,
   Zap, Info, Target, ArrowUpRight, ArrowDownRight, Minus, Layers,
+  ChevronDown, ChevronUp, ArrowUpDown,
 } from "lucide-react";
 import type { ThemeIntelData } from "@/hooks/useThemeIntelligence";
 import { useSpyBenchmark } from "@/hooks/useSpyBenchmark";
