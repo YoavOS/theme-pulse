@@ -12,7 +12,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Bot, Newspaper, ExternalLink, Sparkles, TrendingUp, Activity,
-  Zap, Info, Target, ArrowUpRight, ArrowDownRight, Minus,
+  Zap, Info, Target, ArrowUpRight, ArrowDownRight, Minus, Layers,
 } from "lucide-react";
 import type { ThemeIntelData } from "@/hooks/useThemeIntelligence";
 import { useSpyBenchmark } from "@/hooks/useSpyBenchmark";
