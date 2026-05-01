@@ -701,3 +701,119 @@ function Sparkline({ data }: { data: number[] }) {
     </svg>
   );
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// StocksInThemeTable — sortable per-stock table for the selected theme.
+// Columns: Ticker | RS | 1W % | 1M % | 3M % | 6M % (default sort: RS desc).
+// ─────────────────────────────────────────────────────────────────────────────
+type StockSortField = "sym" | "rs" | "w1" | "m1" | "m3" | "m6";
+
+function StocksInThemeTable({
+  theme,
+  rsMap,
+}: {
+  theme: ThemeIntelData;
+  rsMap: Map<string, import("@/hooks/useQualifiedRsMap").QualifiedRsRow>;
+}) {
+  const [sortField, setSortField] = useState<StockSortField>("rs");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+
+  const ticks = useMemo(() => {
+    return theme.tickers
+      .filter((t) => t.status === "done")
+      .map((t) => {
+        const r = rsMap.get(t.symbol);
+        return {
+          sym: t.symbol,
+          rs: r?.rs_overall ?? null,
+          w1: r?.return_1w ?? (Number.isFinite(t.perf_1w) ? t.perf_1w : null),
+          m1: r?.return_1m ?? (Number.isFinite(t.perf_1m) ? t.perf_1m : null),
+          m3: r?.return_3m ?? (Number.isFinite(t.perf_3m) ? t.perf_3m : null),
+          m6: r?.return_6m ?? null,
+        };
+      });
+  }, [theme, rsMap]);
+
+  const sorted = useMemo(() => {
+    const mul = sortDir === "desc" ? -1 : 1;
+    const arr = [...ticks];
+    arr.sort((a, b) => {
+      if (sortField === "sym") return mul * a.sym.localeCompare(b.sym);
+      const av = a[sortField] as number | null;
+      const bv = b[sortField] as number | null;
+      if (av === null && bv === null) return 0;
+      if (av === null) return 1; // nulls always last
+      if (bv === null) return -1;
+      return mul * (av - bv);
+    });
+    return arr;
+  }, [ticks, sortField, sortDir]);
+
+  const toggleSort = (f: StockSortField) => {
+    if (sortField === f) setSortDir((d) => (d === "desc" ? "asc" : "desc"));
+    else { setSortField(f); setSortDir("desc"); }
+  };
+
+  if (ticks.length === 0) {
+    return <p className="text-xs text-muted-foreground">No ticker data available.</p>;
+  }
+
+  const SortHead = ({ field, label, align = "right" }: { field: StockSortField; label: string; align?: "left" | "right" }) => (
+    <th className={`px-1.5 py-1.5 ${align === "right" ? "text-right" : "text-left"} font-medium`}>
+      <button
+        onClick={() => toggleSort(field)}
+        className={`inline-flex items-center gap-0.5 uppercase tracking-wider text-muted-foreground hover:text-foreground transition-colors ${align === "right" ? "justify-end" : ""}`}
+      >
+        {label}
+        {sortField === field ? (
+          sortDir === "desc" ? <ChevronDown size={10} /> : <ChevronUp size={10} />
+        ) : (
+          <ArrowUpDown size={9} className="opacity-40" />
+        )}
+      </button>
+    </th>
+  );
+
+  const cellColor = (v: number | null) =>
+    v === null || !Number.isFinite(v)
+      ? "hsl(var(--muted-foreground))"
+      : v > 0 ? "hsl(170, 80%, 50%)"
+      : v < 0 ? "hsl(0, 70%, 60%)"
+      : "hsl(var(--muted-foreground))";
+
+  const fmt = (v: number | null) =>
+    v === null || !Number.isFinite(v) ? "—" : `${v >= 0 ? "+" : ""}${v.toFixed(2)}%`;
+
+  return (
+    <div className="max-h-[320px] overflow-y-auto">
+      <table className="w-full text-sm">
+        <thead className="sticky top-0 bg-background/95 backdrop-blur">
+          <tr className="border-b border-[rgba(255,255,255,0.08)] text-[9px]">
+            <SortHead field="sym" label="Ticker" align="left" />
+            <SortHead field="rs" label="RS" />
+            <SortHead field="w1" label="1W %" />
+            <SortHead field="m1" label="1M %" />
+            <SortHead field="m3" label="3M %" />
+            <SortHead field="m6" label="6M %" />
+          </tr>
+        </thead>
+        <tbody>
+          {sorted.map((t) => (
+            <tr key={t.sym} className="border-b border-[rgba(255,255,255,0.04)]">
+              <td className="px-1.5 py-1 text-[11.5px] font-bold text-foreground" style={{ fontFamily: DM_MONO }}>
+                {t.sym}
+              </td>
+              <td className="px-1.5 py-1 text-right text-[11px] font-bold tabular-nums" style={{ fontFamily: DM_MONO, color: rsColor(t.rs) }}>
+                {t.rs ?? "—"}
+              </td>
+              <td className="px-1.5 py-1 text-right text-[11px] tabular-nums" style={{ fontFamily: DM_MONO, color: cellColor(t.w1) }}>{fmt(t.w1)}</td>
+              <td className="px-1.5 py-1 text-right text-[11px] tabular-nums" style={{ fontFamily: DM_MONO, color: cellColor(t.m1) }}>{fmt(t.m1)}</td>
+              <td className="px-1.5 py-1 text-right text-[11px] tabular-nums" style={{ fontFamily: DM_MONO, color: cellColor(t.m3) }}>{fmt(t.m3)}</td>
+              <td className="px-1.5 py-1 text-right text-[11px] tabular-nums" style={{ fontFamily: DM_MONO, color: cellColor(t.m6) }}>{fmt(t.m6)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
