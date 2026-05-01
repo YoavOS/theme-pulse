@@ -8,6 +8,10 @@ export interface QualifiedRsRow {
   rs_1m: number | null;
   rs_3m: number | null;
   rs_6m: number | null;
+  return_1w: number | null;
+  return_1m: number | null;
+  return_3m: number | null;
+  return_6m: number | null;
 }
 
 const PAGE = 1000;
