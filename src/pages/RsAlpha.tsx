@@ -824,10 +824,20 @@ export default function RsAlpha() {
                       const ret = getReturnField(stock, activeTab);
                       const spy = getSpyField(stock, activeTab);
                       const rating = ratingMap.get(stock.symbol) ?? null;
+                      const badge = growthBadge(fundamentalsMap.get(stock.symbol));
                       return (
                         <tr key={stock.symbol} className={`border-b border-border/50 transition-colors hover:bg-muted/20 ${rsBg(rs)}`}>
                           <td className="px-3 py-2 text-xs text-muted-foreground">{idx + 1}</td>
-                          <td className="px-3 py-2 font-mono font-semibold text-foreground">{stock.symbol}</td>
+                          <td className="px-3 py-2 font-mono font-semibold text-foreground">
+                            <span className="inline-flex items-center gap-1.5">
+                              {stock.symbol}
+                              {badge && (
+                                <span title={badge.label} className="text-[13px] leading-none">
+                                  {badge.emoji}
+                                </span>
+                              )}
+                            </span>
+                          </td>
                           <td className="px-3 py-2 text-center"><RsRatingBadge rating={rating} /></td>
                           <td className="px-3 py-2 text-muted-foreground max-w-[240px] truncate" title={stock.companyName ?? ""}>
                             {stock.companyName ?? stock.sector ?? "—"}
