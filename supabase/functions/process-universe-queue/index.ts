@@ -94,13 +94,29 @@ Deno.serve(async (req) => {
       .limit(BATCH_SIZE);
 
     if (!pending || pending.length === 0) {
-      // Mark progress complete if nothing left
+      // Atomic swap: publish staging -> live (only if staging has content)
+      let swapped = 0;
+      try {
+        const { data: swapCount, error: swapErr } = await supabase.rpc("swap_qualified_rs_universe");
+        if (swapErr) {
+          // Empty-staging exception is expected if scan completes with 0 qualified — ignore quietly
+          if (!String(swapErr.message || "").includes("refusing to swap")) {
+            console.error("swap_qualified_rs_universe error:", swapErr);
+          }
+        } else {
+          swapped = Number(swapCount ?? 0);
+          console.log(`Swap complete: published ${swapped} symbols to live universe`);
+        }
+      } catch (e) {
+        console.error("swap rpc threw:", e);
+      }
+
       await supabase
         .from("rs_scan_progress")
         .update({ status: "complete", last_updated: new Date().toISOString() })
         .eq("id", 1);
       return new Response(
-        JSON.stringify({ ok: true, processed: 0, message: "queue empty" }),
+        JSON.stringify({ ok: true, processed: 0, message: "queue empty", swapped }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
