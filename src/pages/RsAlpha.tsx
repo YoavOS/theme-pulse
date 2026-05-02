@@ -330,7 +330,7 @@ export default function RsAlpha() {
             {progress.totalQueued > 0 && (
               <button
                 onClick={() => {
-                  if (confirm("Restart the scan from scratch? This wipes existing progress and re-fetches the full US universe.")) {
+                  if (confirm("Restart the scan from scratch? Your current live universe stays in use until the new scan completes — only the in-progress staging is cleared.")) {
                     rebuildUniverse("restart");
                   }
                 }}
@@ -585,10 +585,10 @@ export default function RsAlpha() {
               <div className="flex items-center justify-between mb-1.5">
                 <span className="text-foreground font-medium">
                   {isPaused ? <Pause size={11} className="mr-1 inline text-amber-500" /> : <Hammer size={11} className="mr-1 inline" />}
-                  {isPaused ? "Scan paused" : "Building qualified universe"} — {rebuildPctDone}%
+                  {isPaused ? "New universe scan paused" : "Building new universe"} — {rebuildPctDone}%
                 </span>
                 <span className="text-muted-foreground">
-                  {progress.processed.toLocaleString()} / {progress.totalQueued.toLocaleString()} symbols · {progress.qualified} qualified · {progress.failed} failed
+                  {progress.processed.toLocaleString()} / {progress.totalQueued.toLocaleString()} symbols · {progress.qualified} qualified so far · {progress.failed} failed
                 </span>
               </div>
               <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
@@ -596,12 +596,13 @@ export default function RsAlpha() {
               </div>
               <div className="mt-1.5 flex items-center justify-between text-[10px] text-muted-foreground">
                 <span>
+                  ✓ Current universe ({stocks.length.toLocaleString()} stocks) stays fully usable — the new list only replaces it once the scan finishes successfully.{" "}
                   {isPaused
                     ? "Click Resume Scan to continue from where it stopped."
-                    : "~50 symbols/min · runs server-side · safe to close this tab."}
+                    : "Runs server-side · safe to close this tab, progress is saved per batch."}
                 </span>
                 {!isPaused && progress.etaSeconds !== null && (
-                  <span className="font-medium">{formatEta(progress.etaSeconds)}</span>
+                  <span className="font-medium whitespace-nowrap">{formatEta(progress.etaSeconds)}</span>
                 )}
               </div>
             </div>
@@ -611,7 +612,7 @@ export default function RsAlpha() {
         {progress.status === "complete" && progress.totalQueued > 0 && !isRebuilding && (
           <div className="container pb-2">
             <div className="rounded-md border border-[hsl(160,70%,50%)]/30 bg-[hsl(160,70%,50%)]/5 px-3 py-1.5 text-xs text-[hsl(160,70%,50%)]">
-              ✓ Universe rebuild complete — {progress.qualified} stocks meet all four criteria.
+              ✓ Universe published — {progress.qualified} stocks now live (atomically swapped from staging).
             </div>
           </div>
         )}
