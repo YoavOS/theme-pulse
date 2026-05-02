@@ -202,8 +202,10 @@ Deno.serve(async (req) => {
           continue;
         }
 
-        // --- All filters passed: insert into qualified universe ---
-        await supabase.from("qualified_rs_universe").upsert({
+        // --- All filters passed: insert into STAGING universe ---
+        // The live qualified_rs_universe is left untouched until the scan
+        // finishes and is atomically swapped via swap_qualified_rs_universe().
+        await supabase.from("qualified_rs_universe_staging").upsert({
           symbol: sym,
           company_name: prof?.name || sym,
           sector: prof?.finnhubIndustry || null,

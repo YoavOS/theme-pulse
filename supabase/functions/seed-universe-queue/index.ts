@@ -86,9 +86,9 @@ Deno.serve(async (req) => {
 
     console.log(`Seeding ${symbols.length} symbols into scan queue (OTC excluded)`);
 
-    // Clear queue + qualified universe
+    // Clear queue + STAGING universe (NOT the live universe — keep it usable until swap)
     await supabase.from("stock_scan_queue").delete().neq("symbol", "__none__");
-    await supabase.from("qualified_rs_universe").delete().neq("symbol", "__none__");
+    await supabase.from("qualified_rs_universe_staging").delete().neq("symbol", "__none__");
 
     // Insert in batches of 1000
     let inserted = 0;
