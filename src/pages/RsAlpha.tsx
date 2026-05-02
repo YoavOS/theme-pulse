@@ -11,6 +11,7 @@ import OverallWeightsPanel, { RsWeights, DEFAULT_RS_WEIGHTS, normalizeWeights } 
 import RsRatingBadge, { computeRsRatings } from "@/components/rs/RsRatingBadge";
 import CustomTradingViewListModal from "@/components/rs/CustomTradingViewListModal";
 import SectorDistributionModal from "@/components/rs/SectorDistributionModal";
+import ThemeDistributionModal from "@/components/rs/ThemeDistributionModal";
 import FundamentalsCoverageModal from "@/components/rs/FundamentalsCoverageModal";
 import { useStockFundamentalsMap } from "@/hooks/useStockFundamentalsMap";
 import {
@@ -114,6 +115,7 @@ export default function RsAlpha() {
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [customListOpen, setCustomListOpen] = useState(false);
   const [sectorDistOpen, setSectorDistOpen] = useState(false);
+  const [themeDistOpen, setThemeDistOpen] = useState(false);
   const [coverageOpen, setCoverageOpen] = useState(false);
   const [hideOtc, setHideOtc] = useState<boolean>(() => {
     const saved = typeof window !== "undefined" ? localStorage.getItem("rs-hide-otc") : null;
@@ -783,6 +785,13 @@ export default function RsAlpha() {
                     <PieChartIcon size={12} /> Sector Distribution
                   </button>
                   <button
+                    onClick={() => setThemeDistOpen(true)}
+                    className="inline-flex items-center gap-1.5 rounded-md border border-primary/40 bg-primary/10 px-3 py-1.5 text-xs font-semibold text-foreground transition-colors hover:bg-primary/20"
+                    title="See how this list distributes across your curated themes + discover new themes with Groq"
+                  >
+                    <PieChartIcon size={12} /> Theme Distribution
+                  </button>
+                  <button
                     onClick={() => setCustomListOpen(true)}
                     className="inline-flex items-center gap-1.5 rounded-md border border-primary/60 bg-primary/15 px-3 py-1.5 text-xs font-semibold text-primary transition-colors hover:bg-primary/25"
                     title="Open custom filters to build a refined TradingView list"
@@ -901,6 +910,13 @@ export default function RsAlpha() {
         getRsForTab={getRsForTab}
         getReturnField={getReturnField}
         isOtcSymbol={isOtcSymbol}
+      />
+
+      <ThemeDistributionModal
+        open={themeDistOpen}
+        onOpenChange={setThemeDistOpen}
+        tabLabel={`${TABS.find(t => t.id === activeTab)?.label ?? ""} Best RS`}
+        stocks={sortedStocks}
       />
 
       <FundamentalsCoverageModal open={coverageOpen} onClose={() => setCoverageOpen(false)} />
