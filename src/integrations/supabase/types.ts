@@ -515,6 +515,93 @@ export type Database = {
         }
         Relationships: []
       }
+      qualified_rs_universe_staging: {
+        Row: {
+          adr_percent: number | null
+          adr_source: string | null
+          avg_dollar_volume: number | null
+          company_name: string | null
+          current_price: number | null
+          market_cap: number | null
+          qualified_at: string
+          return_1d: number | null
+          return_1m: number | null
+          return_1w: number | null
+          return_3m: number | null
+          return_6m: number | null
+          rs_1d: number | null
+          rs_1m: number | null
+          rs_1w: number | null
+          rs_3m: number | null
+          rs_6m: number | null
+          rs_calculated_at: string | null
+          rs_overall: number | null
+          sector: string | null
+          spy_return_1d: number | null
+          spy_return_1m: number | null
+          spy_return_1w: number | null
+          spy_return_3m: number | null
+          spy_return_6m: number | null
+          symbol: string
+        }
+        Insert: {
+          adr_percent?: number | null
+          adr_source?: string | null
+          avg_dollar_volume?: number | null
+          company_name?: string | null
+          current_price?: number | null
+          market_cap?: number | null
+          qualified_at?: string
+          return_1d?: number | null
+          return_1m?: number | null
+          return_1w?: number | null
+          return_3m?: number | null
+          return_6m?: number | null
+          rs_1d?: number | null
+          rs_1m?: number | null
+          rs_1w?: number | null
+          rs_3m?: number | null
+          rs_6m?: number | null
+          rs_calculated_at?: string | null
+          rs_overall?: number | null
+          sector?: string | null
+          spy_return_1d?: number | null
+          spy_return_1m?: number | null
+          spy_return_1w?: number | null
+          spy_return_3m?: number | null
+          spy_return_6m?: number | null
+          symbol: string
+        }
+        Update: {
+          adr_percent?: number | null
+          adr_source?: string | null
+          avg_dollar_volume?: number | null
+          company_name?: string | null
+          current_price?: number | null
+          market_cap?: number | null
+          qualified_at?: string
+          return_1d?: number | null
+          return_1m?: number | null
+          return_1w?: number | null
+          return_3m?: number | null
+          return_6m?: number | null
+          rs_1d?: number | null
+          rs_1m?: number | null
+          rs_1w?: number | null
+          rs_3m?: number | null
+          rs_6m?: number | null
+          rs_calculated_at?: string | null
+          rs_overall?: number | null
+          sector?: string | null
+          spy_return_1d?: number | null
+          spy_return_1m?: number | null
+          spy_return_1w?: number | null
+          spy_return_3m?: number | null
+          spy_return_6m?: number | null
+          symbol?: string
+        }
+        Relationships: []
+      }
       rs_scan_progress: {
         Row: {
           failed: number
@@ -947,6 +1034,7 @@ export type Database = {
         Args: { p_active: boolean }
         Returns: undefined
       }
+      swap_qualified_rs_universe: { Args: never; Returns: number }
     }
     Enums: {
       [_ in never]: never
