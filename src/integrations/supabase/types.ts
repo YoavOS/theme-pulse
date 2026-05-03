@@ -1011,6 +1011,12 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      claim_scan_batch: {
+        Args: { p_limit: number }
+        Returns: {
+          symbol: string
+        }[]
+      }
       get_eod_baselines: {
         Args: {
           p_date_1m: string
@@ -1026,6 +1032,8 @@ export type Database = {
           timeframe: string
         }[]
       }
+      recompute_rs_scan_progress: { Args: never; Returns: undefined }
+      release_universe_scan_lock: { Args: never; Returns: undefined }
       set_fundamentals_cron_active: {
         Args: { p_active: boolean }
         Returns: undefined
@@ -1035,6 +1043,7 @@ export type Database = {
         Returns: undefined
       }
       swap_qualified_rs_universe: { Args: never; Returns: number }
+      try_universe_scan_lock: { Args: never; Returns: boolean }
     }
     Enums: {
       [_ in never]: never
