@@ -6,10 +6,13 @@ const corsHeaders = {
 };
 
 // Tunable constants
-const BATCH_SIZE = 30;            // smaller batch keeps tick under ~2 min even with rate limits
-const FINNHUB_DELAY_MS = 1100;
-const YAHOO_DELAY_MS = 500;
+const BATCH_SIZE = 25;            // claim size per inner loop
+const FINNHUB_DELAY_MS = 1050;    // ~57 req/min, just under the 60/min cap
+const YAHOO_DELAY_MS = 250;
 const ADR_LOOKBACK_DAYS = 14;
+// Run the worker as a long loop within a single invocation to avoid the
+// 1-tick-per-minute cron throttle. Edge functions allow ~150s; leave headroom.
+const TICK_DEADLINE_MS = 115_000;
 
 const FILTERS = {
   MIN_MARKET_CAP_M: 1000,
