@@ -916,8 +916,13 @@ export default function RsAlpha() {
       <ThemeDistributionModal
         open={themeDistOpen}
         onOpenChange={setThemeDistOpen}
+        tabId={activeTab}
         tabLabel={`${TABS.find(t => t.id === activeTab)?.label ?? ""} Best RS`}
         stocks={sortedStocks}
+        ratingMap={ratingMap}
+        getRsForTab={getRsForTab}
+        getReturnField={getReturnField}
+        isOtcSymbol={isOtcSymbol}
       />
 
       <FundamentalsCoverageModal open={coverageOpen} onClose={() => setCoverageOpen(false)} />
