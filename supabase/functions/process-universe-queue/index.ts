@@ -123,115 +123,119 @@ Deno.serve(async (req) => {
         return await finalize({ message: "scan paused" });
       }
 
-      // Atomic claim
-      const { data: claimed, error: claimErr } = await supabase.rpc("claim_scan_batch", { p_limit: BATCH_SIZE });
-      if (claimErr) throw claimErr;
-      const claimedSymbols: string[] = (claimed ?? []).map((r: any) => r.symbol);
+      const tickStart = Date.now();
+      let totalProcessed = 0;
+      let rateLimited = false;
 
-      if (claimedSymbols.length === 0) {
-        // Nothing to claim — finalize will mark complete if processing=0
-        return await finalize({ message: "no pending symbols" });
-      }
+      // Loop: claim → process → repeat until deadline / pause / empty / 429
+      while (Date.now() - tickStart < TICK_DEADLINE_MS) {
+        // Atomic claim
+        const { data: claimed, error: claimErr } = await supabase.rpc("claim_scan_batch", { p_limit: BATCH_SIZE });
+        if (claimErr) throw claimErr;
+        const claimedSymbols: string[] = (claimed ?? []).map((r: any) => r.symbol);
 
-      for (const sym of claimedSymbols) {
-        try {
-          // Stage A: quote
-          const quoteRes = await fetch(`https://finnhub.io/api/v1/quote?symbol=${sym}&token=${FINNHUB_KEY}`);
-          if (quoteRes.status === 429) {
-            await supabase.from("stock_scan_queue").update({ status: "pending" }).eq("symbol", sym);
-            console.log("Rate limited, releasing remaining symbols");
-            // release any other claimed symbols not yet processed
-            break;
+        if (claimedSymbols.length === 0) break;
+
+        for (const sym of claimedSymbols) {
+          if (Date.now() - tickStart >= TICK_DEADLINE_MS) {
+            // release this and the rest as pending
+            await supabase.from("stock_scan_queue").update({ status: "pending" }).eq("status", "processing").in("symbol", claimedSymbols);
+            return await finalize({ batch: totalProcessed, message: "deadline" });
           }
-          const quote = await quoteRes.json();
-          const price = quote?.c;
-          await sleep(FINNHUB_DELAY_MS);
+          try {
+            // Stage A: quote
+            const quoteRes = await fetch(`https://finnhub.io/api/v1/quote?symbol=${sym}&token=${FINNHUB_KEY}`);
+            if (quoteRes.status === 429) { rateLimited = true; break; }
+            const quote = await quoteRes.json();
+            const price = quote?.c;
+            await sleep(FINNHUB_DELAY_MS);
 
-          if (!price || price < FILTERS.MIN_PRICE) {
-            await supabase.from("stock_scan_queue").update({ status: "skipped", processed_at: new Date().toISOString() }).eq("symbol", sym);
-            continue;
+            if (!price || price < FILTERS.MIN_PRICE) {
+              await supabase.from("stock_scan_queue").update({ status: "skipped", processed_at: new Date().toISOString() }).eq("symbol", sym);
+              totalProcessed++; continue;
+            }
+
+            // Stage B: profile
+            const profRes = await fetch(`https://finnhub.io/api/v1/stock/profile2?symbol=${sym}&token=${FINNHUB_KEY}`);
+            if (profRes.status === 429) { rateLimited = true; break; }
+            const prof = await profRes.json();
+            const mcM = prof?.marketCapitalization;
+            await sleep(FINNHUB_DELAY_MS);
+
+            const exch = String(prof?.exchange ?? "").toUpperCase();
+            const isOtc =
+              /OTC|PINK|GREY|GRAY|OOTC|OTCBB|OTCMKTS|OTCPK/.test(exch) ||
+              (/^[A-Z]{5}$/.test(sym) && sym.endsWith("F"));
+            if (isOtc) {
+              await supabase.from("stock_scan_queue").update({ status: "skipped", last_error: `otc:${exch}`, processed_at: new Date().toISOString() }).eq("symbol", sym);
+              totalProcessed++; continue;
+            }
+            if (!mcM || mcM < FILTERS.MIN_MARKET_CAP_M) {
+              await supabase.from("stock_scan_queue").update({ status: "skipped", processed_at: new Date().toISOString() }).eq("symbol", sym);
+              totalProcessed++; continue;
+            }
+
+            // Stage C: volume
+            const metRes = await fetch(`https://finnhub.io/api/v1/stock/metric?symbol=${sym}&metric=all&token=${FINNHUB_KEY}`);
+            if (metRes.status === 429) { rateLimited = true; break; }
+            const met = await metRes.json();
+            const avgVol10d = met?.metric?.["10DayAverageTradingVolume"];
+            await sleep(FINNHUB_DELAY_MS);
+
+            const sharesPerDay = avgVol10d ? avgVol10d * 1_000_000 : 0;
+            const dollarVolume = sharesPerDay * price;
+            if (!dollarVolume || dollarVolume < FILTERS.MIN_DOLLAR_VOLUME) {
+              await supabase.from("stock_scan_queue").update({ status: "skipped", processed_at: new Date().toISOString() }).eq("symbol", sym);
+              totalProcessed++; continue;
+            }
+
+            // Stage D: ADR
+            const { adrPct, source: adrSrc } = await fetchYahooOHLC(sym);
+            await sleep(YAHOO_DELAY_MS);
+            if (adrPct === null || adrPct < FILTERS.MIN_ADR_PCT) {
+              await supabase.from("stock_scan_queue").update({ status: "skipped", processed_at: new Date().toISOString() }).eq("symbol", sym);
+              totalProcessed++; continue;
+            }
+
+            // Qualified → staging
+            await supabase.from("qualified_rs_universe_staging").upsert({
+              symbol: sym,
+              company_name: prof?.name || sym,
+              sector: prof?.finnhubIndustry || null,
+              market_cap: mcM,
+              current_price: price,
+              avg_dollar_volume: dollarVolume,
+              adr_percent: adrPct,
+              adr_source: adrSrc,
+              qualified_at: new Date().toISOString(),
+            }, { onConflict: "symbol" });
+
+            await supabase.from("stock_scan_queue").update({ status: "done", processed_at: new Date().toISOString() }).eq("symbol", sym);
+            totalProcessed++;
+          } catch (e) {
+            console.error(`Error processing ${sym}:`, e);
+            await supabase.from("stock_scan_queue")
+              .update({ status: "failed", last_error: String(e), processed_at: new Date().toISOString() })
+              .eq("symbol", sym);
+            totalProcessed++;
           }
-
-          // Stage B: profile
-          const profRes = await fetch(`https://finnhub.io/api/v1/stock/profile2?symbol=${sym}&token=${FINNHUB_KEY}`);
-          if (profRes.status === 429) {
-            await supabase.from("stock_scan_queue").update({ status: "pending" }).eq("symbol", sym);
-            break;
-          }
-          const prof = await profRes.json();
-          const mcM = prof?.marketCapitalization;
-          await sleep(FINNHUB_DELAY_MS);
-
-          const exch = String(prof?.exchange ?? "").toUpperCase();
-          const isOtc =
-            /OTC|PINK|GREY|GRAY|OOTC|OTCBB|OTCMKTS|OTCPK/.test(exch) ||
-            (/^[A-Z]{5}$/.test(sym) && sym.endsWith("F"));
-          if (isOtc) {
-            await supabase.from("stock_scan_queue").update({ status: "skipped", last_error: `otc:${exch}`, processed_at: new Date().toISOString() }).eq("symbol", sym);
-            continue;
-          }
-          if (!mcM || mcM < FILTERS.MIN_MARKET_CAP_M) {
-            await supabase.from("stock_scan_queue").update({ status: "skipped", processed_at: new Date().toISOString() }).eq("symbol", sym);
-            continue;
-          }
-
-          // Stage C: volume
-          const metRes = await fetch(`https://finnhub.io/api/v1/stock/metric?symbol=${sym}&metric=all&token=${FINNHUB_KEY}`);
-          if (metRes.status === 429) {
-            await supabase.from("stock_scan_queue").update({ status: "pending" }).eq("symbol", sym);
-            break;
-          }
-          const met = await metRes.json();
-          const avgVol10d = met?.metric?.["10DayAverageTradingVolume"];
-          await sleep(FINNHUB_DELAY_MS);
-
-          const sharesPerDay = avgVol10d ? avgVol10d * 1_000_000 : 0;
-          const dollarVolume = sharesPerDay * price;
-          if (!dollarVolume || dollarVolume < FILTERS.MIN_DOLLAR_VOLUME) {
-            await supabase.from("stock_scan_queue").update({ status: "skipped", processed_at: new Date().toISOString() }).eq("symbol", sym);
-            continue;
-          }
-
-          // Stage D: ADR
-          const { adrPct, source: adrSrc } = await fetchYahooOHLC(sym);
-          await sleep(YAHOO_DELAY_MS);
-          if (adrPct === null || adrPct < FILTERS.MIN_ADR_PCT) {
-            await supabase.from("stock_scan_queue").update({ status: "skipped", processed_at: new Date().toISOString() }).eq("symbol", sym);
-            continue;
-          }
-
-          // Qualified → staging
-          await supabase.from("qualified_rs_universe_staging").upsert({
-            symbol: sym,
-            company_name: prof?.name || sym,
-            sector: prof?.finnhubIndustry || null,
-            market_cap: mcM,
-            current_price: price,
-            avg_dollar_volume: dollarVolume,
-            adr_percent: adrPct,
-            adr_source: adrSrc,
-            qualified_at: new Date().toISOString(),
-          }, { onConflict: "symbol" });
-
-          await supabase.from("stock_scan_queue").update({ status: "done", processed_at: new Date().toISOString() }).eq("symbol", sym);
-        } catch (e) {
-          console.error(`Error processing ${sym}:`, e);
-          await supabase.from("stock_scan_queue")
-            .update({ status: "failed", last_error: String(e), processed_at: new Date().toISOString() })
-            .eq("symbol", sym);
         }
-      }
 
-      // Release any symbols still in "processing" from this claim (e.g., we broke out on 429)
-      if (claimedSymbols.length > 0) {
+        // Release any symbols still in "processing" from this claim
         await supabase
           .from("stock_scan_queue")
           .update({ status: "pending" })
           .eq("status", "processing")
           .in("symbol", claimedSymbols);
+
+        if (rateLimited) {
+          console.log("Rate limited — pausing 60s before next claim");
+          await sleep(60_000);
+          rateLimited = false;
+        }
       }
 
-      return await finalize({ batch: claimedSymbols.length });
+      return await finalize({ batch: totalProcessed });
     } finally {
       try { await supabase.rpc("release_universe_scan_lock"); } catch (_) {}
     }
