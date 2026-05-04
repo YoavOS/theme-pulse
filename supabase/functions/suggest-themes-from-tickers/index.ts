@@ -1,6 +1,8 @@
-// Groq-powered: given a list of unassigned tickers (with company name + sector)
-// and the user's existing curated theme names, propose 2-6 NEW logical themes
-// grouping similar stocks. Returns JSON {suggestions: [{theme_name, rationale, tickers[]}]}.
+// Groq-powered: given unassigned tickers + the user's existing curated themes
+// (with their current members), propose:
+//   1. NEW themes (with ≥3 unassigned tickers each)
+//   2. ADDITIONS of unassigned tickers to existing curated themes
+// Returns: { new_themes: [...], theme_additions: [...] }
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
@@ -10,27 +12,32 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-const SYSTEM_PROMPT = `You are an equity research assistant that discovers investable thematic groupings.
-You will receive:
-1. A list of EXISTING curated themes (avoid duplicating these).
-2. A list of UNASSIGNED stocks (ticker, company name, sector).
+const SYSTEM_PROMPT = `You are an equity research assistant that organizes stocks into investable thematic groupings.
 
-Task: Propose 2 to 6 NEW themes that group these unassigned stocks in coherent, INVESTABLE ways.
-Rules:
-- Every suggested theme MUST contain at least 3 tickers from the provided list.
-- A ticker may appear in only ONE suggested theme (no overlaps).
-- Prefer narrative/secular themes (e.g. "Obesity / GLP-1 Drugs", "Edge AI Inference", "Nuclear SMR Suppliers") over generic sector buckets.
-- Theme names must be short (2-5 words), distinct from existing themes.
-- It is fine to leave some tickers unassigned if no coherent group emerges.
+You will receive:
+1. EXISTING curated themes (each with name + a sample of current member tickers).
+2. UNASSIGNED stocks (ticker, company name, sector) that aren't yet in any curated theme.
+
+Your job — do BOTH of the following:
+
+A) Propose NEW themes that group similar unassigned stocks.
+   - Each new theme MUST contain at least 3 unassigned tickers.
+   - Use short narrative names (2-5 words) distinct from existing themes.
+   - A ticker may appear in only ONE new theme.
+
+B) Recommend ADDITIONS of unassigned stocks into EXISTING themes.
+   - Only when a stock clearly belongs in that theme based on its business.
+   - The existing theme name MUST exactly match one provided.
+   - A ticker may appear in either ONE new theme OR ONE addition — never both.
+   - Skip stocks that don't clearly fit anywhere.
 
 Respond ONLY with valid JSON in this exact shape:
 {
-  "suggestions": [
-    {
-      "theme_name": "string",
-      "rationale": "1 short sentence explaining the thesis",
-      "tickers": ["TICK1", "TICK2", "TICK3"]
-    }
+  "new_themes": [
+    {"theme_name": "string", "rationale": "1 short sentence", "tickers": ["TICK1","TICK2","TICK3"]}
+  ],
+  "theme_additions": [
+    {"existing_theme": "exact existing name", "rationale": "1 short sentence", "tickers": ["TICK4","TICK5"]}
   ]
 }`;
 
@@ -51,24 +58,47 @@ serve(async (req) => {
     let payload: any;
     try { payload = await req.json(); } catch { return jsonResponse({ error: "Invalid JSON" }, 400); }
 
-    const existingThemes: string[] = Array.isArray(payload?.existingThemes) ? payload.existingThemes : [];
+    // Backwards compatible: existingThemes may be a string[] (names only) OR
+    // an array of { name, sampleTickers? }
+    const rawThemes = Array.isArray(payload?.existingThemes) ? payload.existingThemes : [];
+    const existingThemes: { name: string; sampleTickers: string[] }[] = rawThemes.map((t: any) => {
+      if (typeof t === "string") return { name: t, sampleTickers: [] };
+      return {
+        name: String(t?.name ?? "").trim(),
+        sampleTickers: Array.isArray(t?.sampleTickers)
+          ? t.sampleTickers.map((s: any) => String(s).toUpperCase()).slice(0, 12)
+          : [],
+      };
+    }).filter((t: any) => t.name);
+
     const unassigned: { symbol: string; company?: string | null; sector?: string | null }[] =
       Array.isArray(payload?.unassigned) ? payload.unassigned : [];
 
     if (unassigned.length < 3) {
-      return jsonResponse({ suggestions: [], note: "Not enough unassigned tickers to suggest themes." });
+      return jsonResponse({
+        new_themes: [], theme_additions: [],
+        suggestions: [], // legacy alias
+        note: "Not enough unassigned tickers to suggest themes.",
+      });
     }
 
-    // Cap input size for Groq context
     const capped = unassigned.slice(0, 200);
     const tickerLines = capped
       .map(t => `${t.symbol} | ${t.company ?? "—"} | ${t.sector ?? "—"}`)
       .join("\n");
 
+    const themesBlock = existingThemes.length
+      ? existingThemes.map(t =>
+          t.sampleTickers.length
+            ? `- ${t.name} [${t.sampleTickers.join(", ")}]`
+            : `- ${t.name}`
+        ).join("\n")
+      : "(none)";
+
     const userMessage =
-      `EXISTING THEMES (avoid duplicating):\n${existingThemes.join(", ") || "(none)"}\n\n` +
+      `EXISTING THEMES (name + sample tickers):\n${themesBlock}\n\n` +
       `UNASSIGNED STOCKS (ticker | company | sector):\n${tickerLines}\n\n` +
-      `Now propose new themes following the rules.`;
+      `Now produce both new_themes and theme_additions per the rules.`;
 
     let response: Response;
     try {
@@ -77,7 +107,7 @@ serve(async (req) => {
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${GROQ_API_KEY}` },
         body: JSON.stringify({
           model: "llama-3.3-70b-versatile",
-          max_tokens: 1500,
+          max_tokens: 2000,
           temperature: 0.3,
           response_format: { type: "json_object" },
           messages: [
@@ -106,14 +136,19 @@ serve(async (req) => {
       parsed = m ? JSON.parse(m[0]) : null;
     } catch { parsed = null; }
 
-    if (!parsed || !Array.isArray(parsed.suggestions)) {
+    if (!parsed) {
       return jsonResponse({ error: "invalid_ai_response", raw: content }, 502);
     }
 
-    // Sanitize: keep only tickers that were actually in the unassigned list, dedupe across themes
     const allowed = new Set(capped.map(t => t.symbol.toUpperCase()));
+    const themeNameSet = new Set(existingThemes.map(t => t.name.toLowerCase()));
     const seen = new Set<string>();
-    const cleaned = parsed.suggestions
+
+    // Sanitize new themes
+    const rawNew = Array.isArray(parsed.new_themes)
+      ? parsed.new_themes
+      : (Array.isArray(parsed.suggestions) ? parsed.suggestions : []);
+    const new_themes = rawNew
       .map((s: any) => {
         const tickers = (Array.isArray(s?.tickers) ? s.tickers : [])
           .map((t: string) => String(t || "").toUpperCase().trim())
@@ -125,9 +160,39 @@ serve(async (req) => {
           tickers,
         };
       })
-      .filter((s: any) => s.theme_name && s.tickers.length >= 3);
+      .filter((s: any) =>
+        s.theme_name && !themeNameSet.has(s.theme_name.toLowerCase()) && s.tickers.length >= 3
+      );
 
-    return jsonResponse({ suggestions: cleaned });
+    // Sanitize additions to existing themes
+    const rawAdds = Array.isArray(parsed.theme_additions) ? parsed.theme_additions : [];
+    const theme_additions = rawAdds
+      .map((a: any) => {
+        const name = String(a?.existing_theme || "").trim();
+        const matchedTheme = existingThemes.find(
+          t => t.name.toLowerCase() === name.toLowerCase()
+        );
+        if (!matchedTheme) return null;
+        const existingMembers = new Set(matchedTheme.sampleTickers);
+        const tickers = (Array.isArray(a?.tickers) ? a.tickers : [])
+          .map((t: string) => String(t || "").toUpperCase().trim())
+          .filter((t: string) =>
+            allowed.has(t) && !seen.has(t) && !existingMembers.has(t)
+          );
+        tickers.forEach((t: string) => seen.add(t));
+        return {
+          existing_theme: matchedTheme.name,
+          rationale: String(a?.rationale || "").trim(),
+          tickers,
+        };
+      })
+      .filter((a: any) => a && a.tickers.length >= 1);
+
+    return jsonResponse({
+      new_themes,
+      theme_additions,
+      suggestions: new_themes, // legacy alias for old callers
+    });
   } catch (e) {
     console.error("Unhandled:", e);
     return jsonResponse({ error: "internal_error" }, 500);
