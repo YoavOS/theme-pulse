@@ -182,10 +182,13 @@ export default function ThemeDistributionModal({
 
   const handleSuggest = async () => {
     if (unassignedSymbols.length < 3) { toast.info("Not enough unassigned tickers for AI suggestions."); return; }
-    setSuggesting(true); setSuggestions(null);
+    setSuggesting(true); setSuggestions(null); setAdditions(null);
     try {
       const payload = {
-        existingThemes: curated.map(c => c.name),
+        existingThemes: curated.map(c => ({
+          name: c.name,
+          sampleTickers: c.symbols.slice(0, 12),
+        })),
         unassigned: unassignedSymbols.slice(0, 200).map(sym => {
           const s = stockMap.get(sym);
           return { symbol: sym, company: s?.companyName ?? null, sector: s?.sector ?? null };
@@ -194,17 +197,22 @@ export default function ThemeDistributionModal({
       const { data, error } = await supabase.functions.invoke("suggest-themes-from-tickers", { body: payload });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
-      const list: Suggestion[] = Array.isArray(data?.suggestions) ? data.suggestions : [];
-      setSuggestions(list);
-      if (list.length === 0) toast.info(data?.note || "AI could not find coherent new themes.");
-      else toast.success(`AI proposed ${list.length} new theme${list.length === 1 ? "" : "s"}.`);
+      const newList: NewThemeSuggestion[] = Array.isArray(data?.new_themes)
+        ? data.new_themes
+        : (Array.isArray(data?.suggestions) ? data.suggestions : []);
+      const addList: ThemeAddition[] = Array.isArray(data?.theme_additions) ? data.theme_additions : [];
+      setSuggestions(newList);
+      setAdditions(addList);
+      const total = newList.length + addList.length;
+      if (total === 0) toast.info(data?.note || "AI could not find coherent suggestions.");
+      else toast.success(`AI proposed ${newList.length} new theme${newList.length === 1 ? "" : "s"} and ${addList.length} addition${addList.length === 1 ? "" : "s"}.`);
     } catch (e) {
       console.error("suggest-themes error:", e);
       toast.error(e instanceof Error ? e.message : "Failed to fetch AI suggestions.");
     } finally { setSuggesting(false); }
   };
 
-  const handleCreate = async (s: Suggestion) => {
+  const handleCreate = async (s: NewThemeSuggestion) => {
     setCreating(s.theme_name);
     try {
       const { data: themeRow, error: insErr } = await supabase
