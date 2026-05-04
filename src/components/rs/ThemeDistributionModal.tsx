@@ -231,6 +231,32 @@ export default function ThemeDistributionModal({
     } finally { setCreating(null); }
   };
 
+  const handleAddToExisting = async (a: ThemeAddition) => {
+    const key = a.existing_theme;
+    setAdding(key);
+    try {
+      const theme = curated.find(c => c.name.toLowerCase() === a.existing_theme.toLowerCase());
+      if (!theme) throw new Error("Theme not found");
+      const existing = new Set(theme.symbols);
+      const fresh = a.tickers.filter(t => !existing.has(t));
+      if (fresh.length === 0) {
+        toast.info("All proposed tickers are already in this theme.");
+        setAddedKeys(prev => new Set(prev).add(key));
+        return;
+      }
+      const rows = fresh.map(t => ({ theme_id: theme.id, ticker_symbol: t }));
+      const { error: tErr } = await supabase.from("theme_tickers").insert(rows);
+      if (tErr) throw tErr;
+      setAddedKeys(prev => new Set(prev).add(key));
+      toast.success(`Added ${fresh.length} ticker${fresh.length === 1 ? "" : "s"} to "${theme.name}".`);
+      reloadThemes();
+    } catch (e: any) {
+      const msg = e?.message?.includes("authent") || e?.code === "42501"
+        ? "Sign in required to edit themes." : (e?.message || "Failed to add tickers.");
+      toast.error(msg);
+    } finally { setAdding(null); }
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
