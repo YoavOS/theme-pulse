@@ -5,14 +5,24 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-// Tunable constants
-const BATCH_SIZE = 25;            // claim size per inner loop
-const FINNHUB_DELAY_MS = 1050;    // ~57 req/min, just under the 60/min cap
-const YAHOO_DELAY_MS = 250;
+// ============================================================
+// Speed strategy
+// ------------------------------------------------------------
+// Finnhub free tier = 60 calls/min. Previously we made 3 Finnhub
+// calls per stock (quote+profile+metric) → ~20 stocks/min cap.
+//
+// New approach uses only ONE Finnhub call per stock (profile2),
+// and gets price / avg-volume / ADR from Yahoo (no published cap).
+// We also fetch Yahoo in parallel batches to maximize throughput.
+//
+// Target: ~55 stocks/min sustained, well under the 60/min limit.
+// ============================================================
+
+const BATCH_SIZE = 50;             // claim size per inner loop
+const YAHOO_PARALLEL = 10;         // parallel Yahoo fetches
+const FINNHUB_DELAY_MS = 1100;     // ~54 req/min — safely under 60/min
 const ADR_LOOKBACK_DAYS = 14;
-// Run the worker as a long loop within a single invocation to avoid the
-// 1-tick-per-minute cron throttle. Edge functions allow ~150s; leave headroom.
-const TICK_DEADLINE_MS = 115_000;
+const TICK_DEADLINE_MS = 115_000;  // edge functions allow ~150s; leave headroom
 
 const FILTERS = {
   MIN_MARKET_CAP_M: 1000,
@@ -23,34 +33,68 @@ const FILTERS = {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-async function fetchYahooOHLC(symbol: string): Promise<{ adrPct: number | null; source: string }> {
-  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=1mo&interval=1d&includePrePost=false`;
+interface YahooStats {
+  price: number | null;
+  avgVolume10d: number | null;
+  adrPct: number | null;
+  source: string;
+}
+
+async function fetchYahooStats(symbol: string): Promise<YahooStats> {
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=2mo&interval=1d&includePrePost=false`;
   try {
     const res = await fetch(url, {
       headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" },
     });
-    if (!res.ok) return { adrPct: null, source: "yahoo_fail" };
+    if (!res.ok) return { price: null, avgVolume10d: null, adrPct: null, source: "yahoo_fail" };
     const data = await res.json();
     const result = data?.chart?.result?.[0];
     const quote = result?.indicators?.quote?.[0];
-    if (!quote) return { adrPct: null, source: "yahoo_fail" };
+    const meta = result?.meta;
+    if (!quote || !meta) return { price: null, avgVolume10d: null, adrPct: null, source: "yahoo_fail" };
+
+    const price = meta.regularMarketPrice ?? null;
     const highs: number[] = quote.high || [];
     const lows: number[] = quote.low || [];
     const closes: number[] = quote.close || [];
-    const daily: number[] = [];
-    for (let i = highs.length - 1; i >= 0 && daily.length < ADR_LOOKBACK_DAYS; i--) {
+    const vols: number[] = quote.volume || [];
+
+    // ADR over last 14 valid bars
+    const dailyAdr: number[] = [];
+    for (let i = highs.length - 1; i >= 0 && dailyAdr.length < ADR_LOOKBACK_DAYS; i--) {
       const h = highs[i], l = lows[i], c = closes[i];
       if (h != null && l != null && c != null && c > 0) {
-        daily.push(((h - l) / c) * 100);
+        dailyAdr.push(((h - l) / c) * 100);
       }
     }
-    if (daily.length < 5) return { adrPct: null, source: "yahoo_insufficient" };
-    const avg = daily.reduce((s, v) => s + v, 0) / daily.length;
-    return { adrPct: Math.round(avg * 100) / 100, source: "ohlc" };
+    const adrPct = dailyAdr.length >= 5
+      ? Math.round((dailyAdr.reduce((s, v) => s + v, 0) / dailyAdr.length) * 100) / 100
+      : null;
+
+    // 10-day avg volume from last 10 valid bars
+    const recentVols: number[] = [];
+    for (let i = vols.length - 1; i >= 0 && recentVols.length < 10; i--) {
+      if (vols[i] != null && vols[i] > 0) recentVols.push(vols[i]);
+    }
+    const avgVolume10d = recentVols.length >= 5
+      ? Math.round(recentVols.reduce((s, v) => s + v, 0) / recentVols.length)
+      : null;
+
+    return { price, avgVolume10d, adrPct, source: "yahoo" };
   } catch (e) {
-    console.error(`Yahoo OHLC error ${symbol}:`, e);
-    return { adrPct: null, source: "yahoo_error" };
+    console.error(`Yahoo error ${symbol}:`, e);
+    return { price: null, avgVolume10d: null, adrPct: null, source: "yahoo_error" };
   }
+}
+
+async function fetchYahooBatch(symbols: string[]): Promise<Record<string, YahooStats>> {
+  const out: Record<string, YahooStats> = {};
+  for (let i = 0; i < symbols.length; i += YAHOO_PARALLEL) {
+    const slice = symbols.slice(i, i + YAHOO_PARALLEL);
+    const results = await Promise.all(slice.map((s) => fetchYahooStats(s)));
+    slice.forEach((s, idx) => { out[s] = results[idx]; });
+  }
+  return out;
 }
 
 Deno.serve(async (req) => {
@@ -61,19 +105,14 @@ Deno.serve(async (req) => {
   const SB_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
   const supabase = createClient(SB_URL, SB_KEY);
 
-  // Helper: finalize this tick (recompute counters from DB; swap if done)
   async function finalize(extra: Record<string, unknown> = {}) {
-    // Always recompute counters from authoritative DB state
     await supabase.rpc("recompute_rs_scan_progress");
-
-    // Re-read to determine if scan is now complete
     const { data: prog } = await supabase
       .from("rs_scan_progress").select("status, processed, qualified, total_queued, failed")
       .eq("id", 1).maybeSingle();
 
     let swapped: number | null = null;
     if (prog?.status === "complete") {
-      // Only swap if staging has rows (RPC raises otherwise — caught silently)
       try {
         const { data: c, error } = await supabase.rpc("swap_qualified_rs_universe");
         if (error) {
@@ -85,7 +124,6 @@ Deno.serve(async (req) => {
           console.log(`Swap complete: published ${swapped} symbols to live universe`);
         }
       } catch (e) { console.error("swap rpc threw:", e); }
-      // Disable cron so it stops ticking
       try { await supabase.rpc("set_universe_cron_active", { p_active: false }); } catch (_) {}
     }
 
@@ -98,7 +136,6 @@ Deno.serve(async (req) => {
   try {
     if (!FINNHUB_KEY) throw new Error("FINNHUB_API_KEY not set");
 
-    // Advisory lock — only one tick runs at a time
     const { data: gotLock } = await supabase.rpc("try_universe_scan_lock");
     if (!gotLock) {
       return new Response(
@@ -108,15 +145,13 @@ Deno.serve(async (req) => {
     }
 
     try {
-      // Recover symbols stuck in "processing" for >5 min (dead worker)
+      // Recover dead workers
       const fiveMinAgo = new Date(Date.now() - 5 * 60_000).toISOString();
-      await supabase
-        .from("stock_scan_queue")
+      await supabase.from("stock_scan_queue")
         .update({ status: "pending" })
         .eq("status", "processing")
         .lt("enqueued_at", fiveMinAgo);
 
-      // Respect pause
       const { data: prog } = await supabase
         .from("rs_scan_progress").select("status").eq("id", 1).maybeSingle();
       if (prog?.status === "paused") {
@@ -125,93 +160,92 @@ Deno.serve(async (req) => {
 
       const tickStart = Date.now();
       let totalProcessed = 0;
+      let totalQualified = 0;
       let rateLimited = false;
 
-      // Loop: claim → process → repeat until deadline / pause / empty / 429
       while (Date.now() - tickStart < TICK_DEADLINE_MS) {
-        // Atomic claim
         const { data: claimed, error: claimErr } = await supabase.rpc("claim_scan_batch", { p_limit: BATCH_SIZE });
         if (claimErr) throw claimErr;
         const claimedSymbols: string[] = (claimed ?? []).map((r: any) => r.symbol);
-
         if (claimedSymbols.length === 0) break;
 
+        // ---- Stage 1: Yahoo in parallel for the whole batch ----
+        const yahooMap = await fetchYahooBatch(claimedSymbols);
+
+        // Pre-filter on Yahoo data so we only spend Finnhub calls on candidates
+        const skipUpdates: string[] = [];
+        const candidates: string[] = [];
         for (const sym of claimedSymbols) {
+          const y = yahooMap[sym];
+          if (!y || y.price == null || y.price < FILTERS.MIN_PRICE) { skipUpdates.push(sym); continue; }
+          if (y.adrPct == null || y.adrPct < FILTERS.MIN_ADR_PCT) { skipUpdates.push(sym); continue; }
+          if (y.avgVolume10d == null) { skipUpdates.push(sym); continue; }
+          const dollarVol = y.avgVolume10d * y.price;
+          if (dollarVol < FILTERS.MIN_DOLLAR_VOLUME) { skipUpdates.push(sym); continue; }
+          candidates.push(sym);
+        }
+
+        if (skipUpdates.length) {
+          await supabase.from("stock_scan_queue")
+            .update({ status: "skipped", processed_at: new Date().toISOString() })
+            .in("symbol", skipUpdates);
+          totalProcessed += skipUpdates.length;
+        }
+
+        // ---- Stage 2: Finnhub profile2 for candidates only (1 call/stock) ----
+        for (const sym of candidates) {
           if (Date.now() - tickStart >= TICK_DEADLINE_MS) {
-            // release this and the rest as pending
-            await supabase.from("stock_scan_queue").update({ status: "pending" }).eq("status", "processing").in("symbol", claimedSymbols);
-            return await finalize({ batch: totalProcessed, message: "deadline" });
+            const remaining = candidates.slice(candidates.indexOf(sym));
+            await supabase.from("stock_scan_queue")
+              .update({ status: "pending" })
+              .eq("status", "processing")
+              .in("symbol", remaining);
+            return await finalize({ batch: totalProcessed, qualified: totalQualified, message: "deadline" });
           }
+          const y = yahooMap[sym];
           try {
-            // Stage A: quote
-            const quoteRes = await fetch(`https://finnhub.io/api/v1/quote?symbol=${sym}&token=${FINNHUB_KEY}`);
-            if (quoteRes.status === 429) { rateLimited = true; break; }
-            const quote = await quoteRes.json();
-            const price = quote?.c;
-            await sleep(FINNHUB_DELAY_MS);
-
-            if (!price || price < FILTERS.MIN_PRICE) {
-              await supabase.from("stock_scan_queue").update({ status: "skipped", processed_at: new Date().toISOString() }).eq("symbol", sym);
-              totalProcessed++; continue;
-            }
-
-            // Stage B: profile
             const profRes = await fetch(`https://finnhub.io/api/v1/stock/profile2?symbol=${sym}&token=${FINNHUB_KEY}`);
             if (profRes.status === 429) { rateLimited = true; break; }
             const prof = await profRes.json();
-            const mcM = prof?.marketCapitalization;
             await sleep(FINNHUB_DELAY_MS);
 
             const exch = String(prof?.exchange ?? "").toUpperCase();
             const isOtc =
               /OTC|PINK|GREY|GRAY|OOTC|OTCBB|OTCMKTS|OTCPK/.test(exch) ||
               (/^[A-Z]{5}$/.test(sym) && sym.endsWith("F"));
+            const mcM = prof?.marketCapitalization;
+
             if (isOtc) {
-              await supabase.from("stock_scan_queue").update({ status: "skipped", last_error: `otc:${exch}`, processed_at: new Date().toISOString() }).eq("symbol", sym);
+              await supabase.from("stock_scan_queue")
+                .update({ status: "skipped", last_error: `otc:${exch}`, processed_at: new Date().toISOString() })
+                .eq("symbol", sym);
               totalProcessed++; continue;
             }
             if (!mcM || mcM < FILTERS.MIN_MARKET_CAP_M) {
-              await supabase.from("stock_scan_queue").update({ status: "skipped", processed_at: new Date().toISOString() }).eq("symbol", sym);
+              await supabase.from("stock_scan_queue")
+                .update({ status: "skipped", processed_at: new Date().toISOString() })
+                .eq("symbol", sym);
               totalProcessed++; continue;
             }
 
-            // Stage C: volume
-            const metRes = await fetch(`https://finnhub.io/api/v1/stock/metric?symbol=${sym}&metric=all&token=${FINNHUB_KEY}`);
-            if (metRes.status === 429) { rateLimited = true; break; }
-            const met = await metRes.json();
-            const avgVol10d = met?.metric?.["10DayAverageTradingVolume"];
-            await sleep(FINNHUB_DELAY_MS);
-
-            const sharesPerDay = avgVol10d ? avgVol10d * 1_000_000 : 0;
-            const dollarVolume = sharesPerDay * price;
-            if (!dollarVolume || dollarVolume < FILTERS.MIN_DOLLAR_VOLUME) {
-              await supabase.from("stock_scan_queue").update({ status: "skipped", processed_at: new Date().toISOString() }).eq("symbol", sym);
-              totalProcessed++; continue;
-            }
-
-            // Stage D: ADR
-            const { adrPct, source: adrSrc } = await fetchYahooOHLC(sym);
-            await sleep(YAHOO_DELAY_MS);
-            if (adrPct === null || adrPct < FILTERS.MIN_ADR_PCT) {
-              await supabase.from("stock_scan_queue").update({ status: "skipped", processed_at: new Date().toISOString() }).eq("symbol", sym);
-              totalProcessed++; continue;
-            }
-
-            // Qualified → staging
+            const dollarVolume = (y.avgVolume10d as number) * (y.price as number);
             await supabase.from("qualified_rs_universe_staging").upsert({
               symbol: sym,
               company_name: prof?.name || sym,
               sector: prof?.finnhubIndustry || null,
               market_cap: mcM,
-              current_price: price,
+              current_price: y.price,
               avg_dollar_volume: dollarVolume,
-              adr_percent: adrPct,
-              adr_source: adrSrc,
+              adr_percent: y.adrPct,
+              adr_source: y.source,
               qualified_at: new Date().toISOString(),
             }, { onConflict: "symbol" });
 
-            await supabase.from("stock_scan_queue").update({ status: "done", processed_at: new Date().toISOString() }).eq("symbol", sym);
+            await supabase.from("stock_scan_queue")
+              .update({ status: "done", processed_at: new Date().toISOString() })
+              .eq("symbol", sym);
             totalProcessed++;
+            totalQualified++;
           } catch (e) {
             console.error(`Error processing ${sym}:`, e);
             await supabase.from("stock_scan_queue")
@@ -221,21 +255,20 @@ Deno.serve(async (req) => {
           }
         }
 
-        // Release any symbols still in "processing" from this claim
-        await supabase
-          .from("stock_scan_queue")
+        // Any leftover "processing" rows from this claim → release
+        await supabase.from("stock_scan_queue")
           .update({ status: "pending" })
           .eq("status", "processing")
           .in("symbol", claimedSymbols);
 
         if (rateLimited) {
-          console.log("Rate limited — pausing 60s before next claim");
+          console.log("Rate limited — pausing 60s");
           await sleep(60_000);
           rateLimited = false;
         }
       }
 
-      return await finalize({ batch: totalProcessed });
+      return await finalize({ batch: totalProcessed, qualified: totalQualified });
     } finally {
       try { await supabase.rpc("release_universe_scan_lock"); } catch (_) {}
     }
