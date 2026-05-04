@@ -78,9 +78,12 @@ export default function ThemeDistributionModal({
   const [expanded, setExpanded] = useState<string | null>(null);
 
   const [suggesting, setSuggesting] = useState(false);
-  const [suggestions, setSuggestions] = useState<Suggestion[] | null>(null);
+  const [suggestions, setSuggestions] = useState<NewThemeSuggestion[] | null>(null);
+  const [additions, setAdditions] = useState<ThemeAddition[] | null>(null);
   const [creating, setCreating] = useState<string | null>(null);
   const [created, setCreated] = useState<Set<string>>(new Set());
+  const [adding, setAdding] = useState<string | null>(null);
+  const [addedKeys, setAddedKeys] = useState<Set<string>>(new Set());
 
   // Apply filters → sort by RS → top N
   const filteredStocks = useMemo(() => {
