@@ -51,8 +51,13 @@ interface Slice {
   isUnassigned?: boolean;
 }
 
-interface Suggestion {
+interface NewThemeSuggestion {
   theme_name: string;
+  rationale: string;
+  tickers: string[];
+}
+interface ThemeAddition {
+  existing_theme: string;
   rationale: string;
   tickers: string[];
 }
