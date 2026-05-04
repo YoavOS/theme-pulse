@@ -516,6 +516,9 @@ export default function ThemeDistributionModal({
 
             {suggestions && suggestions.length > 0 && (
               <div className="space-y-2 animate-fade-in">
+                <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                  New Themes
+                </div>
                 {suggestions.map((s) => {
                   const isCreated = created.has(s.theme_name);
                   const isCreating = creating === s.theme_name;
@@ -539,6 +542,41 @@ export default function ThemeDistributionModal({
                       >
                         {isCreating ? <Loader2 size={11} className="animate-spin" /> : isCreated ? <Check size={11} /> : <Plus size={11} />}
                         {isCreated ? "Added to Dashboard" : isCreating ? "Creating…" : "Create & Add to Dashboard"}
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {additions && additions.length > 0 && (
+              <div className="space-y-2 animate-fade-in">
+                <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                  Add to Existing Themes
+                </div>
+                {additions.map((a) => {
+                  const isAdded = addedKeys.has(a.existing_theme);
+                  const isAdding = adding === a.existing_theme;
+                  return (
+                    <div key={a.existing_theme} className="rounded-lg border border-border bg-card p-3">
+                      <div className="mb-1 text-sm font-semibold text-foreground">→ {a.existing_theme}</div>
+                      <div className="mb-2 text-[11px] italic text-muted-foreground">{a.rationale}</div>
+                      <div className="mb-2 flex flex-wrap gap-1">
+                        {a.tickers.map(t => (
+                          <span key={t} className="rounded bg-muted/40 px-1.5 py-0.5 font-mono text-[10px] text-foreground">{t}</span>
+                        ))}
+                      </div>
+                      <button
+                        onClick={() => handleAddToExisting(a)}
+                        disabled={isAdding || isAdded}
+                        className={`inline-flex w-full items-center justify-center gap-1.5 rounded-md border px-2 py-1.5 text-[11px] font-medium transition-colors ${
+                          isAdded
+                            ? "border-[hsl(160,70%,50%)]/40 bg-[hsl(160,70%,50%)]/10 text-[hsl(160,70%,50%)]"
+                            : "border-primary/50 bg-primary/10 text-primary hover:bg-primary/20"
+                        } disabled:cursor-not-allowed disabled:opacity-60`}
+                      >
+                        {isAdding ? <Loader2 size={11} className="animate-spin" /> : isAdded ? <Check size={11} /> : <Plus size={11} />}
+                        {isAdded ? "Added" : isAdding ? "Adding…" : `Add ${a.tickers.length} to "${a.existing_theme}"`}
                       </button>
                     </div>
                   );
