@@ -20,8 +20,8 @@ const corsHeaders = {
 
 const BATCH_SIZE = 50;             // claim size per inner loop
 const YAHOO_PARALLEL = 10;         // parallel Yahoo fetches
-const FINNHUB_DELAY_MS = 1100;     // ~54 req/min — safely under 60/min
-const ADR_LOOKBACK_DAYS = 14;
+const FINNHUB_DELAY_MS = 1200;     // ~50 req/min — safe target under 60/min cap
+const ADR_LOOKBACK_DAYS = 14;      // ~10 trading days of data
 const TICK_DEADLINE_MS = 115_000;  // edge functions allow ~150s; leave headroom
 
 const FILTERS = {

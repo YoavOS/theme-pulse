@@ -51,8 +51,13 @@ interface Slice {
   isUnassigned?: boolean;
 }
 
-interface Suggestion {
+interface NewThemeSuggestion {
   theme_name: string;
+  rationale: string;
+  tickers: string[];
+}
+interface ThemeAddition {
+  existing_theme: string;
   rationale: string;
   tickers: string[];
 }
@@ -73,9 +78,12 @@ export default function ThemeDistributionModal({
   const [expanded, setExpanded] = useState<string | null>(null);
 
   const [suggesting, setSuggesting] = useState(false);
-  const [suggestions, setSuggestions] = useState<Suggestion[] | null>(null);
+  const [suggestions, setSuggestions] = useState<NewThemeSuggestion[] | null>(null);
+  const [additions, setAdditions] = useState<ThemeAddition[] | null>(null);
   const [creating, setCreating] = useState<string | null>(null);
   const [created, setCreated] = useState<Set<string>>(new Set());
+  const [adding, setAdding] = useState<string | null>(null);
+  const [addedKeys, setAddedKeys] = useState<Set<string>>(new Set());
 
   // Apply filters → sort by RS → top N
   const filteredStocks = useMemo(() => {
@@ -174,10 +182,13 @@ export default function ThemeDistributionModal({
 
   const handleSuggest = async () => {
     if (unassignedSymbols.length < 3) { toast.info("Not enough unassigned tickers for AI suggestions."); return; }
-    setSuggesting(true); setSuggestions(null);
+    setSuggesting(true); setSuggestions(null); setAdditions(null);
     try {
       const payload = {
-        existingThemes: curated.map(c => c.name),
+        existingThemes: curated.map(c => ({
+          name: c.name,
+          sampleTickers: c.symbols.slice(0, 12),
+        })),
         unassigned: unassignedSymbols.slice(0, 200).map(sym => {
           const s = stockMap.get(sym);
           return { symbol: sym, company: s?.companyName ?? null, sector: s?.sector ?? null };
@@ -186,17 +197,22 @@ export default function ThemeDistributionModal({
       const { data, error } = await supabase.functions.invoke("suggest-themes-from-tickers", { body: payload });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
-      const list: Suggestion[] = Array.isArray(data?.suggestions) ? data.suggestions : [];
-      setSuggestions(list);
-      if (list.length === 0) toast.info(data?.note || "AI could not find coherent new themes.");
-      else toast.success(`AI proposed ${list.length} new theme${list.length === 1 ? "" : "s"}.`);
+      const newList: NewThemeSuggestion[] = Array.isArray(data?.new_themes)
+        ? data.new_themes
+        : (Array.isArray(data?.suggestions) ? data.suggestions : []);
+      const addList: ThemeAddition[] = Array.isArray(data?.theme_additions) ? data.theme_additions : [];
+      setSuggestions(newList);
+      setAdditions(addList);
+      const total = newList.length + addList.length;
+      if (total === 0) toast.info(data?.note || "AI could not find coherent suggestions.");
+      else toast.success(`AI proposed ${newList.length} new theme${newList.length === 1 ? "" : "s"} and ${addList.length} addition${addList.length === 1 ? "" : "s"}.`);
     } catch (e) {
       console.error("suggest-themes error:", e);
       toast.error(e instanceof Error ? e.message : "Failed to fetch AI suggestions.");
     } finally { setSuggesting(false); }
   };
 
-  const handleCreate = async (s: Suggestion) => {
+  const handleCreate = async (s: NewThemeSuggestion) => {
     setCreating(s.theme_name);
     try {
       const { data: themeRow, error: insErr } = await supabase
@@ -213,6 +229,32 @@ export default function ThemeDistributionModal({
         ? "Sign in required to add themes." : (e?.message || "Failed to create theme.");
       toast.error(msg);
     } finally { setCreating(null); }
+  };
+
+  const handleAddToExisting = async (a: ThemeAddition) => {
+    const key = a.existing_theme;
+    setAdding(key);
+    try {
+      const theme = curated.find(c => c.name.toLowerCase() === a.existing_theme.toLowerCase());
+      if (!theme) throw new Error("Theme not found");
+      const existing = new Set(theme.symbols);
+      const fresh = a.tickers.filter(t => !existing.has(t));
+      if (fresh.length === 0) {
+        toast.info("All proposed tickers are already in this theme.");
+        setAddedKeys(prev => new Set(prev).add(key));
+        return;
+      }
+      const rows = fresh.map(t => ({ theme_id: theme.id, ticker_symbol: t }));
+      const { error: tErr } = await supabase.from("theme_tickers").insert(rows);
+      if (tErr) throw tErr;
+      setAddedKeys(prev => new Set(prev).add(key));
+      toast.success(`Added ${fresh.length} ticker${fresh.length === 1 ? "" : "s"} to "${theme.name}".`);
+      reloadThemes();
+    } catch (e: any) {
+      const msg = e?.message?.includes("authent") || e?.code === "42501"
+        ? "Sign in required to edit themes." : (e?.message || "Failed to add tickers.");
+      toast.error(msg);
+    } finally { setAdding(null); }
   };
 
   return (
@@ -474,6 +516,9 @@ export default function ThemeDistributionModal({
 
             {suggestions && suggestions.length > 0 && (
               <div className="space-y-2 animate-fade-in">
+                <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                  New Themes
+                </div>
                 {suggestions.map((s) => {
                   const isCreated = created.has(s.theme_name);
                   const isCreating = creating === s.theme_name;
@@ -497,6 +542,41 @@ export default function ThemeDistributionModal({
                       >
                         {isCreating ? <Loader2 size={11} className="animate-spin" /> : isCreated ? <Check size={11} /> : <Plus size={11} />}
                         {isCreated ? "Added to Dashboard" : isCreating ? "Creating…" : "Create & Add to Dashboard"}
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {additions && additions.length > 0 && (
+              <div className="space-y-2 animate-fade-in">
+                <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                  Add to Existing Themes
+                </div>
+                {additions.map((a) => {
+                  const isAdded = addedKeys.has(a.existing_theme);
+                  const isAdding = adding === a.existing_theme;
+                  return (
+                    <div key={a.existing_theme} className="rounded-lg border border-border bg-card p-3">
+                      <div className="mb-1 text-sm font-semibold text-foreground">→ {a.existing_theme}</div>
+                      <div className="mb-2 text-[11px] italic text-muted-foreground">{a.rationale}</div>
+                      <div className="mb-2 flex flex-wrap gap-1">
+                        {a.tickers.map(t => (
+                          <span key={t} className="rounded bg-muted/40 px-1.5 py-0.5 font-mono text-[10px] text-foreground">{t}</span>
+                        ))}
+                      </div>
+                      <button
+                        onClick={() => handleAddToExisting(a)}
+                        disabled={isAdding || isAdded}
+                        className={`inline-flex w-full items-center justify-center gap-1.5 rounded-md border px-2 py-1.5 text-[11px] font-medium transition-colors ${
+                          isAdded
+                            ? "border-[hsl(160,70%,50%)]/40 bg-[hsl(160,70%,50%)]/10 text-[hsl(160,70%,50%)]"
+                            : "border-primary/50 bg-primary/10 text-primary hover:bg-primary/20"
+                        } disabled:cursor-not-allowed disabled:opacity-60`}
+                      >
+                        {isAdding ? <Loader2 size={11} className="animate-spin" /> : isAdded ? <Check size={11} /> : <Plus size={11} />}
+                        {isAdded ? "Added" : isAdding ? "Adding…" : `Add ${a.tickers.length} to "${a.existing_theme}"`}
                       </button>
                     </div>
                   );
