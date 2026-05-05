@@ -31,6 +31,9 @@ import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/comp
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import HelpButton from "@/components/HelpButton";
 import { gicsForIndustry } from "@/lib/sectorTaxonomy";
+import IntradayThemeChart from "@/components/live/IntradayThemeChart";
+import { LineChart as LineChartIcon } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 // ───────────────────────── helpers ─────────────────────────
 
@@ -643,6 +646,7 @@ export default function LiveExecution() {
   const { tickers: watchTickers, add: addWatch, remove: removeWatch, has: hasWatch } = useLiveWatchlist();
 
   const [input, setInput] = useState("");
+  const [showIntraday, setShowIntraday] = useState(false);
   const [activeSymbol, setActiveSymbol] = useState<string | null>(null);
   const [benchmark, setBenchmark] = useState<BenchmarkSymbol>("SPY");
   const [whyTopic, setWhyTopic] = useState<WhyTopic | null>(null);
@@ -1633,6 +1637,17 @@ export default function LiveExecution() {
                       ? "Finding peers…"
                       : ""}
                   </span>
+                  {combinedThemePeers.length > 0 && (
+                    <Button
+                      variant={showIntraday ? "secondary" : "outline"}
+                      size="sm"
+                      className="h-7 gap-1.5 px-2.5 text-xs"
+                      onClick={() => setShowIntraday((v) => !v)}
+                    >
+                      <LineChartIcon size={13} />
+                      {showIntraday ? "Hide Intraday Graph" : "Show Intraday Theme Performance"}
+                    </Button>
+                  )}
                 </div>
                 <p className="mb-4 text-base leading-relaxed text-muted-foreground">
                   Specific theme peers for <span className="font-mono font-bold text-foreground">{snapshot.symbol}</span>{" "}
@@ -1642,13 +1657,27 @@ export default function LiveExecution() {
                 </p>
 
                 {combinedThemePeers.length > 0 ? (
-                  <ThemeTickersTable
-                    peers={combinedThemePeers}
-                    activeSymbol={activeSymbol}
-                    snapshotChangePct={snapshot.quote.changePct}
-                    ratingOverall={themeRatingOverall}
-                    onPick={(sym) => { setInput(sym); submit(sym); }}
-                  />
+                  <>
+                    <ThemeTickersTable
+                      peers={combinedThemePeers}
+                      activeSymbol={activeSymbol}
+                      snapshotChangePct={snapshot.quote.changePct}
+                      ratingOverall={themeRatingOverall}
+                      onPick={(sym) => { setInput(sym); submit(sym); }}
+                    />
+                    {showIntraday && (
+                      <IntradayThemeChart
+                        symbols={[
+                          ...(activeSymbol ? [activeSymbol] : []),
+                          ...combinedThemePeers
+                            .map((p) => p.symbol)
+                            .filter((s) => s !== activeSymbol),
+                        ].slice(0, 8)}
+                        themeLabel={themeDisplayLabel ?? null}
+                        onClose={() => setShowIntraday(false)}
+                      />
+                    )}
+                  </>
                 ) : aiLoading ? (
                   <div className="flex items-center gap-2 rounded-md border border-border/30 bg-muted/10 p-4 text-base text-muted-foreground">
                     <Loader2 size={14} className="animate-spin" /> AI is identifying the theme and peers…
