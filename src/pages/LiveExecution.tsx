@@ -1637,6 +1637,17 @@ export default function LiveExecution() {
                       ? "Finding peers…"
                       : ""}
                   </span>
+                  {combinedThemePeers.length > 0 && (
+                    <Button
+                      variant={showIntraday ? "secondary" : "outline"}
+                      size="sm"
+                      className="h-7 gap-1.5 px-2.5 text-xs"
+                      onClick={() => setShowIntraday((v) => !v)}
+                    >
+                      <LineChartIcon size={13} />
+                      {showIntraday ? "Hide Intraday Graph" : "Show Intraday Theme Performance"}
+                    </Button>
+                  )}
                 </div>
                 <p className="mb-4 text-base leading-relaxed text-muted-foreground">
                   Specific theme peers for <span className="font-mono font-bold text-foreground">{snapshot.symbol}</span>{" "}
