@@ -31,6 +31,9 @@ import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/comp
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import HelpButton from "@/components/HelpButton";
 import { gicsForIndustry } from "@/lib/sectorTaxonomy";
+import IntradayThemeChart from "@/components/live/IntradayThemeChart";
+import { LineChart as LineChartIcon } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 // ───────────────────────── helpers ─────────────────────────
 
