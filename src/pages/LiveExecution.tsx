@@ -1657,13 +1657,27 @@ export default function LiveExecution() {
                 </p>
 
                 {combinedThemePeers.length > 0 ? (
-                  <ThemeTickersTable
-                    peers={combinedThemePeers}
-                    activeSymbol={activeSymbol}
-                    snapshotChangePct={snapshot.quote.changePct}
-                    ratingOverall={themeRatingOverall}
-                    onPick={(sym) => { setInput(sym); submit(sym); }}
-                  />
+                  <>
+                    <ThemeTickersTable
+                      peers={combinedThemePeers}
+                      activeSymbol={activeSymbol}
+                      snapshotChangePct={snapshot.quote.changePct}
+                      ratingOverall={themeRatingOverall}
+                      onPick={(sym) => { setInput(sym); submit(sym); }}
+                    />
+                    {showIntraday && (
+                      <IntradayThemeChart
+                        symbols={[
+                          ...(activeSymbol ? [activeSymbol] : []),
+                          ...combinedThemePeers
+                            .map((p) => p.symbol)
+                            .filter((s) => s !== activeSymbol),
+                        ].slice(0, 8)}
+                        themeLabel={themeDisplayLabel ?? null}
+                        onClose={() => setShowIntraday(false)}
+                      />
+                    )}
+                  </>
                 ) : aiLoading ? (
                   <div className="flex items-center gap-2 rounded-md border border-border/30 bg-muted/10 p-4 text-base text-muted-foreground">
                     <Loader2 size={14} className="animate-spin" /> AI is identifying the theme and peers…
