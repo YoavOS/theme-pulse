@@ -646,6 +646,7 @@ export default function LiveExecution() {
   const { tickers: watchTickers, add: addWatch, remove: removeWatch, has: hasWatch } = useLiveWatchlist();
 
   const [input, setInput] = useState("");
+  const [showIntraday, setShowIntraday] = useState(false);
   const [activeSymbol, setActiveSymbol] = useState<string | null>(null);
   const [benchmark, setBenchmark] = useState<BenchmarkSymbol>("SPY");
   const [whyTopic, setWhyTopic] = useState<WhyTopic | null>(null);
