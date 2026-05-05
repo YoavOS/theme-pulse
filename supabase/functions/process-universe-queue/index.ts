@@ -122,6 +122,24 @@ Deno.serve(async (req) => {
         } else {
           swapped = Number(c ?? 0);
           console.log(`Swap complete: published ${swapped} symbols to live universe`);
+          // Kick off RS recalculation across the new universe (fire-and-forget loop)
+          (async () => {
+            try {
+              let offset = 0;
+              for (let i = 0; i < 500; i++) {
+                const { data: rsData, error: rsErr } = await supabase.functions.invoke(
+                  "calculate-rs-scores",
+                  { body: { offset } },
+                );
+                if (rsErr) { console.error("calculate-rs-scores invoke error:", rsErr); break; }
+                if (rsData?.done || rsData?.next_offset == null) {
+                  console.log(`RS recalc complete: ${rsData?.processed}/${rsData?.total}`);
+                  break;
+                }
+                offset = rsData.next_offset;
+              }
+            } catch (e) { console.error("RS recalc loop error:", e); }
+          })();
         }
       } catch (e) { console.error("swap rpc threw:", e); }
       try { await supabase.rpc("set_universe_cron_active", { p_active: false }); } catch (_) {}
