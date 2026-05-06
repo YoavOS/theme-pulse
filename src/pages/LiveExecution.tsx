@@ -1665,18 +1665,17 @@ export default function LiveExecution() {
                       ratingOverall={themeRatingOverall}
                       onPick={(sym) => { setInput(sym); submit(sym); }}
                     />
-                    {showIntraday && (
-                      <IntradayThemeChart
-                        symbols={[
-                          ...(activeSymbol ? [activeSymbol] : []),
-                          ...combinedThemePeers
-                            .map((p) => p.symbol)
-                            .filter((s) => s !== activeSymbol),
-                        ].slice(0, 8)}
-                        themeLabel={themeDisplayLabel ?? null}
-                        onClose={() => setShowIntraday(false)}
-                      />
-                    )}
+                    <IntradayThemeChart
+                      open={showIntraday}
+                      symbols={[
+                        ...(activeSymbol ? [activeSymbol] : []),
+                        ...combinedThemePeers
+                          .map((p) => p.symbol)
+                          .filter((s) => s !== activeSymbol),
+                      ].slice(0, 7)}
+                      themeLabel={themeDisplayLabel ?? null}
+                      onClose={() => setShowIntraday(false)}
+                    />
                   </>
                 ) : aiLoading ? (
                   <div className="flex items-center gap-2 rounded-md border border-border/30 bg-muted/10 p-4 text-base text-muted-foreground">
