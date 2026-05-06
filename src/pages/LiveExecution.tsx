@@ -32,6 +32,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import HelpButton from "@/components/HelpButton";
 import { gicsForIndustry } from "@/lib/sectorTaxonomy";
 import IntradayThemeChart from "@/components/live/IntradayThemeChart";
+import First30MinVolumeCard from "@/components/live/First30MinVolumeCard";
 import { LineChart as LineChartIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -1588,6 +1589,9 @@ export default function LiveExecution() {
                     </span>
                   </div>
                 )}
+
+                {/* First 30 Min Volume Strength */}
+                {activeSymbol && <First30MinVolumeCard symbol={activeSymbol} />}
 
                 {/* Entry & Rotation Signals box removed per latest cleanup. */}
               </div>
