@@ -1590,6 +1590,9 @@ export default function LiveExecution() {
                   </div>
                 )}
 
+                {/* First 30 Min Volume Strength */}
+                {activeSymbol && <First30MinVolumeCard symbol={activeSymbol} />}
+
                 {/* Entry & Rotation Signals box removed per latest cleanup. */}
               </div>
             )}
