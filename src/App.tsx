@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/hooks/useAuth";
 import { WatchlistProvider } from "@/hooks/useWatchlistContext";
 import Index from "./pages/Index";
+import ThemeToggle from "@/components/ThemeToggle";
 import Login from "./pages/Login";
 import Admin from "./pages/Admin";
 import EodHistory from "./pages/EodHistory";
@@ -26,6 +27,7 @@ const App = () => (
           <Toaster />
           <Sonner />
           <BrowserRouter>
+            <ThemeToggle />
             <Routes>
               <Route path="/" element={<Index />} />
               <Route path="/login" element={<Login />} />
