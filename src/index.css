@@ -5,7 +5,68 @@
 @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@400;500;600;700;800;900&family=DM+Mono:wght@400;500&family=Syne:wght@400;500;600;700;800&display=swap');
 
 @layer base {
+  html {
+    transition: background-color 0.2s ease, color 0.2s ease;
+  }
+
   :root {
+    /* Light mode (default when .dark is absent) */
+    --background: 210 20% 98%;
+    --foreground: 220 25% 12%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 220 25% 12%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 220 25% 12%;
+
+    --primary: 180 70% 35%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 210 16% 93%;
+    --secondary-foreground: 220 25% 18%;
+
+    --muted: 210 16% 94%;
+    --muted-foreground: 220 10% 40%;
+
+    --accent: 200 80% 45%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 72% 50%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 220 13% 88%;
+    --input: 220 13% 90%;
+    --ring: 180 70% 35%;
+
+    --radius: 0.625rem;
+
+    --gain-strong: 152 70% 38%;
+    --gain-medium: 152 60% 42%;
+    --gain-mild: 152 50% 55%;
+    --loss-mild: 0 70% 55%;
+    --loss-strong: 0 72% 45%;
+
+    --surface-elevated: 0 0% 100%;
+    --surface-hover: 210 16% 95%;
+    --bar-track: 220 13% 88%;
+    --bar-green: 152 65% 42%;
+    --bar-red: 0 72% 51%;
+
+    --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+    --font-sans: 'Inter', system-ui, sans-serif;
+
+    --sidebar-background: 210 20% 98%;
+    --sidebar-foreground: 220 25% 18%;
+    --sidebar-primary: 180 70% 35%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 210 16% 93%;
+    --sidebar-accent-foreground: 220 25% 18%;
+    --sidebar-border: 220 13% 88%;
+    --sidebar-ring: 180 70% 35%;
+  }
+
+  .dark {
     --background: 220 20% 7%;
     --foreground: 210 20% 95%;
 
