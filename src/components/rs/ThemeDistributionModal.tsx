@@ -543,7 +543,10 @@ export default function ThemeDistributionModal({
                   const isCreating = creating === s.theme_name;
                   return (
                     <div key={s.theme_name} className="rounded-lg border border-border bg-card p-3">
-                      <div className="mb-1 text-sm font-semibold text-foreground">{s.theme_name}</div>
+                      <div className="mb-1 flex items-start justify-between gap-2">
+                        <div className="text-sm font-semibold text-foreground">{s.theme_name}</div>
+                        <CohesionBadge score={s.cohesion_score} />
+                      </div>
                       <div className="mb-2 text-[11px] italic text-muted-foreground">{s.rationale}</div>
                       <div className="mb-2 flex flex-wrap gap-1">
                         {s.tickers.map(t => (
