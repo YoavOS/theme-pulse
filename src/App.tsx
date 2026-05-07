@@ -15,6 +15,7 @@ import ThemeIntelligence from "./pages/ThemeIntelligence";
 import Watchlist from "./pages/Watchlist";
 import RsAlpha from "./pages/RsAlpha";
 import LiveExecution from "./pages/LiveExecution";
+import Earnings from "./pages/Earnings";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
