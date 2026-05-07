@@ -581,7 +581,10 @@ export default function ThemeDistributionModal({
                   const isAdding = adding === a.existing_theme;
                   return (
                     <div key={a.existing_theme} className="rounded-lg border border-border bg-card p-3">
-                      <div className="mb-1 text-sm font-semibold text-foreground">→ {a.existing_theme}</div>
+                      <div className="mb-1 flex items-start justify-between gap-2">
+                        <div className="text-sm font-semibold text-foreground">→ {a.existing_theme}</div>
+                        <CohesionBadge score={a.cohesion_score} />
+                      </div>
                       <div className="mb-2 text-[11px] italic text-muted-foreground">{a.rationale}</div>
                       <div className="mb-2 flex flex-wrap gap-1">
                         {a.tickers.map(t => (
