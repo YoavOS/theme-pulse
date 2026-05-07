@@ -15,6 +15,7 @@ import ThemeIntelligence from "./pages/ThemeIntelligence";
 import Watchlist from "./pages/Watchlist";
 import RsAlpha from "./pages/RsAlpha";
 import LiveExecution from "./pages/LiveExecution";
+import Earnings from "./pages/Earnings";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -38,6 +39,7 @@ const App = () => (
               <Route path="/watchlist" element={<Watchlist />} />
               <Route path="/rs-alpha" element={<RsAlpha />} />
               <Route path="/live" element={<LiveExecution />} />
+              <Route path="/earnings" element={<Earnings />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </BrowserRouter>

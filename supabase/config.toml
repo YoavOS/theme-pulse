@@ -38,3 +38,9 @@ verify_jwt = false
 
 [functions.calculate-rs-scores]
 verify_jwt = false
+
+[functions.earnings-calendar]
+verify_jwt = false
+
+[functions.earnings-historical-gappers]
+verify_jwt = false
