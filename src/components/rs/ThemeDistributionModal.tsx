@@ -55,11 +55,30 @@ interface NewThemeSuggestion {
   theme_name: string;
   rationale: string;
   tickers: string[];
+  cohesion_score?: number;
 }
 interface ThemeAddition {
   existing_theme: string;
   rationale: string;
   tickers: string[];
+  cohesion_score?: number;
+}
+
+function CohesionBadge({ score }: { score?: number }) {
+  if (score === undefined || score === null) return null;
+  const tone =
+    score >= 9 ? "border-[hsl(160,70%,50%)]/50 bg-[hsl(160,70%,50%)]/15 text-[hsl(160,80%,55%)]"
+    : score >= 7 ? "border-[hsl(180,70%,50%)]/40 bg-[hsl(180,70%,50%)]/10 text-[hsl(180,80%,60%)]"
+    : "border-[hsl(40,80%,55%)]/40 bg-[hsl(40,80%,55%)]/10 text-[hsl(40,90%,60%)]";
+  const label = score >= 9 ? "Excellent" : score >= 7 ? "Strong" : "Mixed";
+  return (
+    <span
+      className={`inline-flex items-center gap-1 rounded border px-1.5 py-0.5 font-mono text-[10px] font-semibold ${tone}`}
+      title={`Groq cohesion self-score: ${score}/10 — ${label}`}
+    >
+      Cohesion {score}/10
+    </span>
+  );
 }
 
 export default function ThemeDistributionModal({
