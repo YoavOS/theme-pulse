@@ -39,6 +39,7 @@ const App = () => (
               <Route path="/watchlist" element={<Watchlist />} />
               <Route path="/rs-alpha" element={<RsAlpha />} />
               <Route path="/live" element={<LiveExecution />} />
+              <Route path="/earnings" element={<Earnings />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </BrowserRouter>
