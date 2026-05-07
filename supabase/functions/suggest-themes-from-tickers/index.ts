@@ -1,7 +1,8 @@
 // Groq-powered: given unassigned tickers + the user's existing curated themes
 // (with their current members), propose:
-//   1. NEW themes (with ≥3 unassigned tickers each)
-//   2. ADDITIONS of unassigned tickers to existing curated themes
+//   1. Stocks to ADD to existing curated themes (FIRST PRIORITY)
+//   2. NEW tightly-cohesive themes (≥5 unassigned tickers each, with cohesion score)
+// Each suggestion includes a self-evaluated cohesion score (1-10).
 // Returns: { new_themes: [...], theme_additions: [...] }
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
@@ -12,32 +13,42 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-const SYSTEM_PROMPT = `You are an equity research assistant that organizes stocks into investable thematic groupings.
+const SYSTEM_PROMPT = `You are an elite equity research analyst grouping stocks into HIGHLY SPECIFIC, TRADABLE thematic baskets.
 
 You will receive:
-1. EXISTING curated themes (each with name + a sample of current member tickers).
-2. UNASSIGNED stocks (ticker, company name, sector) that aren't yet in any curated theme.
+1. EXISTING curated themes (each with name + current member tickers).
+2. UNASSIGNED stocks (ticker, company, sector) not yet in any curated theme.
 
-Your job — do BOTH of the following:
+Follow this process IN ORDER:
 
-A) Propose NEW themes that group similar unassigned stocks.
-   - Each new theme MUST contain at least 3 unassigned tickers.
-   - Use short narrative names (2-5 words) distinct from existing themes.
-   - A ticker may appear in only ONE new theme.
+STEP 1 — FIRST PRIORITY: Try to fit each unassigned stock into an EXISTING curated theme.
+   • Use exact theme name matches.
+   • Only suggest a fit when the stock's core business clearly belongs in that theme (sub-industry, catalyst, business model).
+   • Skip stocks that don't truly fit anywhere.
 
-B) Recommend ADDITIONS of unassigned stocks into EXISTING themes.
-   - Only when a stock clearly belongs in that theme based on its business.
-   - The existing theme name MUST exactly match one provided.
-   - A ticker may appear in either ONE new theme OR ONE addition — never both.
-   - Skip stocks that don't clearly fit anywhere.
+STEP 2 — Group remaining unassigned stocks into NEW themes only when justified:
+   • Theme names must be SPECIFIC and TRADABLE — e.g. "AI Data Center Cooling", "GLP-1 Obesity Drugs", "Power Electronics & Grid Components".
+   • REJECT generic names like "Technology", "Industrials", "Healthcare", "Growth Stocks".
+   • Each new theme MUST contain ≥ 5 unassigned tickers with strong internal similarity (sub-industry, catalyst, business model, revenue driver).
+
+STEP 3 — COHESION SELF-CHECK: For every group you propose (new themes AND additions), evaluate cohesion 1-10:
+   • 9-10 = nearly identical business / catalyst (e.g. all GPU foundries, all GLP-1 manufacturers)
+   • 7-8 = same sub-industry, very tight
+   • 5-6 = related but mixed — usually NOT acceptable
+   • <5 = too broad, REJECT
+   ONLY include suggestions where cohesion ≥ 7. If a group scores below 7, either split it into tighter sub-themes or move tickers to additions.
+
+STEP 4 — Each suggestion needs a SHORT justification (1 sentence) explaining the shared catalyst/business.
+
+A ticker may appear in only ONE place (one new theme OR one addition). Skip tickers that don't fit anywhere with high cohesion.
 
 Respond ONLY with valid JSON in this exact shape:
 {
   "new_themes": [
-    {"theme_name": "string", "rationale": "1 short sentence", "tickers": ["TICK1","TICK2","TICK3"]}
+    {"theme_name": "string", "rationale": "1 sentence", "cohesion_score": 9, "tickers": ["TICK1","TICK2","TICK3","TICK4","TICK5"]}
   ],
   "theme_additions": [
-    {"existing_theme": "exact existing name", "rationale": "1 short sentence", "tickers": ["TICK4","TICK5"]}
+    {"existing_theme": "exact existing name", "rationale": "1 sentence", "cohesion_score": 8, "tickers": ["TICK6","TICK7"]}
   ]
 }`;
 
@@ -58,8 +69,6 @@ serve(async (req) => {
     let payload: any;
     try { payload = await req.json(); } catch { return jsonResponse({ error: "Invalid JSON" }, 400); }
 
-    // Backwards compatible: existingThemes may be a string[] (names only) OR
-    // an array of { name, sampleTickers? }
     const rawThemes = Array.isArray(payload?.existingThemes) ? payload.existingThemes : [];
     const existingThemes: { name: string; sampleTickers: string[] }[] = rawThemes.map((t: any) => {
       if (typeof t === "string") return { name: t, sampleTickers: [] };
@@ -74,11 +83,10 @@ serve(async (req) => {
     const unassigned: { symbol: string; company?: string | null; sector?: string | null }[] =
       Array.isArray(payload?.unassigned) ? payload.unassigned : [];
 
-    if (unassigned.length < 3) {
+    if (unassigned.length < 5) {
       return jsonResponse({
-        new_themes: [], theme_additions: [],
-        suggestions: [], // legacy alias
-        note: "Not enough unassigned tickers to suggest themes.",
+        new_themes: [], theme_additions: [], suggestions: [],
+        note: "Not enough unassigned tickers (need ≥5) to propose themes.",
       });
     }
 
@@ -96,9 +104,9 @@ serve(async (req) => {
       : "(none)";
 
     const userMessage =
-      `EXISTING THEMES (name + sample tickers):\n${themesBlock}\n\n` +
+      `EXISTING CURATED THEMES (name + current members — first try to fit unassigned stocks here):\n${themesBlock}\n\n` +
       `UNASSIGNED STOCKS (ticker | company | sector):\n${tickerLines}\n\n` +
-      `Now produce both new_themes and theme_additions per the rules.`;
+      `Apply the 4-step process. Remember: additions FIRST, then new themes only with cohesion ≥ 7 and ≥ 5 tickers each.`;
 
     let response: Response;
     try {
@@ -107,8 +115,8 @@ serve(async (req) => {
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${GROQ_API_KEY}` },
         body: JSON.stringify({
           model: "llama-3.3-70b-versatile",
-          max_tokens: 2000,
-          temperature: 0.3,
+          max_tokens: 2500,
+          temperature: 0.2,
           response_format: { type: "json_object" },
           messages: [
             { role: "system", content: SYSTEM_PROMPT },
@@ -144,7 +152,13 @@ serve(async (req) => {
     const themeNameSet = new Set(existingThemes.map(t => t.name.toLowerCase()));
     const seen = new Set<string>();
 
-    // Sanitize new themes
+    const clampScore = (n: any): number => {
+      const v = Number(n);
+      if (!Number.isFinite(v)) return 7;
+      return Math.max(1, Math.min(10, Math.round(v)));
+    };
+
+    // Sanitize new themes — strict gates: cohesion ≥7 AND ≥5 tickers
     const rawNew = Array.isArray(parsed.new_themes)
       ? parsed.new_themes
       : (Array.isArray(parsed.suggestions) ? parsed.suggestions : []);
@@ -157,14 +171,18 @@ serve(async (req) => {
         return {
           theme_name: String(s?.theme_name || "").trim(),
           rationale: String(s?.rationale || "").trim(),
+          cohesion_score: clampScore(s?.cohesion_score),
           tickers,
         };
       })
       .filter((s: any) =>
-        s.theme_name && !themeNameSet.has(s.theme_name.toLowerCase()) && s.tickers.length >= 3
+        s.theme_name &&
+        !themeNameSet.has(s.theme_name.toLowerCase()) &&
+        s.tickers.length >= 5 &&
+        s.cohesion_score >= 7
       );
 
-    // Sanitize additions to existing themes
+    // Sanitize additions — cohesion ≥7
     const rawAdds = Array.isArray(parsed.theme_additions) ? parsed.theme_additions : [];
     const theme_additions = rawAdds
       .map((a: any) => {
@@ -183,15 +201,16 @@ serve(async (req) => {
         return {
           existing_theme: matchedTheme.name,
           rationale: String(a?.rationale || "").trim(),
+          cohesion_score: clampScore(a?.cohesion_score),
           tickers,
         };
       })
-      .filter((a: any) => a && a.tickers.length >= 1);
+      .filter((a: any) => a && a.tickers.length >= 1 && a.cohesion_score >= 7);
 
     return jsonResponse({
       new_themes,
       theme_additions,
-      suggestions: new_themes, // legacy alias for old callers
+      suggestions: new_themes,
     });
   } catch (e) {
     console.error("Unhandled:", e);
