@@ -80,7 +80,7 @@ async function fetchFmpFallback(date: string, apiKey: string): Promise<any[]> {
 // FMP single-symbol quote — sequential with throttle to avoid 402 burst limits.
 async function fetchFmpQuotes(symbols: string[], apiKey: string): Promise<Map<string, { price: number | null; prevClose: number | null; marketCap: number | null; name: string | null }>> {
   const out = new Map();
-  const concurrency = 2;
+  const concurrency = 1;
   let idx = 0;
   async function worker() {
     while (idx < symbols.length) {
@@ -111,7 +111,7 @@ async function fetchFmpQuotes(symbols: string[], apiKey: string): Promise<Map<st
           break;
         } catch (e) { console.error(`FMP quote ${sym} threw`, e); break; }
       }
-      await sleep(220);
+      await sleep(380);
     }
   }
   await Promise.all(Array.from({ length: concurrency }, () => worker()));

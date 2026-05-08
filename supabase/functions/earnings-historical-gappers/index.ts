@@ -97,7 +97,7 @@ async function fetchYahooDaily(symbol: string, fromTs: number, toTs: number): Pr
 
 async function fetchFmpProfiles(symbols: string[], apiKey: string): Promise<Map<string, { mcap: number | null; sector: string | null; name: string | null }>> {
   const out = new Map();
-  const concurrency = 2;
+  const concurrency = 1;
   let idx = 0;
   async function worker() {
     while (idx < symbols.length) {
@@ -126,7 +126,7 @@ async function fetchFmpProfiles(symbols: string[], apiKey: string): Promise<Map<
           break;
         } catch { break; }
       }
-      await sleep(220);
+      await sleep(380);
     }
   }
   await Promise.all(Array.from({ length: concurrency }, () => worker()));
