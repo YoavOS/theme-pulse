@@ -210,11 +210,15 @@ serve(async (req) => {
     const profiles = await fetchYahooProfile(allSymbols);
 
     // Pre-filter by market cap when known
-    const eligible = reports.filter(r => {
+    let eligible = reports.filter(r => {
       const p = profiles.get(r.symbol);
       if (!p || p.mcap === null) return false;
       return p.mcap >= minMarketCap;
     });
+
+    // Hard cap to prevent edge function timeout (sort by mcap desc, keep top 250 reports)
+    eligible.sort((a, b) => (profiles.get(b.symbol)?.mcap ?? 0) - (profiles.get(a.symbol)?.mcap ?? 0));
+    eligible = eligible.slice(0, 250);
 
     // For each eligible report, fetch a small daily candle window and compute gap.
     // Group by symbol to minimize Yahoo calls.
