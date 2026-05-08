@@ -97,25 +97,36 @@ async function fetchYahooDaily(symbol: string, fromTs: number, toTs: number): Pr
 
 async function fetchFmpProfiles(symbols: string[], apiKey: string): Promise<Map<string, { mcap: number | null; sector: string | null; name: string | null }>> {
   const out = new Map();
-  const concurrency = 6;
+  const concurrency = 2;
   let idx = 0;
   async function worker() {
     while (idx < symbols.length) {
       const i = idx++;
       const sym = symbols[i];
-      try {
-        const url = `https://financialmodelingprep.com/stable/profile?symbol=${encodeURIComponent(sym)}&apikey=${apiKey}`;
-        const res = await fetch(url, { headers: { "User-Agent": UA } });
-        if (!res.ok) continue;
-        const arr = await res.json().catch(() => null);
-        const p = Array.isArray(arr) ? arr[0] : null;
-        if (!p) continue;
-        out.set(sym.toUpperCase(), {
-          mcap: Number.isFinite(p.marketCap) ? p.marketCap : null,
-          sector: p.sector ?? p.industry ?? null,
-          name: p.companyName ?? p.name ?? null,
-        });
-      } catch {}
+      let attempt = 0;
+      while (attempt < 2) {
+        try {
+          const url = `https://financialmodelingprep.com/stable/profile?symbol=${encodeURIComponent(sym)}&apikey=${apiKey}`;
+          const res = await fetch(url, { headers: { "User-Agent": UA } });
+          if (res.status === 402 || res.status === 429) {
+            attempt++;
+            await sleep(700 + Math.random() * 400);
+            continue;
+          }
+          if (!res.ok) break;
+          const arr = await res.json().catch(() => null);
+          const p = Array.isArray(arr) ? arr[0] : null;
+          if (p) {
+            out.set(sym.toUpperCase(), {
+              mcap: Number.isFinite(p.marketCap) ? p.marketCap : null,
+              sector: p.sector ?? p.industry ?? null,
+              name: p.companyName ?? p.name ?? null,
+            });
+          }
+          break;
+        } catch { break; }
+      }
+      await sleep(220);
     }
   }
   await Promise.all(Array.from({ length: concurrency }, () => worker()));
