@@ -117,11 +117,7 @@ async function fetchFmpQuotes(symbols: string[], apiKey: string): Promise<Map<st
   await Promise.all(Array.from({ length: concurrency }, () => worker()));
   return out;
 }
-    }
-  }
-  await Promise.all(Array.from({ length: concurrency }, () => worker()));
-  return out;
-}
+
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
