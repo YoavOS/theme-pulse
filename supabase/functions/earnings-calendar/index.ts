@@ -77,32 +77,46 @@ async function fetchFmpFallback(date: string, apiKey: string): Promise<any[]> {
   return arr.filter((r: any) => String(r?.date || "").slice(0, 10) === date);
 }
 
-// FMP single-symbol quote (bulk endpoint requires premium). Concurrent fan-out.
+// FMP single-symbol quote — sequential with throttle to avoid 402 burst limits.
 async function fetchFmpQuotes(symbols: string[], apiKey: string): Promise<Map<string, { price: number | null; prevClose: number | null; marketCap: number | null; name: string | null }>> {
   const out = new Map();
-  const concurrency = 6;
+  const concurrency = 2;
   let idx = 0;
   async function worker() {
     while (idx < symbols.length) {
       const i = idx++;
       const sym = symbols[i];
-      try {
-        const url = `https://financialmodelingprep.com/stable/quote?symbol=${encodeURIComponent(sym)}&apikey=${apiKey}`;
-        const res = await fetch(url, { headers: { "User-Agent": UA } });
-        if (!res.ok) {
-          console.error(`FMP quote ${sym} ${res.status}`);
-          continue;
-        }
-        const arr = await res.json().catch(() => null);
-        const q = Array.isArray(arr) ? arr[0] : null;
-        if (!q) { console.error(`FMP quote ${sym} empty`); continue; }
-        out.set(sym.toUpperCase(), {
-          price: Number.isFinite(q.price) ? q.price : null,
-          prevClose: Number.isFinite(q.previousClose) ? q.previousClose : null,
-          marketCap: Number.isFinite(q.marketCap) ? q.marketCap : null,
-          name: q.name ?? null,
-        });
-      } catch (e) { console.error(`FMP quote ${sym} threw`, e); }
+      let attempt = 0;
+      while (attempt < 2) {
+        try {
+          const url = `https://financialmodelingprep.com/stable/quote?symbol=${encodeURIComponent(sym)}&apikey=${apiKey}`;
+          const res = await fetch(url, { headers: { "User-Agent": UA } });
+          if (res.status === 402 || res.status === 429) {
+            // burst-limit: backoff and retry once
+            attempt++;
+            await sleep(700 + Math.random() * 400);
+            continue;
+          }
+          if (!res.ok) { console.error(`FMP quote ${sym} ${res.status}`); break; }
+          const arr = await res.json().catch(() => null);
+          const q = Array.isArray(arr) ? arr[0] : null;
+          if (q) {
+            out.set(sym.toUpperCase(), {
+              price: Number.isFinite(q.price) ? q.price : null,
+              prevClose: Number.isFinite(q.previousClose) ? q.previousClose : null,
+              marketCap: Number.isFinite(q.marketCap) ? q.marketCap : null,
+              name: q.name ?? null,
+            });
+          }
+          break;
+        } catch (e) { console.error(`FMP quote ${sym} threw`, e); break; }
+      }
+      await sleep(220);
+    }
+  }
+  await Promise.all(Array.from({ length: concurrency }, () => worker()));
+  return out;
+}
     }
   }
   await Promise.all(Array.from({ length: concurrency }, () => worker()));
