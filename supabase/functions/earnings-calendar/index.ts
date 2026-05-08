@@ -77,29 +77,32 @@ async function fetchFmpFallback(date: string, apiKey: string): Promise<any[]> {
   return arr.filter((r: any) => String(r?.date || "").slice(0, 10) === date);
 }
 
-async function fetchYahooQuotes(symbols: string[]): Promise<Map<string, { price: number | null; prevClose: number | null; marketCap: number | null; name: string | null }>> {
+// FMP single-symbol quote (bulk endpoint requires premium). Concurrent fan-out.
+async function fetchFmpQuotes(symbols: string[], apiKey: string): Promise<Map<string, { price: number | null; prevClose: number | null; marketCap: number | null; name: string | null }>> {
   const out = new Map();
-  if (symbols.length === 0) return out;
-  for (let i = 0; i < symbols.length; i += 50) {
-    const chunk = symbols.slice(i, i + 50);
-    const url = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${encodeURIComponent(chunk.join(","))}`;
-    try {
-      const res = await fetch(url, { headers: { "User-Agent": UA, "Accept": "application/json" } });
-      if (!res.ok) { await sleep(300); continue; }
-      const j = await res.json();
-      for (const q of (j?.quoteResponse?.result ?? [])) {
-        out.set(String(q.symbol).toUpperCase(), {
-          price: Number.isFinite(q.regularMarketPrice) ? q.regularMarketPrice : (Number.isFinite(q.postMarketPrice) ? q.postMarketPrice : null),
-          prevClose: Number.isFinite(q.regularMarketPreviousClose) ? q.regularMarketPreviousClose : null,
+  const concurrency = 6;
+  let idx = 0;
+  async function worker() {
+    while (idx < symbols.length) {
+      const i = idx++;
+      const sym = symbols[i];
+      try {
+        const url = `https://financialmodelingprep.com/stable/quote?symbol=${encodeURIComponent(sym)}&apikey=${apiKey}`;
+        const res = await fetch(url, { headers: { "User-Agent": UA } });
+        if (!res.ok) continue;
+        const arr = await res.json().catch(() => null);
+        const q = Array.isArray(arr) ? arr[0] : null;
+        if (!q) continue;
+        out.set(sym.toUpperCase(), {
+          price: Number.isFinite(q.price) ? q.price : null,
+          prevClose: Number.isFinite(q.previousClose) ? q.previousClose : null,
           marketCap: Number.isFinite(q.marketCap) ? q.marketCap : null,
-          name: q.shortName || q.longName || null,
+          name: q.name ?? null,
         });
-      }
-    } catch (e) {
-      console.error("Yahoo quote chunk failed:", e);
+      } catch (e) { /* swallow */ }
     }
-    await sleep(150);
   }
+  await Promise.all(Array.from({ length: concurrency }, () => worker()));
   return out;
 }
 
