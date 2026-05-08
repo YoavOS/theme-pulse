@@ -153,8 +153,10 @@ serve(async (req) => {
 
   try {
     const FINNHUB_API_KEY = Deno.env.get("FINNHUB_API_KEY");
+    const FMP_API_KEY = Deno.env.get("FMP_API_KEY");
     const GROQ_API_KEY = Deno.env.get("GROQ_API_KEY");
     if (!FINNHUB_API_KEY) return jsonResponse({ error: "FINNHUB_API_KEY not configured" }, 500);
+    if (!FMP_API_KEY) return jsonResponse({ error: "FMP_API_KEY not configured" }, 500);
 
     let body: any = {};
     try { body = await req.json(); } catch {}
