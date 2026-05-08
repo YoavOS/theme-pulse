@@ -147,9 +147,9 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
   try {
-    const FMP_API_KEY = Deno.env.get("FMP_API_KEY");
+    const FINNHUB_API_KEY = Deno.env.get("FINNHUB_API_KEY");
     const GROQ_API_KEY = Deno.env.get("GROQ_API_KEY");
-    if (!FMP_API_KEY) return jsonResponse({ error: "FMP_API_KEY not configured" }, 500);
+    if (!FINNHUB_API_KEY) return jsonResponse({ error: "FINNHUB_API_KEY not configured" }, 500);
 
     let body: any = {};
     try { body = await req.json(); } catch {}
@@ -168,17 +168,17 @@ serve(async (req) => {
     const fromStr = isoDate(from);
     const toStr = isoDate(today);
 
-    const cal = await fetchFmpCalendarRange(fromStr, toStr, FMP_API_KEY);
+    const cal = await fetchFinnhubRange(fromStr, toStr, FINNHUB_API_KEY);
 
-    const mapTime = (t: any): Gapper["reportTime"] => {
-      const s = String(t || "").toLowerCase();
-      if (s.includes("bmo") || s.includes("before")) return "BMO";
-      if (s.includes("amc") || s.includes("after")) return "AMC";
-      if (s.includes("dmh") || s.includes("during")) return "DMH";
+    const mapTime = (h: any): Gapper["reportTime"] => {
+      const s = String(h || "").toLowerCase();
+      if (s === "bmo" || s.includes("before")) return "BMO";
+      if (s === "amc" || s.includes("after")) return "AMC";
+      if (s === "dmh" || s.includes("during")) return "DMH";
       return null;
     };
 
-    // Filter calendar: skip OTC dotted symbols, optional universe, dedupe (symbol|date)
+    // Filter calendar
     const seen = new Set<string>();
     const universe = universeFilter ? new Set(universeFilter) : null;
     const reports = cal
@@ -186,11 +186,11 @@ serve(async (req) => {
       .map((r: any) => ({
         symbol: String(r.symbol).toUpperCase(),
         date: String(r.date || "").slice(0, 10),
-        time: mapTime(r.time),
-        epsEst: Number.isFinite(r.epsEstimated) ? Number(r.epsEstimated) : null,
-        epsAct: Number.isFinite(r.eps) ? Number(r.eps) : null,
-        revEst: Number.isFinite(r.revenueEstimated) ? Number(r.revenueEstimated) : null,
-        revAct: Number.isFinite(r.revenue) ? Number(r.revenue) : null,
+        time: mapTime(r.hour),
+        epsEst: Number.isFinite(r.epsEstimate) ? Number(r.epsEstimate) : null,
+        epsAct: Number.isFinite(r.epsActual) ? Number(r.epsActual) : null,
+        revEst: Number.isFinite(r.revenueEstimate) ? Number(r.revenueEstimate) : null,
+        revAct: Number.isFinite(r.revenueActual) ? Number(r.revenueActual) : null,
       }))
       .filter((r) => {
         if (!r.date) return false;
