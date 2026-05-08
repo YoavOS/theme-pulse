@@ -214,7 +214,7 @@ serve(async (req) => {
 
     // Get profiles for market-cap filter
     const allSymbols = Array.from(new Set(reports.map(r => r.symbol)));
-    const profiles = await fetchYahooProfile(allSymbols);
+    const profiles = await fetchFmpProfiles(allSymbols, FMP_API_KEY);
 
     // Pre-filter by market cap when known
     let eligible = reports.filter(r => {
