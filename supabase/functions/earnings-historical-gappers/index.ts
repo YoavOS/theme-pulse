@@ -95,25 +95,30 @@ async function fetchYahooDaily(symbol: string, fromTs: number, toTs: number): Pr
   } catch { return []; }
 }
 
-async function fetchYahooProfile(symbols: string[]): Promise<Map<string, { mcap: number | null; sector: string | null; name: string | null }>> {
+async function fetchFmpProfiles(symbols: string[], apiKey: string): Promise<Map<string, { mcap: number | null; sector: string | null; name: string | null }>> {
   const out = new Map();
-  for (let i = 0; i < symbols.length; i += 50) {
-    const chunk = symbols.slice(i, i + 50);
-    try {
-      const url = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${encodeURIComponent(chunk.join(","))}`;
-      const res = await fetch(url, { headers: { "User-Agent": UA } });
-      if (!res.ok) continue;
-      const j = await res.json();
-      for (const q of (j?.quoteResponse?.result ?? [])) {
-        out.set(String(q.symbol).toUpperCase(), {
-          mcap: Number.isFinite(q.marketCap) ? q.marketCap : null,
-          sector: q.sector ?? null,
-          name: q.shortName || q.longName || null,
+  const concurrency = 6;
+  let idx = 0;
+  async function worker() {
+    while (idx < symbols.length) {
+      const i = idx++;
+      const sym = symbols[i];
+      try {
+        const url = `https://financialmodelingprep.com/stable/profile?symbol=${encodeURIComponent(sym)}&apikey=${apiKey}`;
+        const res = await fetch(url, { headers: { "User-Agent": UA } });
+        if (!res.ok) continue;
+        const arr = await res.json().catch(() => null);
+        const p = Array.isArray(arr) ? arr[0] : null;
+        if (!p) continue;
+        out.set(sym.toUpperCase(), {
+          mcap: Number.isFinite(p.marketCap) ? p.marketCap : null,
+          sector: p.sector ?? p.industry ?? null,
+          name: p.companyName ?? p.name ?? null,
         });
-      }
-    } catch (e) { console.error("profile chunk failed", e); }
-    await sleep(200);
+      } catch {}
+    }
   }
+  await Promise.all(Array.from({ length: concurrency }, () => worker()));
   return out;
 }
 
