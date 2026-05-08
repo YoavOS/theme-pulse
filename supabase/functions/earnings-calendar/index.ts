@@ -175,7 +175,7 @@ serve(async (req) => {
 
     // Cap symbol count for Yahoo enrichment
     const symbolsToEnrich = rows.map(r => r.symbol).slice(0, 300);
-    const quotes = await fetchYahooQuotes(symbolsToEnrich);
+    const quotes = FMP_API_KEY ? await fetchFmpQuotes(symbolsToEnrich, FMP_API_KEY) : new Map();
 
     rows = rows.map(r => {
       const q = quotes.get(r.symbol);
