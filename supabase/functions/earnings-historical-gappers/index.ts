@@ -45,15 +45,31 @@ function isoDate(d: Date): string {
   return d.toISOString().slice(0, 10);
 }
 
-async function fetchFmpCalendarRange(from: string, to: string, apiKey: string): Promise<any[]> {
-  const url = `https://financialmodelingprep.com/api/v3/earning_calendar?from=${from}&to=${to}&apikey=${apiKey}`;
-  const res = await fetch(url, { headers: { "User-Agent": UA } });
-  if (!res.ok) {
-    console.error("FMP range error", res.status);
-    return [];
+// Finnhub returns up to ~1500 rows per call → chunk into 30-day windows.
+async function fetchFinnhubRange(from: string, to: string, apiKey: string): Promise<any[]> {
+  const fromD = new Date(from + "T00:00:00Z");
+  const toD = new Date(to + "T00:00:00Z");
+  const out: any[] = [];
+  let cur = new Date(fromD);
+  while (cur <= toD) {
+    const chunkEnd = new Date(Math.min(cur.getTime() + 29 * 86400_000, toD.getTime()));
+    const f = cur.toISOString().slice(0, 10);
+    const t = chunkEnd.toISOString().slice(0, 10);
+    try {
+      const url = `https://finnhub.io/api/v1/calendar/earnings?from=${f}&to=${t}&token=${apiKey}`;
+      const res = await fetch(url, { headers: { "User-Agent": UA } });
+      if (res.ok) {
+        const j = await res.json().catch(() => null);
+        const arr = Array.isArray(j?.earningsCalendar) ? j.earningsCalendar : [];
+        out.push(...arr);
+      } else {
+        console.error("Finnhub range error", res.status);
+      }
+    } catch (e) { console.error("Finnhub fetch failed", e); }
+    cur = new Date(chunkEnd.getTime() + 86400_000);
+    await sleep(200);
   }
-  const data = await res.json();
-  return Array.isArray(data) ? data : [];
+  return out;
 }
 
 interface DailyBar { date: string; open: number; close: number; }
@@ -79,25 +95,41 @@ async function fetchYahooDaily(symbol: string, fromTs: number, toTs: number): Pr
   } catch { return []; }
 }
 
-async function fetchYahooProfile(symbols: string[]): Promise<Map<string, { mcap: number | null; sector: string | null; name: string | null }>> {
+async function fetchFmpProfiles(symbols: string[], apiKey: string): Promise<Map<string, { mcap: number | null; sector: string | null; name: string | null }>> {
   const out = new Map();
-  for (let i = 0; i < symbols.length; i += 50) {
-    const chunk = symbols.slice(i, i + 50);
-    try {
-      const url = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${encodeURIComponent(chunk.join(","))}`;
-      const res = await fetch(url, { headers: { "User-Agent": UA } });
-      if (!res.ok) continue;
-      const j = await res.json();
-      for (const q of (j?.quoteResponse?.result ?? [])) {
-        out.set(String(q.symbol).toUpperCase(), {
-          mcap: Number.isFinite(q.marketCap) ? q.marketCap : null,
-          sector: q.sector ?? null,
-          name: q.shortName || q.longName || null,
-        });
+  const concurrency = 1;
+  let idx = 0;
+  async function worker() {
+    while (idx < symbols.length) {
+      const i = idx++;
+      const sym = symbols[i];
+      let attempt = 0;
+      while (attempt < 2) {
+        try {
+          const url = `https://financialmodelingprep.com/stable/profile?symbol=${encodeURIComponent(sym)}&apikey=${apiKey}`;
+          const res = await fetch(url, { headers: { "User-Agent": UA } });
+          if (res.status === 402 || res.status === 429) {
+            attempt++;
+            await sleep(700 + Math.random() * 400);
+            continue;
+          }
+          if (!res.ok) break;
+          const arr = await res.json().catch(() => null);
+          const p = Array.isArray(arr) ? arr[0] : null;
+          if (p) {
+            out.set(sym.toUpperCase(), {
+              mcap: Number.isFinite(p.marketCap) ? p.marketCap : null,
+              sector: p.sector ?? p.industry ?? null,
+              name: p.companyName ?? p.name ?? null,
+            });
+          }
+          break;
+        } catch { break; }
       }
-    } catch (e) { console.error("profile chunk failed", e); }
-    await sleep(200);
+      await sleep(380);
+    }
   }
+  await Promise.all(Array.from({ length: concurrency }, () => worker()));
   return out;
 }
 
@@ -131,8 +163,10 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
   try {
+    const FINNHUB_API_KEY = Deno.env.get("FINNHUB_API_KEY");
     const FMP_API_KEY = Deno.env.get("FMP_API_KEY");
     const GROQ_API_KEY = Deno.env.get("GROQ_API_KEY");
+    if (!FINNHUB_API_KEY) return jsonResponse({ error: "FINNHUB_API_KEY not configured" }, 500);
     if (!FMP_API_KEY) return jsonResponse({ error: "FMP_API_KEY not configured" }, 500);
 
     let body: any = {};
@@ -152,17 +186,17 @@ serve(async (req) => {
     const fromStr = isoDate(from);
     const toStr = isoDate(today);
 
-    const cal = await fetchFmpCalendarRange(fromStr, toStr, FMP_API_KEY);
+    const cal = await fetchFinnhubRange(fromStr, toStr, FINNHUB_API_KEY);
 
-    const mapTime = (t: any): Gapper["reportTime"] => {
-      const s = String(t || "").toLowerCase();
-      if (s.includes("bmo") || s.includes("before")) return "BMO";
-      if (s.includes("amc") || s.includes("after")) return "AMC";
-      if (s.includes("dmh") || s.includes("during")) return "DMH";
+    const mapTime = (h: any): Gapper["reportTime"] => {
+      const s = String(h || "").toLowerCase();
+      if (s === "bmo" || s.includes("before")) return "BMO";
+      if (s === "amc" || s.includes("after")) return "AMC";
+      if (s === "dmh" || s.includes("during")) return "DMH";
       return null;
     };
 
-    // Filter calendar: skip OTC dotted symbols, optional universe, dedupe (symbol|date)
+    // Filter calendar
     const seen = new Set<string>();
     const universe = universeFilter ? new Set(universeFilter) : null;
     const reports = cal
@@ -170,11 +204,11 @@ serve(async (req) => {
       .map((r: any) => ({
         symbol: String(r.symbol).toUpperCase(),
         date: String(r.date || "").slice(0, 10),
-        time: mapTime(r.time),
-        epsEst: Number.isFinite(r.epsEstimated) ? Number(r.epsEstimated) : null,
-        epsAct: Number.isFinite(r.eps) ? Number(r.eps) : null,
-        revEst: Number.isFinite(r.revenueEstimated) ? Number(r.revenueEstimated) : null,
-        revAct: Number.isFinite(r.revenue) ? Number(r.revenue) : null,
+        time: mapTime(r.hour),
+        epsEst: Number.isFinite(r.epsEstimate) ? Number(r.epsEstimate) : null,
+        epsAct: Number.isFinite(r.epsActual) ? Number(r.epsActual) : null,
+        revEst: Number.isFinite(r.revenueEstimate) ? Number(r.revenueEstimate) : null,
+        revAct: Number.isFinite(r.revenueActual) ? Number(r.revenueActual) : null,
       }))
       .filter((r) => {
         if (!r.date) return false;
@@ -191,14 +225,18 @@ serve(async (req) => {
 
     // Get profiles for market-cap filter
     const allSymbols = Array.from(new Set(reports.map(r => r.symbol)));
-    const profiles = await fetchYahooProfile(allSymbols);
+    const profiles = await fetchFmpProfiles(allSymbols, FMP_API_KEY);
 
     // Pre-filter by market cap when known
-    const eligible = reports.filter(r => {
+    let eligible = reports.filter(r => {
       const p = profiles.get(r.symbol);
       if (!p || p.mcap === null) return false;
       return p.mcap >= minMarketCap;
     });
+
+    // Hard cap to prevent edge function timeout (sort by mcap desc, keep top 250 reports)
+    eligible.sort((a, b) => (profiles.get(b.symbol)?.mcap ?? 0) - (profiles.get(a.symbol)?.mcap ?? 0));
+    eligible = eligible.slice(0, 250);
 
     // For each eligible report, fetch a small daily candle window and compute gap.
     // Group by symbol to minimize Yahoo calls.
