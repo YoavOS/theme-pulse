@@ -89,17 +89,20 @@ async function fetchFmpQuotes(symbols: string[], apiKey: string): Promise<Map<st
       try {
         const url = `https://financialmodelingprep.com/stable/quote?symbol=${encodeURIComponent(sym)}&apikey=${apiKey}`;
         const res = await fetch(url, { headers: { "User-Agent": UA } });
-        if (!res.ok) continue;
+        if (!res.ok) {
+          console.error(`FMP quote ${sym} ${res.status}`);
+          continue;
+        }
         const arr = await res.json().catch(() => null);
         const q = Array.isArray(arr) ? arr[0] : null;
-        if (!q) continue;
+        if (!q) { console.error(`FMP quote ${sym} empty`); continue; }
         out.set(sym.toUpperCase(), {
           price: Number.isFinite(q.price) ? q.price : null,
           prevClose: Number.isFinite(q.previousClose) ? q.previousClose : null,
           marketCap: Number.isFinite(q.marketCap) ? q.marketCap : null,
           name: q.name ?? null,
         });
-      } catch (e) { /* swallow */ }
+      } catch (e) { console.error(`FMP quote ${sym} threw`, e); }
     }
   }
   await Promise.all(Array.from({ length: concurrency }, () => worker()));
