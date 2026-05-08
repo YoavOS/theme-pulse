@@ -45,15 +45,31 @@ function isoDate(d: Date): string {
   return d.toISOString().slice(0, 10);
 }
 
-async function fetchFmpCalendarRange(from: string, to: string, apiKey: string): Promise<any[]> {
-  const url = `https://financialmodelingprep.com/api/v3/earning_calendar?from=${from}&to=${to}&apikey=${apiKey}`;
-  const res = await fetch(url, { headers: { "User-Agent": UA } });
-  if (!res.ok) {
-    console.error("FMP range error", res.status);
-    return [];
+// Finnhub returns up to ~1500 rows per call → chunk into 30-day windows.
+async function fetchFinnhubRange(from: string, to: string, apiKey: string): Promise<any[]> {
+  const fromD = new Date(from + "T00:00:00Z");
+  const toD = new Date(to + "T00:00:00Z");
+  const out: any[] = [];
+  let cur = new Date(fromD);
+  while (cur <= toD) {
+    const chunkEnd = new Date(Math.min(cur.getTime() + 29 * 86400_000, toD.getTime()));
+    const f = cur.toISOString().slice(0, 10);
+    const t = chunkEnd.toISOString().slice(0, 10);
+    try {
+      const url = `https://finnhub.io/api/v1/calendar/earnings?from=${f}&to=${t}&token=${apiKey}`;
+      const res = await fetch(url, { headers: { "User-Agent": UA } });
+      if (res.ok) {
+        const j = await res.json().catch(() => null);
+        const arr = Array.isArray(j?.earningsCalendar) ? j.earningsCalendar : [];
+        out.push(...arr);
+      } else {
+        console.error("Finnhub range error", res.status);
+      }
+    } catch (e) { console.error("Finnhub fetch failed", e); }
+    cur = new Date(chunkEnd.getTime() + 86400_000);
+    await sleep(200);
   }
-  const data = await res.json();
-  return Array.isArray(data) ? data : [];
+  return out;
 }
 
 interface DailyBar { date: string; open: number; close: number; }
