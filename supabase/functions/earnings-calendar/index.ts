@@ -1,8 +1,7 @@
 // Earnings calendar — TODAY's earnings reporters with EPS estimates,
-// market cap filter, report time (BMO/AMC), and pre/after-hours gap %.
-// Data flow: FMP earnings calendar (primary) → enriched with FMP profile (mcap)
-// → Yahoo quote for current/previous close gap %.
-// Optional `universe` filter: array of allowed symbols (e.g. qualified RS universe).
+// market cap filter, report time (BMO/AMC), and current-vs-prevclose gap %.
+// Primary source: Finnhub (has BMO/AMC hour). Fallback: FMP stable endpoint.
+// Enrichment: Yahoo quote (mcap, price, prevClose, name).
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
@@ -19,7 +18,7 @@ interface EarningsRow {
   symbol: string;
   company: string | null;
   marketCap: number | null;
-  reportTime: "BMO" | "AMC" | "DMH" | null; // before-market / after-market / during
+  reportTime: "BMO" | "AMC" | "DMH" | null;
   epsEstimate: number | null;
   epsActual: number | null;
   revenueEstimate: number | null;
@@ -38,37 +37,57 @@ function jsonResponse(body: any, status = 200) {
 }
 
 function todayET(): string {
-  // Format YYYY-MM-DD in US/Eastern
-  const d = new Date();
-  const fmt = new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit" });
-  return fmt.format(d);
+  const fmt = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/New_York",
+    year: "numeric", month: "2-digit", day: "2-digit",
+  });
+  return fmt.format(new Date());
 }
 
-async function fetchFmpCalendar(date: string, apiKey: string): Promise<any[]> {
-  const url = `https://financialmodelingprep.com/api/v3/earning_calendar?from=${date}&to=${date}&apikey=${apiKey}`;
+function mapHour(h: any): EarningsRow["reportTime"] {
+  const s = String(h || "").toLowerCase();
+  if (s === "bmo" || s.includes("before")) return "BMO";
+  if (s === "amc" || s.includes("after")) return "AMC";
+  if (s === "dmh" || s.includes("during")) return "DMH";
+  return null;
+}
+
+// Finnhub primary
+async function fetchFinnhub(date: string, apiKey: string): Promise<any[]> {
+  const url = `https://finnhub.io/api/v1/calendar/earnings?from=${date}&to=${date}&token=${apiKey}`;
   const res = await fetch(url, { headers: { "User-Agent": UA } });
   if (!res.ok) {
-    console.error("FMP calendar error", res.status, await res.text());
+    console.error("Finnhub error", res.status, await res.text().catch(() => ""));
     return [];
   }
-  const data = await res.json();
-  return Array.isArray(data) ? data : [];
+  const j = await res.json().catch(() => null);
+  return Array.isArray(j?.earningsCalendar) ? j.earningsCalendar : [];
+}
+
+// FMP stable fallback (no date param — returns recent rolling window)
+async function fetchFmpFallback(date: string, apiKey: string): Promise<any[]> {
+  const url = `https://financialmodelingprep.com/stable/earnings-calendar?apikey=${apiKey}`;
+  const res = await fetch(url, { headers: { "User-Agent": UA } });
+  if (!res.ok) {
+    console.error("FMP fallback error", res.status);
+    return [];
+  }
+  const arr = await res.json().catch(() => null);
+  if (!Array.isArray(arr)) return [];
+  return arr.filter((r: any) => String(r?.date || "").slice(0, 10) === date);
 }
 
 async function fetchYahooQuotes(symbols: string[]): Promise<Map<string, { price: number | null; prevClose: number | null; marketCap: number | null; name: string | null }>> {
   const out = new Map();
   if (symbols.length === 0) return out;
-  // Yahoo allows ~50 symbols per call
-  const chunks: string[][] = [];
-  for (let i = 0; i < symbols.length; i += 50) chunks.push(symbols.slice(i, i + 50));
-  for (const chunk of chunks) {
+  for (let i = 0; i < symbols.length; i += 50) {
+    const chunk = symbols.slice(i, i + 50);
     const url = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${encodeURIComponent(chunk.join(","))}`;
     try {
       const res = await fetch(url, { headers: { "User-Agent": UA, "Accept": "application/json" } });
       if (!res.ok) { await sleep(300); continue; }
       const j = await res.json();
-      const arr = j?.quoteResponse?.result ?? [];
-      for (const q of arr) {
+      for (const q of (j?.quoteResponse?.result ?? [])) {
         out.set(String(q.symbol).toUpperCase(), {
           price: Number.isFinite(q.regularMarketPrice) ? q.regularMarketPrice : (Number.isFinite(q.postMarketPrice) ? q.postMarketPrice : null),
           prevClose: Number.isFinite(q.regularMarketPreviousClose) ? q.regularMarketPreviousClose : null,
@@ -79,7 +98,7 @@ async function fetchYahooQuotes(symbols: string[]): Promise<Map<string, { price:
     } catch (e) {
       console.error("Yahoo quote chunk failed:", e);
     }
-    await sleep(200);
+    await sleep(150);
   }
   return out;
 }
@@ -88,11 +107,11 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
   try {
+    const FINNHUB_API_KEY = Deno.env.get("FINNHUB_API_KEY");
     const FMP_API_KEY = Deno.env.get("FMP_API_KEY");
-    if (!FMP_API_KEY) return jsonResponse({ error: "FMP_API_KEY not configured" }, 500);
 
     let body: any = {};
-    try { body = await req.json(); } catch { body = {}; }
+    try { body = await req.json(); } catch {}
 
     const minMarketCap = Number(body?.minMarketCap ?? 1_000_000_000);
     const universeFilter: string[] | null = Array.isArray(body?.universe) && body.universe.length > 0
@@ -100,58 +119,77 @@ serve(async (req) => {
       : null;
     const date = String(body?.date || todayET());
 
-    const cal = await fetchFmpCalendar(date, FMP_API_KEY);
+    let raw: any[] = [];
+    let source = "none";
 
-    // Map FMP "time" field: "bmo" | "amc" | "--" | "dmh"
-    const mapTime = (t: any): EarningsRow["reportTime"] => {
-      const s = String(t || "").toLowerCase();
-      if (s.includes("bmo") || s.includes("before")) return "BMO";
-      if (s.includes("amc") || s.includes("after")) return "AMC";
-      if (s.includes("dmh") || s.includes("during")) return "DMH";
-      return null;
-    };
+    if (FINNHUB_API_KEY) {
+      raw = await fetchFinnhub(date, FINNHUB_API_KEY);
+      if (raw.length) source = "finnhub";
+    }
+    if (raw.length === 0 && FMP_API_KEY) {
+      raw = await fetchFmpFallback(date, FMP_API_KEY);
+      if (raw.length) source = "fmp_fallback";
+    }
 
-    let rows: EarningsRow[] = cal
+    // Normalize — Finnhub uses {symbol, hour, epsEstimate, epsActual, revenueEstimate, revenueActual}
+    // FMP uses {symbol, time, epsEstimated, eps, revenueEstimated, revenue}
+    let rows: EarningsRow[] = raw
       .filter((r: any) => r?.symbol && !String(r.symbol).includes("."))
-      .map((r: any) => ({
-        symbol: String(r.symbol).toUpperCase(),
-        company: null,
-        marketCap: null,
-        reportTime: mapTime(r.time),
-        epsEstimate: Number.isFinite(r.epsEstimated) ? Number(r.epsEstimated) : null,
-        epsActual: Number.isFinite(r.eps) ? Number(r.eps) : null,
-        revenueEstimate: Number.isFinite(r.revenueEstimated) ? Number(r.revenueEstimated) : null,
-        revenueActual: Number.isFinite(r.revenue) ? Number(r.revenue) : null,
-        currentPrice: null,
-        previousClose: null,
-        gapPct: null,
-        date,
-      }));
+      .map((r: any) => {
+        const epsEst = r.epsEstimate ?? r.epsEstimated;
+        const epsAct = r.epsActual ?? r.eps;
+        const revEst = r.revenueEstimate ?? r.revenueEstimated;
+        const revAct = r.revenueActual ?? r.revenue;
+        const time = r.hour !== undefined ? mapHour(r.hour) : mapHour(r.time);
+        return {
+          symbol: String(r.symbol).toUpperCase(),
+          company: null,
+          marketCap: null,
+          reportTime: time,
+          epsEstimate: Number.isFinite(epsEst) ? Number(epsEst) : null,
+          epsActual: Number.isFinite(epsAct) ? Number(epsAct) : null,
+          revenueEstimate: Number.isFinite(revEst) ? Number(revEst) : null,
+          revenueActual: Number.isFinite(revAct) ? Number(revAct) : null,
+          currentPrice: null,
+          previousClose: null,
+          gapPct: null,
+          date,
+        };
+      });
+
+    // Dedupe by symbol
+    const seen = new Set<string>();
+    rows = rows.filter(r => {
+      if (seen.has(r.symbol)) return false;
+      seen.add(r.symbol);
+      return true;
+    });
 
     if (universeFilter) {
       const set = new Set(universeFilter);
       rows = rows.filter(r => set.has(r.symbol));
     }
 
-    // Cap to a sane number for Yahoo enrichment
-    const symbols = rows.map(r => r.symbol).slice(0, 250);
-    const quotes = await fetchYahooQuotes(symbols);
+    // Cap symbol count for Yahoo enrichment
+    const symbolsToEnrich = rows.map(r => r.symbol).slice(0, 300);
+    const quotes = await fetchYahooQuotes(symbolsToEnrich);
 
     rows = rows.map(r => {
       const q = quotes.get(r.symbol);
-      const mcap = q?.marketCap ?? null;
       const px = q?.price ?? null;
       const pc = q?.prevClose ?? null;
       const gap = (px !== null && pc !== null && pc > 0)
         ? Math.round(((px - pc) / pc) * 10000) / 100
         : null;
-      return { ...r, marketCap: mcap, currentPrice: px, previousClose: pc, gapPct: gap, company: q?.name ?? null };
+      return { ...r, marketCap: q?.marketCap ?? null, currentPrice: px, previousClose: pc, gapPct: gap, company: q?.name ?? null };
     });
 
-    // Apply market-cap floor (only if we have data; keep null mcap rows out of safety)
-    const filtered = rows.filter(r => r.marketCap !== null && r.marketCap >= minMarketCap);
+    // Apply mcap floor only when we have an mcap; if all enrichments failed, keep rows and let user see them
+    const enrichedAny = rows.some(r => r.marketCap !== null);
+    const filtered = enrichedAny
+      ? rows.filter(r => r.marketCap !== null && r.marketCap >= minMarketCap)
+      : rows; // graceful fallback if Yahoo is blocked
 
-    // Sort: BMO first, then AMC, then by market cap desc
     const order = (t: EarningsRow["reportTime"]) => t === "BMO" ? 0 : t === "DMH" ? 1 : t === "AMC" ? 2 : 3;
     filtered.sort((a, b) => order(a.reportTime) - order(b.reportTime) || (b.marketCap ?? 0) - (a.marketCap ?? 0));
 
@@ -160,6 +198,8 @@ serve(async (req) => {
       total: filtered.length,
       universeFiltered: !!universeFilter,
       minMarketCap,
+      source,
+      enriched: enrichedAny,
       rows: filtered,
     });
   } catch (e) {
