@@ -196,7 +196,7 @@ serve(async (req) => {
     }
 
     // Cap symbols enriched to keep within edge function timeout (Finnhub free: 60/min)
-    const symbolsToEnrich = rows.map(r => r.symbol).slice(0, 60);
+    const symbolsToEnrich = rows.map(r => r.symbol).slice(0, 40);
     const enrichment = FINNHUB_API_KEY
       ? await enrichFinnhub(symbolsToEnrich, FINNHUB_API_KEY)
       : new Map<string, Enrichment>();
