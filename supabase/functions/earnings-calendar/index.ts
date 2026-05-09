@@ -83,39 +83,56 @@ async function fetchFinnhubQuote(sym: string, apiKey: string): Promise<{ price: 
 }
 
 async function fetchFinnhubProfile(sym: string, apiKey: string): Promise<{ marketCap: number | null; name: string | null } | null> {
-  try {
-    const url = `https://finnhub.io/api/v1/stock/profile2?symbol=${encodeURIComponent(sym)}&token=${apiKey}`;
-    const res = await fetch(url, { headers: { "User-Agent": UA } });
-    if (!res.ok) {
-      console.error(`Finnhub profile ${sym} status=${res.status}`);
-      return null;
-    }
-    const j = await res.json().catch(() => null);
-    if (!j || !j.name) {
-      console.warn(`Finnhub profile ${sym} empty payload: ${JSON.stringify(j).slice(0, 100)}`);
-      return null;
-    }
-    const mcRaw = Number(j.marketCapitalization);
-    const marketCap = Number.isFinite(mcRaw) && mcRaw > 0 ? mcRaw * 1_000_000 : null;
-    return { marketCap, name: j.name ?? null };
-  } catch (e) { console.error(`Finnhub profile ${sym}`, e); return null; }
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const url = `https://finnhub.io/api/v1/stock/profile2?symbol=${encodeURIComponent(sym)}&token=${apiKey}`;
+      const res = await fetch(url, { headers: { "User-Agent": UA } });
+      if (res.status === 429) { await sleep(1500 + Math.random() * 1000); continue; }
+      if (!res.ok) { console.error(`Finnhub profile ${sym} status=${res.status}`); return null; }
+      const j = await res.json().catch(() => null);
+      if (!j || !j.name) return null;
+      const mcRaw = Number(j.marketCapitalization);
+      const marketCap = Number.isFinite(mcRaw) && mcRaw > 0 ? mcRaw * 1_000_000 : null;
+      return { marketCap, name: j.name ?? null };
+    } catch (e) { console.error(`Finnhub profile ${sym}`, e); return null; }
+  }
+  return null;
 }
 
-async function enrichFinnhub(symbols: string[], apiKey: string): Promise<Map<string, Enrichment>> {
+// FMP fallback for profile (per-symbol)
+async function fetchFmpProfile(sym: string, apiKey: string): Promise<{ marketCap: number | null; name: string | null } | null> {
+  try {
+    const url = `https://financialmodelingprep.com/stable/profile?symbol=${encodeURIComponent(sym)}&apikey=${apiKey}`;
+    const res = await fetch(url, { headers: { "User-Agent": UA } });
+    if (!res.ok) return null;
+    const arr = await res.json().catch(() => null);
+    const p = Array.isArray(arr) ? arr[0] : null;
+    if (!p) return null;
+    return {
+      marketCap: Number.isFinite(p.marketCap) ? Number(p.marketCap) : null,
+      name: p.companyName ?? p.name ?? null,
+    };
+  } catch { return null; }
+}
+
+async function enrichFinnhub(symbols: string[], finnhubKey: string, fmpKey: string | null): Promise<Map<string, Enrichment>> {
   const out = new Map<string, Enrichment>();
-  // Sequential to stay under Finnhub free-tier 30 req/sec on profile2.
-  // With ~150ms gap between (quote, profile) pairs we do <7 req/sec safely.
   for (const sym of symbols) {
-    const q = await fetchFinnhubQuote(sym, apiKey);
-    await sleep(120);
-    const p = await fetchFinnhubProfile(sym, apiKey);
+    const q = await fetchFinnhubQuote(sym, finnhubKey);
+    await sleep(150);
+    let p = await fetchFinnhubProfile(sym, finnhubKey);
+    await sleep(150);
+    if ((!p || p.marketCap === null) && fmpKey) {
+      const fmp = await fetchFmpProfile(sym, fmpKey);
+      if (fmp) p = fmp;
+      await sleep(380);
+    }
     out.set(sym.toUpperCase(), {
       price: q?.price ?? null,
       prevClose: q?.prevClose ?? null,
       marketCap: p?.marketCap ?? null,
       name: p?.name ?? null,
     });
-    await sleep(120);
   }
   return out;
 }
