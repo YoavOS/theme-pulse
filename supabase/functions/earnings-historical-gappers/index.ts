@@ -72,56 +72,53 @@ async function fetchFinnhubRange(from: string, to: string, apiKey: string): Prom
 }
 
 // ───────── Finnhub profile2 enrichment ─────────
-async function fetchFinnhubProfiles(symbols: string[], apiKey: string): Promise<Map<string, { mcap: number | null; sector: string | null; name: string | null }>> {
-  const out = new Map();
-  const concurrency = 3;
-  let idx = 0;
-  async function worker() {
-    while (idx < symbols.length) {
-      const i = idx++;
-      const sym = symbols[i];
-      try {
-        const url = `https://finnhub.io/api/v1/stock/profile2?symbol=${encodeURIComponent(sym)}&token=${apiKey}`;
-        const res = await fetch(url, { headers: { "User-Agent": UA } });
-        if (res.ok) {
-          const j = await res.json().catch(() => null);
-          if (j && j.name) {
-            const mcRaw = Number(j.marketCapitalization);
-            out.set(sym.toUpperCase(), {
-              mcap: Number.isFinite(mcRaw) && mcRaw > 0 ? mcRaw * 1_000_000 : null,
-              sector: j.finnhubIndustry ?? j.sector ?? null,
-              name: j.name ?? null,
-            });
-          }
-        }
-      } catch (e) { console.error(`Finnhub profile ${sym}`, e); }
-      await sleep(120);
-    }
+async function fetchFinnhubProfileOne(sym: string, apiKey: string): Promise<{ mcap: number | null; sector: string | null; name: string | null } | null> {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const url = `https://finnhub.io/api/v1/stock/profile2?symbol=${encodeURIComponent(sym)}&token=${apiKey}`;
+      const res = await fetch(url, { headers: { "User-Agent": UA } });
+      if (res.status === 429) { await sleep(1500 + Math.random() * 1000); continue; }
+      if (!res.ok) return null;
+      const j = await res.json().catch(() => null);
+      if (!j || !j.name) return null;
+      const mcRaw = Number(j.marketCapitalization);
+      return {
+        mcap: Number.isFinite(mcRaw) && mcRaw > 0 ? mcRaw * 1_000_000 : null,
+        sector: j.finnhubIndustry ?? j.sector ?? null,
+        name: j.name ?? null,
+      };
+    } catch { return null; }
   }
-  await Promise.all(Array.from({ length: concurrency }, () => worker()));
-  return out;
+  return null;
 }
 
-// FMP profile fallback (used only if Finnhub returns nothing)
-async function fetchFmpProfilesFallback(symbols: string[], apiKey: string): Promise<Map<string, { mcap: number | null; sector: string | null; name: string | null }>> {
+async function fetchFmpProfileOne(sym: string, apiKey: string): Promise<{ mcap: number | null; sector: string | null; name: string | null } | null> {
+  try {
+    const url = `https://financialmodelingprep.com/stable/profile?symbol=${encodeURIComponent(sym)}&apikey=${apiKey}`;
+    const res = await fetch(url, { headers: { "User-Agent": UA } });
+    if (!res.ok) return null;
+    const arr = await res.json().catch(() => null);
+    const p = Array.isArray(arr) ? arr[0] : null;
+    if (!p) return null;
+    return {
+      mcap: Number.isFinite(p.marketCap) ? Number(p.marketCap) : null,
+      sector: p.sector ?? p.industry ?? null,
+      name: p.companyName ?? p.name ?? null,
+    };
+  } catch { return null; }
+}
+
+async function fetchProfiles(symbols: string[], finnhubKey: string, fmpKey: string | null): Promise<Map<string, { mcap: number | null; sector: string | null; name: string | null }>> {
   const out = new Map();
-  let idx = 0;
-  while (idx < symbols.length) {
-    const sym = symbols[idx++];
-    try {
-      const url = `https://financialmodelingprep.com/stable/profile?symbol=${encodeURIComponent(sym)}&apikey=${apiKey}`;
-      const res = await fetch(url, { headers: { "User-Agent": UA } });
-      if (res.ok) {
-        const arr = await res.json().catch(() => null);
-        const p = Array.isArray(arr) ? arr[0] : null;
-        if (p) out.set(sym.toUpperCase(), {
-          mcap: Number.isFinite(p.marketCap) ? p.marketCap : null,
-          sector: p.sector ?? p.industry ?? null,
-          name: p.companyName ?? p.name ?? null,
-        });
-      }
-    } catch {}
-    await sleep(380);
+  for (const sym of symbols) {
+    let p = await fetchFinnhubProfileOne(sym, finnhubKey);
+    await sleep(150);
+    if ((!p || p.mcap === null) && fmpKey) {
+      const fmp = await fetchFmpProfileOne(sym, fmpKey);
+      if (fmp) p = fmp;
+      await sleep(380);
+    }
+    if (p) out.set(sym.toUpperCase(), p);
   }
   return out;
 }
