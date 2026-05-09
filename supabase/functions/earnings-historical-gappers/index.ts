@@ -261,13 +261,9 @@ serve(async (req) => {
       return jsonResponse({ from: fromStr, to: toStr, total: 0, rows: [] });
     }
 
-    // Profiles: Finnhub primary, FMP fallback
-    const allSymbols = Array.from(new Set(reports.map(r => r.symbol)));
-    let profiles = await fetchFinnhubProfiles(allSymbols, FINNHUB_API_KEY);
-    if (profiles.size === 0 && FMP_API_KEY) {
-      console.log("Finnhub profiles empty — falling back to FMP");
-      profiles = await fetchFmpProfilesFallback(allSymbols, FMP_API_KEY);
-    }
+    // Profiles: Finnhub primary with per-symbol FMP fallback. Cap to 250 to fit timeout.
+    const allSymbols = Array.from(new Set(reports.map(r => r.symbol))).slice(0, 250);
+    const profiles = await fetchProfiles(allSymbols, FINNHUB_API_KEY, FMP_API_KEY ?? null);
 
     let eligible = reports.filter(r => {
       const p = profiles.get(r.symbol);
