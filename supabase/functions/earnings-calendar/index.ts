@@ -1,7 +1,7 @@
 // Earnings calendar — TODAY's earnings reporters with EPS estimates,
 // market cap filter, report time (BMO/AMC), and current-vs-prevclose gap %.
-// Primary source: Finnhub (has BMO/AMC hour). Fallback: FMP stable endpoint.
-// Enrichment: Yahoo quote (mcap, price, prevClose, name).
+// Primary source: Finnhub for both calendar AND enrichment (quote + profile2).
+// FMP kept only as a fallback when Finnhub is unavailable.
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
@@ -52,72 +52,83 @@ function mapHour(h: any): EarningsRow["reportTime"] {
   return null;
 }
 
-// Finnhub primary
-async function fetchFinnhub(date: string, apiKey: string): Promise<any[]> {
+// ───────── Finnhub: calendar ─────────
+async function fetchFinnhubCalendar(date: string, apiKey: string): Promise<any[]> {
   const url = `https://finnhub.io/api/v1/calendar/earnings?from=${date}&to=${date}&token=${apiKey}`;
   const res = await fetch(url, { headers: { "User-Agent": UA } });
   if (!res.ok) {
-    console.error("Finnhub error", res.status, await res.text().catch(() => ""));
+    console.error("Finnhub calendar error", res.status, await res.text().catch(() => ""));
     return [];
   }
   const j = await res.json().catch(() => null);
   return Array.isArray(j?.earningsCalendar) ? j.earningsCalendar : [];
 }
 
-// FMP stable fallback (no date param — returns recent rolling window)
-async function fetchFmpFallback(date: string, apiKey: string): Promise<any[]> {
-  const url = `https://financialmodelingprep.com/stable/earnings-calendar?apikey=${apiKey}`;
-  const res = await fetch(url, { headers: { "User-Agent": UA } });
-  if (!res.ok) {
-    console.error("FMP fallback error", res.status);
-    return [];
-  }
-  const arr = await res.json().catch(() => null);
-  if (!Array.isArray(arr)) return [];
-  return arr.filter((r: any) => String(r?.date || "").slice(0, 10) === date);
+// ───────── Finnhub: quote + profile2 enrichment ─────────
+interface Enrichment { price: number | null; prevClose: number | null; marketCap: number | null; name: string | null; }
+
+async function fetchFinnhubQuote(sym: string, apiKey: string): Promise<{ price: number | null; prevClose: number | null } | null> {
+  try {
+    const url = `https://finnhub.io/api/v1/quote?symbol=${encodeURIComponent(sym)}&token=${apiKey}`;
+    const res = await fetch(url, { headers: { "User-Agent": UA } });
+    if (!res.ok) return null;
+    const j = await res.json().catch(() => null);
+    if (!j) return null;
+    const c = Number(j.c), pc = Number(j.pc);
+    return {
+      price: Number.isFinite(c) && c > 0 ? c : null,
+      prevClose: Number.isFinite(pc) && pc > 0 ? pc : null,
+    };
+  } catch (e) { console.error(`Finnhub quote ${sym}`, e); return null; }
 }
 
-// FMP single-symbol quote — sequential with throttle to avoid 402 burst limits.
-async function fetchFmpQuotes(symbols: string[], apiKey: string): Promise<Map<string, { price: number | null; prevClose: number | null; marketCap: number | null; name: string | null }>> {
-  const out = new Map();
-  const concurrency = 1;
+async function fetchFinnhubProfile(sym: string, apiKey: string): Promise<{ marketCap: number | null; name: string | null } | null> {
+  try {
+    const url = `https://finnhub.io/api/v1/stock/profile2?symbol=${encodeURIComponent(sym)}&token=${apiKey}`;
+    const res = await fetch(url, { headers: { "User-Agent": UA } });
+    if (!res.ok) return null;
+    const j = await res.json().catch(() => null);
+    if (!j || !j.name) return null;
+    // Finnhub marketCapitalization is in MILLIONS of USD
+    const mcRaw = Number(j.marketCapitalization);
+    const marketCap = Number.isFinite(mcRaw) && mcRaw > 0 ? mcRaw * 1_000_000 : null;
+    return { marketCap, name: j.name ?? null };
+  } catch (e) { console.error(`Finnhub profile ${sym}`, e); return null; }
+}
+
+async function enrichFinnhub(symbols: string[], apiKey: string): Promise<Map<string, Enrichment>> {
+  const out = new Map<string, Enrichment>();
+  // Finnhub free: 60 calls/min. We do quote + profile (2 per sym).
+  // Light parallelism = 3, ~120ms gap → ~7 syms/sec safe.
+  const concurrency = 3;
   let idx = 0;
   async function worker() {
     while (idx < symbols.length) {
       const i = idx++;
       const sym = symbols[i];
-      let attempt = 0;
-      while (attempt < 2) {
-        try {
-          const url = `https://financialmodelingprep.com/stable/quote?symbol=${encodeURIComponent(sym)}&apikey=${apiKey}`;
-          const res = await fetch(url, { headers: { "User-Agent": UA } });
-          if (res.status === 402 || res.status === 429) {
-            // burst-limit: backoff and retry once
-            attempt++;
-            await sleep(700 + Math.random() * 400);
-            continue;
-          }
-          if (!res.ok) { console.error(`FMP quote ${sym} ${res.status}`); break; }
-          const arr = await res.json().catch(() => null);
-          const q = Array.isArray(arr) ? arr[0] : null;
-          if (q) {
-            out.set(sym.toUpperCase(), {
-              price: Number.isFinite(q.price) ? q.price : null,
-              prevClose: Number.isFinite(q.previousClose) ? q.previousClose : null,
-              marketCap: Number.isFinite(q.marketCap) ? q.marketCap : null,
-              name: q.name ?? null,
-            });
-          }
-          break;
-        } catch (e) { console.error(`FMP quote ${sym} threw`, e); break; }
-      }
-      await sleep(380);
+      const [q, p] = await Promise.all([fetchFinnhubQuote(sym, apiKey), fetchFinnhubProfile(sym, apiKey)]);
+      out.set(sym.toUpperCase(), {
+        price: q?.price ?? null,
+        prevClose: q?.prevClose ?? null,
+        marketCap: p?.marketCap ?? null,
+        name: p?.name ?? null,
+      });
+      await sleep(120);
     }
   }
   await Promise.all(Array.from({ length: concurrency }, () => worker()));
   return out;
 }
 
+// ───────── FMP fallback (only used if Finnhub unavailable) ─────────
+async function fetchFmpFallbackCalendar(date: string, apiKey: string): Promise<any[]> {
+  const url = `https://financialmodelingprep.com/stable/earnings-calendar?apikey=${apiKey}`;
+  const res = await fetch(url, { headers: { "User-Agent": UA } });
+  if (!res.ok) return [];
+  const arr = await res.json().catch(() => null);
+  if (!Array.isArray(arr)) return [];
+  return arr.filter((r: any) => String(r?.date || "").slice(0, 10) === date);
+}
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
@@ -139,16 +150,14 @@ serve(async (req) => {
     let source = "none";
 
     if (FINNHUB_API_KEY) {
-      raw = await fetchFinnhub(date, FINNHUB_API_KEY);
+      raw = await fetchFinnhubCalendar(date, FINNHUB_API_KEY);
       if (raw.length) source = "finnhub";
     }
     if (raw.length === 0 && FMP_API_KEY) {
-      raw = await fetchFmpFallback(date, FMP_API_KEY);
+      raw = await fetchFmpFallbackCalendar(date, FMP_API_KEY);
       if (raw.length) source = "fmp_fallback";
     }
 
-    // Normalize — Finnhub uses {symbol, hour, epsEstimate, epsActual, revenueEstimate, revenueActual}
-    // FMP uses {symbol, time, epsEstimated, eps, revenueEstimated, revenue}
     let rows: EarningsRow[] = raw
       .filter((r: any) => r?.symbol && !String(r.symbol).includes("."))
       .map((r: any) => {
@@ -186,12 +195,14 @@ serve(async (req) => {
       rows = rows.filter(r => set.has(r.symbol));
     }
 
-    // Cap symbol count for Yahoo enrichment
-    const symbolsToEnrich = rows.map(r => r.symbol).slice(0, 40);
-    const quotes = FMP_API_KEY ? await fetchFmpQuotes(symbolsToEnrich, FMP_API_KEY) : new Map();
+    // Cap symbols enriched to keep within edge function timeout (Finnhub free: 60/min)
+    const symbolsToEnrich = rows.map(r => r.symbol).slice(0, 60);
+    const enrichment = FINNHUB_API_KEY
+      ? await enrichFinnhub(symbolsToEnrich, FINNHUB_API_KEY)
+      : new Map<string, Enrichment>();
 
     rows = rows.map(r => {
-      const q = quotes.get(r.symbol);
+      const q = enrichment.get(r.symbol);
       const px = q?.price ?? null;
       const pc = q?.prevClose ?? null;
       const gap = (px !== null && pc !== null && pc > 0)
@@ -200,11 +211,11 @@ serve(async (req) => {
       return { ...r, marketCap: q?.marketCap ?? null, currentPrice: px, previousClose: pc, gapPct: gap, company: q?.name ?? null };
     });
 
-    // Apply mcap floor only when we have an mcap; if all enrichments failed, keep rows and let user see them
+    // Apply mcap floor only when we have an mcap; if all enrichments failed, keep rows
     const enrichedAny = rows.some(r => r.marketCap !== null);
     const filtered = enrichedAny
       ? rows.filter(r => r.marketCap !== null && r.marketCap >= minMarketCap)
-      : rows; // graceful fallback if Yahoo is blocked
+      : rows;
 
     const order = (t: EarningsRow["reportTime"]) => t === "BMO" ? 0 : t === "DMH" ? 1 : t === "AMC" ? 2 : 3;
     filtered.sort((a, b) => order(a.reportTime) - order(b.reportTime) || (b.marketCap ?? 0) - (a.marketCap ?? 0));
@@ -216,6 +227,7 @@ serve(async (req) => {
       minMarketCap,
       source,
       enriched: enrichedAny,
+      enrichmentSource: "finnhub",
       rows: filtered,
     });
   } catch (e) {
