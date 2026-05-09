@@ -86,10 +86,15 @@ async function fetchFinnhubProfile(sym: string, apiKey: string): Promise<{ marke
   try {
     const url = `https://finnhub.io/api/v1/stock/profile2?symbol=${encodeURIComponent(sym)}&token=${apiKey}`;
     const res = await fetch(url, { headers: { "User-Agent": UA } });
-    if (!res.ok) return null;
+    if (!res.ok) {
+      console.error(`Finnhub profile ${sym} status=${res.status}`);
+      return null;
+    }
     const j = await res.json().catch(() => null);
-    if (!j || !j.name) return null;
-    // Finnhub marketCapitalization is in MILLIONS of USD
+    if (!j || !j.name) {
+      console.warn(`Finnhub profile ${sym} empty payload: ${JSON.stringify(j).slice(0, 100)}`);
+      return null;
+    }
     const mcRaw = Number(j.marketCapitalization);
     const marketCap = Number.isFinite(mcRaw) && mcRaw > 0 ? mcRaw * 1_000_000 : null;
     return { marketCap, name: j.name ?? null };
@@ -98,25 +103,20 @@ async function fetchFinnhubProfile(sym: string, apiKey: string): Promise<{ marke
 
 async function enrichFinnhub(symbols: string[], apiKey: string): Promise<Map<string, Enrichment>> {
   const out = new Map<string, Enrichment>();
-  // Finnhub free: 60 calls/min. We do quote + profile (2 per sym).
-  // Light parallelism = 3, ~120ms gap → ~7 syms/sec safe.
-  const concurrency = 3;
-  let idx = 0;
-  async function worker() {
-    while (idx < symbols.length) {
-      const i = idx++;
-      const sym = symbols[i];
-      const [q, p] = await Promise.all([fetchFinnhubQuote(sym, apiKey), fetchFinnhubProfile(sym, apiKey)]);
-      out.set(sym.toUpperCase(), {
-        price: q?.price ?? null,
-        prevClose: q?.prevClose ?? null,
-        marketCap: p?.marketCap ?? null,
-        name: p?.name ?? null,
-      });
-      await sleep(120);
-    }
+  // Sequential to stay under Finnhub free-tier 30 req/sec on profile2.
+  // With ~150ms gap between (quote, profile) pairs we do <7 req/sec safely.
+  for (const sym of symbols) {
+    const q = await fetchFinnhubQuote(sym, apiKey);
+    await sleep(120);
+    const p = await fetchFinnhubProfile(sym, apiKey);
+    out.set(sym.toUpperCase(), {
+      price: q?.price ?? null,
+      prevClose: q?.prevClose ?? null,
+      marketCap: p?.marketCap ?? null,
+      name: p?.name ?? null,
+    });
+    await sleep(120);
   }
-  await Promise.all(Array.from({ length: concurrency }, () => worker()));
   return out;
 }
 
