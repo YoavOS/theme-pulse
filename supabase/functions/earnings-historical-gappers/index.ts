@@ -110,16 +110,22 @@ async function fetchFmpProfileOne(sym: string, apiKey: string): Promise<{ mcap: 
 
 async function fetchProfiles(symbols: string[], finnhubKey: string, fmpKey: string | null): Promise<Map<string, { mcap: number | null; sector: string | null; name: string | null }>> {
   const out = new Map();
-  for (const sym of symbols) {
-    let p = await fetchFinnhubProfileOne(sym, finnhubKey);
-    await sleep(150);
-    if ((!p || p.mcap === null) && fmpKey) {
-      const fmp = await fetchFmpProfileOne(sym, fmpKey);
-      if (fmp) p = fmp;
-      await sleep(380);
+  const concurrency = 2;
+  let idx = 0;
+  async function worker() {
+    while (idx < symbols.length) {
+      const i = idx++;
+      const sym = symbols[i];
+      let p = await fetchFinnhubProfileOne(sym, finnhubKey);
+      if ((!p || p.mcap === null) && fmpKey) {
+        const fmp = await fetchFmpProfileOne(sym, fmpKey);
+        if (fmp) p = fmp;
+      }
+      if (p) out.set(sym.toUpperCase(), p);
+      await sleep(180);
     }
-    if (p) out.set(sym.toUpperCase(), p);
   }
+  await Promise.all(Array.from({ length: concurrency }, () => worker()));
   return out;
 }
 
