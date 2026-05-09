@@ -1,7 +1,8 @@
 // Historical big earnings gappers — find stocks that gapped ≥ +X% the day after
-// reporting earnings in the past N days. Uses FMP earnings calendar (historical)
-// to find report dates, then Yahoo daily candles to compute next-day open vs prev close.
-// Optional Groq analysis for each winner: surprise size, catalyst hints, sector context.
+// reporting earnings in the past N days. Uses Finnhub for the calendar, profile,
+// and daily candles. Yahoo kept only as last-resort fallback for daily bars
+// (Finnhub free tier sometimes restricts /stock/candle).
+// Optional Groq analysis for top winners.
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
@@ -17,7 +18,7 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 interface Gapper {
   symbol: string;
   company: string | null;
-  reportDate: string;        // YYYY-MM-DD
+  reportDate: string;
   reportTime: "BMO" | "AMC" | "DMH" | null;
   gapPct: number;
   prevClose: number;
@@ -41,11 +42,9 @@ function jsonResponse(body: any, status = 200) {
   });
 }
 
-function isoDate(d: Date): string {
-  return d.toISOString().slice(0, 10);
-}
+function isoDate(d: Date): string { return d.toISOString().slice(0, 10); }
 
-// Finnhub returns up to ~1500 rows per call → chunk into 30-day windows.
+// ───────── Finnhub calendar (chunked into 30-day windows) ─────────
 async function fetchFinnhubRange(from: string, to: string, apiKey: string): Promise<any[]> {
   const fromD = new Date(from + "T00:00:00Z");
   const toD = new Date(to + "T00:00:00Z");
@@ -67,14 +66,93 @@ async function fetchFinnhubRange(from: string, to: string, apiKey: string): Prom
       }
     } catch (e) { console.error("Finnhub fetch failed", e); }
     cur = new Date(chunkEnd.getTime() + 86400_000);
-    await sleep(200);
+    await sleep(150);
   }
   return out;
 }
 
+// ───────── Finnhub profile2 enrichment ─────────
+async function fetchFinnhubProfileOne(sym: string, apiKey: string): Promise<{ mcap: number | null; sector: string | null; name: string | null } | null> {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const url = `https://finnhub.io/api/v1/stock/profile2?symbol=${encodeURIComponent(sym)}&token=${apiKey}`;
+      const res = await fetch(url, { headers: { "User-Agent": UA } });
+      if (res.status === 429) { await sleep(1500 + Math.random() * 1000); continue; }
+      if (!res.ok) return null;
+      const j = await res.json().catch(() => null);
+      if (!j || !j.name) return null;
+      const mcRaw = Number(j.marketCapitalization);
+      return {
+        mcap: Number.isFinite(mcRaw) && mcRaw > 0 ? mcRaw * 1_000_000 : null,
+        sector: j.finnhubIndustry ?? j.sector ?? null,
+        name: j.name ?? null,
+      };
+    } catch { return null; }
+  }
+  return null;
+}
+
+async function fetchFmpProfileOne(sym: string, apiKey: string): Promise<{ mcap: number | null; sector: string | null; name: string | null } | null> {
+  try {
+    const url = `https://financialmodelingprep.com/stable/profile?symbol=${encodeURIComponent(sym)}&apikey=${apiKey}`;
+    const res = await fetch(url, { headers: { "User-Agent": UA } });
+    if (!res.ok) return null;
+    const arr = await res.json().catch(() => null);
+    const p = Array.isArray(arr) ? arr[0] : null;
+    if (!p) return null;
+    return {
+      mcap: Number.isFinite(p.marketCap) ? Number(p.marketCap) : null,
+      sector: p.sector ?? p.industry ?? null,
+      name: p.companyName ?? p.name ?? null,
+    };
+  } catch { return null; }
+}
+
+async function fetchProfiles(symbols: string[], finnhubKey: string, fmpKey: string | null): Promise<Map<string, { mcap: number | null; sector: string | null; name: string | null }>> {
+  const out = new Map();
+  const concurrency = 2;
+  let idx = 0;
+  async function worker() {
+    while (idx < symbols.length) {
+      const i = idx++;
+      const sym = symbols[i];
+      let p = await fetchFinnhubProfileOne(sym, finnhubKey);
+      if ((!p || p.mcap === null) && fmpKey) {
+        const fmp = await fetchFmpProfileOne(sym, fmpKey);
+        if (fmp) p = fmp;
+      }
+      if (p) out.set(sym.toUpperCase(), p);
+      await sleep(180);
+    }
+  }
+  await Promise.all(Array.from({ length: concurrency }, () => worker()));
+  return out;
+}
+
+// ───────── Daily candles: Finnhub primary, Yahoo fallback ─────────
 interface DailyBar { date: string; open: number; close: number; }
 
-async function fetchYahooDaily(symbol: string, fromTs: number, toTs: number): Promise<DailyBar[]> {
+async function fetchFinnhubDaily(symbol: string, fromTs: number, toTs: number, apiKey: string): Promise<DailyBar[]> {
+  try {
+    const url = `https://finnhub.io/api/v1/stock/candle?symbol=${encodeURIComponent(symbol)}&resolution=D&from=${fromTs}&to=${toTs}&token=${apiKey}`;
+    const res = await fetch(url, { headers: { "User-Agent": UA } });
+    if (!res.ok) return [];
+    const j = await res.json().catch(() => null);
+    if (!j || j.s !== "ok") return [];
+    const ts: number[] = j.t ?? [];
+    const opens: number[] = j.o ?? [];
+    const closes: number[] = j.c ?? [];
+    const out: DailyBar[] = [];
+    for (let i = 0; i < ts.length; i++) {
+      const o = opens[i], c = closes[i];
+      if (o == null || c == null) continue;
+      out.push({ date: new Date(ts[i] * 1000).toISOString().slice(0, 10), open: o, close: c });
+    }
+    return out;
+  } catch { return []; }
+}
+
+async function fetchYahooDailyFallback(symbol: string, fromTs: number, toTs: number): Promise<DailyBar[]> {
   const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?period1=${fromTs}&period2=${toTs}&interval=1d`;
   try {
     const res = await fetch(url, { headers: { "User-Agent": UA, "Accept": "application/json" } });
@@ -93,44 +171,6 @@ async function fetchYahooDaily(symbol: string, fromTs: number, toTs: number): Pr
     }
     return out;
   } catch { return []; }
-}
-
-async function fetchFmpProfiles(symbols: string[], apiKey: string): Promise<Map<string, { mcap: number | null; sector: string | null; name: string | null }>> {
-  const out = new Map();
-  const concurrency = 1;
-  let idx = 0;
-  async function worker() {
-    while (idx < symbols.length) {
-      const i = idx++;
-      const sym = symbols[i];
-      let attempt = 0;
-      while (attempt < 2) {
-        try {
-          const url = `https://financialmodelingprep.com/stable/profile?symbol=${encodeURIComponent(sym)}&apikey=${apiKey}`;
-          const res = await fetch(url, { headers: { "User-Agent": UA } });
-          if (res.status === 402 || res.status === 429) {
-            attempt++;
-            await sleep(700 + Math.random() * 400);
-            continue;
-          }
-          if (!res.ok) break;
-          const arr = await res.json().catch(() => null);
-          const p = Array.isArray(arr) ? arr[0] : null;
-          if (p) {
-            out.set(sym.toUpperCase(), {
-              mcap: Number.isFinite(p.marketCap) ? p.marketCap : null,
-              sector: p.sector ?? p.industry ?? null,
-              name: p.companyName ?? p.name ?? null,
-            });
-          }
-          break;
-        } catch { break; }
-      }
-      await sleep(380);
-    }
-  }
-  await Promise.all(Array.from({ length: concurrency }, () => worker()));
-  return out;
 }
 
 async function groqSummarize(g: Gapper, groqKey: string): Promise<string | null> {
@@ -167,7 +207,6 @@ serve(async (req) => {
     const FMP_API_KEY = Deno.env.get("FMP_API_KEY");
     const GROQ_API_KEY = Deno.env.get("GROQ_API_KEY");
     if (!FINNHUB_API_KEY) return jsonResponse({ error: "FINNHUB_API_KEY not configured" }, 500);
-    if (!FMP_API_KEY) return jsonResponse({ error: "FMP_API_KEY not configured" }, 500);
 
     let body: any = {};
     try { body = await req.json(); } catch {}
@@ -196,7 +235,6 @@ serve(async (req) => {
       return null;
     };
 
-    // Filter calendar
     const seen = new Set<string>();
     const universe = universeFilter ? new Set(universeFilter) : null;
     const reports = cal
@@ -223,23 +261,19 @@ serve(async (req) => {
       return jsonResponse({ from: fromStr, to: toStr, total: 0, rows: [] });
     }
 
-    // Get profiles for market-cap filter
-    const allSymbols = Array.from(new Set(reports.map(r => r.symbol)));
-    const profiles = await fetchFmpProfiles(allSymbols, FMP_API_KEY);
+    // Profiles: Finnhub primary with per-symbol FMP fallback. Cap to 250 to fit timeout.
+    const allSymbols = Array.from(new Set(reports.map(r => r.symbol))).slice(0, 250);
+    const profiles = await fetchProfiles(allSymbols, FINNHUB_API_KEY, FMP_API_KEY ?? null);
 
-    // Pre-filter by market cap when known
     let eligible = reports.filter(r => {
       const p = profiles.get(r.symbol);
       if (!p || p.mcap === null) return false;
       return p.mcap >= minMarketCap;
     });
 
-    // Hard cap to prevent edge function timeout (sort by mcap desc, keep top 250 reports)
     eligible.sort((a, b) => (profiles.get(b.symbol)?.mcap ?? 0) - (profiles.get(a.symbol)?.mcap ?? 0));
     eligible = eligible.slice(0, 250);
 
-    // For each eligible report, fetch a small daily candle window and compute gap.
-    // Group by symbol to minimize Yahoo calls.
     const bySymbol = new Map<string, typeof eligible>();
     for (const r of eligible) {
       const arr = bySymbol.get(r.symbol) ?? [];
@@ -248,19 +282,23 @@ serve(async (req) => {
     }
 
     const gappers: Gapper[] = [];
+    let candleSource: "finnhub" | "yahoo" | "mixed" | "none" = "none";
+    let finnhubBars = 0;
+    let yahooBars = 0;
 
-    let i = 0;
     for (const [symbol, list] of bySymbol) {
-      i++;
       const fromTs = Math.floor(from.getTime() / 1000) - 7 * 86400;
       const toTs = Math.floor(today.getTime() / 1000) + 86400;
-      const bars = await fetchYahooDaily(symbol, fromTs, toTs);
-      if (bars.length < 2) { await sleep(120); continue; }
+
+      let bars = await fetchFinnhubDaily(symbol, fromTs, toTs, FINNHUB_API_KEY);
+      if (bars.length >= 2) finnhubBars++;
+      if (bars.length < 2) {
+        bars = await fetchYahooDailyFallback(symbol, fromTs, toTs);
+        if (bars.length >= 2) yahooBars++;
+      }
+      if (bars.length < 2) { await sleep(80); continue; }
 
       for (const r of list) {
-        // Find the report-day index, then determine the "next open" reference.
-        // BMO → gap = (reportDay.open - prevDay.close) / prevDay.close
-        // AMC/DMH → gap = (nextDay.open - reportDay.close) / reportDay.close
         const idx = bars.findIndex(b => b.date === r.date);
         if (idx < 0) continue;
         let prevClose: number | null = null;
@@ -270,7 +308,6 @@ serve(async (req) => {
           prevClose = bars[idx - 1].close;
           openPrice = bars[idx].open;
         } else {
-          // default AMC behavior
           if (idx >= bars.length - 1) continue;
           prevClose = bars[idx].close;
           openPrice = bars[idx + 1].open;
@@ -307,15 +344,17 @@ serve(async (req) => {
       await sleep(80);
     }
 
-    // Sort by gap desc
+    if (finnhubBars > 0 && yahooBars === 0) candleSource = "finnhub";
+    else if (yahooBars > 0 && finnhubBars === 0) candleSource = "yahoo";
+    else if (finnhubBars > 0 && yahooBars > 0) candleSource = "mixed";
+
     gappers.sort((a, b) => b.gapPct - a.gapPct);
 
-    // Optional Groq analysis for top winners
     if (enableAi && GROQ_API_KEY) {
       const top = gappers.slice(0, maxAiRows);
       for (const g of top) {
         g.aiAnalysis = await groqSummarize(g, GROQ_API_KEY);
-        await sleep(300); // rate-friendly
+        await sleep(300);
       }
     }
 
@@ -327,6 +366,8 @@ serve(async (req) => {
       minMarketCap,
       universeFiltered: !!universeFilter,
       total: gappers.length,
+      candleSource,
+      profileCount: profiles.size,
       rows: gappers,
     });
   } catch (e) {
