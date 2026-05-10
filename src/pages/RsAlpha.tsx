@@ -420,6 +420,34 @@ export default function RsAlpha() {
               />
             )}
 
+            <div className="flex items-center gap-1.5 rounded-md border border-border bg-muted/20 px-2 py-1 text-[11px] text-muted-foreground" title="Tight Range Score = recent average daily range divided by baseline average daily range">
+              <span className="font-medium text-foreground">Coil</span>
+              <input
+                type="number"
+                min={2}
+                max={40}
+                value={coilSettings.shortDays}
+                onChange={(e) => setCoilSettings((p) => ({ ...p, shortDays: Math.max(2, Math.min(40, Number(e.target.value))) }))}
+                className="w-10 rounded border border-border bg-background px-1 py-0.5 text-right font-mono text-foreground"
+              />
+              <span>vs</span>
+              <input
+                type="number"
+                min={10}
+                max={120}
+                value={coilSettings.longDays}
+                onChange={(e) => setCoilSettings((p) => ({ ...p, longDays: Math.max(10, Math.min(120, Number(e.target.value))) }))}
+                className="w-11 rounded border border-border bg-background px-1 py-0.5 text-right font-mono text-foreground"
+              />
+              <button
+                onClick={() => { setSortField("coil"); setSortDir("asc"); }}
+                className="rounded border border-border px-1.5 py-0.5 text-foreground hover:bg-accent"
+              >
+                Tightest First
+              </button>
+              {coilLoading && <Loader2 size={11} className="animate-spin text-primary" />}
+            </div>
+
             <button
               onClick={recalculateRs}
               disabled={isRecalculating || isRebuilding || stocks.length === 0}
