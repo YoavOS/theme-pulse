@@ -14,6 +14,7 @@ import SectorDistributionModal from "@/components/rs/SectorDistributionModal";
 import ThemeDistributionModal from "@/components/rs/ThemeDistributionModal";
 import FundamentalsCoverageModal from "@/components/rs/FundamentalsCoverageModal";
 import { useStockFundamentalsMap } from "@/hooks/useStockFundamentalsMap";
+import { supabase } from "@/integrations/supabase/client";
 import {
   DEFAULT_GROWTH_FILTERS,
   GrowthFiltersState,
@@ -34,11 +35,20 @@ function growthBadge(f: ReturnType<typeof useStockFundamentalsMap>["map"] extend
 }
 
 type TabId = "overall" | "1d" | "1w" | "1m" | "3m" | "6m";
-type SortField = "rank" | "symbol" | "company" | "rs" | "rating" | "stockReturn" | "spyReturn" | "price";
+type SortField = "rank" | "symbol" | "company" | "rs" | "rating" | "stockReturn" | "spyReturn" | "price" | "coil";
 type SortDir = "asc" | "desc";
 
 const RS_WEIGHTS_KEY = "rs-overall-weights-v2";
 const GROWTH_FILTERS_KEY = "rs-growth-filters-v1";
+const COIL_SETTINGS_KEY = "rs-coil-settings-v1";
+
+interface TightRangeScore {
+  score: number | null;
+  recentAvgRangePct: number | null;
+  baselineAvgRangePct: number | null;
+  ranges: number[];
+  dataPoints: number;
+}
 
 const TABS: { id: TabId; label: string }[] = [
   { id: "overall", label: "Overall" },
@@ -100,6 +110,12 @@ function pctDisplay(val: number | null): string {
   if (val === null) return "N/A";
   return `${val >= 0 ? "+" : ""}${val.toFixed(2)}%`;
 }
+function coilColor(score: number | null): string {
+  if (score === null) return "text-muted-foreground";
+  if (score < 0.75) return "text-[hsl(160,70%,50%)] font-bold";
+  if (score <= 1.05) return "text-[hsl(40,90%,58%)] font-semibold";
+  return "text-destructive font-semibold";
+}
 
 export default function RsAlpha() {
   const {
@@ -153,11 +169,60 @@ export default function RsAlpha() {
       return { ...DEFAULT_RS_WEIGHTS };
     }
   });
+  const [coilSettings, setCoilSettings] = useState(() => {
+    if (typeof window === "undefined") return { shortDays: 7, longDays: 30 };
+    try {
+      const parsed = JSON.parse(localStorage.getItem(COIL_SETTINGS_KEY) ?? "{}");
+      return {
+        shortDays: Math.max(2, Math.min(40, Number(parsed.shortDays ?? 7))),
+        longDays: Math.max(10, Math.min(120, Number(parsed.longDays ?? 30))),
+      };
+    } catch {
+      return { shortDays: 7, longDays: 30 };
+    }
+  });
+  const [coilScores, setCoilScores] = useState<Map<string, TightRangeScore>>(new Map());
+  const [coilLoading, setCoilLoading] = useState(false);
 
   useEffect(() => { setShowAll(false); }, [activeTab]);
   useEffect(() => { localStorage.setItem("rs-hide-otc", String(hideOtc)); }, [hideOtc]);
   useEffect(() => { localStorage.setItem(RS_WEIGHTS_KEY, JSON.stringify(weights)); }, [weights]);
   useEffect(() => { localStorage.setItem(GROWTH_FILTERS_KEY, JSON.stringify(growthFilters)); }, [growthFilters]);
+  useEffect(() => { localStorage.setItem(COIL_SETTINGS_KEY, JSON.stringify(coilSettings)); }, [coilSettings]);
+
+  useEffect(() => {
+    if (stocks.length === 0) return;
+    let cancelled = false;
+    const run = async () => {
+      setCoilLoading(true);
+      try {
+        const longDays = Math.max(coilSettings.longDays, coilSettings.shortDays + 1);
+        const { data, error } = await supabase.functions.invoke("tight-range-scores", {
+          body: { symbols: stocks.map((s) => s.symbol), shortDays: coilSettings.shortDays, longDays },
+        });
+        if (error) throw error;
+        if (data?.error) throw new Error(data.error);
+        if (cancelled) return;
+        const next = new Map<string, TightRangeScore>();
+        for (const row of data?.rows ?? []) {
+          next.set(String(row.symbol).toUpperCase(), {
+            score: row.score ?? null,
+            recentAvgRangePct: row.recentAvgRangePct ?? null,
+            baselineAvgRangePct: row.baselineAvgRangePct ?? null,
+            ranges: Array.isArray(row.ranges) ? row.ranges : [],
+            dataPoints: row.dataPoints ?? 0,
+          });
+        }
+        setCoilScores(next);
+      } catch (e) {
+        if (!cancelled) toast.error(e instanceof Error ? e.message : "Failed to calculate Tight Range scores");
+      } finally {
+        if (!cancelled) setCoilLoading(false);
+      }
+    };
+    run();
+    return () => { cancelled = true; };
+  }, [stocks, coilSettings.shortDays, coilSettings.longDays]);
 
   // Heuristic: 5-letter all-caps tickers ending in 'F' are typically foreign OTC (e.g., FKURF).
   // Also defensively block any symbol with OTC suffixes that may have slipped through historically.
@@ -189,7 +254,7 @@ export default function RsAlpha() {
 
   const toggleSort = (field: SortField) => {
     if (sortField === field) setSortDir(d => d === "desc" ? "asc" : "desc");
-    else { setSortField(field); setSortDir("desc"); }
+    else { setSortField(field); setSortDir(field === "coil" ? "asc" : "desc"); }
   };
 
   const growthActive = anyActive(growthFilters);
@@ -224,12 +289,17 @@ export default function RsAlpha() {
         case "stockReturn": return mul * ((getReturnField(a, activeTab) ?? -999) - (getReturnField(b, activeTab) ?? -999));
         case "spyReturn": return mul * ((getSpyField(a, activeTab) ?? -999) - (getSpyField(b, activeTab) ?? -999));
         case "price": return mul * ((a.price ?? 0) - (b.price ?? 0));
+        case "coil": {
+          const av = coilScores.get(a.symbol)?.score ?? 999;
+          const bv = coilScores.get(b.symbol)?.score ?? 999;
+          return mul * (av - bv);
+        }
         default: return 0;
       }
     });
     return { sortedStocks: sorted, ratingMap: map, growthFilteredOutCount: droppedByGrowth };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stocks, activeTab, sortField, sortDir, hideOtc, weights, growthFilters, fundamentalsMap]);
+  }, [stocks, activeTab, sortField, sortDir, hideOtc, weights, growthFilters, fundamentalsMap, coilScores]);
 
   const otcHiddenCount = useMemo(
     () => hideOtc ? stocks.filter(s => isOtcSymbol(s.symbol) && getRsForTab(s, activeTab) !== null).length : 0,
@@ -349,6 +419,34 @@ export default function RsAlpha() {
                 onReset={() => setWeights({ ...DEFAULT_RS_WEIGHTS })}
               />
             )}
+
+            <div className="flex items-center gap-1.5 rounded-md border border-border bg-muted/20 px-2 py-1 text-[11px] text-muted-foreground" title="Tight Range Score = recent average daily range divided by baseline average daily range">
+              <span className="font-medium text-foreground">Coil</span>
+              <input
+                type="number"
+                min={2}
+                max={40}
+                value={coilSettings.shortDays}
+                onChange={(e) => setCoilSettings((p) => ({ ...p, shortDays: Math.max(2, Math.min(40, Number(e.target.value))) }))}
+                className="w-10 rounded border border-border bg-background px-1 py-0.5 text-right font-mono text-foreground"
+              />
+              <span>vs</span>
+              <input
+                type="number"
+                min={10}
+                max={120}
+                value={coilSettings.longDays}
+                onChange={(e) => setCoilSettings((p) => ({ ...p, longDays: Math.max(10, Math.min(120, Number(e.target.value))) }))}
+                className="w-11 rounded border border-border bg-background px-1 py-0.5 text-right font-mono text-foreground"
+              />
+              <button
+                onClick={() => { setSortField("coil"); setSortDir("asc"); }}
+                className="rounded border border-border px-1.5 py-0.5 text-foreground hover:bg-accent"
+              >
+                Tightest First
+              </button>
+              {coilLoading && <Loader2 size={11} className="animate-spin text-primary" />}
+            </div>
 
             <button
               onClick={recalculateRs}
@@ -825,6 +923,7 @@ export default function RsAlpha() {
                       <th className="px-3 py-2.5 text-right"><SortHeader field="rs" label="RS Score" className="justify-end" /></th>
                       <th className="px-3 py-2.5 text-right"><SortHeader field="stockReturn" label="Stock Return" className="justify-end" /></th>
                       <th className="px-3 py-2.5 text-right"><SortHeader field="spyReturn" label="SPY Return" className="justify-end" /></th>
+                      <th className="px-3 py-2.5 text-right"><SortHeader field="coil" label="Tight Range" className="justify-end" /></th>
                       <th className="px-3 py-2.5 text-right"><SortHeader field="price" label="Price" className="justify-end" /></th>
                     </tr>
                   </thead>
@@ -835,6 +934,7 @@ export default function RsAlpha() {
                       const spy = getSpyField(stock, activeTab);
                       const rating = ratingMap.get(stock.symbol) ?? null;
                       const badge = growthBadge(fundamentalsMap.get(stock.symbol));
+                      const coil = coilScores.get(stock.symbol);
                       return (
                         <tr key={stock.symbol} className={`border-b border-border/50 transition-colors hover:bg-muted/20 ${rsBg(rs)}`}>
                           <td className="px-3 py-2 text-xs text-muted-foreground">{idx + 1}</td>
@@ -858,6 +958,24 @@ export default function RsAlpha() {
                           </td>
                           <td className={`px-3 py-2 text-right font-mono text-xs ${spy !== null && spy >= 0 ? "text-[hsl(160,60%,55%)]" : "text-destructive/80"}`}>
                             {pctDisplay(spy)}
+                          </td>
+                          <td className="px-3 py-2 text-right">
+                            <div className="flex items-center justify-end gap-2">
+                              {coil?.ranges?.length ? (
+                                <span className="flex h-5 items-end gap-0.5" title={`Recent ${coilSettings.shortDays}d ADR ${coil.recentAvgRangePct?.toFixed(2) ?? "—"}% vs ${coilSettings.longDays}d ${coil.baselineAvgRangePct?.toFixed(2) ?? "—"}%`}>
+                                  {coil.ranges.slice(-10).map((range, i) => (
+                                    <span
+                                      key={i}
+                                      className="w-1 rounded-sm bg-primary/45"
+                                      style={{ height: `${Math.max(3, Math.min(18, range * 2.4))}px` }}
+                                    />
+                                  ))}
+                                </span>
+                              ) : null}
+                              <span className={`font-mono text-xs ${coilColor(coil?.score ?? null)}`}>
+                                {coil?.score !== null && coil?.score !== undefined ? `${coil.score.toFixed(2)}x` : coilLoading ? "…" : "N/A"}
+                              </span>
+                            </div>
                           </td>
                           <td className="px-3 py-2 text-right font-mono text-muted-foreground">
                             {stock.price !== null ? `$${stock.price.toFixed(2)}` : "N/A"}
