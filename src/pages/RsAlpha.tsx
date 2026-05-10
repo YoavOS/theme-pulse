@@ -169,11 +169,60 @@ export default function RsAlpha() {
       return { ...DEFAULT_RS_WEIGHTS };
     }
   });
+  const [coilSettings, setCoilSettings] = useState(() => {
+    if (typeof window === "undefined") return { shortDays: 7, longDays: 30 };
+    try {
+      const parsed = JSON.parse(localStorage.getItem(COIL_SETTINGS_KEY) ?? "{}");
+      return {
+        shortDays: Math.max(2, Math.min(40, Number(parsed.shortDays ?? 7))),
+        longDays: Math.max(10, Math.min(120, Number(parsed.longDays ?? 30))),
+      };
+    } catch {
+      return { shortDays: 7, longDays: 30 };
+    }
+  });
+  const [coilScores, setCoilScores] = useState<Map<string, TightRangeScore>>(new Map());
+  const [coilLoading, setCoilLoading] = useState(false);
 
   useEffect(() => { setShowAll(false); }, [activeTab]);
   useEffect(() => { localStorage.setItem("rs-hide-otc", String(hideOtc)); }, [hideOtc]);
   useEffect(() => { localStorage.setItem(RS_WEIGHTS_KEY, JSON.stringify(weights)); }, [weights]);
   useEffect(() => { localStorage.setItem(GROWTH_FILTERS_KEY, JSON.stringify(growthFilters)); }, [growthFilters]);
+  useEffect(() => { localStorage.setItem(COIL_SETTINGS_KEY, JSON.stringify(coilSettings)); }, [coilSettings]);
+
+  useEffect(() => {
+    if (stocks.length === 0) return;
+    let cancelled = false;
+    const run = async () => {
+      setCoilLoading(true);
+      try {
+        const longDays = Math.max(coilSettings.longDays, coilSettings.shortDays + 1);
+        const { data, error } = await supabase.functions.invoke("tight-range-scores", {
+          body: { symbols: stocks.map((s) => s.symbol), shortDays: coilSettings.shortDays, longDays },
+        });
+        if (error) throw error;
+        if (data?.error) throw new Error(data.error);
+        if (cancelled) return;
+        const next = new Map<string, TightRangeScore>();
+        for (const row of data?.rows ?? []) {
+          next.set(String(row.symbol).toUpperCase(), {
+            score: row.score ?? null,
+            recentAvgRangePct: row.recentAvgRangePct ?? null,
+            baselineAvgRangePct: row.baselineAvgRangePct ?? null,
+            ranges: Array.isArray(row.ranges) ? row.ranges : [],
+            dataPoints: row.dataPoints ?? 0,
+          });
+        }
+        setCoilScores(next);
+      } catch (e) {
+        if (!cancelled) toast.error(e instanceof Error ? e.message : "Failed to calculate Tight Range scores");
+      } finally {
+        if (!cancelled) setCoilLoading(false);
+      }
+    };
+    run();
+    return () => { cancelled = true; };
+  }, [stocks, coilSettings.shortDays, coilSettings.longDays]);
 
   // Heuristic: 5-letter all-caps tickers ending in 'F' are typically foreign OTC (e.g., FKURF).
   // Also defensively block any symbol with OTC suffixes that may have slipped through historically.
