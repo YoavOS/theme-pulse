@@ -254,7 +254,7 @@ export default function RsAlpha() {
 
   const toggleSort = (field: SortField) => {
     if (sortField === field) setSortDir(d => d === "desc" ? "asc" : "desc");
-    else { setSortField(field); setSortDir("desc"); }
+    else { setSortField(field); setSortDir(field === "coil" ? "asc" : "desc"); }
   };
 
   const growthActive = anyActive(growthFilters);
@@ -289,12 +289,17 @@ export default function RsAlpha() {
         case "stockReturn": return mul * ((getReturnField(a, activeTab) ?? -999) - (getReturnField(b, activeTab) ?? -999));
         case "spyReturn": return mul * ((getSpyField(a, activeTab) ?? -999) - (getSpyField(b, activeTab) ?? -999));
         case "price": return mul * ((a.price ?? 0) - (b.price ?? 0));
+        case "coil": {
+          const av = coilScores.get(a.symbol)?.score ?? 999;
+          const bv = coilScores.get(b.symbol)?.score ?? 999;
+          return mul * (av - bv);
+        }
         default: return 0;
       }
     });
     return { sortedStocks: sorted, ratingMap: map, growthFilteredOutCount: droppedByGrowth };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stocks, activeTab, sortField, sortDir, hideOtc, weights, growthFilters, fundamentalsMap]);
+  }, [stocks, activeTab, sortField, sortDir, hideOtc, weights, growthFilters, fundamentalsMap, coilScores]);
 
   const otcHiddenCount = useMemo(
     () => hideOtc ? stocks.filter(s => isOtcSymbol(s.symbol) && getRsForTab(s, activeTab) !== null).length : 0,
