@@ -923,6 +923,7 @@ export default function RsAlpha() {
                       <th className="px-3 py-2.5 text-right"><SortHeader field="rs" label="RS Score" className="justify-end" /></th>
                       <th className="px-3 py-2.5 text-right"><SortHeader field="stockReturn" label="Stock Return" className="justify-end" /></th>
                       <th className="px-3 py-2.5 text-right"><SortHeader field="spyReturn" label="SPY Return" className="justify-end" /></th>
+                      <th className="px-3 py-2.5 text-right"><SortHeader field="coil" label="Tight Range" className="justify-end" /></th>
                       <th className="px-3 py-2.5 text-right"><SortHeader field="price" label="Price" className="justify-end" /></th>
                     </tr>
                   </thead>
@@ -933,6 +934,7 @@ export default function RsAlpha() {
                       const spy = getSpyField(stock, activeTab);
                       const rating = ratingMap.get(stock.symbol) ?? null;
                       const badge = growthBadge(fundamentalsMap.get(stock.symbol));
+                      const coil = coilScores.get(stock.symbol);
                       return (
                         <tr key={stock.symbol} className={`border-b border-border/50 transition-colors hover:bg-muted/20 ${rsBg(rs)}`}>
                           <td className="px-3 py-2 text-xs text-muted-foreground">{idx + 1}</td>
@@ -956,6 +958,24 @@ export default function RsAlpha() {
                           </td>
                           <td className={`px-3 py-2 text-right font-mono text-xs ${spy !== null && spy >= 0 ? "text-[hsl(160,60%,55%)]" : "text-destructive/80"}`}>
                             {pctDisplay(spy)}
+                          </td>
+                          <td className="px-3 py-2 text-right">
+                            <div className="flex items-center justify-end gap-2">
+                              {coil?.ranges?.length ? (
+                                <span className="flex h-5 items-end gap-0.5" title={`Recent ${coilSettings.shortDays}d ADR ${coil.recentAvgRangePct?.toFixed(2) ?? "—"}% vs ${coilSettings.longDays}d ${coil.baselineAvgRangePct?.toFixed(2) ?? "—"}%`}>
+                                  {coil.ranges.slice(-10).map((range, i) => (
+                                    <span
+                                      key={i}
+                                      className="w-1 rounded-sm bg-primary/45"
+                                      style={{ height: `${Math.max(3, Math.min(18, range * 2.4))}px` }}
+                                    />
+                                  ))}
+                                </span>
+                              ) : null}
+                              <span className={`font-mono text-xs ${coilColor(coil?.score ?? null)}`}>
+                                {coil?.score !== null && coil?.score !== undefined ? `${coil.score.toFixed(2)}x` : coilLoading ? "…" : "N/A"}
+                              </span>
+                            </div>
                           </td>
                           <td className="px-3 py-2 text-right font-mono text-muted-foreground">
                             {stock.price !== null ? `$${stock.price.toFixed(2)}` : "N/A"}
