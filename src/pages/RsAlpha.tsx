@@ -14,6 +14,7 @@ import SectorDistributionModal from "@/components/rs/SectorDistributionModal";
 import ThemeDistributionModal from "@/components/rs/ThemeDistributionModal";
 import FundamentalsCoverageModal from "@/components/rs/FundamentalsCoverageModal";
 import { useStockFundamentalsMap } from "@/hooks/useStockFundamentalsMap";
+import { supabase } from "@/integrations/supabase/client";
 import {
   DEFAULT_GROWTH_FILTERS,
   GrowthFiltersState,
@@ -34,11 +35,20 @@ function growthBadge(f: ReturnType<typeof useStockFundamentalsMap>["map"] extend
 }
 
 type TabId = "overall" | "1d" | "1w" | "1m" | "3m" | "6m";
-type SortField = "rank" | "symbol" | "company" | "rs" | "rating" | "stockReturn" | "spyReturn" | "price";
+type SortField = "rank" | "symbol" | "company" | "rs" | "rating" | "stockReturn" | "spyReturn" | "price" | "coil";
 type SortDir = "asc" | "desc";
 
 const RS_WEIGHTS_KEY = "rs-overall-weights-v2";
 const GROWTH_FILTERS_KEY = "rs-growth-filters-v1";
+const COIL_SETTINGS_KEY = "rs-coil-settings-v1";
+
+interface TightRangeScore {
+  score: number | null;
+  recentAvgRangePct: number | null;
+  baselineAvgRangePct: number | null;
+  ranges: number[];
+  dataPoints: number;
+}
 
 const TABS: { id: TabId; label: string }[] = [
   { id: "overall", label: "Overall" },
@@ -99,6 +109,12 @@ function rsBg(val: number | null): string {
 function pctDisplay(val: number | null): string {
   if (val === null) return "N/A";
   return `${val >= 0 ? "+" : ""}${val.toFixed(2)}%`;
+}
+function coilColor(score: number | null): string {
+  if (score === null) return "text-muted-foreground";
+  if (score < 0.75) return "text-[hsl(160,70%,50%)] font-bold";
+  if (score <= 1.05) return "text-[hsl(40,90%,58%)] font-semibold";
+  return "text-destructive font-semibold";
 }
 
 export default function RsAlpha() {
