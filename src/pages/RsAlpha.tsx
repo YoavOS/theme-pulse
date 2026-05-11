@@ -10,6 +10,7 @@ import HelpButton from "@/components/HelpButton";
 import OverallWeightsPanel, { RsWeights, DEFAULT_RS_WEIGHTS, normalizeWeights } from "@/components/rs/OverallWeightsPanel";
 import RsRatingBadge, { computeRsRatings } from "@/components/rs/RsRatingBadge";
 import CustomTradingViewListModal from "@/components/rs/CustomTradingViewListModal";
+import CustomListAnalyzerModal from "@/components/rs/CustomListAnalyzerModal";
 import SectorDistributionModal from "@/components/rs/SectorDistributionModal";
 import ThemeDistributionModal from "@/components/rs/ThemeDistributionModal";
 import FundamentalsCoverageModal from "@/components/rs/FundamentalsCoverageModal";
@@ -130,6 +131,7 @@ export default function RsAlpha() {
   const [sortField, setSortField] = useState<SortField>("rs");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [customListOpen, setCustomListOpen] = useState(false);
+  const [analyzerOpen, setAnalyzerOpen] = useState(false);
   const [sectorDistOpen, setSectorDistOpen] = useState(false);
   const [themeDistOpen, setThemeDistOpen] = useState(false);
   const [coverageOpen, setCoverageOpen] = useState(false);
@@ -897,6 +899,13 @@ export default function RsAlpha() {
                   >
                     <Settings2 size={12} /> Create Custom TradingView List
                   </button>
+                  <button
+                    onClick={() => setAnalyzerOpen(true)}
+                    className="inline-flex items-center gap-1.5 rounded-md border border-[hsl(280,70%,60%)]/60 bg-[hsl(280,70%,60%)]/15 px-3 py-1.5 text-xs font-semibold text-[hsl(280,80%,75%)] transition-colors hover:bg-[hsl(280,70%,60%)]/25"
+                    title="Paste any ticker list and rank it by RS, Tight Range, Growth and more"
+                  >
+                    <Settings2 size={12} /> Import &amp; Analyze List
+                  </button>
                 </div>
               </div>
             )}
@@ -1013,6 +1022,21 @@ export default function RsAlpha() {
         tabLabel={`${TABS.find(t => t.id === activeTab)?.label ?? ""} Best RS`}
         stocks={sortedStocks}
         ratingMap={ratingMap}
+        getRsForTab={getRsForTab}
+        getReturnField={getReturnField}
+        isOtcSymbol={isOtcSymbol}
+        fundamentalsMap={fundamentalsMap}
+        coilScores={coilScores}
+        coilShortDays={coilSettings.shortDays}
+        coilLongDays={coilSettings.longDays}
+      />
+
+      <CustomListAnalyzerModal
+        open={analyzerOpen}
+        onOpenChange={setAnalyzerOpen}
+        tabId={activeTab}
+        tabLabel={`${TABS.find(t => t.id === activeTab)?.label ?? ""} RS`}
+        universe={stocks}
         getRsForTab={getRsForTab}
         getReturnField={getReturnField}
         isOtcSymbol={isOtcSymbol}
