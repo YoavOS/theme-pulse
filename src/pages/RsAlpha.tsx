@@ -899,6 +899,13 @@ export default function RsAlpha() {
                   >
                     <Settings2 size={12} /> Create Custom TradingView List
                   </button>
+                  <button
+                    onClick={() => setAnalyzerOpen(true)}
+                    className="inline-flex items-center gap-1.5 rounded-md border border-[hsl(280,70%,60%)]/60 bg-[hsl(280,70%,60%)]/15 px-3 py-1.5 text-xs font-semibold text-[hsl(280,80%,75%)] transition-colors hover:bg-[hsl(280,70%,60%)]/25"
+                    title="Paste any ticker list and rank it by RS, Tight Range, Growth and more"
+                  >
+                    <Settings2 size={12} /> Import &amp; Analyze List
+                  </button>
                 </div>
               </div>
             )}
