@@ -17,9 +17,15 @@ import {
 } from "@/lib/growthFilters";
 
 export type CustomListTab = "overall" | "1d" | "1w" | "1m" | "3m" | "6m";
-type SortBy = "rs" | "rating" | "return";
+type SortBy = "rs" | "rating" | "return" | "coil";
 const TOPN_MIN = 10;
 const TOPN_MAX = 500; // values >= MAX mean "All"
+
+export interface CoilScoreInfo {
+  score: number | null;
+  recentAvgRangePct?: number | null;
+  baselineAvgRangePct?: number | null;
+}
 
 interface Props {
   open: boolean;
@@ -33,6 +39,10 @@ interface Props {
   getReturnField: (s: RsStock, t: CustomListTab) => number | null;
   isOtcSymbol: (sym: string) => boolean;
   fundamentalsMap?: Map<string, StockFundamentals>;
+  /** Optional coil/tight-range score per symbol. Lower = tighter. */
+  coilScores?: Map<string, CoilScoreInfo>;
+  coilShortDays?: number;
+  coilLongDays?: number;
 }
 
 export default function CustomTradingViewListModal({
