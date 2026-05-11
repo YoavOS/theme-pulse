@@ -138,18 +138,28 @@ export default function CustomTradingViewListModal({
         const f = fundamentalsMap?.get(s.symbol);
         if (!passesAllActiveFilters(growthFilters, f)) return false;
       }
+      if (coilFilterOn) {
+        const c = coilScores?.get(s.symbol)?.score;
+        if (c === null || c === undefined || !Number.isFinite(c)) return false;
+        if (c > maxCoil) return false;
+      }
       return true;
     });
 
     list = [...list].sort((a, b) => {
       if (sortBy === "rs") return (getRsForTab(b, tabId) ?? -999) - (getRsForTab(a, tabId) ?? -999);
       if (sortBy === "rating") return (ratingMap.get(b.symbol) ?? -1) - (ratingMap.get(a.symbol) ?? -1);
+      if (sortBy === "coil") {
+        const av = coilScores?.get(a.symbol)?.score ?? 999;
+        const bv = coilScores?.get(b.symbol)?.score ?? 999;
+        return av - bv; // tightest first
+      }
       return (getReturnField(b, tabId) ?? -999) - (getReturnField(a, tabId) ?? -999);
     });
 
     if (topN < TOPN_MAX) list = list.slice(0, topN);
     return list;
-  }, [stocks, ratingMap, minRating, minAdr, acceleratingOnly, excludeOtc, sortBy, topN, tabId, getRsForTab, getReturnField, isOtcSymbol, excludeSectorsOn, excludedSectors, growthFilters, growthActive, fundamentalsMap, expandedExclusions]);
+  }, [stocks, ratingMap, minRating, minAdr, acceleratingOnly, excludeOtc, sortBy, topN, tabId, getRsForTab, getReturnField, isOtcSymbol, excludeSectorsOn, excludedSectors, growthFilters, growthActive, fundamentalsMap, expandedExclusions, coilFilterOn, maxCoil, coilScores]);
 
   const symbols = filtered.map(s => s.symbol);
 
