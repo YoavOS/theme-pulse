@@ -1031,6 +1031,21 @@ export default function RsAlpha() {
         coilLongDays={coilSettings.longDays}
       />
 
+      <CustomListAnalyzerModal
+        open={analyzerOpen}
+        onOpenChange={setAnalyzerOpen}
+        tabId={activeTab}
+        tabLabel={`${TABS.find(t => t.id === activeTab)?.label ?? ""} RS`}
+        universe={stocks}
+        getRsForTab={getRsForTab}
+        getReturnField={getReturnField}
+        isOtcSymbol={isOtcSymbol}
+        fundamentalsMap={fundamentalsMap}
+        coilScores={coilScores}
+        coilShortDays={coilSettings.shortDays}
+        coilLongDays={coilSettings.longDays}
+      />
+
       <SectorDistributionModal
         open={sectorDistOpen}
         onOpenChange={setSectorDistOpen}
