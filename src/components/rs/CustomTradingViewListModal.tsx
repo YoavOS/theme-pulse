@@ -271,15 +271,18 @@ export default function CustomTradingViewListModal({
                 { v: "rs" as SortBy, label: "RS Score" },
                 { v: "rating" as SortBy, label: "RS Rating" },
                 { v: "return" as SortBy, label: "Stock Return %" },
+                { v: "coil" as SortBy, label: "Tightest First", disabled: !coilAvailable },
               ].map(opt => (
                 <button
                   key={opt.v}
+                  disabled={(opt as any).disabled}
                   onClick={() => setSortBy(opt.v)}
                   className={`rounded-md border px-3 py-1 text-xs font-medium transition-colors ${
                     sortBy === opt.v
                       ? "border-primary bg-primary/15 text-primary"
                       : "border-border text-muted-foreground hover:bg-accent hover:text-foreground"
-                  }`}
+                  } ${(opt as any).disabled ? "opacity-40 cursor-not-allowed" : ""}`}
+                  title={(opt as any).disabled ? "Tight Range scores not loaded yet" : undefined}
                 >
                   {opt.label}
                 </button>
