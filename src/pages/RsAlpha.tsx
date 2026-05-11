@@ -1017,6 +1017,9 @@ export default function RsAlpha() {
         getReturnField={getReturnField}
         isOtcSymbol={isOtcSymbol}
         fundamentalsMap={fundamentalsMap}
+        coilScores={coilScores}
+        coilShortDays={coilSettings.shortDays}
+        coilLongDays={coilSettings.longDays}
       />
 
       <SectorDistributionModal

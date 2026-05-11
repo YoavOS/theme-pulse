@@ -17,9 +17,15 @@ import {
 } from "@/lib/growthFilters";
 
 export type CustomListTab = "overall" | "1d" | "1w" | "1m" | "3m" | "6m";
-type SortBy = "rs" | "rating" | "return";
+type SortBy = "rs" | "rating" | "return" | "coil";
 const TOPN_MIN = 10;
 const TOPN_MAX = 500; // values >= MAX mean "All"
+
+export interface CoilScoreInfo {
+  score: number | null;
+  recentAvgRangePct?: number | null;
+  baselineAvgRangePct?: number | null;
+}
 
 interface Props {
   open: boolean;
@@ -33,11 +39,16 @@ interface Props {
   getReturnField: (s: RsStock, t: CustomListTab) => number | null;
   isOtcSymbol: (sym: string) => boolean;
   fundamentalsMap?: Map<string, StockFundamentals>;
+  /** Optional coil/tight-range score per symbol. Lower = tighter. */
+  coilScores?: Map<string, CoilScoreInfo>;
+  coilShortDays?: number;
+  coilLongDays?: number;
 }
 
 export default function CustomTradingViewListModal({
   open, onOpenChange, tabId, tabLabel, stocks, ratingMap,
   getRsForTab, getReturnField, isOtcSymbol, fundamentalsMap,
+  coilScores, coilShortDays, coilLongDays,
 }: Props) {
   const [minRating, setMinRating] = useState<number>(60);
   const [topN, setTopN] = useState<number>(50);
@@ -50,8 +61,11 @@ export default function CustomTradingViewListModal({
   const [sectorSearch, setSectorSearch] = useState<string>("");
   const [sectorPopoverOpen, setSectorPopoverOpen] = useState<boolean>(false);
   const [growthFilters, setGrowthFilters] = useState<GrowthFiltersState>({ ...DEFAULT_GROWTH_FILTERS });
+  const [coilFilterOn, setCoilFilterOn] = useState<boolean>(false);
+  const [maxCoil, setMaxCoil] = useState<number>(0.85);
   const growthActive = anyActive(growthFilters);
   const fundamentalsAvailable = (fundamentalsMap?.size ?? 0) > 0;
+  const coilAvailable = (coilScores?.size ?? 0) > 0;
 
   // Industries actually present in the qualified universe (used to show counts and an "Other" group)
   const universeIndustries = useMemo(() => {
@@ -124,18 +138,28 @@ export default function CustomTradingViewListModal({
         const f = fundamentalsMap?.get(s.symbol);
         if (!passesAllActiveFilters(growthFilters, f)) return false;
       }
+      if (coilFilterOn) {
+        const c = coilScores?.get(s.symbol)?.score;
+        if (c === null || c === undefined || !Number.isFinite(c)) return false;
+        if (c > maxCoil) return false;
+      }
       return true;
     });
 
     list = [...list].sort((a, b) => {
       if (sortBy === "rs") return (getRsForTab(b, tabId) ?? -999) - (getRsForTab(a, tabId) ?? -999);
       if (sortBy === "rating") return (ratingMap.get(b.symbol) ?? -1) - (ratingMap.get(a.symbol) ?? -1);
+      if (sortBy === "coil") {
+        const av = coilScores?.get(a.symbol)?.score ?? 999;
+        const bv = coilScores?.get(b.symbol)?.score ?? 999;
+        return av - bv; // tightest first
+      }
       return (getReturnField(b, tabId) ?? -999) - (getReturnField(a, tabId) ?? -999);
     });
 
     if (topN < TOPN_MAX) list = list.slice(0, topN);
     return list;
-  }, [stocks, ratingMap, minRating, minAdr, acceleratingOnly, excludeOtc, sortBy, topN, tabId, getRsForTab, getReturnField, isOtcSymbol, excludeSectorsOn, excludedSectors, growthFilters, growthActive, fundamentalsMap, expandedExclusions]);
+  }, [stocks, ratingMap, minRating, minAdr, acceleratingOnly, excludeOtc, sortBy, topN, tabId, getRsForTab, getReturnField, isOtcSymbol, excludeSectorsOn, excludedSectors, growthFilters, growthActive, fundamentalsMap, expandedExclusions, coilFilterOn, maxCoil, coilScores]);
 
   const symbols = filtered.map(s => s.symbol);
 
@@ -205,6 +229,39 @@ export default function CustomTradingViewListModal({
             <Slider min={1} max={10} step={0.1} value={[minAdr]} onValueChange={(v) => setMinAdr(v[0])} />
           </div>
 
+          {/* Tight Range / Coil Score filter */}
+          <div className="space-y-2 rounded-md border border-border bg-muted/20 px-3 py-2.5">
+            <div className="flex items-center justify-between">
+              <label className="flex items-center gap-2 text-xs cursor-pointer">
+                <Checkbox
+                  checked={coilFilterOn}
+                  disabled={!coilAvailable}
+                  onCheckedChange={(v) => setCoilFilterOn(!!v)}
+                />
+                <span>
+                  <span className="font-medium text-foreground">Tight Range / Coil Score</span>
+                  <span className="block text-[10px] text-muted-foreground">
+                    {coilAvailable
+                      ? `Recent ${coilShortDays ?? 7}d ADR ÷ ${coilLongDays ?? 30}d ADR · lower = tighter`
+                      : "Tight Range scores still loading…"}
+                  </span>
+                </span>
+              </label>
+              <span className="font-mono text-xs text-primary">≤ {maxCoil.toFixed(2)}x</span>
+            </div>
+            <Slider
+              min={0.4}
+              max={1.5}
+              step={0.05}
+              value={[maxCoil]}
+              onValueChange={(v) => setMaxCoil(v[0])}
+              disabled={!coilFilterOn}
+            />
+            <div className="flex justify-between text-[10px] text-muted-foreground">
+              <span>0.40x (very tight)</span><span>1.50x (expanding)</span>
+            </div>
+          </div>
+
           {/* Top N */}
           <div className="space-y-2">
             <div className="flex items-center justify-between text-xs">
@@ -247,15 +304,18 @@ export default function CustomTradingViewListModal({
                 { v: "rs" as SortBy, label: "RS Score" },
                 { v: "rating" as SortBy, label: "RS Rating" },
                 { v: "return" as SortBy, label: "Stock Return %" },
+                { v: "coil" as SortBy, label: "Tightest First", disabled: !coilAvailable },
               ].map(opt => (
                 <button
                   key={opt.v}
+                  disabled={(opt as any).disabled}
                   onClick={() => setSortBy(opt.v)}
                   className={`rounded-md border px-3 py-1 text-xs font-medium transition-colors ${
                     sortBy === opt.v
                       ? "border-primary bg-primary/15 text-primary"
                       : "border-border text-muted-foreground hover:bg-accent hover:text-foreground"
-                  }`}
+                  } ${(opt as any).disabled ? "opacity-40 cursor-not-allowed" : ""}`}
+                  title={(opt as any).disabled ? "Tight Range scores not loaded yet" : undefined}
                 >
                   {opt.label}
                 </button>
