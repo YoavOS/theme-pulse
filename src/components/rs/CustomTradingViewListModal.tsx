@@ -229,6 +229,39 @@ export default function CustomTradingViewListModal({
             <Slider min={1} max={10} step={0.1} value={[minAdr]} onValueChange={(v) => setMinAdr(v[0])} />
           </div>
 
+          {/* Tight Range / Coil Score filter */}
+          <div className="space-y-2 rounded-md border border-border bg-muted/20 px-3 py-2.5">
+            <div className="flex items-center justify-between">
+              <label className="flex items-center gap-2 text-xs cursor-pointer">
+                <Checkbox
+                  checked={coilFilterOn}
+                  disabled={!coilAvailable}
+                  onCheckedChange={(v) => setCoilFilterOn(!!v)}
+                />
+                <span>
+                  <span className="font-medium text-foreground">Tight Range / Coil Score</span>
+                  <span className="block text-[10px] text-muted-foreground">
+                    {coilAvailable
+                      ? `Recent ${coilShortDays ?? 7}d ADR ÷ ${coilLongDays ?? 30}d ADR · lower = tighter`
+                      : "Tight Range scores still loading…"}
+                  </span>
+                </span>
+              </label>
+              <span className="font-mono text-xs text-primary">≤ {maxCoil.toFixed(2)}x</span>
+            </div>
+            <Slider
+              min={0.4}
+              max={1.5}
+              step={0.05}
+              value={[maxCoil]}
+              onValueChange={(v) => setMaxCoil(v[0])}
+              disabled={!coilFilterOn}
+            />
+            <div className="flex justify-between text-[10px] text-muted-foreground">
+              <span>0.40x (very tight)</span><span>1.50x (expanding)</span>
+            </div>
+          </div>
+
           {/* Top N */}
           <div className="space-y-2">
             <div className="flex items-center justify-between text-xs">
