@@ -48,6 +48,7 @@ interface Props {
 export default function CustomTradingViewListModal({
   open, onOpenChange, tabId, tabLabel, stocks, ratingMap,
   getRsForTab, getReturnField, isOtcSymbol, fundamentalsMap,
+  coilScores, coilShortDays, coilLongDays,
 }: Props) {
   const [minRating, setMinRating] = useState<number>(60);
   const [topN, setTopN] = useState<number>(50);
@@ -60,8 +61,11 @@ export default function CustomTradingViewListModal({
   const [sectorSearch, setSectorSearch] = useState<string>("");
   const [sectorPopoverOpen, setSectorPopoverOpen] = useState<boolean>(false);
   const [growthFilters, setGrowthFilters] = useState<GrowthFiltersState>({ ...DEFAULT_GROWTH_FILTERS });
+  const [coilFilterOn, setCoilFilterOn] = useState<boolean>(false);
+  const [maxCoil, setMaxCoil] = useState<number>(0.85);
   const growthActive = anyActive(growthFilters);
   const fundamentalsAvailable = (fundamentalsMap?.size ?? 0) > 0;
+  const coilAvailable = (coilScores?.size ?? 0) > 0;
 
   // Industries actually present in the qualified universe (used to show counts and an "Other" group)
   const universeIndustries = useMemo(() => {
