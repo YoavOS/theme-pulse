@@ -1,5 +1,5 @@
-import { useMemo, useState } from "react";
-import { Copy, Download, ExternalLink, ListChecks, Sparkles } from "lucide-react";
+import { useMemo, useRef, useState, useEffect, useCallback } from "react";
+import { Copy, Download, ExternalLink, ListChecks, Sparkles, Upload, FileText, X, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Slider } from "@/components/ui/slider";
 import { RsStock } from "@/hooks/useRsAlpha";
+import { supabase } from "@/integrations/supabase/client";
 import type { StockFundamentals } from "@/hooks/useStockFundamentalsMap";
 import {
   DEFAULT_GROWTH_FILTERS,
@@ -28,9 +29,16 @@ export interface CoilScoreInfo {
   baselineAvgRangePct?: number | null;
 }
 
+interface EmaInfo {
+  ema9w: number | null;
+  price: number | null;
+  distancePct: number | null;
+}
+
 type SortBy =
   | "rs"
   | "rating"
+  | "ema"
   | "coil"
   | "return"
   | "marketCap"
@@ -38,12 +46,20 @@ type SortBy =
   | "growth"
   | "input";
 
+const RS_TABS: { id: AnalyzerTab; label: string }[] = [
+  { id: "overall", label: "Overall RS" },
+  { id: "1d", label: "1 Day RS" },
+  { id: "1w", label: "1 Week RS" },
+  { id: "1m", label: "1 Month RS" },
+  { id: "3m", label: "3 Months RS" },
+  { id: "6m", label: "6 Months RS" },
+];
+
 interface Props {
   open: boolean;
   onOpenChange: (o: boolean) => void;
   tabId: AnalyzerTab;
   tabLabel: string;
-  /** Full qualified universe (already keyed by symbol). */
   universe: RsStock[];
   getRsForTab: (s: RsStock, t: AnalyzerTab) => number | null;
   getReturnField: (s: RsStock, t: AnalyzerTab) => number | null;
@@ -54,12 +70,24 @@ interface Props {
   coilLongDays?: number;
 }
 
+// Strip exchange prefixes (NYSE:, NASDAQ:, AMEX:, BATS:, ARCA:, CBOE:, OTC:, etc.)
+// and any common TradingView decorations.
+function cleanTicker(raw: string): string {
+  let t = raw.trim().toUpperCase();
+  // Drop exchange prefix before colon
+  const colonIdx = t.indexOf(":");
+  if (colonIdx >= 0) t = t.slice(colonIdx + 1);
+  // Strip any quotes/brackets/whitespace
+  t = t.replace(/[^A-Z0-9.\-]/g, "");
+  return t;
+}
+
 function parseTickers(raw: string): string[] {
   if (!raw) return [];
   const seen = new Set<string>();
   const out: string[] = [];
   for (const tok of raw.split(/[\s,;|]+/)) {
-    const t = tok.trim().toUpperCase().replace(/[^A-Z0-9.\-]/g, "");
+    const t = cleanTicker(tok);
     if (!t) continue;
     if (seen.has(t)) continue;
     seen.add(t);
@@ -82,6 +110,7 @@ function growthScore(f?: StockFundamentals): { score: number; emoji: string | nu
 const SORT_OPTIONS: { id: SortBy; label: string }[] = [
   { id: "rs", label: "RS Score (highest)" },
   { id: "rating", label: "RS Rating (highest)" },
+  { id: "ema", label: "Closest to 9W EMA (smallest |distance|)" },
   { id: "coil", label: "Tight Range / Coil (tightest)" },
   { id: "return", label: "Stock Return (highest)" },
   { id: "growth", label: "Fundamentals / Growth Strength" },
@@ -90,6 +119,15 @@ const SORT_OPTIONS: { id: SortBy; label: string }[] = [
   { id: "input", label: "Original Input Order" },
 ];
 
+function emaColor(d: number | null): string {
+  if (d === null || d === undefined) return "text-muted-foreground";
+  const a = Math.abs(d);
+  if (a <= 2) return "text-[hsl(140,70%,55%)] font-semibold"; // very close — attractive pullback
+  if (a <= 5) return "text-[hsl(160,55%,55%)]";
+  if (a <= 10) return "text-foreground";
+  return d >= 0 ? "text-amber-400" : "text-destructive/80";
+}
+
 export default function CustomListAnalyzerModal({
   open, onOpenChange, tabId, tabLabel, universe,
   getRsForTab, getReturnField, isOtcSymbol, fundamentalsMap,
@@ -97,17 +135,31 @@ export default function CustomListAnalyzerModal({
 }: Props) {
   const [raw, setRaw] = useState<string>("");
   const [analyzed, setAnalyzed] = useState<boolean>(false);
+  const [dragOver, setDragOver] = useState<boolean>(false);
+  const [lastFileName, setLastFileName] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // RS timeframe used for filter + sort (defaults to current tab; user can override)
+  const [filterRsTab, setFilterRsTab] = useState<AnalyzerTab>(tabId);
+  useEffect(() => { setFilterRsTab(tabId); }, [tabId]);
 
   // Filters
   const [sortBy, setSortBy] = useState<SortBy>("rs");
   const [minRating, setMinRating] = useState<number>(0);
   const [minAdr, setMinAdr] = useState<number>(0);
-  const [minMcapM, setMinMcapM] = useState<number>(0); // millions
+  const [minMcapM, setMinMcapM] = useState<number>(0);
   const [excludeOtc, setExcludeOtc] = useState<boolean>(true);
   const [hideMissing, setHideMissing] = useState<boolean>(false);
   const [growthFilters, setGrowthFilters] = useState<GrowthFiltersState>({ ...DEFAULT_GROWTH_FILTERS });
   const [coilFilterOn, setCoilFilterOn] = useState<boolean>(false);
   const [maxCoil, setMaxCoil] = useState<number>(0.85);
+
+  // 9W EMA filter
+  const [emaFilterOn, setEmaFilterOn] = useState<boolean>(false);
+  const [maxEmaAbs, setMaxEmaAbs] = useState<number>(5); // ±5%
+  const [emaMap, setEmaMap] = useState<Map<string, EmaInfo>>(new Map());
+  const [emaLoading, setEmaLoading] = useState<boolean>(false);
+  const emaAvailable = emaMap.size > 0;
 
   const universeMap = useMemo(() => {
     const m = new Map<string, RsStock>();
@@ -121,7 +173,70 @@ export default function CustomListAnalyzerModal({
   const coilAvailable = (coilScores?.size ?? 0) > 0;
   const growthActive = anyActive(growthFilters);
 
-  // Compute matched stocks + ratings (rating computed within this list, not the global universe)
+  // ---------- File upload ----------
+  const ingestFile = useCallback(async (file: File) => {
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error("File too large (max 5MB).");
+      return;
+    }
+    try {
+      const text = await file.text();
+      const parsed = parseTickers(text);
+      if (parsed.length === 0) {
+        toast.error("No tickers found in file.");
+        return;
+      }
+      setRaw(parsed.join(", "));
+      setLastFileName(file.name);
+      toast.success(`Loaded ${parsed.length} tickers successfully`, { description: file.name });
+    } catch (e) {
+      toast.error("Could not read file.", { description: e instanceof Error ? e.message : String(e) });
+    }
+  }, []);
+
+  const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    if (f) void ingestFile(f);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault(); setDragOver(false);
+    const f = e.dataTransfer.files?.[0];
+    if (f) void ingestFile(f);
+  };
+
+  // ---------- Fetch 9W EMA distances on Analyze ----------
+  const fetchEmaForSymbols = useCallback(async (symbols: string[]) => {
+    if (symbols.length === 0) return;
+    setEmaLoading(true);
+    try {
+      const next = new Map(emaMap);
+      // Skip symbols already loaded
+      const need = symbols.filter((s) => !next.has(s));
+      if (need.length === 0) { setEmaLoading(false); return; }
+      // Chunk to keep payload reasonable
+      const CHUNK = 250;
+      for (let i = 0; i < need.length; i += CHUNK) {
+        const slice = need.slice(i, i + CHUNK);
+        const { data, error } = await supabase.functions.invoke("ema9w-distance", { body: { symbols: slice } });
+        if (error) throw new Error(error.message);
+        const rows = (data as { rows?: Array<{ symbol: string; ema9w: number | null; price: number | null; distancePct: number | null }> })?.rows ?? [];
+        for (const r of rows) {
+          next.set(r.symbol.toUpperCase(), { ema9w: r.ema9w, price: r.price, distancePct: r.distancePct });
+        }
+        setEmaMap(new Map(next));
+      }
+      const scored = Array.from(next.values()).filter((v) => v.distancePct !== null).length;
+      toast.success(`9W EMA loaded for ${scored} stocks.`);
+    } catch (e) {
+      toast.error("9W EMA fetch failed.", { description: e instanceof Error ? e.message : String(e) });
+    } finally {
+      setEmaLoading(false);
+    }
+  }, [emaMap]);
+
+  // Compute matched stocks + ratings
   const { rows, matched, missing, ratingMap } = useMemo(() => {
     const matchedStocks: RsStock[] = [];
     const missingTickers: string[] = [];
@@ -133,12 +248,12 @@ export default function CustomListAnalyzerModal({
       else missingTickers.push(t);
     });
 
-    const rsValues = matchedStocks.map((s) => getRsForTab(s, tabId));
+    // Ratings computed against the SELECTED filter timeframe (not display tab)
+    const rsValues = matchedStocks.map((s) => getRsForTab(s, filterRsTab));
     const ratings = computeRsRatings(rsValues);
     const rMap = new Map<string, number | null>();
     matchedStocks.forEach((s, i) => rMap.set(s.symbol, ratings[i]));
 
-    // Apply filters
     const filtered = matchedStocks.filter((s) => {
       const r = rMap.get(s.symbol);
       if (excludeOtc && isOtcSymbol(s.symbol)) return false;
@@ -154,26 +269,38 @@ export default function CustomListAnalyzerModal({
         if (c === null || c === undefined || !Number.isFinite(c)) return false;
         if (c > maxCoil) return false;
       }
+      if (emaFilterOn) {
+        const d = emaMap.get(s.symbol)?.distancePct;
+        if (d === null || d === undefined || !Number.isFinite(d)) return false;
+        if (Math.abs(d) > maxEmaAbs) return false;
+      }
       return true;
     });
 
     const sorted = [...filtered].sort((a, b) => {
       switch (sortBy) {
-        case "rs": return (getRsForTab(b, tabId) ?? -999) - (getRsForTab(a, tabId) ?? -999);
+        case "rs": return (getRsForTab(b, filterRsTab) ?? -999) - (getRsForTab(a, filterRsTab) ?? -999);
         case "rating": return (rMap.get(b.symbol) ?? -1) - (rMap.get(a.symbol) ?? -1);
+        case "ema": {
+          const av = emaMap.get(a.symbol)?.distancePct;
+          const bv = emaMap.get(b.symbol)?.distancePct;
+          const aa = av === null || av === undefined ? Infinity : Math.abs(av);
+          const bb = bv === null || bv === undefined ? Infinity : Math.abs(bv);
+          return aa - bb;
+        }
         case "coil": {
           const av = coilScores?.get(a.symbol)?.score ?? 999;
           const bv = coilScores?.get(b.symbol)?.score ?? 999;
           return av - bv;
         }
-        case "return": return (getReturnField(b, tabId) ?? -999) - (getReturnField(a, tabId) ?? -999);
+        case "return": return (getReturnField(b, filterRsTab) ?? -999) - (getReturnField(a, filterRsTab) ?? -999);
         case "marketCap": return (b.marketCap ?? -1) - (a.marketCap ?? -1);
         case "dollarVol": return (b.avgDollarVolume ?? -1) - (a.avgDollarVolume ?? -1);
         case "growth": {
           const ag = growthScore(fundamentalsMap?.get(a.symbol)).score;
           const bg = growthScore(fundamentalsMap?.get(b.symbol)).score;
           if (bg !== ag) return bg - ag;
-          return (getRsForTab(b, tabId) ?? -999) - (getRsForTab(a, tabId) ?? -999);
+          return (getRsForTab(b, filterRsTab) ?? -999) - (getRsForTab(a, filterRsTab) ?? -999);
         }
         case "input": return (inputOrder.get(a.symbol) ?? 0) - (inputOrder.get(b.symbol) ?? 0);
       }
@@ -181,20 +308,20 @@ export default function CustomListAnalyzerModal({
 
     return { rows: sorted, matched: matchedStocks, missing: missingTickers, ratingMap: rMap };
   }, [
-    inputTickers, universeMap, tabId, getRsForTab, getReturnField, isOtcSymbol,
+    inputTickers, universeMap, filterRsTab, getRsForTab, getReturnField, isOtcSymbol,
     minRating, minAdr, minMcapM, excludeOtc, growthFilters, growthActive,
-    fundamentalsMap, coilFilterOn, maxCoil, coilScores, sortBy,
+    fundamentalsMap, coilFilterOn, maxCoil, coilScores, emaFilterOn, maxEmaAbs, emaMap, sortBy,
   ]);
 
   const visibleMissing = hideMissing ? [] : missing;
   const exportSymbols = rows.map((s) => s.symbol);
 
   const handleAnalyze = () => {
-    if (inputTickers.length === 0) {
-      toast.error("Paste at least one ticker.");
-      return;
-    }
+    if (inputTickers.length === 0) { toast.error("Paste at least one ticker."); return; }
     setAnalyzed(true);
+    // Kick off EMA fetch for matched symbols in universe (skip ones that won't be displayed anyway)
+    const matchedSyms = inputTickers.filter((t) => universeMap.has(t));
+    void fetchEmaForSymbols(matchedSyms);
   };
 
   const handleCopy = async () => {
@@ -208,8 +335,7 @@ export default function CustomListAnalyzerModal({
     const blob = new Blob([exportSymbols.join("\n") + "\n"], { type: "text/plain;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
-    a.href = url;
-    a.download = `Analyzed_List_${exportSymbols.length}tickers.txt`;
+    a.href = url; a.download = `Analyzed_List_${exportSymbols.length}tickers.txt`;
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
     URL.revokeObjectURL(url);
     toast.success(`Downloaded ${exportSymbols.length} symbols.`);
@@ -249,17 +375,50 @@ export default function CustomListAnalyzerModal({
             <ListChecks size={18} /> Custom List Analyzer · {tabLabel}
           </DialogTitle>
           <DialogDescription>
-            Paste any list of tickers, then sort &amp; filter using the same RS, Tight Range, Growth and Fundamentals data as the main view.
+            Paste, upload (.txt) or drop a TradingView list. Exchange prefixes like <code>NYSE:</code> / <code>NASDAQ:</code> are stripped automatically.
           </DialogDescription>
         </DialogHeader>
 
         {!analyzed ? (
           <div className="space-y-3">
-            <label className="text-xs font-medium text-muted-foreground">Tickers (comma, space, or newline-separated)</label>
+            {/* Drag & drop / upload zone */}
+            <div
+              onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+              onDragLeave={() => setDragOver(false)}
+              onDrop={handleDrop}
+              className={`flex items-center justify-between gap-3 rounded-lg border-2 border-dashed p-3 text-xs transition ${dragOver ? "border-primary bg-primary/5" : "border-border bg-muted/20"}`}
+            >
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <Upload size={16} />
+                <span>Drag &amp; drop a <code>.txt</code> here, or</span>
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  className="inline-flex items-center gap-1 rounded-md border border-border bg-background px-2 py-1 text-xs font-medium hover:bg-accent"
+                >
+                  <FileText size={12} /> Upload File
+                </button>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".txt,text/plain,.csv,text/csv"
+                  className="hidden"
+                  onChange={handleFileInput}
+                />
+                {lastFileName && (
+                  <span className="ml-2 inline-flex items-center gap-1 rounded bg-background px-2 py-0.5 font-mono text-[10px]">
+                    {lastFileName}
+                    <button onClick={() => { setLastFileName(null); setRaw(""); }} className="text-muted-foreground hover:text-foreground"><X size={10} /></button>
+                  </span>
+                )}
+              </div>
+              <span className="text-[10px] text-muted-foreground">Supports TradingView exports (NYSE:DAN,NASDAQ:TSEM,…)</span>
+            </div>
+
+            <label className="text-xs font-medium text-muted-foreground">Or paste tickers (comma, space, newline-separated)</label>
             <Textarea
               value={raw}
               onChange={(e) => setRaw(e.target.value)}
-              placeholder={"AAPL, MSFT, NVDA\nTSLA AMD\nMETA, GOOGL"}
+              placeholder={"NYSE:DAN,NASDAQ:TSEM,NYSE:CIEN\nAAPL MSFT NVDA\nTSLA, AMD"}
               className="min-h-[180px] font-mono text-sm"
             />
             <div className="flex items-center justify-between text-xs text-muted-foreground">
@@ -278,6 +437,16 @@ export default function CustomListAnalyzerModal({
             {/* Settings panel */}
             <div className="grid grid-cols-1 gap-3 rounded-lg border border-border bg-muted/20 p-3 md:grid-cols-3">
               <div>
+                <label className="mb-1 block text-[11px] font-medium text-muted-foreground">RS Timeframe (filter &amp; sort)</label>
+                <select
+                  value={filterRsTab}
+                  onChange={(e) => setFilterRsTab(e.target.value as AnalyzerTab)}
+                  className="h-9 w-full rounded-md border border-input bg-background px-2 text-xs"
+                >
+                  {RS_TABS.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}
+                </select>
+              </div>
+              <div>
                 <label className="mb-1 block text-[11px] font-medium text-muted-foreground">Sort By</label>
                 <select
                   value={sortBy}
@@ -288,9 +457,16 @@ export default function CustomListAnalyzerModal({
                     <option
                       key={o.id}
                       value={o.id}
-                      disabled={(o.id === "coil" && !coilAvailable) || (o.id === "growth" && !fundamentalsAvailable)}
+                      disabled={
+                        (o.id === "coil" && !coilAvailable) ||
+                        (o.id === "growth" && !fundamentalsAvailable) ||
+                        (o.id === "ema" && !emaAvailable && !emaLoading)
+                      }
                     >
-                      {o.label}{(o.id === "coil" && !coilAvailable) ? " (loading…)" : ""}{(o.id === "growth" && !fundamentalsAvailable) ? " (no fundamentals)" : ""}
+                      {o.label}
+                      {o.id === "coil" && !coilAvailable ? " (loading…)" : ""}
+                      {o.id === "growth" && !fundamentalsAvailable ? " (no fundamentals)" : ""}
+                      {o.id === "ema" && emaLoading ? " (loading…)" : ""}
                     </option>
                   ))}
                 </select>
@@ -343,6 +519,31 @@ export default function CustomListAnalyzerModal({
                 </div>
                 <Slider value={[maxCoil]} min={0.4} max={1.5} step={0.05} onValueChange={(v) => setMaxCoil(v[0])} disabled={!coilFilterOn || !coilAvailable} className="mt-1" />
               </div>
+
+              {/* 9W EMA filter */}
+              <div className="md:col-span-3">
+                <div className="flex items-center justify-between">
+                  <label className="flex items-center gap-2 text-xs">
+                    <Checkbox
+                      checked={emaFilterOn}
+                      onCheckedChange={(v) => setEmaFilterOn(!!v)}
+                      disabled={!emaAvailable && !emaLoading}
+                    />
+                    Distance to 9-Week EMA filter
+                    {emaLoading && <Loader2 size={12} className="animate-spin text-muted-foreground" />}
+                  </label>
+                  <span className="font-mono text-xs text-muted-foreground">within ±{maxEmaAbs.toFixed(1)}%</span>
+                </div>
+                <Slider
+                  value={[maxEmaAbs]}
+                  min={0.5}
+                  max={20}
+                  step={0.5}
+                  onValueChange={(v) => setMaxEmaAbs(v[0])}
+                  disabled={!emaFilterOn || (!emaAvailable && !emaLoading)}
+                  className="mt-1"
+                />
+              </div>
             </div>
 
             {/* Summary + actions */}
@@ -350,6 +551,7 @@ export default function CustomListAnalyzerModal({
               <div className="flex flex-wrap items-center gap-3">
                 <span><span className="font-semibold text-foreground">{rows.length}</span> shown</span>
                 <span className="text-muted-foreground">· {matched.length} matched in universe · {missing.length} unmatched · {inputTickers.length} input</span>
+                {emaLoading && <span className="inline-flex items-center gap-1 text-muted-foreground"><Loader2 size={11} className="animate-spin" /> 9W EMA loading…</span>}
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 <button onClick={handleReset} className="rounded-md border border-border px-3 py-1.5 text-xs hover:bg-accent">← Edit list</button>
@@ -371,6 +573,7 @@ export default function CustomListAnalyzerModal({
                       <th className="px-2 py-2 text-left text-muted-foreground">Company</th>
                       <th className="px-2 py-2 text-right text-muted-foreground">RS</th>
                       <th className="px-2 py-2 text-right text-muted-foreground">Return</th>
+                      <th className="px-2 py-2 text-right text-muted-foreground" title="Distance from current price to 9-Week EMA">9W EMA Δ</th>
                       <th className="px-2 py-2 text-right text-muted-foreground">Coil</th>
                       <th className="px-2 py-2 text-right text-muted-foreground">ADR%</th>
                       <th className="px-2 py-2 text-right text-muted-foreground">Mkt Cap</th>
@@ -380,10 +583,11 @@ export default function CustomListAnalyzerModal({
                   </thead>
                   <tbody>
                     {rows.map((s, idx) => {
-                      const rs = getRsForTab(s, tabId);
-                      const ret = getReturnField(s, tabId);
+                      const rs = getRsForTab(s, filterRsTab);
+                      const ret = getReturnField(s, filterRsTab);
                       const rating = ratingMap.get(s.symbol) ?? null;
                       const coil = coilScores?.get(s.symbol)?.score ?? null;
+                      const ema = emaMap.get(s.symbol);
                       const g = growthScore(fundamentalsMap?.get(s.symbol));
                       return (
                         <tr key={s.symbol} className="border-b border-border/40 hover:bg-muted/20">
@@ -393,6 +597,9 @@ export default function CustomListAnalyzerModal({
                           <td className="px-2 py-1.5 max-w-[200px] truncate text-muted-foreground" title={s.companyName ?? ""}>{s.companyName ?? "—"}</td>
                           <td className={`px-2 py-1.5 text-right font-mono ${rs !== null && rs >= 0 ? "text-[hsl(160,60%,55%)]" : "text-destructive/80"}`}>{pctDisplay(rs)}</td>
                           <td className={`px-2 py-1.5 text-right font-mono ${ret !== null && ret >= 0 ? "text-[hsl(160,60%,55%)]" : "text-destructive/80"}`}>{pctDisplay(ret)}</td>
+                          <td className={`px-2 py-1.5 text-right font-mono ${emaColor(ema?.distancePct ?? null)}`} title={ema?.ema9w ? `9W EMA: ${ema.ema9w}` : ""}>
+                            {ema?.distancePct === null || ema?.distancePct === undefined ? (emaLoading ? "…" : "—") : pctDisplay(ema.distancePct)}
+                          </td>
                           <td className="px-2 py-1.5 text-right font-mono">{coil !== null ? `${coil.toFixed(2)}x` : "—"}</td>
                           <td className="px-2 py-1.5 text-right font-mono text-muted-foreground">{s.adrPercent !== null ? `${s.adrPercent.toFixed(1)}%` : "—"}</td>
                           <td className="px-2 py-1.5 text-right font-mono text-muted-foreground">{fmtMcap(s.marketCap)}</td>
@@ -402,7 +609,7 @@ export default function CustomListAnalyzerModal({
                       );
                     })}
                     {rows.length === 0 && (
-                      <tr><td colSpan={11} className="px-2 py-6 text-center text-muted-foreground">No tickers match the current filters.</td></tr>
+                      <tr><td colSpan={12} className="px-2 py-6 text-center text-muted-foreground">No tickers match the current filters.</td></tr>
                     )}
                   </tbody>
                 </table>
