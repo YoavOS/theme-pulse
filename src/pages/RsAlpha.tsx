@@ -1135,6 +1135,8 @@ export default function RsAlpha() {
         coilScores={coilScores}
         coilShortDays={coilSettings.shortDays}
         coilLongDays={coilSettings.longDays}
+        emaDistances={emaDistances}
+        qqqPctChange={qqqPctChange}
       />
 
       <CustomListAnalyzerModal
@@ -1150,6 +1152,7 @@ export default function RsAlpha() {
         coilScores={coilScores}
         coilShortDays={coilSettings.shortDays}
         coilLongDays={coilSettings.longDays}
+        emaDistances={emaDistances}
       />
 
       <SectorDistributionModal
