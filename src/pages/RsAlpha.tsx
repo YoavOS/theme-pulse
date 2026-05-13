@@ -36,7 +36,7 @@ function growthBadge(f: ReturnType<typeof useStockFundamentalsMap>["map"] extend
 }
 
 type TabId = "overall" | "1d" | "1w" | "1m" | "3m" | "6m";
-type SortField = "rank" | "symbol" | "company" | "rs" | "rating" | "stockReturn" | "spyReturn" | "price" | "coil";
+type SortField = "rank" | "symbol" | "company" | "rs" | "rating" | "stockReturn" | "spyReturn" | "price" | "coil" | "ema9d" | "ema21d" | "ema9w";
 type SortDir = "asc" | "desc";
 
 const RS_WEIGHTS_KEY = "rs-overall-weights-v2";
@@ -49,6 +49,15 @@ interface TightRangeScore {
   baselineAvgRangePct: number | null;
   ranges: number[];
   dataPoints: number;
+}
+
+export interface EmaDistanceInfo {
+  dist9d: number | null;
+  dist21d: number | null;
+  dist9w: number | null;
+  ema9d: number | null;
+  ema21d: number | null;
+  ema9w: number | null;
 }
 
 const TABS: { id: TabId; label: string }[] = [
@@ -116,6 +125,18 @@ function coilColor(score: number | null): string {
   if (score < 0.75) return "text-[hsl(160,70%,50%)] font-bold";
   if (score <= 1.05) return "text-[hsl(40,90%,58%)] font-semibold";
   return "text-destructive font-semibold";
+}
+function emaDistColor(d: number | null): string {
+  if (d === null || d === undefined) return "text-muted-foreground";
+  const a = Math.abs(d);
+  if (a <= 2) return "text-[hsl(140,70%,55%)] font-semibold"; // close pullback / hugging EMA
+  if (a <= 5) return "text-[hsl(160,55%,55%)]";
+  if (a <= 10) return "text-foreground";
+  return d >= 0 ? "text-amber-400" : "text-destructive/80";
+}
+function emaDistDisplay(d: number | null | undefined): string {
+  if (d === null || d === undefined) return "—";
+  return `${d >= 0 ? "+" : ""}${d.toFixed(1)}%`;
 }
 
 export default function RsAlpha() {
