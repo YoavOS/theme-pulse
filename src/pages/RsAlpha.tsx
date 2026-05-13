@@ -335,8 +335,10 @@ export default function RsAlpha() {
   };
 
   const toggleSort = (field: SortField) => {
+    // EMA distance + Coil sort: smaller is better → default ascending.
+    const ascByDefault = field === "coil" || field === "ema9d" || field === "ema21d" || field === "ema9w";
     if (sortField === field) setSortDir(d => d === "desc" ? "asc" : "desc");
-    else { setSortField(field); setSortDir(field === "coil" ? "asc" : "desc"); }
+    else { setSortField(field); setSortDir(ascByDefault ? "asc" : "desc"); }
   };
 
   const growthActive = anyActive(growthFilters);
@@ -376,12 +378,23 @@ export default function RsAlpha() {
           const bv = coilScores.get(b.symbol)?.score ?? 999;
           return mul * (av - bv);
         }
+        case "ema9d":
+        case "ema21d":
+        case "ema9w": {
+          const key = sortField === "ema9d" ? "dist9d" : sortField === "ema21d" ? "dist21d" : "dist9w";
+          const av = emaDistances.get(a.symbol)?.[key];
+          const bv = emaDistances.get(b.symbol)?.[key];
+          // Sort by absolute distance (closest = best). Missing values pushed to end.
+          const aa = av === null || av === undefined ? Infinity : Math.abs(av);
+          const bb = bv === null || bv === undefined ? Infinity : Math.abs(bv);
+          return mul * (aa - bb);
+        }
         default: return 0;
       }
     });
     return { sortedStocks: sorted, ratingMap: map, growthFilteredOutCount: droppedByGrowth };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stocks, activeTab, sortField, sortDir, hideOtc, weights, growthFilters, fundamentalsMap, coilScores]);
+  }, [stocks, activeTab, sortField, sortDir, hideOtc, weights, growthFilters, fundamentalsMap, coilScores, emaDistances]);
 
   const otcHiddenCount = useMemo(
     () => hideOtc ? stocks.filter(s => isOtcSymbol(s.symbol) && getRsForTab(s, activeTab) !== null).length : 0,
