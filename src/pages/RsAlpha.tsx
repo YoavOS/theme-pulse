@@ -206,6 +206,9 @@ export default function RsAlpha() {
   });
   const [coilScores, setCoilScores] = useState<Map<string, TightRangeScore>>(new Map());
   const [coilLoading, setCoilLoading] = useState(false);
+  const [emaDistances, setEmaDistances] = useState<Map<string, EmaDistanceInfo>>(new Map());
+  const [emaLoading, setEmaLoading] = useState(false);
+  const [qqqPctChange, setQqqPctChange] = useState<number | null>(null);
 
   useEffect(() => { setShowAll(false); }, [activeTab]);
   useEffect(() => { localStorage.setItem("rs-hide-otc", String(hideOtc)); }, [hideOtc]);
@@ -246,6 +249,62 @@ export default function RsAlpha() {
     run();
     return () => { cancelled = true; };
   }, [stocks, coilSettings.shortDays, coilSettings.longDays]);
+
+  // Load EMA distances (9D / 21D / 9W) for the qualified universe.
+  useEffect(() => {
+    if (stocks.length === 0) return;
+    let cancelled = false;
+    const run = async () => {
+      setEmaLoading(true);
+      try {
+        const symbols = stocks.map((s) => s.symbol);
+        const next = new Map<string, EmaDistanceInfo>();
+        const CHUNK = 300;
+        for (let i = 0; i < symbols.length; i += CHUNK) {
+          const slice = symbols.slice(i, i + CHUNK);
+          const { data, error } = await supabase.functions.invoke("ema-distances", { body: { symbols: slice } });
+          if (error) throw error;
+          if (data?.error) throw new Error(data.error);
+          if (cancelled) return;
+          for (const row of data?.rows ?? []) {
+            next.set(String(row.symbol).toUpperCase(), {
+              dist9d: row.dist9d ?? null,
+              dist21d: row.dist21d ?? null,
+              dist9w: row.dist9w ?? null,
+              ema9d: row.ema9d ?? null,
+              ema21d: row.ema21d ?? null,
+              ema9w: row.ema9w ?? null,
+            });
+          }
+          setEmaDistances(new Map(next));
+        }
+      } catch (e) {
+        if (!cancelled) toast.error(e instanceof Error ? e.message : "Failed to calculate EMA distances");
+      } finally {
+        if (!cancelled) setEmaLoading(false);
+      }
+    };
+    run();
+    return () => { cancelled = true; };
+  }, [stocks]);
+
+  // Fetch QQQ today's % change once for relative-strength scanner profiles.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data, error } = await supabase.functions.invoke("get-intraday-prices", { body: { symbols: ["QQQ"], interval: "5m" } });
+        if (error) throw error;
+        if (cancelled) return;
+        const r = (data as { results?: { QQQ?: { close: number[]; prevClose: number | null } } })?.results?.QQQ;
+        if (r && r.close.length > 0 && r.prevClose && r.prevClose > 0) {
+          const last = r.close[r.close.length - 1];
+          setQqqPctChange(((last - r.prevClose) / r.prevClose) * 100);
+        }
+      } catch { /* non-blocking */ }
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   // Heuristic: 5-letter all-caps tickers ending in 'F' are typically foreign OTC (e.g., FKURF).
   // Also defensively block any symbol with OTC suffixes that may have slipped through historically.
