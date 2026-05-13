@@ -1026,6 +1026,9 @@ export default function RsAlpha() {
                       <th className="px-3 py-2.5 text-right"><SortHeader field="stockReturn" label="Stock Return" className="justify-end" /></th>
                       <th className="px-3 py-2.5 text-right"><SortHeader field="spyReturn" label="SPY Return" className="justify-end" /></th>
                       <th className="px-3 py-2.5 text-right"><SortHeader field="coil" label="Tight Range" className="justify-end" /></th>
+                      <th className="px-2 py-2.5 text-right" title="Distance from current price to 9-day EMA"><SortHeader field="ema9d" label="To 9D EMA" className="justify-end" /></th>
+                      <th className="px-2 py-2.5 text-right" title="Distance from current price to 21-day EMA"><SortHeader field="ema21d" label="To 21D EMA" className="justify-end" /></th>
+                      <th className="px-2 py-2.5 text-right" title="Distance from current price to 9-week EMA"><SortHeader field="ema9w" label="To 9W EMA" className="justify-end" /></th>
                       <th className="px-3 py-2.5 text-right"><SortHeader field="price" label="Price" className="justify-end" /></th>
                     </tr>
                   </thead>
@@ -1037,6 +1040,7 @@ export default function RsAlpha() {
                       const rating = ratingMap.get(stock.symbol) ?? null;
                       const badge = growthBadge(fundamentalsMap.get(stock.symbol));
                       const coil = coilScores.get(stock.symbol);
+                      const ema = emaDistances.get(stock.symbol);
                       return (
                         <tr key={stock.symbol} className={`border-b border-border/50 transition-colors hover:bg-muted/20 ${rsBg(rs)}`}>
                           <td className="px-3 py-2 text-xs text-muted-foreground">{idx + 1}</td>
@@ -1078,6 +1082,15 @@ export default function RsAlpha() {
                                 {coil?.score !== null && coil?.score !== undefined ? `${coil.score.toFixed(2)}x` : coilLoading ? "…" : "N/A"}
                               </span>
                             </div>
+                          </td>
+                          <td className={`px-2 py-2 text-right font-mono text-xs ${emaDistColor(ema?.dist9d ?? null)}`} title={ema?.ema9d ? `9D EMA: $${ema.ema9d.toFixed(2)}` : ""}>
+                            {ema?.dist9d === null || ema?.dist9d === undefined ? (emaLoading ? "…" : "—") : emaDistDisplay(ema.dist9d)}
+                          </td>
+                          <td className={`px-2 py-2 text-right font-mono text-xs ${emaDistColor(ema?.dist21d ?? null)}`} title={ema?.ema21d ? `21D EMA: $${ema.ema21d.toFixed(2)}` : ""}>
+                            {ema?.dist21d === null || ema?.dist21d === undefined ? (emaLoading ? "…" : "—") : emaDistDisplay(ema.dist21d)}
+                          </td>
+                          <td className={`px-2 py-2 text-right font-mono text-xs ${emaDistColor(ema?.dist9w ?? null)}`} title={ema?.ema9w ? `9W EMA: $${ema.ema9w.toFixed(2)}` : ""}>
+                            {ema?.dist9w === null || ema?.dist9w === undefined ? (emaLoading ? "…" : "—") : emaDistDisplay(ema.dist9w)}
                           </td>
                           <td className="px-3 py-2 text-right font-mono text-muted-foreground">
                             {stock.price !== null ? `$${stock.price.toFixed(2)}` : "N/A"}
