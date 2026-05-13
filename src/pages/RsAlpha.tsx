@@ -36,7 +36,7 @@ function growthBadge(f: ReturnType<typeof useStockFundamentalsMap>["map"] extend
 }
 
 type TabId = "overall" | "1d" | "1w" | "1m" | "3m" | "6m";
-type SortField = "rank" | "symbol" | "company" | "rs" | "rating" | "stockReturn" | "spyReturn" | "price" | "coil";
+type SortField = "rank" | "symbol" | "company" | "rs" | "rating" | "stockReturn" | "spyReturn" | "price" | "coil" | "ema9d" | "ema21d" | "ema9w";
 type SortDir = "asc" | "desc";
 
 const RS_WEIGHTS_KEY = "rs-overall-weights-v2";
@@ -49,6 +49,15 @@ interface TightRangeScore {
   baselineAvgRangePct: number | null;
   ranges: number[];
   dataPoints: number;
+}
+
+export interface EmaDistanceInfo {
+  dist9d: number | null;
+  dist21d: number | null;
+  dist9w: number | null;
+  ema9d: number | null;
+  ema21d: number | null;
+  ema9w: number | null;
 }
 
 const TABS: { id: TabId; label: string }[] = [
@@ -116,6 +125,18 @@ function coilColor(score: number | null): string {
   if (score < 0.75) return "text-[hsl(160,70%,50%)] font-bold";
   if (score <= 1.05) return "text-[hsl(40,90%,58%)] font-semibold";
   return "text-destructive font-semibold";
+}
+function emaDistColor(d: number | null): string {
+  if (d === null || d === undefined) return "text-muted-foreground";
+  const a = Math.abs(d);
+  if (a <= 2) return "text-[hsl(140,70%,55%)] font-semibold"; // close pullback / hugging EMA
+  if (a <= 5) return "text-[hsl(160,55%,55%)]";
+  if (a <= 10) return "text-foreground";
+  return d >= 0 ? "text-amber-400" : "text-destructive/80";
+}
+function emaDistDisplay(d: number | null | undefined): string {
+  if (d === null || d === undefined) return "—";
+  return `${d >= 0 ? "+" : ""}${d.toFixed(1)}%`;
 }
 
 export default function RsAlpha() {
@@ -185,6 +206,9 @@ export default function RsAlpha() {
   });
   const [coilScores, setCoilScores] = useState<Map<string, TightRangeScore>>(new Map());
   const [coilLoading, setCoilLoading] = useState(false);
+  const [emaDistances, setEmaDistances] = useState<Map<string, EmaDistanceInfo>>(new Map());
+  const [emaLoading, setEmaLoading] = useState(false);
+  const [qqqPctChange, setQqqPctChange] = useState<number | null>(null);
 
   useEffect(() => { setShowAll(false); }, [activeTab]);
   useEffect(() => { localStorage.setItem("rs-hide-otc", String(hideOtc)); }, [hideOtc]);
@@ -226,6 +250,62 @@ export default function RsAlpha() {
     return () => { cancelled = true; };
   }, [stocks, coilSettings.shortDays, coilSettings.longDays]);
 
+  // Load EMA distances (9D / 21D / 9W) for the qualified universe.
+  useEffect(() => {
+    if (stocks.length === 0) return;
+    let cancelled = false;
+    const run = async () => {
+      setEmaLoading(true);
+      try {
+        const symbols = stocks.map((s) => s.symbol);
+        const next = new Map<string, EmaDistanceInfo>();
+        const CHUNK = 300;
+        for (let i = 0; i < symbols.length; i += CHUNK) {
+          const slice = symbols.slice(i, i + CHUNK);
+          const { data, error } = await supabase.functions.invoke("ema-distances", { body: { symbols: slice } });
+          if (error) throw error;
+          if (data?.error) throw new Error(data.error);
+          if (cancelled) return;
+          for (const row of data?.rows ?? []) {
+            next.set(String(row.symbol).toUpperCase(), {
+              dist9d: row.dist9d ?? null,
+              dist21d: row.dist21d ?? null,
+              dist9w: row.dist9w ?? null,
+              ema9d: row.ema9d ?? null,
+              ema21d: row.ema21d ?? null,
+              ema9w: row.ema9w ?? null,
+            });
+          }
+          setEmaDistances(new Map(next));
+        }
+      } catch (e) {
+        if (!cancelled) toast.error(e instanceof Error ? e.message : "Failed to calculate EMA distances");
+      } finally {
+        if (!cancelled) setEmaLoading(false);
+      }
+    };
+    run();
+    return () => { cancelled = true; };
+  }, [stocks]);
+
+  // Fetch QQQ today's % change once for relative-strength scanner profiles.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data, error } = await supabase.functions.invoke("get-intraday-prices", { body: { symbols: ["QQQ"], interval: "5m" } });
+        if (error) throw error;
+        if (cancelled) return;
+        const r = (data as { results?: { QQQ?: { close: number[]; prevClose: number | null } } })?.results?.QQQ;
+        if (r && r.close.length > 0 && r.prevClose && r.prevClose > 0) {
+          const last = r.close[r.close.length - 1];
+          setQqqPctChange(((last - r.prevClose) / r.prevClose) * 100);
+        }
+      } catch { /* non-blocking */ }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
   // Heuristic: 5-letter all-caps tickers ending in 'F' are typically foreign OTC (e.g., FKURF).
   // Also defensively block any symbol with OTC suffixes that may have slipped through historically.
   const isOtcSymbol = (sym: string): boolean => {
@@ -255,8 +335,10 @@ export default function RsAlpha() {
   };
 
   const toggleSort = (field: SortField) => {
+    // EMA distance + Coil sort: smaller is better → default ascending.
+    const ascByDefault = field === "coil" || field === "ema9d" || field === "ema21d" || field === "ema9w";
     if (sortField === field) setSortDir(d => d === "desc" ? "asc" : "desc");
-    else { setSortField(field); setSortDir(field === "coil" ? "asc" : "desc"); }
+    else { setSortField(field); setSortDir(ascByDefault ? "asc" : "desc"); }
   };
 
   const growthActive = anyActive(growthFilters);
@@ -296,12 +378,23 @@ export default function RsAlpha() {
           const bv = coilScores.get(b.symbol)?.score ?? 999;
           return mul * (av - bv);
         }
+        case "ema9d":
+        case "ema21d":
+        case "ema9w": {
+          const key = sortField === "ema9d" ? "dist9d" : sortField === "ema21d" ? "dist21d" : "dist9w";
+          const av = emaDistances.get(a.symbol)?.[key];
+          const bv = emaDistances.get(b.symbol)?.[key];
+          // Sort by absolute distance (closest = best). Missing values pushed to end.
+          const aa = av === null || av === undefined ? Infinity : Math.abs(av);
+          const bb = bv === null || bv === undefined ? Infinity : Math.abs(bv);
+          return mul * (aa - bb);
+        }
         default: return 0;
       }
     });
     return { sortedStocks: sorted, ratingMap: map, growthFilteredOutCount: droppedByGrowth };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stocks, activeTab, sortField, sortDir, hideOtc, weights, growthFilters, fundamentalsMap, coilScores]);
+  }, [stocks, activeTab, sortField, sortDir, hideOtc, weights, growthFilters, fundamentalsMap, coilScores, emaDistances]);
 
   const otcHiddenCount = useMemo(
     () => hideOtc ? stocks.filter(s => isOtcSymbol(s.symbol) && getRsForTab(s, activeTab) !== null).length : 0,
@@ -933,6 +1026,9 @@ export default function RsAlpha() {
                       <th className="px-3 py-2.5 text-right"><SortHeader field="stockReturn" label="Stock Return" className="justify-end" /></th>
                       <th className="px-3 py-2.5 text-right"><SortHeader field="spyReturn" label="SPY Return" className="justify-end" /></th>
                       <th className="px-3 py-2.5 text-right"><SortHeader field="coil" label="Tight Range" className="justify-end" /></th>
+                      <th className="px-2 py-2.5 text-right" title="Distance from current price to 9-day EMA"><SortHeader field="ema9d" label="To 9D EMA" className="justify-end" /></th>
+                      <th className="px-2 py-2.5 text-right" title="Distance from current price to 21-day EMA"><SortHeader field="ema21d" label="To 21D EMA" className="justify-end" /></th>
+                      <th className="px-2 py-2.5 text-right" title="Distance from current price to 9-week EMA"><SortHeader field="ema9w" label="To 9W EMA" className="justify-end" /></th>
                       <th className="px-3 py-2.5 text-right"><SortHeader field="price" label="Price" className="justify-end" /></th>
                     </tr>
                   </thead>
@@ -944,6 +1040,7 @@ export default function RsAlpha() {
                       const rating = ratingMap.get(stock.symbol) ?? null;
                       const badge = growthBadge(fundamentalsMap.get(stock.symbol));
                       const coil = coilScores.get(stock.symbol);
+                      const ema = emaDistances.get(stock.symbol);
                       return (
                         <tr key={stock.symbol} className={`border-b border-border/50 transition-colors hover:bg-muted/20 ${rsBg(rs)}`}>
                           <td className="px-3 py-2 text-xs text-muted-foreground">{idx + 1}</td>
@@ -985,6 +1082,15 @@ export default function RsAlpha() {
                                 {coil?.score !== null && coil?.score !== undefined ? `${coil.score.toFixed(2)}x` : coilLoading ? "…" : "N/A"}
                               </span>
                             </div>
+                          </td>
+                          <td className={`px-2 py-2 text-right font-mono text-xs ${emaDistColor(ema?.dist9d ?? null)}`} title={ema?.ema9d ? `9D EMA: $${ema.ema9d.toFixed(2)}` : ""}>
+                            {ema?.dist9d === null || ema?.dist9d === undefined ? (emaLoading ? "…" : "—") : emaDistDisplay(ema.dist9d)}
+                          </td>
+                          <td className={`px-2 py-2 text-right font-mono text-xs ${emaDistColor(ema?.dist21d ?? null)}`} title={ema?.ema21d ? `21D EMA: $${ema.ema21d.toFixed(2)}` : ""}>
+                            {ema?.dist21d === null || ema?.dist21d === undefined ? (emaLoading ? "…" : "—") : emaDistDisplay(ema.dist21d)}
+                          </td>
+                          <td className={`px-2 py-2 text-right font-mono text-xs ${emaDistColor(ema?.dist9w ?? null)}`} title={ema?.ema9w ? `9W EMA: $${ema.ema9w.toFixed(2)}` : ""}>
+                            {ema?.dist9w === null || ema?.dist9w === undefined ? (emaLoading ? "…" : "—") : emaDistDisplay(ema.dist9w)}
                           </td>
                           <td className="px-3 py-2 text-right font-mono text-muted-foreground">
                             {stock.price !== null ? `$${stock.price.toFixed(2)}` : "N/A"}
@@ -1029,6 +1135,8 @@ export default function RsAlpha() {
         coilScores={coilScores}
         coilShortDays={coilSettings.shortDays}
         coilLongDays={coilSettings.longDays}
+        emaDistances={emaDistances}
+        qqqPctChange={qqqPctChange}
       />
 
       <CustomListAnalyzerModal
@@ -1044,6 +1152,7 @@ export default function RsAlpha() {
         coilScores={coilScores}
         coilShortDays={coilSettings.shortDays}
         coilLongDays={coilSettings.longDays}
+        emaDistances={emaDistances}
       />
 
       <SectorDistributionModal

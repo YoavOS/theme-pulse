@@ -29,16 +29,32 @@ export interface CoilScoreInfo {
   baselineAvgRangePct?: number | null;
 }
 
+export interface EmaDistanceInfo {
+  dist9d: number | null;
+  dist21d: number | null;
+  dist9w: number | null;
+  ema9d?: number | null;
+  ema21d?: number | null;
+  ema9w?: number | null;
+  price?: number | null;
+}
+
 interface EmaInfo {
+  ema9d: number | null;
+  ema21d: number | null;
   ema9w: number | null;
+  dist9d: number | null;
+  dist21d: number | null;
+  dist9w: number | null;
   price: number | null;
-  distancePct: number | null;
 }
 
 type SortBy =
   | "rs"
   | "rating"
-  | "ema"
+  | "ema9d"
+  | "ema21d"
+  | "ema9w"
   | "coil"
   | "return"
   | "marketCap"
@@ -68,6 +84,8 @@ interface Props {
   coilScores?: Map<string, CoilScoreInfo>;
   coilShortDays?: number;
   coilLongDays?: number;
+  /** Pre-loaded EMA distances from the parent (for instant rendering when available). */
+  emaDistances?: Map<string, EmaDistanceInfo>;
 }
 
 // Strip exchange prefixes (NYSE:, NASDAQ:, AMEX:, BATS:, ARCA:, CBOE:, OTC:, etc.)
@@ -110,7 +128,9 @@ function growthScore(f?: StockFundamentals): { score: number; emoji: string | nu
 const SORT_OPTIONS: { id: SortBy; label: string }[] = [
   { id: "rs", label: "RS Score (highest)" },
   { id: "rating", label: "RS Rating (highest)" },
-  { id: "ema", label: "Closest to 9W EMA (smallest |distance|)" },
+  { id: "ema9d", label: "Closest to 9D EMA (smallest |distance|)" },
+  { id: "ema21d", label: "Closest to 21D EMA (smallest |distance|)" },
+  { id: "ema9w", label: "Closest to 9W EMA (smallest |distance|)" },
   { id: "coil", label: "Tight Range / Coil (tightest)" },
   { id: "return", label: "Stock Return (highest)" },
   { id: "growth", label: "Fundamentals / Growth Strength" },
@@ -119,10 +139,10 @@ const SORT_OPTIONS: { id: SortBy; label: string }[] = [
   { id: "input", label: "Original Input Order" },
 ];
 
-function emaColor(d: number | null): string {
+function emaColor(d: number | null | undefined): string {
   if (d === null || d === undefined) return "text-muted-foreground";
   const a = Math.abs(d);
-  if (a <= 2) return "text-[hsl(140,70%,55%)] font-semibold"; // very close — attractive pullback
+  if (a <= 2) return "text-[hsl(140,70%,55%)] font-semibold";
   if (a <= 5) return "text-[hsl(160,55%,55%)]";
   if (a <= 10) return "text-foreground";
   return d >= 0 ? "text-amber-400" : "text-destructive/80";
