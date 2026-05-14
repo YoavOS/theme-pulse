@@ -174,12 +174,19 @@ export default function CustomListAnalyzerModal({
   const [coilFilterOn, setCoilFilterOn] = useState<boolean>(false);
   const [maxCoil, setMaxCoil] = useState<number>(0.85);
 
-  // 9W EMA filter
-  const [emaFilterOn, setEmaFilterOn] = useState<boolean>(false);
-  const [maxEmaAbs, setMaxEmaAbs] = useState<number>(5); // ±5%
+  // EMA filters (9D, 21D, 9W)
+  const [ema9dFilterOn, setEma9dFilterOn] = useState<boolean>(false);
+  const [maxEma9dAbs, setMaxEma9dAbs] = useState<number>(3);
+  const [ema21dFilterOn, setEma21dFilterOn] = useState<boolean>(false);
+  const [maxEma21dAbs, setMaxEma21dAbs] = useState<number>(3);
+  const [ema9wFilterOn, setEma9wFilterOn] = useState<boolean>(false);
+  const [maxEma9wAbs, setMaxEma9wAbs] = useState<number>(5);
+  const [emaFilterMode, setEmaFilterMode] = useState<"AND" | "OR">("OR");
   const [emaMap, setEmaMap] = useState<Map<string, EmaInfo>>(new Map());
   const [emaLoading, setEmaLoading] = useState<boolean>(false);
   const emaAvailable = emaMap.size > 0;
+  const activeEmaFilters =
+    (ema9dFilterOn ? 1 : 0) + (ema21dFilterOn ? 1 : 0) + (ema9wFilterOn ? 1 : 0);
 
   const universeMap = useMemo(() => {
     const m = new Map<string, RsStock>();
