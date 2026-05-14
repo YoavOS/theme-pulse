@@ -177,6 +177,7 @@ const DEFAULT_FILTERS: FilterState = {
   maxEma21dAbs: 3,
   ema9wFilterOn: false,
   maxEma9wAbs: 5,
+  emaFilterMode: "OR",
   relVsQqqOn: false,
   minRelVsQqq: 0,
 };
