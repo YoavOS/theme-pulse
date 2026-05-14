@@ -633,6 +633,8 @@ export default function CustomListAnalyzerModal({
                       <th className="px-2 py-2 text-left text-muted-foreground">Company</th>
                       <th className="px-2 py-2 text-right text-muted-foreground">RS</th>
                       <th className="px-2 py-2 text-right text-muted-foreground">Return</th>
+                      <th className="px-2 py-2 text-right text-muted-foreground" title="Distance from current price to 9-Day EMA">9D EMA Δ</th>
+                      <th className="px-2 py-2 text-right text-muted-foreground" title="Distance from current price to 21-Day EMA">21D EMA Δ</th>
                       <th className="px-2 py-2 text-right text-muted-foreground" title="Distance from current price to 9-Week EMA">9W EMA Δ</th>
                       <th className="px-2 py-2 text-right text-muted-foreground">Coil</th>
                       <th className="px-2 py-2 text-right text-muted-foreground">ADR%</th>
@@ -649,6 +651,11 @@ export default function CustomListAnalyzerModal({
                       const coil = coilScores?.get(s.symbol)?.score ?? null;
                       const ema = emaMap.get(s.symbol);
                       const g = growthScore(fundamentalsMap?.get(s.symbol));
+                      const emaCell = (d: number | null | undefined, ref: number | null | undefined, label: string) => (
+                        <td className={`px-2 py-1.5 text-right font-mono ${emaColor(d ?? null)}`} title={ref ? `${label}: ${ref}` : ""}>
+                          {d === null || d === undefined ? (emaLoading ? "…" : "—") : pctDisplay(d)}
+                        </td>
+                      );
                       return (
                         <tr key={s.symbol} className="border-b border-border/40 hover:bg-muted/20">
                           <td className="px-2 py-1.5 text-muted-foreground">{idx + 1}</td>
@@ -657,9 +664,9 @@ export default function CustomListAnalyzerModal({
                           <td className="px-2 py-1.5 max-w-[200px] truncate text-muted-foreground" title={s.companyName ?? ""}>{s.companyName ?? "—"}</td>
                           <td className={`px-2 py-1.5 text-right font-mono ${rs !== null && rs >= 0 ? "text-[hsl(160,60%,55%)]" : "text-destructive/80"}`}>{pctDisplay(rs)}</td>
                           <td className={`px-2 py-1.5 text-right font-mono ${ret !== null && ret >= 0 ? "text-[hsl(160,60%,55%)]" : "text-destructive/80"}`}>{pctDisplay(ret)}</td>
-                          <td className={`px-2 py-1.5 text-right font-mono ${emaColor(ema?.distancePct ?? null)}`} title={ema?.ema9w ? `9W EMA: ${ema.ema9w}` : ""}>
-                            {ema?.distancePct === null || ema?.distancePct === undefined ? (emaLoading ? "…" : "—") : pctDisplay(ema.distancePct)}
-                          </td>
+                          {emaCell(ema?.dist9d, ema?.ema9d, "9D EMA")}
+                          {emaCell(ema?.dist21d, ema?.ema21d, "21D EMA")}
+                          {emaCell(ema?.dist9w, ema?.ema9w, "9W EMA")}
                           <td className="px-2 py-1.5 text-right font-mono">{coil !== null ? `${coil.toFixed(2)}x` : "—"}</td>
                           <td className="px-2 py-1.5 text-right font-mono text-muted-foreground">{s.adrPercent !== null ? `${s.adrPercent.toFixed(1)}%` : "—"}</td>
                           <td className="px-2 py-1.5 text-right font-mono text-muted-foreground">{fmtMcap(s.marketCap)}</td>
@@ -669,7 +676,7 @@ export default function CustomListAnalyzerModal({
                       );
                     })}
                     {rows.length === 0 && (
-                      <tr><td colSpan={12} className="px-2 py-6 text-center text-muted-foreground">No tickers match the current filters.</td></tr>
+                      <tr><td colSpan={14} className="px-2 py-6 text-center text-muted-foreground">No tickers match the current filters.</td></tr>
                     )}
                   </tbody>
                 </table>
