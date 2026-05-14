@@ -62,6 +62,7 @@ interface FilterState {
   maxEma21dAbs: number;
   ema9wFilterOn: boolean;
   maxEma9wAbs: number;
+  emaFilterMode: "AND" | "OR";
   relVsQqqOn: boolean;
   minRelVsQqq: number;
 }
