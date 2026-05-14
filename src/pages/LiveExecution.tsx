@@ -1353,6 +1353,7 @@ export default function LiveExecution() {
         </header>
 
         <main className="w-full px-6 py-5 space-y-5">
+          <MarketDriversWidget />
           {/* ── Quick Trade Check ── */}
           <section
             className="rounded-xl border border-border/60 bg-card/40 p-4 backdrop-blur-sm"
