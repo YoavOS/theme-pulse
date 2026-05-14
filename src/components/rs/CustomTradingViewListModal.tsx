@@ -584,7 +584,21 @@ export default function CustomTradingViewListModal({
 
           {/* EMA Pullback filters */}
           <div className="space-y-2 rounded-md border border-border bg-muted/20 px-3 py-2.5">
-            <div className="text-xs font-medium text-foreground">EMA Pullback Filters</div>
+            <div className="flex items-center justify-between">
+              <div className="text-xs font-medium text-foreground">EMA Pullback Filters</div>
+              {((state.ema9dFilterOn ? 1 : 0) + (state.ema21dFilterOn ? 1 : 0) + (state.ema9wFilterOn ? 1 : 0)) >= 2 && (
+                <div className="inline-flex overflow-hidden rounded-md border border-border text-[10px]">
+                  <button type="button" onClick={() => set("emaFilterMode", "OR")}
+                    className={`px-2 py-1 ${state.emaFilterMode === "OR" ? "bg-primary text-primary-foreground" : "bg-background hover:bg-accent"}`}>
+                    Match ANY (OR)
+                  </button>
+                  <button type="button" onClick={() => set("emaFilterMode", "AND")}
+                    className={`px-2 py-1 ${state.emaFilterMode === "AND" ? "bg-primary text-primary-foreground" : "bg-background hover:bg-accent"}`}>
+                    Match ALL (AND)
+                  </button>
+                </div>
+              )}
+            </div>
 
             {([
               { key: "9d", on: state.ema9dFilterOn, max: state.maxEma9dAbs, setOn: (v: boolean) => set("ema9dFilterOn", v), setMax: (v: number) => set("maxEma9dAbs", v), label: "9-Day EMA" },
