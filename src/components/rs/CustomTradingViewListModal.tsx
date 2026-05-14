@@ -339,20 +339,23 @@ export default function CustomTradingViewListModal({
         if (c > state.maxCoil) return false;
       }
       const ema = emaDistances?.get(s.symbol);
-      if (state.ema9dFilterOn) {
-        const d = ema?.dist9d;
-        if (d === null || d === undefined || !Number.isFinite(d)) return false;
-        if (Math.abs(d) > state.maxEma9dAbs) return false;
-      }
-      if (state.ema21dFilterOn) {
-        const d = ema?.dist21d;
-        if (d === null || d === undefined || !Number.isFinite(d)) return false;
-        if (Math.abs(d) > state.maxEma21dAbs) return false;
-      }
-      if (state.ema9wFilterOn) {
-        const d = ema?.dist9w;
-        if (d === null || d === undefined || !Number.isFinite(d)) return false;
-        if (Math.abs(d) > state.maxEma9wAbs) return false;
+      const emaActiveCount = (state.ema9dFilterOn ? 1 : 0) + (state.ema21dFilterOn ? 1 : 0) + (state.ema9wFilterOn ? 1 : 0);
+      if (emaActiveCount > 0) {
+        const checks: boolean[] = [];
+        if (state.ema9dFilterOn) {
+          const d = ema?.dist9d;
+          checks.push(d !== null && d !== undefined && Number.isFinite(d) && Math.abs(d) <= state.maxEma9dAbs);
+        }
+        if (state.ema21dFilterOn) {
+          const d = ema?.dist21d;
+          checks.push(d !== null && d !== undefined && Number.isFinite(d) && Math.abs(d) <= state.maxEma21dAbs);
+        }
+        if (state.ema9wFilterOn) {
+          const d = ema?.dist9w;
+          checks.push(d !== null && d !== undefined && Number.isFinite(d) && Math.abs(d) <= state.maxEma9wAbs);
+        }
+        const pass = state.emaFilterMode === "OR" ? checks.some(Boolean) : checks.every(Boolean);
+        if (!pass) return false;
       }
       if (state.relVsQqqOn && qqqAvailable) {
         // s.return1d typically holds today's % change for the stock.
