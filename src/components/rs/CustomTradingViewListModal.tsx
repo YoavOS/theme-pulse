@@ -127,6 +127,21 @@ const BUILTIN_PROFILES: ScannerProfile[] = [
     },
   },
   {
+    id: "builtin:pullback-buys-or",
+    name: "Pullback Buys (9W or 21D)",
+    description: "Strong RS pulling back to the 9W EMA OR the 21D EMA — broad pullback hunting.",
+    isBuiltIn: true,
+    criteria: {
+      minRating: 75,
+      ema9wFilterOn: true,
+      maxEma9wAbs: 3,
+      ema21dFilterOn: true,
+      maxEma21dAbs: 3,
+      emaFilterMode: "OR",
+      sortBy: "ema9w",
+    },
+  },
+  {
     id: "builtin:high-rs-tight-range",
     name: "High RS + Tight Range",
     description: "Top-quintile RS combined with a tight coil — breakout candidates.",
