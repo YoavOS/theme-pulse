@@ -233,31 +233,33 @@ export default function CustomListAnalyzerModal({
     if (f) void ingestFile(f);
   };
 
-  // ---------- Fetch 9W EMA distances on Analyze ----------
+  // ---------- Fetch EMA distances (9D / 21D / 9W) on Analyze ----------
   const fetchEmaForSymbols = useCallback(async (symbols: string[]) => {
     if (symbols.length === 0) return;
     setEmaLoading(true);
     try {
       const next = new Map(emaMap);
-      // Skip symbols already loaded
       const need = symbols.filter((s) => !next.has(s));
       if (need.length === 0) { setEmaLoading(false); return; }
-      // Chunk to keep payload reasonable
-      const CHUNK = 250;
+      const CHUNK = 200;
       for (let i = 0; i < need.length; i += CHUNK) {
         const slice = need.slice(i, i + CHUNK);
-        const { data, error } = await supabase.functions.invoke("ema9w-distance", { body: { symbols: slice } });
+        const { data, error } = await supabase.functions.invoke("ema-distances", { body: { symbols: slice } });
         if (error) throw new Error(error.message);
-        const rows = (data as { rows?: Array<{ symbol: string; ema9w: number | null; price: number | null; distancePct: number | null }> })?.rows ?? [];
+        const rows = (data as { rows?: Array<{ symbol: string; ema9d: number | null; ema21d: number | null; ema9w: number | null; price: number | null; dist9d: number | null; dist21d: number | null; dist9w: number | null }> })?.rows ?? [];
         for (const r of rows) {
-          next.set(r.symbol.toUpperCase(), { ema9w: r.ema9w, price: r.price, distancePct: r.distancePct });
+          next.set(r.symbol.toUpperCase(), {
+            ema9d: r.ema9d, ema21d: r.ema21d, ema9w: r.ema9w,
+            dist9d: r.dist9d, dist21d: r.dist21d, dist9w: r.dist9w,
+            price: r.price,
+          });
         }
         setEmaMap(new Map(next));
       }
-      const scored = Array.from(next.values()).filter((v) => v.distancePct !== null).length;
-      toast.success(`9W EMA loaded for ${scored} stocks.`);
+      const scored = Array.from(next.values()).filter((v) => v.dist9w !== null || v.dist21d !== null || v.dist9d !== null).length;
+      toast.success(`EMA distances loaded for ${scored} stocks.`);
     } catch (e) {
-      toast.error("9W EMA fetch failed.", { description: e instanceof Error ? e.message : String(e) });
+      toast.error("EMA distances fetch failed.", { description: e instanceof Error ? e.message : String(e) });
     } finally {
       setEmaLoading(false);
     }
