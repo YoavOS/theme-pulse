@@ -565,29 +565,44 @@ export default function CustomListAnalyzerModal({
                 <Slider value={[maxCoil]} min={0.4} max={1.5} step={0.05} onValueChange={(v) => setMaxCoil(v[0])} disabled={!coilFilterOn || !coilAvailable} className="mt-1" />
               </div>
 
-              {/* 9W EMA filter */}
-              <div className="md:col-span-3">
+              {/* EMA distance filters (9D / 21D / 9W) with AND/OR mode */}
+              <div className="md:col-span-3 space-y-2 rounded-md border border-border/60 bg-muted/10 p-2">
                 <div className="flex items-center justify-between">
-                  <label className="flex items-center gap-2 text-xs">
-                    <Checkbox
-                      checked={emaFilterOn}
-                      onCheckedChange={(v) => setEmaFilterOn(!!v)}
-                      disabled={!emaAvailable && !emaLoading}
-                    />
-                    Distance to 9-Week EMA filter
-                    {emaLoading && <Loader2 size={12} className="animate-spin text-muted-foreground" />}
-                  </label>
-                  <span className="font-mono text-xs text-muted-foreground">within ±{maxEmaAbs.toFixed(1)}%</span>
+                  <span className="text-[11px] font-semibold text-muted-foreground inline-flex items-center gap-1">
+                    EMA Pullback Filters
+                    {emaLoading && <Loader2 size={11} className="animate-spin" />}
+                  </span>
+                  {activeEmaFilters >= 2 && (
+                    <div className="inline-flex overflow-hidden rounded-md border border-border text-[10px]">
+                      <button
+                        type="button"
+                        onClick={() => setEmaFilterMode("OR")}
+                        className={`px-2 py-1 ${emaFilterMode === "OR" ? "bg-primary text-primary-foreground" : "bg-background hover:bg-accent"}`}
+                      >Match ANY (OR)</button>
+                      <button
+                        type="button"
+                        onClick={() => setEmaFilterMode("AND")}
+                        className={`px-2 py-1 ${emaFilterMode === "AND" ? "bg-primary text-primary-foreground" : "bg-background hover:bg-accent"}`}
+                      >Match ALL (AND)</button>
+                    </div>
+                  )}
                 </div>
-                <Slider
-                  value={[maxEmaAbs]}
-                  min={0.5}
-                  max={20}
-                  step={0.5}
-                  onValueChange={(v) => setMaxEmaAbs(v[0])}
-                  disabled={!emaFilterOn || (!emaAvailable && !emaLoading)}
-                  className="mt-1"
-                />
+                {([
+                  { on: ema9dFilterOn, setOn: setEma9dFilterOn, max: maxEma9dAbs, setMax: setMaxEma9dAbs, label: "9D EMA" },
+                  { on: ema21dFilterOn, setOn: setEma21dFilterOn, max: maxEma21dAbs, setMax: setMaxEma21dAbs, label: "21D EMA" },
+                  { on: ema9wFilterOn, setOn: setEma9wFilterOn, max: maxEma9wAbs, setMax: setMaxEma9wAbs, label: "9W EMA" },
+                ] as const).map((row) => (
+                  <div key={row.label} className="grid grid-cols-12 items-center gap-2">
+                    <label className="col-span-4 flex items-center gap-2 text-xs">
+                      <Checkbox checked={row.on} onCheckedChange={(v) => row.setOn(!!v)} disabled={!emaAvailable && !emaLoading} />
+                      Distance to {row.label}
+                    </label>
+                    <div className="col-span-7">
+                      <Slider value={[row.max]} min={0.5} max={20} step={0.5} onValueChange={(v) => row.setMax(v[0])} disabled={!row.on || (!emaAvailable && !emaLoading)} />
+                    </div>
+                    <span className="col-span-1 text-right font-mono text-[10px] text-muted-foreground">±{row.max.toFixed(1)}%</span>
+                  </div>
+                ))}
               </div>
             </div>
 
