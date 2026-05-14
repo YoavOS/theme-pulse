@@ -298,25 +298,36 @@ export default function CustomListAnalyzerModal({
         if (c === null || c === undefined || !Number.isFinite(c)) return false;
         if (c > maxCoil) return false;
       }
-      if (emaFilterOn) {
-        const d = emaMap.get(s.symbol)?.distancePct;
-        if (d === null || d === undefined || !Number.isFinite(d)) return false;
-        if (Math.abs(d) > maxEmaAbs) return false;
+      if (activeEmaFilters > 0) {
+        const e = emaMap.get(s.symbol);
+        const checks: Array<boolean> = [];
+        if (ema9dFilterOn) {
+          const d = e?.dist9d;
+          checks.push(d !== null && d !== undefined && Number.isFinite(d) && Math.abs(d) <= maxEma9dAbs);
+        }
+        if (ema21dFilterOn) {
+          const d = e?.dist21d;
+          checks.push(d !== null && d !== undefined && Number.isFinite(d) && Math.abs(d) <= maxEma21dAbs);
+        }
+        if (ema9wFilterOn) {
+          const d = e?.dist9w;
+          checks.push(d !== null && d !== undefined && Number.isFinite(d) && Math.abs(d) <= maxEma9wAbs);
+        }
+        const pass = emaFilterMode === "OR" ? checks.some(Boolean) : checks.every(Boolean);
+        if (!pass) return false;
       }
       return true;
     });
+
+    const absDist = (v: number | null | undefined) => (v === null || v === undefined ? Infinity : Math.abs(v));
 
     const sorted = [...filtered].sort((a, b) => {
       switch (sortBy) {
         case "rs": return (getRsForTab(b, filterRsTab) ?? -999) - (getRsForTab(a, filterRsTab) ?? -999);
         case "rating": return (rMap.get(b.symbol) ?? -1) - (rMap.get(a.symbol) ?? -1);
-        case "ema": {
-          const av = emaMap.get(a.symbol)?.distancePct;
-          const bv = emaMap.get(b.symbol)?.distancePct;
-          const aa = av === null || av === undefined ? Infinity : Math.abs(av);
-          const bb = bv === null || bv === undefined ? Infinity : Math.abs(bv);
-          return aa - bb;
-        }
+        case "ema9d": return absDist(emaMap.get(a.symbol)?.dist9d) - absDist(emaMap.get(b.symbol)?.dist9d);
+        case "ema21d": return absDist(emaMap.get(a.symbol)?.dist21d) - absDist(emaMap.get(b.symbol)?.dist21d);
+        case "ema9w": return absDist(emaMap.get(a.symbol)?.dist9w) - absDist(emaMap.get(b.symbol)?.dist9w);
         case "coil": {
           const av = coilScores?.get(a.symbol)?.score ?? 999;
           const bv = coilScores?.get(b.symbol)?.score ?? 999;
@@ -339,7 +350,9 @@ export default function CustomListAnalyzerModal({
   }, [
     inputTickers, universeMap, filterRsTab, getRsForTab, getReturnField, isOtcSymbol,
     minRating, minAdr, minMcapM, excludeOtc, growthFilters, growthActive,
-    fundamentalsMap, coilFilterOn, maxCoil, coilScores, emaFilterOn, maxEmaAbs, emaMap, sortBy,
+    fundamentalsMap, coilFilterOn, maxCoil, coilScores,
+    activeEmaFilters, ema9dFilterOn, ema21dFilterOn, ema9wFilterOn,
+    maxEma9dAbs, maxEma21dAbs, maxEma9wAbs, emaFilterMode, emaMap, sortBy,
   ]);
 
   const visibleMissing = hideMissing ? [] : missing;
