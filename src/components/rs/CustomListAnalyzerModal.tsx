@@ -495,22 +495,25 @@ export default function CustomListAnalyzerModal({
                   onChange={(e) => setSortBy(e.target.value as SortBy)}
                   className="h-9 w-full rounded-md border border-input bg-background px-2 text-xs"
                 >
-                  {SORT_OPTIONS.map((o) => (
-                    <option
-                      key={o.id}
-                      value={o.id}
-                      disabled={
-                        (o.id === "coil" && !coilAvailable) ||
-                        (o.id === "growth" && !fundamentalsAvailable) ||
-                        (o.id === "ema" && !emaAvailable && !emaLoading)
-                      }
-                    >
-                      {o.label}
-                      {o.id === "coil" && !coilAvailable ? " (loading…)" : ""}
-                      {o.id === "growth" && !fundamentalsAvailable ? " (no fundamentals)" : ""}
-                      {o.id === "ema" && emaLoading ? " (loading…)" : ""}
-                    </option>
-                  ))}
+                  {SORT_OPTIONS.map((o) => {
+                    const isEma = o.id === "ema9d" || o.id === "ema21d" || o.id === "ema9w";
+                    return (
+                      <option
+                        key={o.id}
+                        value={o.id}
+                        disabled={
+                          (o.id === "coil" && !coilAvailable) ||
+                          (o.id === "growth" && !fundamentalsAvailable) ||
+                          (isEma && !emaAvailable && !emaLoading)
+                        }
+                      >
+                        {o.label}
+                        {o.id === "coil" && !coilAvailable ? " (loading…)" : ""}
+                        {o.id === "growth" && !fundamentalsAvailable ? " (no fundamentals)" : ""}
+                        {isEma && emaLoading && !emaAvailable ? " (loading…)" : ""}
+                      </option>
+                    );
+                  })}
                 </select>
               </div>
               <div>
