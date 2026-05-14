@@ -53,3 +53,9 @@ verify_jwt = false
 
 [functions.ema-distances]
 verify_jwt = false
+
+[functions.index-drivers]
+verify_jwt = false
+
+[functions.market-drivers-insight]
+verify_jwt = false

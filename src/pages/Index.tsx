@@ -243,6 +243,8 @@ export default function Index() {
       badge: null as number | string | null, pulse: false },
     { to: "/live", label: "Live Execution", icon: <Activity size={14} />, active: false, color: "text-[hsl(160,80%,45%)]",
       badge: null as number | string | null, pulse: false },
+    { to: "/market-drivers", label: "Market Drivers", icon: <BarChart3 size={14} />, active: false, color: "text-[hsl(200,80%,55%)]",
+      badge: null as number | string | null, pulse: false },
     { to: "/earnings", label: "Earnings", icon: <DollarSign size={14} />, active: false, color: "text-[hsl(40,90%,55%)]",
       badge: null as number | string | null, pulse: false },
     { to: "/eod-history", label: "EOD History", icon: <Calendar size={14} />, active: false, color: "text-gain-medium",

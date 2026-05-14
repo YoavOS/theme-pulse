@@ -62,6 +62,7 @@ interface FilterState {
   maxEma21dAbs: number;
   ema9wFilterOn: boolean;
   maxEma9wAbs: number;
+  emaFilterMode: "AND" | "OR";
   relVsQqqOn: boolean;
   minRelVsQqq: number;
 }
@@ -126,6 +127,21 @@ const BUILTIN_PROFILES: ScannerProfile[] = [
     },
   },
   {
+    id: "builtin:pullback-buys-or",
+    name: "Pullback Buys (9W or 21D)",
+    description: "Strong RS pulling back to the 9W EMA OR the 21D EMA — broad pullback hunting.",
+    isBuiltIn: true,
+    criteria: {
+      minRating: 75,
+      ema9wFilterOn: true,
+      maxEma9wAbs: 3,
+      ema21dFilterOn: true,
+      maxEma21dAbs: 3,
+      emaFilterMode: "OR",
+      sortBy: "ema9w",
+    },
+  },
+  {
     id: "builtin:high-rs-tight-range",
     name: "High RS + Tight Range",
     description: "Top-quintile RS combined with a tight coil — breakout candidates.",
@@ -176,6 +192,7 @@ const DEFAULT_FILTERS: FilterState = {
   maxEma21dAbs: 3,
   ema9wFilterOn: false,
   maxEma9wAbs: 5,
+  emaFilterMode: "OR",
   relVsQqqOn: false,
   minRelVsQqq: 0,
 };
@@ -337,20 +354,23 @@ export default function CustomTradingViewListModal({
         if (c > state.maxCoil) return false;
       }
       const ema = emaDistances?.get(s.symbol);
-      if (state.ema9dFilterOn) {
-        const d = ema?.dist9d;
-        if (d === null || d === undefined || !Number.isFinite(d)) return false;
-        if (Math.abs(d) > state.maxEma9dAbs) return false;
-      }
-      if (state.ema21dFilterOn) {
-        const d = ema?.dist21d;
-        if (d === null || d === undefined || !Number.isFinite(d)) return false;
-        if (Math.abs(d) > state.maxEma21dAbs) return false;
-      }
-      if (state.ema9wFilterOn) {
-        const d = ema?.dist9w;
-        if (d === null || d === undefined || !Number.isFinite(d)) return false;
-        if (Math.abs(d) > state.maxEma9wAbs) return false;
+      const emaActiveCount = (state.ema9dFilterOn ? 1 : 0) + (state.ema21dFilterOn ? 1 : 0) + (state.ema9wFilterOn ? 1 : 0);
+      if (emaActiveCount > 0) {
+        const checks: boolean[] = [];
+        if (state.ema9dFilterOn) {
+          const d = ema?.dist9d;
+          checks.push(d !== null && d !== undefined && Number.isFinite(d) && Math.abs(d) <= state.maxEma9dAbs);
+        }
+        if (state.ema21dFilterOn) {
+          const d = ema?.dist21d;
+          checks.push(d !== null && d !== undefined && Number.isFinite(d) && Math.abs(d) <= state.maxEma21dAbs);
+        }
+        if (state.ema9wFilterOn) {
+          const d = ema?.dist9w;
+          checks.push(d !== null && d !== undefined && Number.isFinite(d) && Math.abs(d) <= state.maxEma9wAbs);
+        }
+        const pass = state.emaFilterMode === "OR" ? checks.some(Boolean) : checks.every(Boolean);
+        if (!pass) return false;
       }
       if (state.relVsQqqOn && qqqAvailable) {
         // s.return1d typically holds today's % change for the stock.
@@ -564,7 +584,21 @@ export default function CustomTradingViewListModal({
 
           {/* EMA Pullback filters */}
           <div className="space-y-2 rounded-md border border-border bg-muted/20 px-3 py-2.5">
-            <div className="text-xs font-medium text-foreground">EMA Pullback Filters</div>
+            <div className="flex items-center justify-between">
+              <div className="text-xs font-medium text-foreground">EMA Pullback Filters</div>
+              {((state.ema9dFilterOn ? 1 : 0) + (state.ema21dFilterOn ? 1 : 0) + (state.ema9wFilterOn ? 1 : 0)) >= 2 && (
+                <div className="inline-flex overflow-hidden rounded-md border border-border text-[10px]">
+                  <button type="button" onClick={() => set("emaFilterMode", "OR")}
+                    className={`px-2 py-1 ${state.emaFilterMode === "OR" ? "bg-primary text-primary-foreground" : "bg-background hover:bg-accent"}`}>
+                    Match ANY (OR)
+                  </button>
+                  <button type="button" onClick={() => set("emaFilterMode", "AND")}
+                    className={`px-2 py-1 ${state.emaFilterMode === "AND" ? "bg-primary text-primary-foreground" : "bg-background hover:bg-accent"}`}>
+                    Match ALL (AND)
+                  </button>
+                </div>
+              )}
+            </div>
 
             {([
               { key: "9d", on: state.ema9dFilterOn, max: state.maxEma9dAbs, setOn: (v: boolean) => set("ema9dFilterOn", v), setMax: (v: number) => set("maxEma9dAbs", v), label: "9-Day EMA" },

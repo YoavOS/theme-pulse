@@ -1,74 +1,85 @@
-## Plan: Scanner Profiles + EMA Pullback Metrics (9D / 21D / 9W)
+# Plan
 
-### 1. New edge function: `ema-distances`
-Replace/extend the existing `ema9w-distance` function with a unified `ema-distances` function that returns 9D, 21D, and 9W EMA distances in a single call.
+Two distinct workstreams. I'll do them in this order so each milestone is independently verifiable.
 
-- Fetch from Yahoo: `range=6mo&interval=1d` (gives ~125 daily bars — enough for 9D + 21D EMAs, plus enables weekly resampling for 9W EMA).
-- Compute:
-  - `ema9d` from daily closes
-  - `ema21d` from daily closes
-  - `ema9w` from weekly-resampled closes (group daily bars by ISO week, take last close of each week)
-- Return per symbol: `{ symbol, price, ema9d, ema21d, ema9w, dist9d, dist21d, dist9w }`
-- Concurrency 14, max 2500 symbols, deadline 125s, same throttling pattern.
-- Keep `ema9w-distance` as a thin wrapper (or deprecate it inside `CustomListAnalyzerModal` by switching to the new function). Since `ema9w-distance` is only consumed by the analyzer modal, we can safely switch the analyzer to the new function and remove the old one — but for safety, leave `ema9w-distance` in place and just add `ema-distances`.
+## Workstream 1 — Custom List Analyzer cleanup + EMA OR/AND logic
 
-### 2. RS Alpha main lists: 9D / 21D / 9W EMA columns + sorting
-In `src/pages/RsAlpha.tsx`:
-- Add `emaDistances` state: `Map<string, { dist9d, dist21d, dist9w }>`.
-- Add an "EMA distances" loader (button + auto-load like `coilScores`) that posts the active universe symbols to `ema-distances` and stores results.
-- Add three new columns to the main list table(s): **To 9D EMA**, **To 21D EMA**, **To 9W EMA**.
-  - Color: green when |dist| ≤ 2%, neutral otherwise; subtle red if dist < -8% (extended below).
-- Add new sort options: "Closest to 9D EMA", "Closest to 21D EMA", "Closest to 9W EMA" (sort by `Math.abs(dist)` ascending; missing values pushed to bottom).
+### 1.1 Fix `CustomListAnalyzerModal.tsx`
+- Migrate fully from `ema9w-distance` → `ema-distances` response shape (`{ dist9d, dist21d, dist9w }`).
+- Replace single `ema9wDist` map with `emaDist` map of the new shape.
+- Add columns: **To 9D EMA**, **To 21D EMA** (alongside existing 9W column), with same color rules (green ≤2%, red < -8%).
+- Add filters: max |dist9d|, max |dist21d| (alongside max |dist9w|).
+- Add sort options: "Closest to 9D EMA", "Closest to 21D EMA" (already have 9W).
+- Re-verify file upload (.txt + drag-drop) still works after refactor.
+- Clear all TS errors.
 
-### 3. Custom TradingView List modal (`CustomTradingViewListModal.tsx`)
-- Accept new prop: `emaDistances?: Map<string, { dist9d, dist21d, dist9w }>`.
-- Add filters for max |distance| to 9D / 21D / 9W EMA (sliders, default off).
-- Add sort options: "Closest to 9D EMA", "Closest to 21D EMA", "Closest to 9W EMA".
-- Show columns in the preview table.
+### 1.2 EMA OR/AND logic
+- New piece of state `emaFilterMode: "AND" | "OR"` (default `"OR"`) in:
+  - `CustomListAnalyzerModal.tsx`
+  - `CustomTradingViewListModal.tsx`
+  - `RsAlpha.tsx` (main lists, controlling main-list EMA filters if any are active there — currently sorts only; we'll add the same toggle next to any EMA filter UI).
+- Toggle UI: small segmented control labeled "EMA filters: [Match ANY (OR)] [Match ALL (AND)]", visible only when ≥2 EMA distance filters are active.
+- Filter evaluation:
+  - AND: row must satisfy every active EMA distance filter (current behavior).
+  - OR: row passes if it satisfies at least one active EMA distance filter; non-EMA filters still AND'd.
+- Built-in **9W EMA Pullbacks** profile remains; add a new built-in profile **"Pullback Buys (9W or 21D)"**: `min RS 75`, `max |9W| ≤ 3`, `max |21D| ≤ 3`, `emaFilterMode: "OR"`, sort "Closest to 9W EMA".
 
-### 4. Custom List Analyzer modal (`CustomListAnalyzerModal.tsx`)
-- Switch internal call from `ema9w-distance` → `ema-distances`.
-- Add the same 9D / 21D filters and sort options alongside existing 9W controls.
-- Add columns "To 9D EMA" and "To 21D EMA" next to existing "9W EMA Δ".
+### Files (Workstream 1)
+- `src/components/rs/CustomListAnalyzerModal.tsx` — refactor + 9D/21D + OR toggle.
+- `src/components/rs/CustomTradingViewListModal.tsx` — OR toggle + new built-in profile.
+- `src/pages/RsAlpha.tsx` — pass through, OR toggle for main-list EMA filters if filters exist there.
 
-### 5. Scanner Profiles ("Saved Setups") in Custom TradingView List modal
-A profile is a named bundle of filter + sort settings.
+## Workstream 2 — Market Drivers
 
-**Storage**: localStorage key `rs_alpha_scanner_profiles_v1` — `Array<{ id, name, isBuiltIn, criteria }>` where `criteria` mirrors the modal's filter/sort state shape.
+### 2.1 Data approach
+The app has SPY/QQQ price history (`eod_prices` with `__BENCHMARK__`) but does **not** currently store index constituent weights. To compute "weighted contribution" we need: per-ticker index weight × today's % change.
 
-**Built-in profiles** (always present, can be cloned to user list):
-- **Red Day Leaders / Market Defiers**: `minRsRating: 75`, `minRelStrengthVsQqq: 0` (today's stock %change minus QQQ %change ≥ 0; positive means defying the market), `growthFilter: any`, `sort: rsRating desc`.
-- **Coiled Leaders**: `minRsRating: 80`, `coilFilterOn: true`, `maxCoil: 0.70`, `sort: coil asc`.
-- **9W EMA Pullbacks**: `minRsRating: 75`, `max9wDist: 3`, `sort: closest9w`.
-- **High RS + Tight Range**: `minRsRating: 85`, `coilFilterOn: true`, `maxCoil: 0.80`.
+Approach: new edge function `index-drivers` that:
+- Maintains a hard-coded weight table for **QQQ top 50** and **SPY top 50** (sourced from public Invesco/SPDR holdings as of build date) — good enough for "top contributors" view; documented as approximate.
+- Fetches today's quotes for those ~100 symbols via Yahoo (`?symbols=...`) in one batched call per index.
+- Returns per index: `{ indexPct, indexPoints, rows: [{ symbol, name, weight, pctChange, weightedContribution, cumulative }], top10ContributionPct, breadth: { advancers, decliners } }`.
+- Timeframe param: `today | 1w | 1m`. For 1w/1m, pull EOD perf from `eod_prices` for the same symbols.
 
-**UI** (top of the modal, above existing filters):
-- "Scanner Profiles" section with a dropdown (built-in + user-saved profiles) + Apply button.
-- "Save current as profile…" button → prompt for name → persists current settings to localStorage.
-- "Manage profiles" small popover: rename / delete user profiles (built-ins are not deletable).
+A follow-up could fetch live weights from an API; out of scope for v1.
 
-**Relative-strength-vs-QQQ filter (new)**:
-- Requires today's QQQ % change. Already loadable from existing live snapshot data — read from a parent prop `qqqPctChange?: number | null` passed by `RsAlpha.tsx` (which already consumes live snapshot via `useLiveSnapshot`).
-- For each row, compute `relVsQqq = stockPctChange - qqqPctChange`. Filter `relVsQqq >= minRelStrengthVsQqq`.
-- Add sort option: "Strongest vs QQQ".
+### 2.2 New page `MarketDrivers.tsx` at `/market-drivers`
+- Top: SPY + QQQ tile (% change, points), concentration score, breadth summary.
+- Tabs: **QQQ Drivers** / **SPY Drivers**.
+- Table: Rank · Ticker · Name · Weight % · % Change · Weighted Contribution · Cumulative. Sort by weighted contribution desc by default.
+- Bar chart (Recharts) — top positive / negative contributors.
+- Groq insight box: call existing AI gateway via a small edge function `market-drivers-insight` that takes the rows and returns a one-paragraph commentary. (Use Lovable AI Gateway, model `google/gemini-3-flash-preview`.)
+- Simulator: row-level "If X was flat" — pure client math: `indexPct − weight × pctChange`.
+- Timeframe selector (Today / 1W / 1M).
+- Theme contribution: aggregate weighted contribution by theme using existing theme→ticker mapping.
+- Export top contributors → TradingView (reuse existing TV export util).
 
-### Files
+### 2.3 Live Execution widget
+- New component `MarketDriversWidget.tsx` rendered near top of `LiveExecution.tsx`, collapsible.
+- Shows: SPY & QQQ % change, top 5 QQQ contributors, "Top 5 explain X%" with color coding (>60% red, 40-60% orange, <40% green).
+- Calls same `index-drivers` edge function with `index=QQQ&timeframe=today`.
+- Button "Open Full Market Drivers" → `navigate('/market-drivers')`.
 
-**New / edited edge functions**
-- `supabase/functions/ema-distances/index.ts` — new, returns 9D + 21D + 9W in one call.
-- `supabase/config.toml` — register `[functions.ema-distances]` with `verify_jwt = false`.
+### 2.4 Navigation
+- Add `/market-drivers` route in `App.tsx`.
+- Add nav link in main navigation (wherever other top-level tabs live — likely `Index.tsx` header or `NavLink.tsx` consumers).
 
-**Frontend**
-- `src/pages/RsAlpha.tsx` — load EMA distances, pass to children, add columns + sort options to main lists, pass `qqqPctChange` to modals.
-- `src/components/rs/CustomTradingViewListModal.tsx` — new EMA filters/sorts/columns, Scanner Profiles section, Rel-vs-QQQ filter & sort.
-- `src/components/rs/CustomListAnalyzerModal.tsx` — switch to `ema-distances`, add 9D + 21D filters/sorts/columns.
+### Files (Workstream 2)
+- **New** `supabase/functions/index-drivers/index.ts`
+- **New** `supabase/functions/market-drivers-insight/index.ts`
+- **New** `src/pages/MarketDrivers.tsx`
+- **New** `src/components/live/MarketDriversWidget.tsx`
+- **Edit** `src/App.tsx` (route)
+- **Edit** `src/pages/LiveExecution.tsx` (mount widget)
+- **Edit** main nav (TBD which file — will inspect)
+- **Edit** `supabase/config.toml` (register new functions)
 
-### Out of scope
-- No DB schema changes (profiles live in localStorage; cross-device sync can be a follow-up).
-- No changes to existing `ema9w-distance` function (kept for backward compatibility; analyzer switches to new function).
+## Out of scope
+- Live (sub-daily) index constituent weight refresh — using a maintained static weight table for v1.
+- Bottom-50 constituents of SPY/QQQ — top 50 each is sufficient for "drivers".
+- Weight table admin UI.
 
-### Verification
-1. Deploy `ema-distances`; curl-test it with a 5-symbol payload — confirm `dist9d`, `dist21d`, `dist9w` values are sensible.
-2. Open RS Alpha → verify the three new columns render and sorting by "Closest to 9D EMA" works.
-3. Open Custom TradingView List → verify Scanner Profiles dropdown shows "Red Day Leaders" and applying it sets RS ≥ 75 + Rel-vs-QQQ ≥ 0.
-4. Open Import & Analyze List → confirm 9D / 21D columns show up next to 9W.
+## Verification
+1. Analyzer modal: upload a TradingView .txt, see 9D/21D/9W columns, toggle OR mode with 9W ≤ 3 and 21D ≤ 3 active, verify row count expands vs AND.
+2. RS Alpha main list: same OR toggle visible when ≥2 EMA filters are active.
+3. `/market-drivers`: QQQ tab loads with top contributors and concentration score; flipping NVDA % to 0 in simulator updates the projected QQQ %.
+4. Live Execution: widget visible at top, "Open Full Market Drivers" navigates to the new tab.

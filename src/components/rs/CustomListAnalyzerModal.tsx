@@ -174,12 +174,19 @@ export default function CustomListAnalyzerModal({
   const [coilFilterOn, setCoilFilterOn] = useState<boolean>(false);
   const [maxCoil, setMaxCoil] = useState<number>(0.85);
 
-  // 9W EMA filter
-  const [emaFilterOn, setEmaFilterOn] = useState<boolean>(false);
-  const [maxEmaAbs, setMaxEmaAbs] = useState<number>(5); // ±5%
+  // EMA filters (9D, 21D, 9W)
+  const [ema9dFilterOn, setEma9dFilterOn] = useState<boolean>(false);
+  const [maxEma9dAbs, setMaxEma9dAbs] = useState<number>(3);
+  const [ema21dFilterOn, setEma21dFilterOn] = useState<boolean>(false);
+  const [maxEma21dAbs, setMaxEma21dAbs] = useState<number>(3);
+  const [ema9wFilterOn, setEma9wFilterOn] = useState<boolean>(false);
+  const [maxEma9wAbs, setMaxEma9wAbs] = useState<number>(5);
+  const [emaFilterMode, setEmaFilterMode] = useState<"AND" | "OR">("OR");
   const [emaMap, setEmaMap] = useState<Map<string, EmaInfo>>(new Map());
   const [emaLoading, setEmaLoading] = useState<boolean>(false);
   const emaAvailable = emaMap.size > 0;
+  const activeEmaFilters =
+    (ema9dFilterOn ? 1 : 0) + (ema21dFilterOn ? 1 : 0) + (ema9wFilterOn ? 1 : 0);
 
   const universeMap = useMemo(() => {
     const m = new Map<string, RsStock>();
@@ -226,31 +233,33 @@ export default function CustomListAnalyzerModal({
     if (f) void ingestFile(f);
   };
 
-  // ---------- Fetch 9W EMA distances on Analyze ----------
+  // ---------- Fetch EMA distances (9D / 21D / 9W) on Analyze ----------
   const fetchEmaForSymbols = useCallback(async (symbols: string[]) => {
     if (symbols.length === 0) return;
     setEmaLoading(true);
     try {
       const next = new Map(emaMap);
-      // Skip symbols already loaded
       const need = symbols.filter((s) => !next.has(s));
       if (need.length === 0) { setEmaLoading(false); return; }
-      // Chunk to keep payload reasonable
-      const CHUNK = 250;
+      const CHUNK = 200;
       for (let i = 0; i < need.length; i += CHUNK) {
         const slice = need.slice(i, i + CHUNK);
-        const { data, error } = await supabase.functions.invoke("ema9w-distance", { body: { symbols: slice } });
+        const { data, error } = await supabase.functions.invoke("ema-distances", { body: { symbols: slice } });
         if (error) throw new Error(error.message);
-        const rows = (data as { rows?: Array<{ symbol: string; ema9w: number | null; price: number | null; distancePct: number | null }> })?.rows ?? [];
+        const rows = (data as { rows?: Array<{ symbol: string; ema9d: number | null; ema21d: number | null; ema9w: number | null; price: number | null; dist9d: number | null; dist21d: number | null; dist9w: number | null }> })?.rows ?? [];
         for (const r of rows) {
-          next.set(r.symbol.toUpperCase(), { ema9w: r.ema9w, price: r.price, distancePct: r.distancePct });
+          next.set(r.symbol.toUpperCase(), {
+            ema9d: r.ema9d, ema21d: r.ema21d, ema9w: r.ema9w,
+            dist9d: r.dist9d, dist21d: r.dist21d, dist9w: r.dist9w,
+            price: r.price,
+          });
         }
         setEmaMap(new Map(next));
       }
-      const scored = Array.from(next.values()).filter((v) => v.distancePct !== null).length;
-      toast.success(`9W EMA loaded for ${scored} stocks.`);
+      const scored = Array.from(next.values()).filter((v) => v.dist9w !== null || v.dist21d !== null || v.dist9d !== null).length;
+      toast.success(`EMA distances loaded for ${scored} stocks.`);
     } catch (e) {
-      toast.error("9W EMA fetch failed.", { description: e instanceof Error ? e.message : String(e) });
+      toast.error("EMA distances fetch failed.", { description: e instanceof Error ? e.message : String(e) });
     } finally {
       setEmaLoading(false);
     }
@@ -289,25 +298,36 @@ export default function CustomListAnalyzerModal({
         if (c === null || c === undefined || !Number.isFinite(c)) return false;
         if (c > maxCoil) return false;
       }
-      if (emaFilterOn) {
-        const d = emaMap.get(s.symbol)?.distancePct;
-        if (d === null || d === undefined || !Number.isFinite(d)) return false;
-        if (Math.abs(d) > maxEmaAbs) return false;
+      if (activeEmaFilters > 0) {
+        const e = emaMap.get(s.symbol);
+        const checks: Array<boolean> = [];
+        if (ema9dFilterOn) {
+          const d = e?.dist9d;
+          checks.push(d !== null && d !== undefined && Number.isFinite(d) && Math.abs(d) <= maxEma9dAbs);
+        }
+        if (ema21dFilterOn) {
+          const d = e?.dist21d;
+          checks.push(d !== null && d !== undefined && Number.isFinite(d) && Math.abs(d) <= maxEma21dAbs);
+        }
+        if (ema9wFilterOn) {
+          const d = e?.dist9w;
+          checks.push(d !== null && d !== undefined && Number.isFinite(d) && Math.abs(d) <= maxEma9wAbs);
+        }
+        const pass = emaFilterMode === "OR" ? checks.some(Boolean) : checks.every(Boolean);
+        if (!pass) return false;
       }
       return true;
     });
+
+    const absDist = (v: number | null | undefined) => (v === null || v === undefined ? Infinity : Math.abs(v));
 
     const sorted = [...filtered].sort((a, b) => {
       switch (sortBy) {
         case "rs": return (getRsForTab(b, filterRsTab) ?? -999) - (getRsForTab(a, filterRsTab) ?? -999);
         case "rating": return (rMap.get(b.symbol) ?? -1) - (rMap.get(a.symbol) ?? -1);
-        case "ema": {
-          const av = emaMap.get(a.symbol)?.distancePct;
-          const bv = emaMap.get(b.symbol)?.distancePct;
-          const aa = av === null || av === undefined ? Infinity : Math.abs(av);
-          const bb = bv === null || bv === undefined ? Infinity : Math.abs(bv);
-          return aa - bb;
-        }
+        case "ema9d": return absDist(emaMap.get(a.symbol)?.dist9d) - absDist(emaMap.get(b.symbol)?.dist9d);
+        case "ema21d": return absDist(emaMap.get(a.symbol)?.dist21d) - absDist(emaMap.get(b.symbol)?.dist21d);
+        case "ema9w": return absDist(emaMap.get(a.symbol)?.dist9w) - absDist(emaMap.get(b.symbol)?.dist9w);
         case "coil": {
           const av = coilScores?.get(a.symbol)?.score ?? 999;
           const bv = coilScores?.get(b.symbol)?.score ?? 999;
@@ -330,7 +350,9 @@ export default function CustomListAnalyzerModal({
   }, [
     inputTickers, universeMap, filterRsTab, getRsForTab, getReturnField, isOtcSymbol,
     minRating, minAdr, minMcapM, excludeOtc, growthFilters, growthActive,
-    fundamentalsMap, coilFilterOn, maxCoil, coilScores, emaFilterOn, maxEmaAbs, emaMap, sortBy,
+    fundamentalsMap, coilFilterOn, maxCoil, coilScores,
+    activeEmaFilters, ema9dFilterOn, ema21dFilterOn, ema9wFilterOn,
+    maxEma9dAbs, maxEma21dAbs, maxEma9wAbs, emaFilterMode, emaMap, sortBy,
   ]);
 
   const visibleMissing = hideMissing ? [] : missing;
@@ -473,22 +495,25 @@ export default function CustomListAnalyzerModal({
                   onChange={(e) => setSortBy(e.target.value as SortBy)}
                   className="h-9 w-full rounded-md border border-input bg-background px-2 text-xs"
                 >
-                  {SORT_OPTIONS.map((o) => (
-                    <option
-                      key={o.id}
-                      value={o.id}
-                      disabled={
-                        (o.id === "coil" && !coilAvailable) ||
-                        (o.id === "growth" && !fundamentalsAvailable) ||
-                        (o.id === "ema" && !emaAvailable && !emaLoading)
-                      }
-                    >
-                      {o.label}
-                      {o.id === "coil" && !coilAvailable ? " (loading…)" : ""}
-                      {o.id === "growth" && !fundamentalsAvailable ? " (no fundamentals)" : ""}
-                      {o.id === "ema" && emaLoading ? " (loading…)" : ""}
-                    </option>
-                  ))}
+                  {SORT_OPTIONS.map((o) => {
+                    const isEma = o.id === "ema9d" || o.id === "ema21d" || o.id === "ema9w";
+                    return (
+                      <option
+                        key={o.id}
+                        value={o.id}
+                        disabled={
+                          (o.id === "coil" && !coilAvailable) ||
+                          (o.id === "growth" && !fundamentalsAvailable) ||
+                          (isEma && !emaAvailable && !emaLoading)
+                        }
+                      >
+                        {o.label}
+                        {o.id === "coil" && !coilAvailable ? " (loading…)" : ""}
+                        {o.id === "growth" && !fundamentalsAvailable ? " (no fundamentals)" : ""}
+                        {isEma && emaLoading && !emaAvailable ? " (loading…)" : ""}
+                      </option>
+                    );
+                  })}
                 </select>
               </div>
               <div>
@@ -540,29 +565,44 @@ export default function CustomListAnalyzerModal({
                 <Slider value={[maxCoil]} min={0.4} max={1.5} step={0.05} onValueChange={(v) => setMaxCoil(v[0])} disabled={!coilFilterOn || !coilAvailable} className="mt-1" />
               </div>
 
-              {/* 9W EMA filter */}
-              <div className="md:col-span-3">
+              {/* EMA distance filters (9D / 21D / 9W) with AND/OR mode */}
+              <div className="md:col-span-3 space-y-2 rounded-md border border-border/60 bg-muted/10 p-2">
                 <div className="flex items-center justify-between">
-                  <label className="flex items-center gap-2 text-xs">
-                    <Checkbox
-                      checked={emaFilterOn}
-                      onCheckedChange={(v) => setEmaFilterOn(!!v)}
-                      disabled={!emaAvailable && !emaLoading}
-                    />
-                    Distance to 9-Week EMA filter
-                    {emaLoading && <Loader2 size={12} className="animate-spin text-muted-foreground" />}
-                  </label>
-                  <span className="font-mono text-xs text-muted-foreground">within ±{maxEmaAbs.toFixed(1)}%</span>
+                  <span className="text-[11px] font-semibold text-muted-foreground inline-flex items-center gap-1">
+                    EMA Pullback Filters
+                    {emaLoading && <Loader2 size={11} className="animate-spin" />}
+                  </span>
+                  {activeEmaFilters >= 2 && (
+                    <div className="inline-flex overflow-hidden rounded-md border border-border text-[10px]">
+                      <button
+                        type="button"
+                        onClick={() => setEmaFilterMode("OR")}
+                        className={`px-2 py-1 ${emaFilterMode === "OR" ? "bg-primary text-primary-foreground" : "bg-background hover:bg-accent"}`}
+                      >Match ANY (OR)</button>
+                      <button
+                        type="button"
+                        onClick={() => setEmaFilterMode("AND")}
+                        className={`px-2 py-1 ${emaFilterMode === "AND" ? "bg-primary text-primary-foreground" : "bg-background hover:bg-accent"}`}
+                      >Match ALL (AND)</button>
+                    </div>
+                  )}
                 </div>
-                <Slider
-                  value={[maxEmaAbs]}
-                  min={0.5}
-                  max={20}
-                  step={0.5}
-                  onValueChange={(v) => setMaxEmaAbs(v[0])}
-                  disabled={!emaFilterOn || (!emaAvailable && !emaLoading)}
-                  className="mt-1"
-                />
+                {([
+                  { on: ema9dFilterOn, setOn: setEma9dFilterOn, max: maxEma9dAbs, setMax: setMaxEma9dAbs, label: "9D EMA" },
+                  { on: ema21dFilterOn, setOn: setEma21dFilterOn, max: maxEma21dAbs, setMax: setMaxEma21dAbs, label: "21D EMA" },
+                  { on: ema9wFilterOn, setOn: setEma9wFilterOn, max: maxEma9wAbs, setMax: setMaxEma9wAbs, label: "9W EMA" },
+                ] as const).map((row) => (
+                  <div key={row.label} className="grid grid-cols-12 items-center gap-2">
+                    <label className="col-span-4 flex items-center gap-2 text-xs">
+                      <Checkbox checked={row.on} onCheckedChange={(v) => row.setOn(!!v)} disabled={!emaAvailable && !emaLoading} />
+                      Distance to {row.label}
+                    </label>
+                    <div className="col-span-7">
+                      <Slider value={[row.max]} min={0.5} max={20} step={0.5} onValueChange={(v) => row.setMax(v[0])} disabled={!row.on || (!emaAvailable && !emaLoading)} />
+                    </div>
+                    <span className="col-span-1 text-right font-mono text-[10px] text-muted-foreground">±{row.max.toFixed(1)}%</span>
+                  </div>
+                ))}
               </div>
             </div>
 
@@ -571,7 +611,7 @@ export default function CustomListAnalyzerModal({
               <div className="flex flex-wrap items-center gap-3">
                 <span><span className="font-semibold text-foreground">{rows.length}</span> shown</span>
                 <span className="text-muted-foreground">· {matched.length} matched in universe · {missing.length} unmatched · {inputTickers.length} input</span>
-                {emaLoading && <span className="inline-flex items-center gap-1 text-muted-foreground"><Loader2 size={11} className="animate-spin" /> 9W EMA loading…</span>}
+                {emaLoading && <span className="inline-flex items-center gap-1 text-muted-foreground"><Loader2 size={11} className="animate-spin" /> EMA distances loading…</span>}
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 <button onClick={handleReset} className="rounded-md border border-border px-3 py-1.5 text-xs hover:bg-accent">← Edit list</button>
@@ -593,6 +633,8 @@ export default function CustomListAnalyzerModal({
                       <th className="px-2 py-2 text-left text-muted-foreground">Company</th>
                       <th className="px-2 py-2 text-right text-muted-foreground">RS</th>
                       <th className="px-2 py-2 text-right text-muted-foreground">Return</th>
+                      <th className="px-2 py-2 text-right text-muted-foreground" title="Distance from current price to 9-Day EMA">9D EMA Δ</th>
+                      <th className="px-2 py-2 text-right text-muted-foreground" title="Distance from current price to 21-Day EMA">21D EMA Δ</th>
                       <th className="px-2 py-2 text-right text-muted-foreground" title="Distance from current price to 9-Week EMA">9W EMA Δ</th>
                       <th className="px-2 py-2 text-right text-muted-foreground">Coil</th>
                       <th className="px-2 py-2 text-right text-muted-foreground">ADR%</th>
@@ -609,6 +651,11 @@ export default function CustomListAnalyzerModal({
                       const coil = coilScores?.get(s.symbol)?.score ?? null;
                       const ema = emaMap.get(s.symbol);
                       const g = growthScore(fundamentalsMap?.get(s.symbol));
+                      const emaCell = (d: number | null | undefined, ref: number | null | undefined, label: string) => (
+                        <td className={`px-2 py-1.5 text-right font-mono ${emaColor(d ?? null)}`} title={ref ? `${label}: ${ref}` : ""}>
+                          {d === null || d === undefined ? (emaLoading ? "…" : "—") : pctDisplay(d)}
+                        </td>
+                      );
                       return (
                         <tr key={s.symbol} className="border-b border-border/40 hover:bg-muted/20">
                           <td className="px-2 py-1.5 text-muted-foreground">{idx + 1}</td>
@@ -617,9 +664,9 @@ export default function CustomListAnalyzerModal({
                           <td className="px-2 py-1.5 max-w-[200px] truncate text-muted-foreground" title={s.companyName ?? ""}>{s.companyName ?? "—"}</td>
                           <td className={`px-2 py-1.5 text-right font-mono ${rs !== null && rs >= 0 ? "text-[hsl(160,60%,55%)]" : "text-destructive/80"}`}>{pctDisplay(rs)}</td>
                           <td className={`px-2 py-1.5 text-right font-mono ${ret !== null && ret >= 0 ? "text-[hsl(160,60%,55%)]" : "text-destructive/80"}`}>{pctDisplay(ret)}</td>
-                          <td className={`px-2 py-1.5 text-right font-mono ${emaColor(ema?.distancePct ?? null)}`} title={ema?.ema9w ? `9W EMA: ${ema.ema9w}` : ""}>
-                            {ema?.distancePct === null || ema?.distancePct === undefined ? (emaLoading ? "…" : "—") : pctDisplay(ema.distancePct)}
-                          </td>
+                          {emaCell(ema?.dist9d, ema?.ema9d, "9D EMA")}
+                          {emaCell(ema?.dist21d, ema?.ema21d, "21D EMA")}
+                          {emaCell(ema?.dist9w, ema?.ema9w, "9W EMA")}
                           <td className="px-2 py-1.5 text-right font-mono">{coil !== null ? `${coil.toFixed(2)}x` : "—"}</td>
                           <td className="px-2 py-1.5 text-right font-mono text-muted-foreground">{s.adrPercent !== null ? `${s.adrPercent.toFixed(1)}%` : "—"}</td>
                           <td className="px-2 py-1.5 text-right font-mono text-muted-foreground">{fmtMcap(s.marketCap)}</td>
@@ -629,7 +676,7 @@ export default function CustomListAnalyzerModal({
                       );
                     })}
                     {rows.length === 0 && (
-                      <tr><td colSpan={12} className="px-2 py-6 text-center text-muted-foreground">No tickers match the current filters.</td></tr>
+                      <tr><td colSpan={14} className="px-2 py-6 text-center text-muted-foreground">No tickers match the current filters.</td></tr>
                     )}
                   </tbody>
                 </table>
