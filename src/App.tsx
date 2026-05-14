@@ -41,6 +41,7 @@ const App = () => (
               <Route path="/rs-alpha" element={<RsAlpha />} />
               <Route path="/live" element={<LiveExecution />} />
               <Route path="/earnings" element={<Earnings />} />
+              <Route path="/market-drivers" element={<MarketDrivers />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </BrowserRouter>
