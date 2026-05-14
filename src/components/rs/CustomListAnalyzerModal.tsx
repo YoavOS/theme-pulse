@@ -611,7 +611,7 @@ export default function CustomListAnalyzerModal({
               <div className="flex flex-wrap items-center gap-3">
                 <span><span className="font-semibold text-foreground">{rows.length}</span> shown</span>
                 <span className="text-muted-foreground">· {matched.length} matched in universe · {missing.length} unmatched · {inputTickers.length} input</span>
-                {emaLoading && <span className="inline-flex items-center gap-1 text-muted-foreground"><Loader2 size={11} className="animate-spin" /> 9W EMA loading…</span>}
+                {emaLoading && <span className="inline-flex items-center gap-1 text-muted-foreground"><Loader2 size={11} className="animate-spin" /> EMA distances loading…</span>}
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 <button onClick={handleReset} className="rounded-md border border-border px-3 py-1.5 text-xs hover:bg-accent">← Edit list</button>
