@@ -6,6 +6,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import EarningsAnalysisPanel, { type EarningsAnalysisContext } from "@/components/earnings/EarningsAnalysisPanel";
 
 // ────────────────────────────────────────────────────────────────────
 // Types matching the two edge functions
@@ -99,6 +100,9 @@ export default function Earnings() {
   const [enableAi, setEnableAi] = useState<boolean>(true);
   const [gappers, setGappers] = useState<GapperRow[]>([]);
   const [gappersLoading, setGappersLoading] = useState(false);
+
+  // AI panel
+  const [analysisCtx, setAnalysisCtx] = useState<EarningsAnalysisContext | null>(null);
 
   // Build the universe array when scope = qualified
   const fetchUniverse = useCallback(async (): Promise<string[] | null> => {
@@ -316,7 +320,17 @@ export default function Earnings() {
                   </td></tr>
                 ) : (
                   filteredToday.map((r) => (
-                    <tr key={`${r.symbol}-${r.date}`} className="border-b border-border/50 transition-colors hover:bg-accent/40">
+                    <tr
+                      key={`${r.symbol}-${r.date}`}
+                      onClick={() => setAnalysisCtx({
+                        symbol: r.symbol, company: r.company,
+                        gapPct: r.gapPct,
+                        epsSurprisePct: r.epsActual !== null && r.epsEstimate ? ((r.epsActual - r.epsEstimate) / Math.abs(r.epsEstimate)) * 100 : null,
+                        revenueSurprisePct: r.revenueActual !== null && r.revenueEstimate ? ((r.revenueActual - r.revenueEstimate) / Math.abs(r.revenueEstimate)) * 100 : null,
+                        reportDate: r.date, reportTime: r.reportTime,
+                      })}
+                      className="cursor-pointer border-b border-border/50 transition-colors hover:bg-accent/40"
+                    >
                       <td className="px-3 py-1.5 font-mono font-bold text-foreground">{r.symbol}</td>
                       <td className="px-3 py-1.5 text-foreground/90 truncate max-w-[200px]">{r.company ?? "—"}</td>
                       <td className="px-3 py-1.5 text-right font-mono">{fmtMcap(r.marketCap)}</td>
@@ -402,7 +416,15 @@ export default function Earnings() {
           ) : (
             <div className="divide-y divide-border/50">
               {gappers.map((g) => (
-                <div key={`${g.symbol}-${g.reportDate}`} className="px-4 py-3">
+                <div
+                  key={`${g.symbol}-${g.reportDate}`}
+                  onClick={() => setAnalysisCtx({
+                    symbol: g.symbol, company: g.company, sector: g.sector,
+                    gapPct: g.gapPct, epsSurprisePct: g.epsSurprisePct, revenueSurprisePct: g.revenueSurprisePct,
+                    reportDate: g.reportDate, reportTime: g.reportTime,
+                  })}
+                  className="cursor-pointer px-4 py-3 transition-colors hover:bg-accent/30"
+                >
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div className="flex items-center gap-2">
                       <span className="font-mono text-sm font-bold text-foreground">{g.symbol}</span>
@@ -451,6 +473,7 @@ export default function Earnings() {
           )}
         </section>
       </main>
+      <EarningsAnalysisPanel ctx={analysisCtx} onClose={() => setAnalysisCtx(null)} />
     </div>
   );
 }
