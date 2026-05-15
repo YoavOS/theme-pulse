@@ -416,7 +416,15 @@ export default function Earnings() {
           ) : (
             <div className="divide-y divide-border/50">
               {gappers.map((g) => (
-                <div key={`${g.symbol}-${g.reportDate}`} className="px-4 py-3">
+                <div
+                  key={`${g.symbol}-${g.reportDate}`}
+                  onClick={() => setAnalysisCtx({
+                    symbol: g.symbol, company: g.company, sector: g.sector,
+                    gapPct: g.gapPct, epsSurprisePct: g.epsSurprisePct, revenueSurprisePct: g.revenueSurprisePct,
+                    reportDate: g.reportDate, reportTime: g.reportTime,
+                  })}
+                  className="cursor-pointer px-4 py-3 transition-colors hover:bg-accent/30"
+                >
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div className="flex items-center gap-2">
                       <span className="font-mono text-sm font-bold text-foreground">{g.symbol}</span>
