@@ -320,7 +320,17 @@ export default function Earnings() {
                   </td></tr>
                 ) : (
                   filteredToday.map((r) => (
-                    <tr key={`${r.symbol}-${r.date}`} className="border-b border-border/50 transition-colors hover:bg-accent/40">
+                    <tr
+                      key={`${r.symbol}-${r.date}`}
+                      onClick={() => setAnalysisCtx({
+                        symbol: r.symbol, company: r.company,
+                        gapPct: r.gapPct,
+                        epsSurprisePct: r.epsActual !== null && r.epsEstimate ? ((r.epsActual - r.epsEstimate) / Math.abs(r.epsEstimate)) * 100 : null,
+                        revenueSurprisePct: r.revenueActual !== null && r.revenueEstimate ? ((r.revenueActual - r.revenueEstimate) / Math.abs(r.revenueEstimate)) * 100 : null,
+                        reportDate: r.date, reportTime: r.reportTime,
+                      })}
+                      className="cursor-pointer border-b border-border/50 transition-colors hover:bg-accent/40"
+                    >
                       <td className="px-3 py-1.5 font-mono font-bold text-foreground">{r.symbol}</td>
                       <td className="px-3 py-1.5 text-foreground/90 truncate max-w-[200px]">{r.company ?? "—"}</td>
                       <td className="px-3 py-1.5 text-right font-mono">{fmtMcap(r.marketCap)}</td>
