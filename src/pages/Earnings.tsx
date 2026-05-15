@@ -473,6 +473,7 @@ export default function Earnings() {
           )}
         </section>
       </main>
+      <EarningsAnalysisPanel ctx={analysisCtx} onClose={() => setAnalysisCtx(null)} />
     </div>
   );
 }
