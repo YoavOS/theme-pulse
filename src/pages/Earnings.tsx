@@ -101,6 +101,9 @@ export default function Earnings() {
   const [gappers, setGappers] = useState<GapperRow[]>([]);
   const [gappersLoading, setGappersLoading] = useState(false);
 
+  // AI panel
+  const [analysisCtx, setAnalysisCtx] = useState<EarningsAnalysisContext | null>(null);
+
   // Build the universe array when scope = qualified
   const fetchUniverse = useCallback(async (): Promise<string[] | null> => {
     if (scope !== "qualified") return null;
