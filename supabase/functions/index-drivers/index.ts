@@ -68,22 +68,37 @@ interface QuoteResult {
   price: number | null;
 }
 
-async function fetchQuotes(symbols: string[]): Promise<Map<string, QuoteResult>> {
-  const out = new Map<string, QuoteResult>();
-  const url = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${encodeURIComponent(symbols.join(","))}`;
+async function fetchQuoteViaChart(symbol: string): Promise<QuoteResult> {
+  // Use chart endpoint (no crumb required). Get last 5d to compute today's % change
+  // = (regularMarketPrice - previousClose) / previousClose.
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=5d&interval=1d`;
   try {
     const res = await fetch(url, { headers: { "User-Agent": UA, Accept: "application/json" } });
-    if (!res.ok) return out;
+    if (!res.ok) return { symbol, pctChange: null, price: null };
     const json = await res.json().catch(() => null);
-    const rows = json?.quoteResponse?.result ?? [];
-    for (const r of rows) {
-      const sym = String(r.symbol || "").toUpperCase();
-      const pct = typeof r.regularMarketChangePercent === "number" ? r.regularMarketChangePercent : null;
-      const price = typeof r.regularMarketPrice === "number" ? r.regularMarketPrice : null;
-      out.set(sym, { symbol: sym, pctChange: pct, price });
+    const r = json?.chart?.result?.[0];
+    const meta = r?.meta;
+    const price: number | null = typeof meta?.regularMarketPrice === "number" ? meta.regularMarketPrice : null;
+    const prevClose: number | null = typeof meta?.chartPreviousClose === "number" ? meta.chartPreviousClose
+      : typeof meta?.previousClose === "number" ? meta.previousClose : null;
+    let pct: number | null = null;
+    if (price !== null && prevClose && prevClose > 0) {
+      pct = ((price - prevClose) / prevClose) * 100;
     }
+    return { symbol, pctChange: pct, price };
   } catch {
-    // ignore — caller will see missing entries
+    return { symbol, pctChange: null, price: null };
+  }
+}
+
+async function fetchQuotes(symbols: string[]): Promise<Map<string, QuoteResult>> {
+  const out = new Map<string, QuoteResult>();
+  // Parallelize in chunks of 15 to avoid hammering Yahoo
+  const chunkSize = 15;
+  for (let i = 0; i < symbols.length; i += chunkSize) {
+    const chunk = symbols.slice(i, i + chunkSize);
+    const results = await Promise.all(chunk.map((s) => fetchQuoteViaChart(s)));
+    results.forEach((r) => out.set(r.symbol.toUpperCase(), r));
   }
   return out;
 }
