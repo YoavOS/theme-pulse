@@ -179,6 +179,22 @@ export default function MarketDrivers() {
     return Math.max(...data.rows.map((r) => Math.abs(r.weightedContribution ?? 0)), 0.01);
   }, [data]);
 
+  const sortedRows = useMemo(() => {
+    if (!data) return [];
+    const arr = [...data.rows];
+    const dir = sortDir === "asc" ? 1 : -1;
+    arr.sort((a, b) => {
+      const va = a[sortKey] as number | string | null;
+      const vb = b[sortKey] as number | string | null;
+      if (va === null && vb === null) return 0;
+      if (va === null) return 1;
+      if (vb === null) return -1;
+      if (typeof va === "string" && typeof vb === "string") return va.localeCompare(vb) * dir;
+      return ((va as number) - (vb as number)) * dir;
+    });
+    return arr;
+  }, [data, sortKey, sortDir]);
+
   return (
     <div className="min-h-screen bg-background text-foreground">
       <div className="mx-auto max-w-7xl px-4 py-6">
