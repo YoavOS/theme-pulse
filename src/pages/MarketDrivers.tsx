@@ -418,7 +418,7 @@ export default function MarketDrivers() {
         </div>
 
         <p className="mt-3 text-[10px] text-muted-foreground">
-          Weights based on top-50 constituents (approximate, refresh periodically). Live quotes via Yahoo Finance · auto-refresh every 60s on Today.
+          {data && <>Full constituents: <span className="font-semibold text-foreground">{data.rows.length}</span> {data.index} holdings · </>}Live quotes via Yahoo Finance · auto-refresh every 60s on Today · click any column header to sort.
         </p>
       </div>
     </div>
