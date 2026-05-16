@@ -338,14 +338,31 @@ export default function MarketDrivers() {
             <table className="w-full text-[13px]">
               <thead className="sticky top-0 z-10 bg-card/95 backdrop-blur-sm">
                 <tr className="border-b border-border text-[10px] uppercase tracking-wider text-muted-foreground">
-                  <th className="px-3 py-2.5 text-left">#</th>
-                  <th className="px-3 py-2.5 text-left">Ticker</th>
-                  <th className="px-3 py-2.5 text-left">Company</th>
-                  <th className="px-3 py-2.5 text-right">Weight</th>
-                  <th className="px-3 py-2.5 text-right">% Change</th>
-                  <th className="px-3 py-2.5 text-right">Contribution (pp)</th>
-                  <th className="px-3 py-2.5 text-right">Cumul.</th>
-                  <th className="px-3 py-2.5 text-center">Sim flat</th>
+                  {(() => {
+                    const SortableTh = ({ k, label, align = "left", className = "" }: { k: SortKey; label: string; align?: "left" | "right" | "center"; className?: string }) => {
+                      const active = sortKey === k;
+                      const justify = align === "right" ? "justify-end" : align === "center" ? "justify-center" : "justify-start";
+                      return (
+                        <th className={`px-3 py-2.5 ${align === "right" ? "text-right" : align === "center" ? "text-center" : "text-left"} ${className}`}>
+                          <button onClick={() => toggleSort(k)}
+                            className={`inline-flex items-center gap-1 ${justify} w-full hover:text-foreground transition-colors ${active ? "text-foreground font-semibold" : ""}`}>
+                            <span>{label}</span>
+                            {active && (sortDir === "desc" ? <ArrowDown size={10} /> : <ArrowUp size={10} />)}
+                          </button>
+                        </th>
+                      );
+                    };
+                    return (<>
+                      <SortableTh k="rank" label="#" />
+                      <SortableTh k="symbol" label="Ticker" />
+                      <SortableTh k="name" label="Company" />
+                      <SortableTh k="weight" label="Weight" align="right" />
+                      <SortableTh k="pctChange" label="% Change" align="right" />
+                      <SortableTh k="weightedContribution" label="Contribution (pp)" align="right" className="bg-primary/5" />
+                      <SortableTh k="cumulativeShare" label="Cumul." align="right" />
+                      <th className="px-3 py-2.5 text-center">Sim flat</th>
+                    </>);
+                  })()}
                 </tr>
               </thead>
               <tbody>
@@ -354,7 +371,7 @@ export default function MarketDrivers() {
                     <Loader2 size={16} className="inline-block animate-spin" /> Loading drivers…
                   </td></tr>
                 )}
-                {data?.rows.map((r) => {
+                {sortedRows.map((r) => {
                   const isTop5 = r.rank <= 5;
                   const barWidth = Math.min(100, (Math.abs(r.weightedContribution ?? 0) / maxAbsContrib) * 100);
                   const barPositive = (r.weightedContribution ?? 0) >= 0;
