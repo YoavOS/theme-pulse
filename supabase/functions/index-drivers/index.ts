@@ -117,7 +117,7 @@ const QQQ_WEIGHTS: Array<[string, string, number]> = [
   ["CSGP", "CoStar Group, Inc.", 0.0316]
 ];
 
-// SPY (SPDR S&P 500) — top 50 by weight. Approximate late-2025 snapshot.
+// SPY (SPDR S&P 500) — full holdings sourced from SSGA.
 const SPY_WEIGHTS: Array<[string, string, number]> = [
   ["NVDA", "NVIDIA CORP", 8.9032],
   ["AAPL", "APPLE INC", 6.8044],
