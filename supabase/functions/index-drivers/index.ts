@@ -10,8 +10,8 @@ const corsHeaders = {
 };
 const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0";
 
-// Approximate top-50 weights (% of index). Updated late-2025 snapshot.
-// QQQ holdings (Invesco) — top contributors by weight
+// Full constituent weights (% of index). QQQ ≈ 100 holdings, SPY ≈ 500 holdings.
+// QQQ holdings (Invesco Nasdaq-100)
 const QQQ_WEIGHTS: Array<[string, string, number]> = [
   ["NVDA", "NVIDIA Corp", 9.1],
   ["MSFT", "Microsoft Corp", 8.4],
