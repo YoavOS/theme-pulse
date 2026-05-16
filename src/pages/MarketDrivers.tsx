@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { ArrowLeft, BarChart3, Loader2, Sparkles, Copy, RefreshCw, Zap } from "lucide-react";
+import { ArrowLeft, ArrowUp, ArrowDown, BarChart3, Loader2, Sparkles, Copy, RefreshCw, Zap } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -98,6 +98,14 @@ export default function MarketDrivers() {
   const [lastFetched, setLastFetched] = useState<number>(0);
   const reqRef = useRef(0);
 
+  type SortKey = "rank" | "symbol" | "name" | "weight" | "pctChange" | "weightedContribution" | "cumulativeShare";
+  const [sortKey, setSortKey] = useState<SortKey>("weightedContribution");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  const toggleSort = (k: SortKey) => {
+    if (k === sortKey) setSortDir((d) => (d === "desc" ? "asc" : "desc"));
+    else { setSortKey(k); setSortDir(k === "symbol" || k === "name" || k === "rank" ? "asc" : "desc"); }
+  };
+
   const load = useCallback(async (manual = false) => {
     const myReq = ++reqRef.current;
     setLoading(true);
@@ -170,6 +178,22 @@ export default function MarketDrivers() {
     if (!data) return 1;
     return Math.max(...data.rows.map((r) => Math.abs(r.weightedContribution ?? 0)), 0.01);
   }, [data]);
+
+  const sortedRows = useMemo(() => {
+    if (!data) return [];
+    const arr = [...data.rows];
+    const dir = sortDir === "asc" ? 1 : -1;
+    arr.sort((a, b) => {
+      const va = a[sortKey] as number | string | null;
+      const vb = b[sortKey] as number | string | null;
+      if (va === null && vb === null) return 0;
+      if (va === null) return 1;
+      if (vb === null) return -1;
+      if (typeof va === "string" && typeof vb === "string") return va.localeCompare(vb) * dir;
+      return ((va as number) - (vb as number)) * dir;
+    });
+    return arr;
+  }, [data, sortKey, sortDir]);
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -314,14 +338,31 @@ export default function MarketDrivers() {
             <table className="w-full text-[13px]">
               <thead className="sticky top-0 z-10 bg-card/95 backdrop-blur-sm">
                 <tr className="border-b border-border text-[10px] uppercase tracking-wider text-muted-foreground">
-                  <th className="px-3 py-2.5 text-left">#</th>
-                  <th className="px-3 py-2.5 text-left">Ticker</th>
-                  <th className="px-3 py-2.5 text-left">Company</th>
-                  <th className="px-3 py-2.5 text-right">Weight</th>
-                  <th className="px-3 py-2.5 text-right">% Change</th>
-                  <th className="px-3 py-2.5 text-right">Contribution (pp)</th>
-                  <th className="px-3 py-2.5 text-right">Cumul.</th>
-                  <th className="px-3 py-2.5 text-center">Sim flat</th>
+                  {(() => {
+                    const SortableTh = ({ k, label, align = "left", className = "" }: { k: SortKey; label: string; align?: "left" | "right" | "center"; className?: string }) => {
+                      const active = sortKey === k;
+                      const justify = align === "right" ? "justify-end" : align === "center" ? "justify-center" : "justify-start";
+                      return (
+                        <th className={`px-3 py-2.5 ${align === "right" ? "text-right" : align === "center" ? "text-center" : "text-left"} ${className}`}>
+                          <button onClick={() => toggleSort(k)}
+                            className={`inline-flex items-center gap-1 ${justify} w-full hover:text-foreground transition-colors ${active ? "text-foreground font-semibold" : ""}`}>
+                            <span>{label}</span>
+                            {active && (sortDir === "desc" ? <ArrowDown size={10} /> : <ArrowUp size={10} />)}
+                          </button>
+                        </th>
+                      );
+                    };
+                    return (<>
+                      <SortableTh k="rank" label="#" />
+                      <SortableTh k="symbol" label="Ticker" />
+                      <SortableTh k="name" label="Company" />
+                      <SortableTh k="weight" label="Weight" align="right" />
+                      <SortableTh k="pctChange" label="% Change" align="right" />
+                      <SortableTh k="weightedContribution" label="Contribution (pp)" align="right" className="bg-primary/5" />
+                      <SortableTh k="cumulativeShare" label="Cumul." align="right" />
+                      <th className="px-3 py-2.5 text-center">Sim flat</th>
+                    </>);
+                  })()}
                 </tr>
               </thead>
               <tbody>
@@ -330,7 +371,7 @@ export default function MarketDrivers() {
                     <Loader2 size={16} className="inline-block animate-spin" /> Loading drivers…
                   </td></tr>
                 )}
-                {data?.rows.map((r) => {
+                {sortedRows.map((r) => {
                   const isTop5 = r.rank <= 5;
                   const barWidth = Math.min(100, (Math.abs(r.weightedContribution ?? 0) / maxAbsContrib) * 100);
                   const barPositive = (r.weightedContribution ?? 0) >= 0;
@@ -377,7 +418,7 @@ export default function MarketDrivers() {
         </div>
 
         <p className="mt-3 text-[10px] text-muted-foreground">
-          Weights based on top-50 constituents (approximate, refresh periodically). Live quotes via Yahoo Finance · auto-refresh every 60s on Today.
+          {data && <>Full constituents: <span className="font-semibold text-foreground">{data.rows.length}</span> {data.index} holdings · </>}Live quotes via Yahoo Finance · auto-refresh every 60s on Today · click any column header to sort.
         </p>
       </div>
     </div>
