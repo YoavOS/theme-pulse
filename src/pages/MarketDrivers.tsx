@@ -98,6 +98,14 @@ export default function MarketDrivers() {
   const [lastFetched, setLastFetched] = useState<number>(0);
   const reqRef = useRef(0);
 
+  type SortKey = "rank" | "symbol" | "name" | "weight" | "pctChange" | "weightedContribution" | "cumulativeShare";
+  const [sortKey, setSortKey] = useState<SortKey>("weightedContribution");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  const toggleSort = (k: SortKey) => {
+    if (k === sortKey) setSortDir((d) => (d === "desc" ? "asc" : "desc"));
+    else { setSortKey(k); setSortDir(k === "symbol" || k === "name" || k === "rank" ? "asc" : "desc"); }
+  };
+
   const load = useCallback(async (manual = false) => {
     const myReq = ++reqRef.current;
     setLoading(true);
