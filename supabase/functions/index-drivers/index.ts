@@ -666,7 +666,7 @@ async function fetchQuoteViaChart(symbol: string): Promise<QuoteResult> {
 async function fetchQuotes(symbols: string[]): Promise<Map<string, QuoteResult>> {
   const out = new Map<string, QuoteResult>();
   // Parallelize in chunks of 15 to avoid hammering Yahoo
-  const chunkSize = 15;
+  const chunkSize = 50;
   for (let i = 0; i < symbols.length; i += chunkSize) {
     const chunk = symbols.slice(i, i + chunkSize);
     const results = await Promise.all(chunk.map((s) => fetchQuoteViaChart(s)));
