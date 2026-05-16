@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { ArrowLeft, BarChart3, Loader2, Sparkles, Copy, RefreshCw, Zap } from "lucide-react";
+import { ArrowLeft, ArrowUp, ArrowDown, BarChart3, Loader2, Sparkles, Copy, RefreshCw, Zap } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 
