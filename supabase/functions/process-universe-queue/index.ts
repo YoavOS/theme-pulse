@@ -24,11 +24,12 @@ const FINNHUB_DELAY_MS = 1200;     // ~50 req/min — safe target under 60/min c
 const ADR_LOOKBACK_DAYS = 14;      // ~10 trading days of data
 const TICK_DEADLINE_MS = 115_000;  // edge functions allow ~150s; leave headroom
 
-const FILTERS = {
-  MIN_MARKET_CAP_M: 1000,
-  MIN_PRICE: 6,
+const DEFAULT_FILTERS = {
+  MIN_MARKET_CAP_M: 300,
+  MIN_PRICE: 5,
   MIN_DOLLAR_VOLUME: 10_000_000,
   MIN_ADR_PCT: 3,
+  EXCLUDE_OTC: true,
 };
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -171,10 +172,18 @@ Deno.serve(async (req) => {
         .lt("enqueued_at", fiveMinAgo);
 
       const { data: prog } = await supabase
-        .from("rs_scan_progress").select("status").eq("id", 1).maybeSingle();
+        .from("rs_scan_progress").select("status, filters").eq("id", 1).maybeSingle();
       if (prog?.status === "paused") {
         return await finalize({ message: "scan paused" });
       }
+      const userFilters = (prog as any)?.filters || {};
+      const FILTERS = {
+        MIN_MARKET_CAP_M: userFilters.minMarketCapM ?? DEFAULT_FILTERS.MIN_MARKET_CAP_M,
+        MIN_PRICE: userFilters.minPrice ?? DEFAULT_FILTERS.MIN_PRICE,
+        MIN_DOLLAR_VOLUME: userFilters.minDollarVolume ?? DEFAULT_FILTERS.MIN_DOLLAR_VOLUME,
+        MIN_ADR_PCT: userFilters.minAdrPct ?? DEFAULT_FILTERS.MIN_ADR_PCT,
+        EXCLUDE_OTC: userFilters.excludeOtc ?? DEFAULT_FILTERS.EXCLUDE_OTC,
+      };
 
       const tickStart = Date.now();
       let totalProcessed = 0;
@@ -233,13 +242,13 @@ Deno.serve(async (req) => {
               (/^[A-Z]{5}$/.test(sym) && sym.endsWith("F"));
             const mcM = prof?.marketCapitalization;
 
-            if (isOtc) {
+            if (isOtc && FILTERS.EXCLUDE_OTC) {
               await supabase.from("stock_scan_queue")
                 .update({ status: "skipped", last_error: `otc:${exch}`, processed_at: new Date().toISOString() })
                 .eq("symbol", sym);
               totalProcessed++; continue;
             }
-            if (!mcM || mcM < FILTERS.MIN_MARKET_CAP_M) {
+            if (FILTERS.MIN_MARKET_CAP_M > 0 && (!mcM || mcM < FILTERS.MIN_MARKET_CAP_M)) {
               await supabase.from("stock_scan_queue")
                 .update({ status: "skipped", processed_at: new Date().toISOString() })
                 .eq("symbol", sym);
