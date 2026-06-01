@@ -16,12 +16,19 @@ Deno.serve(async (req) => {
 
     const supabase = createClient(SB_URL, SB_KEY);
 
-    // Parse optional body: { mode: "resume" | "restart" }
+    // Parse optional body: { mode: "resume" | "restart", filters?: {...} }
     let mode: "resume" | "restart" = "resume";
+    let filters: any = null;
     try {
       const body = await req.json();
       if (body?.mode === "restart") mode = "restart";
+      if (body?.filters && typeof body.filters === "object") filters = body.filters;
     } catch (_) { /* no body */ }
+
+    // Persist filters on progress row so cron worker reads them on every tick
+    if (filters) {
+      await supabase.from("rs_scan_progress").update({ filters }).eq("id", 1);
+    }
 
     // ── Check if there's already pending/processing work ──
     const { count: pendingCount } = await supabase

@@ -34,6 +34,7 @@ import { gicsForIndustry } from "@/lib/sectorTaxonomy";
 import IntradayThemeChart from "@/components/live/IntradayThemeChart";
 import First30MinVolumeCard from "@/components/live/First30MinVolumeCard";
 import MarketDriversWidget from "@/components/live/MarketDriversWidget";
+import StockDriversCard from "@/components/live/StockDriversCard";
 import { LineChart as LineChartIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -1594,6 +1595,20 @@ export default function LiveExecution() {
 
                 {/* First 30 Min Volume Strength */}
                 {activeSymbol && <First30MinVolumeCard symbol={activeSymbol} />}
+
+                {/* Stock Drivers — AI analysis */}
+                {activeSymbol && (
+                  <StockDriversCard
+                    symbol={activeSymbol}
+                    companyName={activeStock?.companyName}
+                    sector={activeStock?.sector}
+                    price={activeStock?.price ?? snapshot?.quote?.price ?? null}
+                    return1d={activeStock?.return1d ?? null}
+                    return1w={activeStock?.return1w ?? null}
+                    return1m={activeStock?.return1m ?? null}
+                    rsRating={overallRating}
+                  />
+                )}
 
                 {/* Entry & Rotation Signals box removed per latest cleanup. */}
               </div>

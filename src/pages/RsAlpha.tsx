@@ -14,6 +14,7 @@ import CustomListAnalyzerModal from "@/components/rs/CustomListAnalyzerModal";
 import SectorDistributionModal from "@/components/rs/SectorDistributionModal";
 import ThemeDistributionModal from "@/components/rs/ThemeDistributionModal";
 import FundamentalsCoverageModal from "@/components/rs/FundamentalsCoverageModal";
+import UniverseSettingsModal, { type UniverseFilters } from "@/components/rs/UniverseSettingsModal";
 import { useStockFundamentalsMap } from "@/hooks/useStockFundamentalsMap";
 import { supabase } from "@/integrations/supabase/client";
 import {
@@ -156,6 +157,7 @@ export default function RsAlpha() {
   const [sectorDistOpen, setSectorDistOpen] = useState(false);
   const [themeDistOpen, setThemeDistOpen] = useState(false);
   const [coverageOpen, setCoverageOpen] = useState(false);
+  const [universeSettingsOpen, setUniverseSettingsOpen] = useState<null | "resume" | "restart">(null);
   const [hideOtc, setHideOtc] = useState<boolean>(() => {
     const saved = typeof window !== "undefined" ? localStorage.getItem("rs-hide-otc") : null;
     return saved === null ? true : saved === "true";
@@ -461,7 +463,7 @@ export default function RsAlpha() {
             {/* Start / Resume / Continue */}
             {!isRebuilding && (
               <button
-                onClick={() => rebuildUniverse("resume")}
+                onClick={() => setUniverseSettingsOpen("resume")}
                 disabled={isMutatingScan}
                 className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-50"
                 title={isPaused ? "Resume the paused scan" : "Start or continue the qualified universe scan"}
@@ -494,11 +496,7 @@ export default function RsAlpha() {
             {/* Restart from scratch */}
             {progress.totalQueued > 0 && (
               <button
-                onClick={() => {
-                  if (confirm("Restart the scan from scratch? Your current live universe stays in use until the new scan completes — only the in-progress staging is cleared.")) {
-                    rebuildUniverse("restart");
-                  }
-                }}
+                onClick={() => setUniverseSettingsOpen("restart")}
                 disabled={isMutatingScan}
                 className="inline-flex items-center justify-center rounded-md border border-border px-2 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-50"
                 title="Wipe progress and restart from scratch"
@@ -892,7 +890,7 @@ export default function RsAlpha() {
               Click <em>Rebuild Qualified Universe</em> to scan the full US market and find stocks meeting all four quality criteria.
               The scan runs in the background and takes 6–10 hours; results stream in as stocks qualify.
             </p>
-            <button onClick={() => rebuildUniverse("resume")} disabled={isMutatingScan} className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50">
+            <button onClick={() => setUniverseSettingsOpen("resume")} disabled={isMutatingScan} className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50">
               {isMutatingScan ? "Starting…" : "Update Stock List"}
             </button>
           </div>
@@ -1180,6 +1178,18 @@ export default function RsAlpha() {
       />
 
       <FundamentalsCoverageModal open={coverageOpen} onClose={() => setCoverageOpen(false)} />
+
+      <UniverseSettingsModal
+        open={universeSettingsOpen !== null}
+        mode={universeSettingsOpen ?? "resume"}
+        onClose={() => setUniverseSettingsOpen(null)}
+        onConfirm={(filters) => {
+          const mode = universeSettingsOpen ?? "resume";
+          setUniverseSettingsOpen(null);
+          if (mode === "restart" && !confirm("Restart the scan from scratch? Your current live universe stays in use until the new scan completes — only the in-progress staging is cleared.")) return;
+          rebuildUniverse(mode, filters as unknown as Record<string, unknown>);
+        }}
+      />
     </div>
   );
 }

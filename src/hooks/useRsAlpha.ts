@@ -226,12 +226,12 @@ export function useRsAlpha() {
 
   // ── Start / Resume heavy scan ──
   // mode "resume" (default) continues from last point; "restart" wipes and reseeds.
-  const rebuildUniverse = useCallback(async (mode: "resume" | "restart" = "resume") => {
+  const rebuildUniverse = useCallback(async (mode: "resume" | "restart" = "resume", filters?: Record<string, unknown>) => {
     setError(null);
     setIsMutatingScan(true);
     try {
       const { data, error: fnErr } = await supabase.functions.invoke("seed-universe-queue", {
-        body: { mode },
+        body: { mode, filters },
       });
       if (fnErr) throw new Error(fnErr.message);
       if (data?.error) throw new Error(data.error);
