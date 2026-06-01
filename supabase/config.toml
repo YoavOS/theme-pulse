@@ -62,3 +62,6 @@ verify_jwt = false
 
 [functions.earnings-deep-analysis]
 verify_jwt = false
+
+[functions.stock-drivers-analysis]
+verify_jwt = false
