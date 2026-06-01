@@ -605,6 +605,7 @@ export type Database = {
       rs_scan_progress: {
         Row: {
           failed: number
+          filters: Json | null
           id: number
           last_updated: string
           processed: number
@@ -615,6 +616,7 @@ export type Database = {
         }
         Insert: {
           failed?: number
+          filters?: Json | null
           id?: number
           last_updated?: string
           processed?: number
@@ -625,6 +627,7 @@ export type Database = {
         }
         Update: {
           failed?: number
+          filters?: Json | null
           id?: number
           last_updated?: string
           processed?: number

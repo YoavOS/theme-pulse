@@ -1,0 +1,1 @@
+ALTER TABLE public.rs_scan_progress ADD COLUMN IF NOT EXISTS filters jsonb;
