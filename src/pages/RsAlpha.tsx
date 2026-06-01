@@ -1178,6 +1178,18 @@ export default function RsAlpha() {
       />
 
       <FundamentalsCoverageModal open={coverageOpen} onClose={() => setCoverageOpen(false)} />
+
+      <UniverseSettingsModal
+        open={universeSettingsOpen !== null}
+        mode={universeSettingsOpen ?? "resume"}
+        onClose={() => setUniverseSettingsOpen(null)}
+        onConfirm={(filters) => {
+          const mode = universeSettingsOpen ?? "resume";
+          setUniverseSettingsOpen(null);
+          if (mode === "restart" && !confirm("Restart the scan from scratch? Your current live universe stays in use until the new scan completes — only the in-progress staging is cleared.")) return;
+          rebuildUniverse(mode, filters as unknown as Record<string, unknown>);
+        }}
+      />
     </div>
   );
 }
