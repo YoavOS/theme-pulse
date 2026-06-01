@@ -14,6 +14,7 @@ import CustomListAnalyzerModal from "@/components/rs/CustomListAnalyzerModal";
 import SectorDistributionModal from "@/components/rs/SectorDistributionModal";
 import ThemeDistributionModal from "@/components/rs/ThemeDistributionModal";
 import FundamentalsCoverageModal from "@/components/rs/FundamentalsCoverageModal";
+import UniverseSettingsModal, { type UniverseFilters } from "@/components/rs/UniverseSettingsModal";
 import { useStockFundamentalsMap } from "@/hooks/useStockFundamentalsMap";
 import { supabase } from "@/integrations/supabase/client";
 import {
@@ -156,6 +157,7 @@ export default function RsAlpha() {
   const [sectorDistOpen, setSectorDistOpen] = useState(false);
   const [themeDistOpen, setThemeDistOpen] = useState(false);
   const [coverageOpen, setCoverageOpen] = useState(false);
+  const [universeSettingsOpen, setUniverseSettingsOpen] = useState<null | "resume" | "restart">(null);
   const [hideOtc, setHideOtc] = useState<boolean>(() => {
     const saved = typeof window !== "undefined" ? localStorage.getItem("rs-hide-otc") : null;
     return saved === null ? true : saved === "true";
