@@ -1599,16 +1599,42 @@ export default function LiveExecution() {
 
                 {/* Stock Drivers — AI analysis */}
                 {activeSymbol && (
-                  <StockDriversCard
-                    symbol={activeSymbol}
-                    companyName={activeStock?.companyName}
-                    sector={activeStock?.sector}
-                    price={activeStock?.price ?? snapshot?.quote?.price ?? null}
-                    return1d={activeStock?.return1d ?? null}
-                    return1w={activeStock?.return1w ?? null}
-                    return1m={activeStock?.return1m ?? null}
-                    rsRating={overallRating}
-                  />
+                  <>
+                    <button
+                      onClick={() => setDriversOpen(true)}
+                      className="group relative w-full overflow-hidden rounded-xl border border-primary/30 bg-gradient-to-r from-primary/10 via-primary/5 to-transparent px-5 py-4 text-left transition-all hover:border-primary/50 hover:from-primary/15"
+                    >
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <Sparkles size={15} className="text-primary" />
+                            <span className="font-['Syne',sans-serif] text-sm font-semibold text-foreground">
+                              Stock Drivers — {activeSymbol}
+                            </span>
+                            <span className="rounded-md border border-primary/30 bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">AI</span>
+                          </div>
+                          <div className="mt-1 text-xs text-muted-foreground">
+                            Open the side panel for short/long-term drivers, outlook, and an interactive Groq chat.
+                          </div>
+                        </div>
+                        <span className="rounded-md border border-border bg-background/80 px-2.5 py-1 text-xs font-medium text-foreground group-hover:bg-accent">
+                          Open Panel →
+                        </span>
+                      </div>
+                    </button>
+                    <StockDriversPanel
+                      open={driversOpen}
+                      onOpenChange={setDriversOpen}
+                      symbol={activeSymbol}
+                      companyName={activeStock?.companyName}
+                      sector={activeStock?.sector}
+                      price={activeStock?.price ?? snapshot?.quote?.price ?? null}
+                      return1d={activeStock?.return1d ?? null}
+                      return1w={activeStock?.return1w ?? null}
+                      return1m={activeStock?.return1m ?? null}
+                      rsRating={overallRating}
+                    />
+                  </>
                 )}
 
                 {/* Entry & Rotation Signals box removed per latest cleanup. */}
