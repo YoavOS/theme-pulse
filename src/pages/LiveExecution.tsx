@@ -34,7 +34,7 @@ import { gicsForIndustry } from "@/lib/sectorTaxonomy";
 import IntradayThemeChart from "@/components/live/IntradayThemeChart";
 import First30MinVolumeCard from "@/components/live/First30MinVolumeCard";
 import MarketDriversWidget from "@/components/live/MarketDriversWidget";
-import StockDriversCard from "@/components/live/StockDriversCard";
+import StockDriversPanel from "@/components/live/StockDriversPanel";
 import { LineChart as LineChartIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
