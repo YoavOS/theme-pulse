@@ -224,6 +224,19 @@ export function useRsAlpha() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [progress.qualified]);
 
+  // Reload qualified universe whenever the scan transitions to "complete" (atomic swap just published).
+  const lastStatusRef = useRef<string | null>(null);
+  useEffect(() => {
+    const prev = lastStatusRef.current;
+    lastStatusRef.current = progress.status;
+    if (prev && prev !== "complete" && progress.status === "complete") {
+      // Reload immediately, then again after a delay so post-swap RS recalc writes are picked up.
+      loadStocks();
+      const t = window.setTimeout(() => { loadStocks(); }, 4000);
+      return () => window.clearTimeout(t);
+    }
+  }, [progress.status, loadStocks]);
+
   // ── Start / Resume heavy scan ──
   // mode "resume" (default) continues from last point; "restart" wipes and reseeds.
   const rebuildUniverse = useCallback(async (mode: "resume" | "restart" = "resume", filters?: Record<string, unknown>) => {
