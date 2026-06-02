@@ -68,3 +68,6 @@ verify_jwt = false
 
 [functions.stock-drivers-chat]
 verify_jwt = false
+
+[functions.morning-brief]
+verify_jwt = false
