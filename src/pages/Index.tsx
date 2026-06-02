@@ -234,6 +234,7 @@ export default function Index() {
   // Shared tab definitions (reused in standard top-row and enhanced-mode left rail)
   const dashboardTabs = [
     { to: "/", label: "Dashboard", icon: <LayoutDashboard size={14} />, active: true, color: "", badge: null as number | string | null, pulse: false },
+    { to: "/morning-brief", label: "Morning Brief", icon: <Sun size={14} />, active: false, color: "text-[hsl(40,90%,55%)]", badge: null as number | string | null, pulse: false },
     { to: "/intelligence", label: "Intelligence", icon: <Brain size={14} />, active: false, color: "text-primary", badge: null as number | string | null, pulse: false },
     { to: "/watchlist", label: "Watchlist", icon: <Bookmark size={14} />, active: false, color: "text-[hsl(40,80%,50%)]",
       badge: pinned.length > 0 ? pinned.length : null, pulse: false },
