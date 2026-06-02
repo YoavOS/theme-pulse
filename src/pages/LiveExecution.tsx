@@ -19,6 +19,7 @@ import {
   ShieldAlert,
   HelpCircle,
   RefreshCw,
+  Sparkles,
 } from "lucide-react";
 import { useRsAlpha, type RsStock } from "@/hooks/useRsAlpha";
 import { useLiveSnapshot, useLiveWatchlist, type LiveSnapshot, type BenchmarkSymbol } from "@/hooks/useLiveSnapshot";
