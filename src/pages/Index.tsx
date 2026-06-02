@@ -4,7 +4,7 @@ import { useLiveThemeData } from "@/hooks/useLiveThemeData";
 import ThemeCard from "@/components/ThemeCard";
 import ThemeDrilldownModal from "@/components/ThemeDrilldownModal";
 import ValidateTickersDialog from "@/components/ValidateTickersDialog";
-import { RefreshCw, Download, TrendingUp, TrendingDown, Wifi, WifiOff, Loader2, Settings, ScanLine, X, ShieldCheck, Brain, Bookmark, ChevronDown, LayoutDashboard, AlertTriangle, LayoutGrid, List, Flame, Circle, BarChart3, Calendar, Bell, Zap, Sparkles, Activity, DollarSign } from "lucide-react";
+import { RefreshCw, Download, TrendingUp, TrendingDown, Wifi, WifiOff, Loader2, Settings, ScanLine, X, ShieldCheck, Brain, Bookmark, ChevronDown, LayoutDashboard, AlertTriangle, LayoutGrid, List, Flame, Circle, BarChart3, Calendar, Bell, Zap, Sparkles, Activity, DollarSign, Sun } from "lucide-react";
 import RankedListView from "@/components/dashboard/RankedListView";
 import HeatmapGridView from "@/components/dashboard/HeatmapGridView";
 import DashboardBubbleView from "@/components/dashboard/DashboardBubbleView";
@@ -234,6 +234,7 @@ export default function Index() {
   // Shared tab definitions (reused in standard top-row and enhanced-mode left rail)
   const dashboardTabs = [
     { to: "/", label: "Dashboard", icon: <LayoutDashboard size={14} />, active: true, color: "", badge: null as number | string | null, pulse: false },
+    { to: "/morning-brief", label: "Morning Brief", icon: <Sun size={14} />, active: false, color: "text-[hsl(40,90%,55%)]", badge: null as number | string | null, pulse: false },
     { to: "/intelligence", label: "Intelligence", icon: <Brain size={14} />, active: false, color: "text-primary", badge: null as number | string | null, pulse: false },
     { to: "/watchlist", label: "Watchlist", icon: <Bookmark size={14} />, active: false, color: "text-[hsl(40,80%,50%)]",
       badge: pinned.length > 0 ? pinned.length : null, pulse: false },
