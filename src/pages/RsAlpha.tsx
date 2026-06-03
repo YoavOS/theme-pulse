@@ -308,6 +308,35 @@ export default function RsAlpha() {
     return () => { cancelled = true; };
   }, [stocks]);
 
+  // Load RS New High Before Price signals for the active qualified universe.
+  useEffect(() => {
+    if (stocks.length === 0) {
+      setRsNewHighSignals(new Map());
+      return;
+    }
+    let cancelled = false;
+    const run = async () => {
+      setRsNhLoading(true);
+      try {
+        const { data, error } = await supabase.functions.invoke("rs-new-high-signals", {
+          body: { symbols: stocks.map((s) => s.symbol), benchmark: rsNhSettings.benchmark, lookbackDays: rsNhSettings.lookbackDays },
+        });
+        if (error) throw error;
+        if (data?.error) throw new Error(data.error);
+        if (cancelled) return;
+        const next = new Map<string, RsNewHighSignal>();
+        for (const row of data?.rows ?? []) next.set(String(row.symbol).toUpperCase(), row as RsNewHighSignal);
+        setRsNewHighSignals(next);
+      } catch (e) {
+        if (!cancelled) toast.error(e instanceof Error ? e.message : "Failed to calculate RS New High signals");
+      } finally {
+        if (!cancelled) setRsNhLoading(false);
+      }
+    };
+    run();
+    return () => { cancelled = true; };
+  }, [stocks, rsNhSettings.benchmark, rsNhSettings.lookbackDays]);
+
   // Fetch QQQ today's % change once for relative-strength scanner profiles.
   useEffect(() => {
     let cancelled = false;
