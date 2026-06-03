@@ -240,6 +240,32 @@ export function useRsAlpha() {
     }
   }, [progress.status, loadStocks]);
 
+  // Progress can say "complete" while live rows are still old if the final publish
+  // failed after staging finished. Recover by invoking the worker's finalize path.
+  useEffect(() => {
+    if (progress.status !== "complete" || progress.qualified <= 0) return;
+    if (stocks.length >= progress.qualified) return;
+    const recoveryKey = `${progress.lastUpdated ?? "complete"}:${progress.qualified}:${stocks.length}`;
+    if (publishRecoveryRef.current === recoveryKey) return;
+    publishRecoveryRef.current = recoveryKey;
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data, error: fnErr } = await supabase.functions.invoke("process-universe-queue", { body: { finalizeOnly: true } });
+        if (fnErr) throw new Error(fnErr.message);
+        if (data?.error) throw new Error(data.error);
+        if (cancelled) return;
+        await loadStocks();
+        await loadProgress();
+      } catch (e) {
+        console.warn("publish recovery failed", e);
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [progress.status, progress.qualified, progress.lastUpdated, stocks.length, loadStocks, loadProgress]);
+
   // ── Start / Resume heavy scan ──
   // mode "resume" (default) continues from last point; "restart" wipes and reseeds.
   const rebuildUniverse = useCallback(async (mode: "resume" | "restart" = "resume", filters?: Record<string, unknown>) => {
