@@ -405,6 +405,7 @@ export default function RsAlpha() {
           return false;
         }
       }
+      if (onlyRsNewHigh && !rsNewHighSignals.get(s.symbol)?.isSignal) return false;
       return true;
     });
     const rsValues = filtered.map(s => getRsForTab(s, activeTab));
@@ -438,12 +439,13 @@ export default function RsAlpha() {
           const bb = bv === null || bv === undefined ? Infinity : Math.abs(bv);
           return mul * (aa - bb);
         }
+        case "rsNewHigh": return mul * (rsNewHighScore(rsNewHighSignals.get(a.symbol)) - rsNewHighScore(rsNewHighSignals.get(b.symbol)));
         default: return 0;
       }
     });
     return { sortedStocks: sorted, ratingMap: map, growthFilteredOutCount: droppedByGrowth };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stocks, activeTab, sortField, sortDir, hideOtc, weights, growthFilters, fundamentalsMap, coilScores, emaDistances]);
+  }, [stocks, activeTab, sortField, sortDir, hideOtc, weights, growthFilters, fundamentalsMap, coilScores, emaDistances, onlyRsNewHigh, rsNewHighSignals]);
 
   const otcHiddenCount = useMemo(
     () => hideOtc ? stocks.filter(s => isOtcSymbol(s.symbol) && getRsForTab(s, activeTab) !== null).length : 0,
