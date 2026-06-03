@@ -663,6 +663,7 @@ export default function CustomTradingViewListModal({
                 { v: "ema9d" as SortBy, label: "Closest to 9D EMA", disabled: !emaAvailable },
                 { v: "ema21d" as SortBy, label: "Closest to 21D EMA", disabled: !emaAvailable },
                 { v: "ema9w" as SortBy, label: "Closest to 9W EMA", disabled: !emaAvailable },
+                { v: "rsNewHigh" as SortBy, label: "RS New High First" },
                 { v: "relVsQqq" as SortBy, label: "Strongest vs QQQ", disabled: !qqqAvailable },
               ].map((opt) => (
                 <button
@@ -692,6 +693,13 @@ export default function CustomTradingViewListModal({
               <span>
                 <span className="font-medium text-foreground">Exclude OTC Stocks</span>
                 <span className="block text-[10px] text-muted-foreground">Hide foreign / pink sheets</span>
+              </span>
+            </label>
+            <label className="flex items-center gap-2 rounded-md border border-primary/30 bg-primary/5 px-3 py-2 text-xs cursor-pointer">
+              <Checkbox checked={state.rsNewHighOnly} onCheckedChange={(v) => set("rsNewHighOnly", !!v)} />
+              <span>
+                <span className="font-medium text-foreground">Only RS New High</span>
+                <span className="block text-[10px] text-muted-foreground">RS line broke out before price</span>
               </span>
             </label>
           </div>
