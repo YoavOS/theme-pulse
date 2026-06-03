@@ -659,6 +659,48 @@ export default function RsAlpha() {
           </div>
         </div>
 
+        {/* RS New High Before Price controls */}
+        <div className="container pb-1.5">
+          <div className="flex flex-wrap items-center gap-2 rounded-md border border-primary/30 bg-primary/5 px-3 py-1.5 text-[11px]">
+            <div className="flex items-center gap-1.5 font-semibold text-primary">
+              <Zap size={12} /> RS New High Before Price
+              {rsNhLoading && <Loader2 size={11} className="animate-spin" />}
+            </div>
+            <select
+              value={rsNhSettings.benchmark}
+              onChange={(e) => setRsNhSettings((p) => ({ ...p, benchmark: e.target.value as RsNewHighBenchmark }))}
+              className="h-6 rounded border border-border bg-background px-2 font-mono text-[11px] text-foreground"
+            >
+              <option value="SPY">vs SPY</option>
+              <option value="QQQ">vs QQQ</option>
+            </select>
+            <select
+              value={rsNhSettings.lookbackDays}
+              onChange={(e) => setRsNhSettings((p) => ({ ...p, lookbackDays: Number(e.target.value) }))}
+              className="h-6 rounded border border-border bg-background px-2 font-mono text-[11px] text-foreground"
+            >
+              {RS_NEW_HIGH_LOOKBACKS.map((d) => <option key={d} value={d}>{d === 252 ? "52-week" : `${d}-day`}</option>)}
+            </select>
+            <button
+              type="button"
+              onClick={() => setOnlyRsNewHigh((v) => !v)}
+              className={`rounded border px-2 py-0.5 font-medium transition-colors ${onlyRsNewHigh ? "border-primary bg-primary/20 text-primary" : "border-border text-muted-foreground hover:bg-accent hover:text-foreground"}`}
+            >
+              Only RS NH
+            </button>
+            <button
+              type="button"
+              onClick={() => { setSortField("rsNewHigh"); setSortDir("desc"); }}
+              className="rounded border border-border px-2 py-0.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+            >
+              RS New High First
+            </button>
+            <span className="ml-auto text-muted-foreground">
+              {Array.from(rsNewHighSignals.values()).filter((s) => s.isSignal).length.toLocaleString()} signals
+            </span>
+          </div>
+        </div>
+
         {/* Filter banner */}
         <div className="container pb-1.5">
           <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border/50 bg-muted/20 px-3 py-1.5 text-[11px] text-muted-foreground">
