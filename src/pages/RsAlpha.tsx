@@ -213,12 +213,28 @@ export default function RsAlpha() {
   const [emaDistances, setEmaDistances] = useState<Map<string, EmaDistanceInfo>>(new Map());
   const [emaLoading, setEmaLoading] = useState(false);
   const [qqqPctChange, setQqqPctChange] = useState<number | null>(null);
+  const [onlyRsNewHigh, setOnlyRsNewHigh] = useState(false);
+  const [rsNhLoading, setRsNhLoading] = useState(false);
+  const [rsNewHighSignals, setRsNewHighSignals] = useState<Map<string, RsNewHighSignal>>(new Map());
+  const [rsNhSettings, setRsNhSettings] = useState<{ benchmark: RsNewHighBenchmark; lookbackDays: number }>(() => {
+    if (typeof window === "undefined") return { benchmark: "SPY", lookbackDays: 20 };
+    try {
+      const parsed = JSON.parse(localStorage.getItem(RS_NH_SETTINGS_KEY) ?? "{}");
+      return {
+        benchmark: parsed.benchmark === "QQQ" ? "QQQ" : "SPY",
+        lookbackDays: RS_NEW_HIGH_LOOKBACKS.includes(parsed.lookbackDays) ? parsed.lookbackDays : 20,
+      };
+    } catch {
+      return { benchmark: "SPY", lookbackDays: 20 };
+    }
+  });
 
   useEffect(() => { setShowAll(false); }, [activeTab]);
   useEffect(() => { localStorage.setItem("rs-hide-otc", String(hideOtc)); }, [hideOtc]);
   useEffect(() => { localStorage.setItem(RS_WEIGHTS_KEY, JSON.stringify(weights)); }, [weights]);
   useEffect(() => { localStorage.setItem(GROWTH_FILTERS_KEY, JSON.stringify(growthFilters)); }, [growthFilters]);
   useEffect(() => { localStorage.setItem(COIL_SETTINGS_KEY, JSON.stringify(coilSettings)); }, [coilSettings]);
+  useEffect(() => { localStorage.setItem(RS_NH_SETTINGS_KEY, JSON.stringify(rsNhSettings)); }, [rsNhSettings]);
 
   useEffect(() => {
     if (stocks.length === 0) return;
