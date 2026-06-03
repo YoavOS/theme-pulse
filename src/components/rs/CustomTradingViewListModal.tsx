@@ -15,6 +15,7 @@ import {
   passesAllActiveFilters,
   anyActive,
 } from "@/lib/growthFilters";
+import { formatRsNewHighBadge, rsNewHighScore, type RsNewHighSignal } from "@/lib/rsNewHigh";
 
 export type CustomListTab = "overall" | "1d" | "1w" | "1m" | "3m" | "6m";
 type SortBy =
@@ -25,7 +26,8 @@ type SortBy =
   | "ema9d"
   | "ema21d"
   | "ema9w"
-  | "relVsQqq";
+  | "relVsQqq"
+  | "rsNewHigh";
 const TOPN_MIN = 10;
 const TOPN_MAX = 500; // values >= MAX mean "All"
 
@@ -65,6 +67,7 @@ interface FilterState {
   emaFilterMode: "AND" | "OR";
   relVsQqqOn: boolean;
   minRelVsQqq: number;
+  rsNewHighOnly: boolean;
 }
 
 interface ScannerProfile {
@@ -170,6 +173,7 @@ interface Props {
   coilShortDays?: number;
   coilLongDays?: number;
   emaDistances?: Map<string, EmaDistanceInfo>;
+  rsNewHighSignals?: Map<string, RsNewHighSignal>;
   /** Today's QQQ % change (used for "Red Day Leaders" / market-defiance filtering). */
   qqqPctChange?: number | null;
 }
@@ -195,6 +199,7 @@ const DEFAULT_FILTERS: FilterState = {
   emaFilterMode: "OR",
   relVsQqqOn: false,
   minRelVsQqq: 0,
+  rsNewHighOnly: false,
 };
 
 function loadUserProfiles(): ScannerProfile[] {
@@ -217,7 +222,7 @@ function saveUserProfiles(list: ScannerProfile[]) {
 export default function CustomTradingViewListModal({
   open, onOpenChange, tabId, tabLabel, stocks, ratingMap,
   getRsForTab, getReturnField, isOtcSymbol, fundamentalsMap,
-  coilScores, coilShortDays, coilLongDays, emaDistances, qqqPctChange,
+  coilScores, coilShortDays, coilLongDays, emaDistances, rsNewHighSignals, qqqPctChange,
 }: Props) {
   const [state, setState] = useState<FilterState>({ ...DEFAULT_FILTERS });
   const [sectorSearch, setSectorSearch] = useState<string>("");
@@ -270,6 +275,7 @@ export default function CustomTradingViewListModal({
         maxEma9wAbs: state.maxEma9wAbs,
         relVsQqqOn: state.relVsQqqOn,
         minRelVsQqq: state.minRelVsQqq,
+        rsNewHighOnly: state.rsNewHighOnly,
       },
     };
     const next = [...userProfiles, profile];
