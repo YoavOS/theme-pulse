@@ -85,7 +85,7 @@ export function useRsAlpha() {
   const publishRecoveryRef = useRef<string | null>(null);
 
   // ── Load qualified universe from DB ──
-  const loadStocks = useCallback(async () => {
+  const loadStocks = useCallback(async (): Promise<number> => {
     setIsLoading(true);
     setError(null);
     try {
@@ -171,9 +171,11 @@ export function useRsAlpha() {
         rsCalculatedAt: r.rs_calculated_at,
       }});
       setStocks(mapped);
+      return mapped.length;
     } catch (e) {
       console.error("loadStocks error:", e);
       setError(e instanceof Error ? e.message : String(e));
+      return 0;
     } finally {
       setIsLoading(false);
     }
