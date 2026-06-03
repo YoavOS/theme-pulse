@@ -222,7 +222,7 @@ export default function RsAlpha() {
       const parsed = JSON.parse(localStorage.getItem(RS_NH_SETTINGS_KEY) ?? "{}");
       return {
         benchmark: parsed.benchmark === "QQQ" ? "QQQ" : "SPY",
-        lookbackDays: RS_NEW_HIGH_LOOKBACKS.includes(parsed.lookbackDays) ? parsed.lookbackDays : 20,
+        lookbackDays: RS_NEW_HIGH_LOOKBACKS.includes(Number(parsed.lookbackDays) as (typeof RS_NEW_HIGH_LOOKBACKS)[number]) ? Number(parsed.lookbackDays) : 20,
       };
     } catch {
       return { benchmark: "SPY", lookbackDays: 20 };
@@ -1111,6 +1111,7 @@ export default function RsAlpha() {
                       <th className="px-3 py-2.5 text-left"><SortHeader field="symbol" label="Ticker" /></th>
                       <th className="px-3 py-2.5 text-center"><SortHeader field="rating" label="RS Rating" className="justify-center" /></th>
                       <th className="px-3 py-2.5 text-left"><SortHeader field="company" label="Company" /></th>
+                      <th className="px-3 py-2.5 text-center"><SortHeader field="rsNewHigh" label="RS NH" className="justify-center" /></th>
                       <th className="px-3 py-2.5 text-right"><SortHeader field="rs" label="RS Score" className="justify-end" /></th>
                       <th className="px-3 py-2.5 text-right"><SortHeader field="stockReturn" label="Stock Return" className="justify-end" /></th>
                       <th className="px-3 py-2.5 text-right"><SortHeader field="spyReturn" label="SPY Return" className="justify-end" /></th>
@@ -1130,6 +1131,7 @@ export default function RsAlpha() {
                       const badge = growthBadge(fundamentalsMap.get(stock.symbol));
                       const coil = coilScores.get(stock.symbol);
                       const ema = emaDistances.get(stock.symbol);
+                      const rsNh = rsNewHighSignals.get(stock.symbol);
                       return (
                         <tr key={stock.symbol} className={`border-b border-border/50 transition-colors hover:bg-muted/20 ${rsBg(rs)}`}>
                           <td className="px-3 py-2 text-xs text-muted-foreground">{idx + 1}</td>
@@ -1141,11 +1143,19 @@ export default function RsAlpha() {
                                   {badge.emoji}
                                 </span>
                               )}
+                              {rsNh?.isSignal && <Zap size={12} className="text-primary" aria-label="RS New High before price" />}
                             </span>
                           </td>
                           <td className="px-3 py-2 text-center"><RsRatingBadge rating={rating} /></td>
                           <td className="px-3 py-2 text-muted-foreground max-w-[240px] truncate" title={stock.companyName ?? ""}>
                             {stock.companyName ?? stock.sector ?? "—"}
+                          </td>
+                          <td className="px-3 py-2 text-center">
+                            {rsNh?.isSignal ? (
+                              <span className="inline-flex items-center gap-1 rounded-full border border-primary/40 bg-primary/10 px-2 py-0.5 font-mono text-[10px] font-semibold text-primary" title={`RS high ${rsNh.rsHighDaysAgo ?? "—"}d ago; price high ${rsNh.priceHighDaysAgo ?? "—"}d ago vs ${rsNh.benchmark}`}>
+                                <Zap size={10} /> {formatRsNewHighBadge(rsNh)}
+                              </span>
+                            ) : rsNhLoading ? <span className="text-muted-foreground">…</span> : <span className="text-muted-foreground">—</span>}
                           </td>
                           <td className={`px-3 py-2 text-right font-mono font-semibold ${rsColor(rs)}`}>{pctDisplay(rs)}</td>
                           <td className={`px-3 py-2 text-right font-mono ${ret !== null && ret >= 0 ? "text-[hsl(160,60%,55%)]" : "text-destructive/80"}`}>
@@ -1226,6 +1236,7 @@ export default function RsAlpha() {
         coilLongDays={coilSettings.longDays}
         emaDistances={emaDistances}
         qqqPctChange={qqqPctChange}
+        rsNewHighSignals={rsNewHighSignals}
       />
 
       <CustomListAnalyzerModal
@@ -1242,6 +1253,7 @@ export default function RsAlpha() {
         coilShortDays={coilSettings.shortDays}
         coilLongDays={coilSettings.longDays}
         emaDistances={emaDistances}
+        rsNewHighSignals={rsNewHighSignals}
       />
 
       <SectorDistributionModal
