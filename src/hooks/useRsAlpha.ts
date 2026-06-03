@@ -3,10 +3,10 @@ import { supabase } from "@/integrations/supabase/client";
 
 // ── Filter thresholds (single source of truth — must match process-universe-queue/index.ts) ──
 export const RS_FILTER_THRESHOLDS = {
-  MIN_MARKET_CAP: 1000,           // $1B in Finnhub units (millions)
+  MIN_MARKET_CAP: 300,            // $300M in Finnhub units (millions)
   MIN_DOLLAR_VOLUME: 10_000_000,  // $10M average daily dollar volume
   MIN_AVG_DAILY_RANGE: 3,         // 3% average daily range (14d)
-  MIN_PRICE: 6,
+  MIN_PRICE: 5,
 };
 
 const SUPABASE_PAGE_SIZE = 1000;
@@ -82,6 +82,7 @@ export function useRsAlpha() {
     startedAt: null, lastUpdated: null, etaSeconds: null,
   });
   const pollRef = useRef<number | null>(null);
+  const publishRecoveryRef = useRef<string | null>(null);
 
   // ── Load qualified universe from DB ──
   const loadStocks = useCallback(async () => {
