@@ -6,8 +6,8 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const MAX_SYMBOLS = 300;
-const HISTORY_BATCH_SIZE = 8;
+const MAX_SYMBOLS = 2000;
+const HISTORY_BATCH_SIZE = 12;
 const VALID_BENCHMARKS = new Set(["SPY", "QQQ"]);
 
 const dayKey = (ts: number) => new Date(ts * 1000).toISOString().slice(0, 10);
