@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { ArrowLeft, RefreshCw, Loader2, Info, ChevronDown, ChevronUp, ArrowUpDown, Filter, Hammer, Pause, Play, RotateCcw, Copy, Download, Settings2, PieChart as PieChartIcon, Database, BarChart3 } from "lucide-react";
+import { ArrowLeft, RefreshCw, Loader2, Info, ChevronDown, ChevronUp, ArrowUpDown, Filter, Hammer, Pause, Play, RotateCcw, Copy, Download, Settings2, PieChart as PieChartIcon, Database, BarChart3, Zap } from "lucide-react";
 import { toast } from "sonner";
 import { useRsAlpha, RsStock, RS_FILTER_THRESHOLDS } from "@/hooks/useRsAlpha";
 import { useFundamentalsScan } from "@/hooks/useFundamentalsScan";
@@ -26,6 +26,7 @@ import {
   passesHighGrowth,
   passesONeil,
 } from "@/lib/growthFilters";
+import { formatRsNewHighBadge, RS_NEW_HIGH_LOOKBACKS, rsNewHighScore, type RsNewHighBenchmark, type RsNewHighSignal } from "@/lib/rsNewHigh";
 
 // Strongest-first: Rocket (High Growth) > Fire (Growth) > Diamond (O'Neil).
 function growthBadge(f: ReturnType<typeof useStockFundamentalsMap>["map"] extends Map<string, infer T> ? T | undefined : never): { emoji: string; label: string } | null {
@@ -37,12 +38,13 @@ function growthBadge(f: ReturnType<typeof useStockFundamentalsMap>["map"] extend
 }
 
 type TabId = "overall" | "1d" | "1w" | "1m" | "3m" | "6m";
-type SortField = "rank" | "symbol" | "company" | "rs" | "rating" | "stockReturn" | "spyReturn" | "price" | "coil" | "ema9d" | "ema21d" | "ema9w";
+type SortField = "rank" | "symbol" | "company" | "rs" | "rating" | "stockReturn" | "spyReturn" | "price" | "coil" | "ema9d" | "ema21d" | "ema9w" | "rsNewHigh";
 type SortDir = "asc" | "desc";
 
 const RS_WEIGHTS_KEY = "rs-overall-weights-v2";
 const GROWTH_FILTERS_KEY = "rs-growth-filters-v1";
 const COIL_SETTINGS_KEY = "rs-coil-settings-v1";
+const RS_NH_SETTINGS_KEY = "rs-new-high-settings-v1";
 
 interface TightRangeScore {
   score: number | null;
@@ -211,12 +213,28 @@ export default function RsAlpha() {
   const [emaDistances, setEmaDistances] = useState<Map<string, EmaDistanceInfo>>(new Map());
   const [emaLoading, setEmaLoading] = useState(false);
   const [qqqPctChange, setQqqPctChange] = useState<number | null>(null);
+  const [onlyRsNewHigh, setOnlyRsNewHigh] = useState(false);
+  const [rsNhLoading, setRsNhLoading] = useState(false);
+  const [rsNewHighSignals, setRsNewHighSignals] = useState<Map<string, RsNewHighSignal>>(new Map());
+  const [rsNhSettings, setRsNhSettings] = useState<{ benchmark: RsNewHighBenchmark; lookbackDays: number }>(() => {
+    if (typeof window === "undefined") return { benchmark: "SPY", lookbackDays: 20 };
+    try {
+      const parsed = JSON.parse(localStorage.getItem(RS_NH_SETTINGS_KEY) ?? "{}");
+      return {
+        benchmark: parsed.benchmark === "QQQ" ? "QQQ" : "SPY",
+        lookbackDays: RS_NEW_HIGH_LOOKBACKS.includes(Number(parsed.lookbackDays) as (typeof RS_NEW_HIGH_LOOKBACKS)[number]) ? Number(parsed.lookbackDays) : 20,
+      };
+    } catch {
+      return { benchmark: "SPY", lookbackDays: 20 };
+    }
+  });
 
   useEffect(() => { setShowAll(false); }, [activeTab]);
   useEffect(() => { localStorage.setItem("rs-hide-otc", String(hideOtc)); }, [hideOtc]);
   useEffect(() => { localStorage.setItem(RS_WEIGHTS_KEY, JSON.stringify(weights)); }, [weights]);
   useEffect(() => { localStorage.setItem(GROWTH_FILTERS_KEY, JSON.stringify(growthFilters)); }, [growthFilters]);
   useEffect(() => { localStorage.setItem(COIL_SETTINGS_KEY, JSON.stringify(coilSettings)); }, [coilSettings]);
+  useEffect(() => { localStorage.setItem(RS_NH_SETTINGS_KEY, JSON.stringify(rsNhSettings)); }, [rsNhSettings]);
 
   useEffect(() => {
     if (stocks.length === 0) return;
@@ -290,6 +308,35 @@ export default function RsAlpha() {
     return () => { cancelled = true; };
   }, [stocks]);
 
+  // Load RS New High Before Price signals for the active qualified universe.
+  useEffect(() => {
+    if (stocks.length === 0) {
+      setRsNewHighSignals(new Map());
+      return;
+    }
+    let cancelled = false;
+    const run = async () => {
+      setRsNhLoading(true);
+      try {
+        const { data, error } = await supabase.functions.invoke("rs-new-high-signals", {
+          body: { symbols: stocks.map((s) => s.symbol), benchmark: rsNhSettings.benchmark, lookbackDays: rsNhSettings.lookbackDays },
+        });
+        if (error) throw error;
+        if (data?.error) throw new Error(data.error);
+        if (cancelled) return;
+        const next = new Map<string, RsNewHighSignal>();
+        for (const row of data?.rows ?? []) next.set(String(row.symbol).toUpperCase(), row as RsNewHighSignal);
+        setRsNewHighSignals(next);
+      } catch (e) {
+        if (!cancelled) toast.error(e instanceof Error ? e.message : "Failed to calculate RS New High signals");
+      } finally {
+        if (!cancelled) setRsNhLoading(false);
+      }
+    };
+    run();
+    return () => { cancelled = true; };
+  }, [stocks, rsNhSettings.benchmark, rsNhSettings.lookbackDays]);
+
   // Fetch QQQ today's % change once for relative-strength scanner profiles.
   useEffect(() => {
     let cancelled = false;
@@ -358,6 +405,7 @@ export default function RsAlpha() {
           return false;
         }
       }
+      if (onlyRsNewHigh && !rsNewHighSignals.get(s.symbol)?.isSignal) return false;
       return true;
     });
     const rsValues = filtered.map(s => getRsForTab(s, activeTab));
@@ -391,12 +439,13 @@ export default function RsAlpha() {
           const bb = bv === null || bv === undefined ? Infinity : Math.abs(bv);
           return mul * (aa - bb);
         }
+        case "rsNewHigh": return mul * (rsNewHighScore(rsNewHighSignals.get(a.symbol)) - rsNewHighScore(rsNewHighSignals.get(b.symbol)));
         default: return 0;
       }
     });
     return { sortedStocks: sorted, ratingMap: map, growthFilteredOutCount: droppedByGrowth };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stocks, activeTab, sortField, sortDir, hideOtc, weights, growthFilters, fundamentalsMap, coilScores, emaDistances]);
+  }, [stocks, activeTab, sortField, sortDir, hideOtc, weights, growthFilters, fundamentalsMap, coilScores, emaDistances, onlyRsNewHigh, rsNewHighSignals]);
 
   const otcHiddenCount = useMemo(
     () => hideOtc ? stocks.filter(s => isOtcSymbol(s.symbol) && getRsForTab(s, activeTab) !== null).length : 0,
@@ -607,6 +656,48 @@ export default function RsAlpha() {
             )}
 
             <HelpButton />
+          </div>
+        </div>
+
+        {/* RS New High Before Price controls */}
+        <div className="container pb-1.5">
+          <div className="flex flex-wrap items-center gap-2 rounded-md border border-primary/30 bg-primary/5 px-3 py-1.5 text-[11px]">
+            <div className="flex items-center gap-1.5 font-semibold text-primary">
+              <Zap size={12} /> RS New High Before Price
+              {rsNhLoading && <Loader2 size={11} className="animate-spin" />}
+            </div>
+            <select
+              value={rsNhSettings.benchmark}
+              onChange={(e) => setRsNhSettings((p) => ({ ...p, benchmark: e.target.value as RsNewHighBenchmark }))}
+              className="h-6 rounded border border-border bg-background px-2 font-mono text-[11px] text-foreground"
+            >
+              <option value="SPY">vs SPY</option>
+              <option value="QQQ">vs QQQ</option>
+            </select>
+            <select
+              value={rsNhSettings.lookbackDays}
+              onChange={(e) => setRsNhSettings((p) => ({ ...p, lookbackDays: Number(e.target.value) }))}
+              className="h-6 rounded border border-border bg-background px-2 font-mono text-[11px] text-foreground"
+            >
+              {RS_NEW_HIGH_LOOKBACKS.map((d) => <option key={d} value={d}>{d === 252 ? "52-week" : `${d}-day`}</option>)}
+            </select>
+            <button
+              type="button"
+              onClick={() => setOnlyRsNewHigh((v) => !v)}
+              className={`rounded border px-2 py-0.5 font-medium transition-colors ${onlyRsNewHigh ? "border-primary bg-primary/20 text-primary" : "border-border text-muted-foreground hover:bg-accent hover:text-foreground"}`}
+            >
+              Only RS NH
+            </button>
+            <button
+              type="button"
+              onClick={() => { setSortField("rsNewHigh"); setSortDir("desc"); }}
+              className="rounded border border-border px-2 py-0.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+            >
+              RS New High First
+            </button>
+            <span className="ml-auto text-muted-foreground">
+              {Array.from(rsNewHighSignals.values()).filter((s) => s.isSignal).length.toLocaleString()} signals
+            </span>
           </div>
         </div>
 
@@ -1020,6 +1111,7 @@ export default function RsAlpha() {
                       <th className="px-3 py-2.5 text-left"><SortHeader field="symbol" label="Ticker" /></th>
                       <th className="px-3 py-2.5 text-center"><SortHeader field="rating" label="RS Rating" className="justify-center" /></th>
                       <th className="px-3 py-2.5 text-left"><SortHeader field="company" label="Company" /></th>
+                      <th className="px-3 py-2.5 text-center"><SortHeader field="rsNewHigh" label="RS NH" className="justify-center" /></th>
                       <th className="px-3 py-2.5 text-right"><SortHeader field="rs" label="RS Score" className="justify-end" /></th>
                       <th className="px-3 py-2.5 text-right"><SortHeader field="stockReturn" label="Stock Return" className="justify-end" /></th>
                       <th className="px-3 py-2.5 text-right"><SortHeader field="spyReturn" label="SPY Return" className="justify-end" /></th>
@@ -1039,6 +1131,7 @@ export default function RsAlpha() {
                       const badge = growthBadge(fundamentalsMap.get(stock.symbol));
                       const coil = coilScores.get(stock.symbol);
                       const ema = emaDistances.get(stock.symbol);
+                      const rsNh = rsNewHighSignals.get(stock.symbol);
                       return (
                         <tr key={stock.symbol} className={`border-b border-border/50 transition-colors hover:bg-muted/20 ${rsBg(rs)}`}>
                           <td className="px-3 py-2 text-xs text-muted-foreground">{idx + 1}</td>
@@ -1050,11 +1143,19 @@ export default function RsAlpha() {
                                   {badge.emoji}
                                 </span>
                               )}
+                              {rsNh?.isSignal && <Zap size={12} className="text-primary" aria-label="RS New High before price" />}
                             </span>
                           </td>
                           <td className="px-3 py-2 text-center"><RsRatingBadge rating={rating} /></td>
                           <td className="px-3 py-2 text-muted-foreground max-w-[240px] truncate" title={stock.companyName ?? ""}>
                             {stock.companyName ?? stock.sector ?? "—"}
+                          </td>
+                          <td className="px-3 py-2 text-center">
+                            {rsNh?.isSignal ? (
+                              <span className="inline-flex items-center gap-1 rounded-full border border-primary/40 bg-primary/10 px-2 py-0.5 font-mono text-[10px] font-semibold text-primary" title={`RS high ${rsNh.rsHighDaysAgo ?? "—"}d ago; price high ${rsNh.priceHighDaysAgo ?? "—"}d ago vs ${rsNh.benchmark}`}>
+                                <Zap size={10} /> {formatRsNewHighBadge(rsNh)}
+                              </span>
+                            ) : rsNhLoading ? <span className="text-muted-foreground">…</span> : <span className="text-muted-foreground">—</span>}
                           </td>
                           <td className={`px-3 py-2 text-right font-mono font-semibold ${rsColor(rs)}`}>{pctDisplay(rs)}</td>
                           <td className={`px-3 py-2 text-right font-mono ${ret !== null && ret >= 0 ? "text-[hsl(160,60%,55%)]" : "text-destructive/80"}`}>
@@ -1135,6 +1236,7 @@ export default function RsAlpha() {
         coilLongDays={coilSettings.longDays}
         emaDistances={emaDistances}
         qqqPctChange={qqqPctChange}
+        rsNewHighSignals={rsNewHighSignals}
       />
 
       <CustomListAnalyzerModal
@@ -1151,6 +1253,7 @@ export default function RsAlpha() {
         coilShortDays={coilSettings.shortDays}
         coilLongDays={coilSettings.longDays}
         emaDistances={emaDistances}
+        rsNewHighSignals={rsNewHighSignals}
       />
 
       <SectorDistributionModal

@@ -20,6 +20,7 @@ import {
 } from "@/lib/growthFilters";
 import { computeRsRatings } from "@/components/rs/RsRatingBadge";
 import RsRatingBadge from "@/components/rs/RsRatingBadge";
+import { formatRsNewHighBadge, rsNewHighScore, type RsNewHighSignal } from "@/lib/rsNewHigh";
 
 export type AnalyzerTab = "overall" | "1d" | "1w" | "1m" | "3m" | "6m";
 
@@ -60,6 +61,7 @@ type SortBy =
   | "marketCap"
   | "dollarVol"
   | "growth"
+  | "rsNewHigh"
   | "input";
 
 const RS_TABS: { id: AnalyzerTab; label: string }[] = [
@@ -86,6 +88,7 @@ interface Props {
   coilLongDays?: number;
   /** Pre-loaded EMA distances from the parent (for instant rendering when available). */
   emaDistances?: Map<string, EmaDistanceInfo>;
+  rsNewHighSignals?: Map<string, RsNewHighSignal>;
 }
 
 // Strip exchange prefixes (NYSE:, NASDAQ:, AMEX:, BATS:, ARCA:, CBOE:, OTC:, etc.)
@@ -133,6 +136,7 @@ const SORT_OPTIONS: { id: SortBy; label: string }[] = [
   { id: "ema9w", label: "Closest to 9W EMA (smallest |distance|)" },
   { id: "coil", label: "Tight Range / Coil (tightest)" },
   { id: "return", label: "Stock Return (highest)" },
+  { id: "rsNewHigh", label: "RS New High First" },
   { id: "growth", label: "Fundamentals / Growth Strength" },
   { id: "marketCap", label: "Market Cap (largest)" },
   { id: "dollarVol", label: "Avg $ Volume (highest)" },
@@ -151,7 +155,7 @@ function emaColor(d: number | null | undefined): string {
 export default function CustomListAnalyzerModal({
   open, onOpenChange, tabId, tabLabel, universe,
   getRsForTab, getReturnField, isOtcSymbol, fundamentalsMap,
-  coilScores, coilShortDays, coilLongDays,
+  coilScores, coilShortDays, coilLongDays, rsNewHighSignals,
 }: Props) {
   const [raw, setRaw] = useState<string>("");
   const [analyzed, setAnalyzed] = useState<boolean>(false);
@@ -173,6 +177,7 @@ export default function CustomListAnalyzerModal({
   const [growthFilters, setGrowthFilters] = useState<GrowthFiltersState>({ ...DEFAULT_GROWTH_FILTERS });
   const [coilFilterOn, setCoilFilterOn] = useState<boolean>(false);
   const [maxCoil, setMaxCoil] = useState<number>(0.85);
+  const [rsNewHighOnly, setRsNewHighOnly] = useState<boolean>(false);
 
   // EMA filters (9D, 21D, 9W)
   const [ema9dFilterOn, setEma9dFilterOn] = useState<boolean>(false);
@@ -298,6 +303,7 @@ export default function CustomListAnalyzerModal({
         if (c === null || c === undefined || !Number.isFinite(c)) return false;
         if (c > maxCoil) return false;
       }
+      if (rsNewHighOnly && !rsNewHighSignals?.get(s.symbol)?.isSignal) return false;
       if (activeEmaFilters > 0) {
         const e = emaMap.get(s.symbol);
         const checks: Array<boolean> = [];
@@ -334,6 +340,7 @@ export default function CustomListAnalyzerModal({
           return av - bv;
         }
         case "return": return (getReturnField(b, filterRsTab) ?? -999) - (getReturnField(a, filterRsTab) ?? -999);
+        case "rsNewHigh": return rsNewHighScore(rsNewHighSignals?.get(b.symbol)) - rsNewHighScore(rsNewHighSignals?.get(a.symbol));
         case "marketCap": return (b.marketCap ?? -1) - (a.marketCap ?? -1);
         case "dollarVol": return (b.avgDollarVolume ?? -1) - (a.avgDollarVolume ?? -1);
         case "growth": {
@@ -350,7 +357,7 @@ export default function CustomListAnalyzerModal({
   }, [
     inputTickers, universeMap, filterRsTab, getRsForTab, getReturnField, isOtcSymbol,
     minRating, minAdr, minMcapM, excludeOtc, growthFilters, growthActive,
-    fundamentalsMap, coilFilterOn, maxCoil, coilScores,
+    fundamentalsMap, coilFilterOn, maxCoil, coilScores, rsNewHighOnly, rsNewHighSignals,
     activeEmaFilters, ema9dFilterOn, ema21dFilterOn, ema9wFilterOn,
     maxEma9dAbs, maxEma21dAbs, maxEma9wAbs, emaFilterMode, emaMap, sortBy,
   ]);
@@ -541,6 +548,9 @@ export default function CustomListAnalyzerModal({
                 <label className="flex items-center gap-2 text-xs">
                   <Checkbox checked={hideMissing} onCheckedChange={(v) => setHideMissing(!!v)} /> Hide unmatched tickers
                 </label>
+                <label className="flex items-center gap-2 text-xs">
+                  <Checkbox checked={rsNewHighOnly} onCheckedChange={(v) => setRsNewHighOnly(!!v)} /> Only RS NH
+                </label>
               </div>
               <div className="flex flex-col gap-1.5 pt-2">
                 <span className="text-[11px] font-medium text-muted-foreground">Growth Filters</span>
@@ -632,6 +642,7 @@ export default function CustomListAnalyzerModal({
                       <th className="px-2 py-2 text-center text-muted-foreground">Rating</th>
                       <th className="px-2 py-2 text-left text-muted-foreground">Company</th>
                       <th className="px-2 py-2 text-right text-muted-foreground">RS</th>
+                      <th className="px-2 py-2 text-center text-muted-foreground">RS NH</th>
                       <th className="px-2 py-2 text-right text-muted-foreground">Return</th>
                       <th className="px-2 py-2 text-right text-muted-foreground" title="Distance from current price to 9-Day EMA">9D EMA Δ</th>
                       <th className="px-2 py-2 text-right text-muted-foreground" title="Distance from current price to 21-Day EMA">21D EMA Δ</th>
@@ -650,6 +661,7 @@ export default function CustomListAnalyzerModal({
                       const rating = ratingMap.get(s.symbol) ?? null;
                       const coil = coilScores?.get(s.symbol)?.score ?? null;
                       const ema = emaMap.get(s.symbol);
+                      const rsNh = rsNewHighSignals?.get(s.symbol);
                       const g = growthScore(fundamentalsMap?.get(s.symbol));
                       const emaCell = (d: number | null | undefined, ref: number | null | undefined, label: string) => (
                         <td className={`px-2 py-1.5 text-right font-mono ${emaColor(d ?? null)}`} title={ref ? `${label}: ${ref}` : ""}>
@@ -663,6 +675,7 @@ export default function CustomListAnalyzerModal({
                           <td className="px-2 py-1.5 text-center"><RsRatingBadge rating={rating} /></td>
                           <td className="px-2 py-1.5 max-w-[200px] truncate text-muted-foreground" title={s.companyName ?? ""}>{s.companyName ?? "—"}</td>
                           <td className={`px-2 py-1.5 text-right font-mono ${rs !== null && rs >= 0 ? "text-[hsl(160,60%,55%)]" : "text-destructive/80"}`}>{pctDisplay(rs)}</td>
+                          <td className="px-2 py-1.5 text-center font-mono text-[10px] text-primary">{rsNh?.isSignal ? formatRsNewHighBadge(rsNh) : "—"}</td>
                           <td className={`px-2 py-1.5 text-right font-mono ${ret !== null && ret >= 0 ? "text-[hsl(160,60%,55%)]" : "text-destructive/80"}`}>{pctDisplay(ret)}</td>
                           {emaCell(ema?.dist9d, ema?.ema9d, "9D EMA")}
                           {emaCell(ema?.dist21d, ema?.ema21d, "21D EMA")}
@@ -676,7 +689,7 @@ export default function CustomListAnalyzerModal({
                       );
                     })}
                     {rows.length === 0 && (
-                      <tr><td colSpan={14} className="px-2 py-6 text-center text-muted-foreground">No tickers match the current filters.</td></tr>
+                      <tr><td colSpan={15} className="px-2 py-6 text-center text-muted-foreground">No tickers match the current filters.</td></tr>
                     )}
                   </tbody>
                 </table>

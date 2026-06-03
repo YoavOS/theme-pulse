@@ -3,10 +3,10 @@ import { supabase } from "@/integrations/supabase/client";
 
 // ── Filter thresholds (single source of truth — must match process-universe-queue/index.ts) ──
 export const RS_FILTER_THRESHOLDS = {
-  MIN_MARKET_CAP: 1000,           // $1B in Finnhub units (millions)
+  MIN_MARKET_CAP: 300,            // $300M in Finnhub units (millions)
   MIN_DOLLAR_VOLUME: 10_000_000,  // $10M average daily dollar volume
   MIN_AVG_DAILY_RANGE: 3,         // 3% average daily range (14d)
-  MIN_PRICE: 6,
+  MIN_PRICE: 5,
 };
 
 const SUPABASE_PAGE_SIZE = 1000;
@@ -82,9 +82,10 @@ export function useRsAlpha() {
     startedAt: null, lastUpdated: null, etaSeconds: null,
   });
   const pollRef = useRef<number | null>(null);
+  const publishRecoveryRef = useRef<string | null>(null);
 
   // ── Load qualified universe from DB ──
-  const loadStocks = useCallback(async () => {
+  const loadStocks = useCallback(async (): Promise<number> => {
     setIsLoading(true);
     setError(null);
     try {
@@ -170,9 +171,11 @@ export function useRsAlpha() {
         rsCalculatedAt: r.rs_calculated_at,
       }});
       setStocks(mapped);
+      return mapped.length;
     } catch (e) {
       console.error("loadStocks error:", e);
       setError(e instanceof Error ? e.message : String(e));
+      return 0;
     } finally {
       setIsLoading(false);
     }
@@ -236,6 +239,32 @@ export function useRsAlpha() {
       return () => window.clearTimeout(t);
     }
   }, [progress.status, loadStocks]);
+
+  // Progress can say "complete" while live rows are still old if the final publish
+  // failed after staging finished. Recover by invoking the worker's finalize path.
+  useEffect(() => {
+    if (progress.status !== "complete" || progress.qualified <= 0) return;
+    if (stocks.length >= progress.qualified) return;
+    const recoveryKey = `${progress.lastUpdated ?? "complete"}:${progress.qualified}:${stocks.length}`;
+    if (publishRecoveryRef.current === recoveryKey) return;
+    publishRecoveryRef.current = recoveryKey;
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data, error: fnErr } = await supabase.functions.invoke("process-universe-queue", { body: { finalizeOnly: true } });
+        if (fnErr) throw new Error(fnErr.message);
+        if (data?.error) throw new Error(data.error);
+        if (cancelled) return;
+        await loadStocks();
+        await loadProgress();
+      } catch (e) {
+        console.warn("publish recovery failed", e);
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [progress.status, progress.qualified, progress.lastUpdated, stocks.length, loadStocks, loadProgress]);
 
   // ── Start / Resume heavy scan ──
   // mode "resume" (default) continues from last point; "restart" wipes and reseeds.
