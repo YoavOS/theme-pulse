@@ -548,6 +548,9 @@ export default function CustomListAnalyzerModal({
                 <label className="flex items-center gap-2 text-xs">
                   <Checkbox checked={hideMissing} onCheckedChange={(v) => setHideMissing(!!v)} /> Hide unmatched tickers
                 </label>
+                <label className="flex items-center gap-2 text-xs">
+                  <Checkbox checked={rsNewHighOnly} onCheckedChange={(v) => setRsNewHighOnly(!!v)} /> Only RS NH
+                </label>
               </div>
               <div className="flex flex-col gap-1.5 pt-2">
                 <span className="text-[11px] font-medium text-muted-foreground">Growth Filters</span>
@@ -639,6 +642,7 @@ export default function CustomListAnalyzerModal({
                       <th className="px-2 py-2 text-center text-muted-foreground">Rating</th>
                       <th className="px-2 py-2 text-left text-muted-foreground">Company</th>
                       <th className="px-2 py-2 text-right text-muted-foreground">RS</th>
+                      <th className="px-2 py-2 text-center text-muted-foreground">RS NH</th>
                       <th className="px-2 py-2 text-right text-muted-foreground">Return</th>
                       <th className="px-2 py-2 text-right text-muted-foreground" title="Distance from current price to 9-Day EMA">9D EMA Δ</th>
                       <th className="px-2 py-2 text-right text-muted-foreground" title="Distance from current price to 21-Day EMA">21D EMA Δ</th>
@@ -657,6 +661,7 @@ export default function CustomListAnalyzerModal({
                       const rating = ratingMap.get(s.symbol) ?? null;
                       const coil = coilScores?.get(s.symbol)?.score ?? null;
                       const ema = emaMap.get(s.symbol);
+                      const rsNh = rsNewHighSignals?.get(s.symbol);
                       const g = growthScore(fundamentalsMap?.get(s.symbol));
                       const emaCell = (d: number | null | undefined, ref: number | null | undefined, label: string) => (
                         <td className={`px-2 py-1.5 text-right font-mono ${emaColor(d ?? null)}`} title={ref ? `${label}: ${ref}` : ""}>
@@ -670,6 +675,7 @@ export default function CustomListAnalyzerModal({
                           <td className="px-2 py-1.5 text-center"><RsRatingBadge rating={rating} /></td>
                           <td className="px-2 py-1.5 max-w-[200px] truncate text-muted-foreground" title={s.companyName ?? ""}>{s.companyName ?? "—"}</td>
                           <td className={`px-2 py-1.5 text-right font-mono ${rs !== null && rs >= 0 ? "text-[hsl(160,60%,55%)]" : "text-destructive/80"}`}>{pctDisplay(rs)}</td>
+                          <td className="px-2 py-1.5 text-center font-mono text-[10px] text-primary">{rsNh?.isSignal ? formatRsNewHighBadge(rsNh) : "—"}</td>
                           <td className={`px-2 py-1.5 text-right font-mono ${ret !== null && ret >= 0 ? "text-[hsl(160,60%,55%)]" : "text-destructive/80"}`}>{pctDisplay(ret)}</td>
                           {emaCell(ema?.dist9d, ema?.ema9d, "9D EMA")}
                           {emaCell(ema?.dist21d, ema?.ema21d, "21D EMA")}
@@ -683,7 +689,7 @@ export default function CustomListAnalyzerModal({
                       );
                     })}
                     {rows.length === 0 && (
-                      <tr><td colSpan={14} className="px-2 py-6 text-center text-muted-foreground">No tickers match the current filters.</td></tr>
+                      <tr><td colSpan={15} className="px-2 py-6 text-center text-muted-foreground">No tickers match the current filters.</td></tr>
                     )}
                   </tbody>
                 </table>
