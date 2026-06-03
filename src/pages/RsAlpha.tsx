@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { ArrowLeft, RefreshCw, Loader2, Info, ChevronDown, ChevronUp, ArrowUpDown, Filter, Hammer, Pause, Play, RotateCcw, Copy, Download, Settings2, PieChart as PieChartIcon, Database, BarChart3 } from "lucide-react";
+import { ArrowLeft, RefreshCw, Loader2, Info, ChevronDown, ChevronUp, ArrowUpDown, Filter, Hammer, Pause, Play, RotateCcw, Copy, Download, Settings2, PieChart as PieChartIcon, Database, BarChart3, Zap } from "lucide-react";
 import { toast } from "sonner";
 import { useRsAlpha, RsStock, RS_FILTER_THRESHOLDS } from "@/hooks/useRsAlpha";
 import { useFundamentalsScan } from "@/hooks/useFundamentalsScan";
@@ -26,6 +26,7 @@ import {
   passesHighGrowth,
   passesONeil,
 } from "@/lib/growthFilters";
+import { formatRsNewHighBadge, RS_NEW_HIGH_LOOKBACKS, rsNewHighScore, type RsNewHighBenchmark, type RsNewHighSignal } from "@/lib/rsNewHigh";
 
 // Strongest-first: Rocket (High Growth) > Fire (Growth) > Diamond (O'Neil).
 function growthBadge(f: ReturnType<typeof useStockFundamentalsMap>["map"] extends Map<string, infer T> ? T | undefined : never): { emoji: string; label: string } | null {
@@ -37,12 +38,13 @@ function growthBadge(f: ReturnType<typeof useStockFundamentalsMap>["map"] extend
 }
 
 type TabId = "overall" | "1d" | "1w" | "1m" | "3m" | "6m";
-type SortField = "rank" | "symbol" | "company" | "rs" | "rating" | "stockReturn" | "spyReturn" | "price" | "coil" | "ema9d" | "ema21d" | "ema9w";
+type SortField = "rank" | "symbol" | "company" | "rs" | "rating" | "stockReturn" | "spyReturn" | "price" | "coil" | "ema9d" | "ema21d" | "ema9w" | "rsNewHigh";
 type SortDir = "asc" | "desc";
 
 const RS_WEIGHTS_KEY = "rs-overall-weights-v2";
 const GROWTH_FILTERS_KEY = "rs-growth-filters-v1";
 const COIL_SETTINGS_KEY = "rs-coil-settings-v1";
+const RS_NH_SETTINGS_KEY = "rs-new-high-settings-v1";
 
 interface TightRangeScore {
   score: number | null;
