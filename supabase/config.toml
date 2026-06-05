@@ -71,6 +71,3 @@ verify_jwt = false
 
 [functions.morning-brief]
 verify_jwt = false
-
-[functions.rs-new-high-signals]
-verify_jwt = false

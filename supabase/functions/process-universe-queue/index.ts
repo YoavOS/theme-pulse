@@ -105,7 +105,6 @@ Deno.serve(async (req) => {
   const SB_URL = Deno.env.get("SUPABASE_URL")!;
   const SB_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
   const supabase = createClient(SB_URL, SB_KEY);
-  const body = await req.json().catch(() => ({}));
 
   async function finalize(extra: Record<string, unknown> = {}) {
     await supabase.rpc("recompute_rs_scan_progress");
@@ -154,10 +153,6 @@ Deno.serve(async (req) => {
   }
 
   try {
-    if (body?.finalizeOnly === true) {
-      return await finalize({ message: "finalize_only" });
-    }
-
     if (!FINNHUB_KEY) throw new Error("FINNHUB_API_KEY not set");
 
     const { data: gotLock } = await supabase.rpc("try_universe_scan_lock");

@@ -15,7 +15,6 @@ import {
   passesAllActiveFilters,
   anyActive,
 } from "@/lib/growthFilters";
-import { rsNewHighScore, type RsNewHighSignal } from "@/lib/rsNewHigh";
 
 export type CustomListTab = "overall" | "1d" | "1w" | "1m" | "3m" | "6m";
 type SortBy =
@@ -26,8 +25,7 @@ type SortBy =
   | "ema9d"
   | "ema21d"
   | "ema9w"
-  | "relVsQqq"
-  | "rsNewHigh";
+  | "relVsQqq";
 const TOPN_MIN = 10;
 const TOPN_MAX = 500; // values >= MAX mean "All"
 
@@ -67,7 +65,6 @@ interface FilterState {
   emaFilterMode: "AND" | "OR";
   relVsQqqOn: boolean;
   minRelVsQqq: number;
-  rsNewHighOnly: boolean;
 }
 
 interface ScannerProfile {
@@ -173,7 +170,6 @@ interface Props {
   coilShortDays?: number;
   coilLongDays?: number;
   emaDistances?: Map<string, EmaDistanceInfo>;
-  rsNewHighSignals?: Map<string, RsNewHighSignal>;
   /** Today's QQQ % change (used for "Red Day Leaders" / market-defiance filtering). */
   qqqPctChange?: number | null;
 }
@@ -199,7 +195,6 @@ const DEFAULT_FILTERS: FilterState = {
   emaFilterMode: "OR",
   relVsQqqOn: false,
   minRelVsQqq: 0,
-  rsNewHighOnly: false,
 };
 
 function loadUserProfiles(): ScannerProfile[] {
@@ -222,7 +217,7 @@ function saveUserProfiles(list: ScannerProfile[]) {
 export default function CustomTradingViewListModal({
   open, onOpenChange, tabId, tabLabel, stocks, ratingMap,
   getRsForTab, getReturnField, isOtcSymbol, fundamentalsMap,
-  coilScores, coilShortDays, coilLongDays, emaDistances, rsNewHighSignals, qqqPctChange,
+  coilScores, coilShortDays, coilLongDays, emaDistances, qqqPctChange,
 }: Props) {
   const [state, setState] = useState<FilterState>({ ...DEFAULT_FILTERS });
   const [sectorSearch, setSectorSearch] = useState<string>("");
@@ -275,7 +270,6 @@ export default function CustomTradingViewListModal({
         maxEma9wAbs: state.maxEma9wAbs,
         relVsQqqOn: state.relVsQqqOn,
         minRelVsQqq: state.minRelVsQqq,
-        rsNewHighOnly: state.rsNewHighOnly,
       },
     };
     const next = [...userProfiles, profile];
@@ -359,7 +353,6 @@ export default function CustomTradingViewListModal({
         if (c === null || c === undefined || !Number.isFinite(c)) return false;
         if (c > state.maxCoil) return false;
       }
-      if (state.rsNewHighOnly && !rsNewHighSignals?.get(s.symbol)?.isSignal) return false;
       const ema = emaDistances?.get(s.symbol);
       const emaActiveCount = (state.ema9dFilterOn ? 1 : 0) + (state.ema21dFilterOn ? 1 : 0) + (state.ema9wFilterOn ? 1 : 0);
       if (emaActiveCount > 0) {
@@ -414,13 +407,12 @@ export default function CustomTradingViewListModal({
           const bPct = (b.return1d ?? -999) - (qqqPctChange ?? 0);
           return bPct - aPct;
         }
-        case "rsNewHigh": return rsNewHighScore(rsNewHighSignals?.get(b.symbol)) - rsNewHighScore(rsNewHighSignals?.get(a.symbol));
       }
     });
 
     if (state.topN < TOPN_MAX) list = list.slice(0, state.topN);
     return list;
-  }, [stocks, ratingMap, state, excludedSectorsSet, expandedExclusions, growthActive, fundamentalsMap, coilScores, emaDistances, rsNewHighSignals, qqqPctChange, qqqAvailable, tabId, getRsForTab, getReturnField, isOtcSymbol]);
+  }, [stocks, ratingMap, state, excludedSectorsSet, expandedExclusions, growthActive, fundamentalsMap, coilScores, emaDistances, qqqPctChange, qqqAvailable, tabId, getRsForTab, getReturnField, isOtcSymbol]);
 
   const symbols = filtered.map((s) => s.symbol);
 
@@ -663,7 +655,6 @@ export default function CustomTradingViewListModal({
                 { v: "ema9d" as SortBy, label: "Closest to 9D EMA", disabled: !emaAvailable },
                 { v: "ema21d" as SortBy, label: "Closest to 21D EMA", disabled: !emaAvailable },
                 { v: "ema9w" as SortBy, label: "Closest to 9W EMA", disabled: !emaAvailable },
-                { v: "rsNewHigh" as SortBy, label: "RS New High First" },
                 { v: "relVsQqq" as SortBy, label: "Strongest vs QQQ", disabled: !qqqAvailable },
               ].map((opt) => (
                 <button
@@ -693,13 +684,6 @@ export default function CustomTradingViewListModal({
               <span>
                 <span className="font-medium text-foreground">Exclude OTC Stocks</span>
                 <span className="block text-[10px] text-muted-foreground">Hide foreign / pink sheets</span>
-              </span>
-            </label>
-            <label className="flex items-center gap-2 rounded-md border border-primary/30 bg-primary/5 px-3 py-2 text-xs cursor-pointer">
-              <Checkbox checked={state.rsNewHighOnly} onCheckedChange={(v) => set("rsNewHighOnly", !!v)} />
-              <span>
-                <span className="font-medium text-foreground">Only RS New High</span>
-                <span className="block text-[10px] text-muted-foreground">RS line broke out before price</span>
               </span>
             </label>
           </div>
