@@ -245,7 +245,6 @@ export default function ThemeDrilldownModal({
   const total = validTickers.length;
   const ratio = total > 0 ? up / total : 0;
   const sign = theme.performance_pct >= 0 ? "+" : "";
-  const pinned = isPinned(theme.theme_name);
 
   const toggleSort = (key: SortKey) => {
     if (sortKey === key) {
@@ -259,12 +258,6 @@ export default function ThemeDrilldownModal({
   const pctColor = (v: number | null | undefined) => {
     if (v === null || v === undefined) return "text-muted-foreground";
     return v >= 0 ? "text-gain-medium" : "text-loss-mild";
-  };
-
-  const handleViewWatchlist = () => {
-    if (!pinned) togglePin(theme.theme_name);
-    onOpenChange(false);
-    navigate("/watchlist");
   };
 
   return (
@@ -286,15 +279,6 @@ export default function ThemeDrilldownModal({
                 <h2 className="text-xl font-bold text-foreground" style={{ fontFamily: "'Syne', sans-serif" }}>
                   {theme.theme_name}
                 </h2>
-                <button
-                  onClick={() => togglePin(theme.theme_name)}
-                  className={`rounded p-1 transition-all ${
-                    pinned ? "text-[hsl(var(--primary))]" : "text-muted-foreground hover:text-foreground"
-                  }`}
-                  title={pinned ? "Unpin" : "Pin to watchlist"}
-                >
-                  <Pin size={14} className={pinned ? "fill-current" : ""} />
-                </button>
               </div>
               {theme.notes && (
                 <p className="mt-1 text-xs text-muted-foreground italic">{theme.notes}</p>
