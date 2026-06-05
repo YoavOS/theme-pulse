@@ -1,9 +1,7 @@
 import { useState, useMemo, useEffect } from "react";
 import { ThemeData } from "@/data/themeData";
-import { useWatchlist } from "@/hooks/useWatchlistContext";
 import { supabase } from "@/integrations/supabase/client";
-import { Pin, X, ExternalLink, ArrowUpDown, Newspaper, BarChart3 } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { X, ExternalLink, ArrowUpDown, Newspaper, BarChart3 } from "lucide-react";
 import { useSpyBenchmark, formatRS } from "@/hooks/useSpyBenchmark";
 import { NewsArticle } from "@/hooks/useThemeNews";
 import { NewsTabContent } from "@/components/NewsPanel";
@@ -107,8 +105,6 @@ export default function ThemeDrilldownModal({
   isFundamentalsLoading?: boolean;
   defaultTab?: "tickers" | "news" | "fundamentals";
 }) {
-   const { isPinned, togglePin } = useWatchlist();
-   const navigate = useNavigate();
    const [sortKey, setSortKey] = useState<SortKey>(defaultSortKey || "pct");
    const [sortDir, setSortDir] = useState<SortDir>("desc");
    const [extras, setExtras] = useState<Record<string, TickerExtra>>({});
@@ -249,7 +245,6 @@ export default function ThemeDrilldownModal({
   const total = validTickers.length;
   const ratio = total > 0 ? up / total : 0;
   const sign = theme.performance_pct >= 0 ? "+" : "";
-  const pinned = isPinned(theme.theme_name);
 
   const toggleSort = (key: SortKey) => {
     if (sortKey === key) {
@@ -263,12 +258,6 @@ export default function ThemeDrilldownModal({
   const pctColor = (v: number | null | undefined) => {
     if (v === null || v === undefined) return "text-muted-foreground";
     return v >= 0 ? "text-gain-medium" : "text-loss-mild";
-  };
-
-  const handleViewWatchlist = () => {
-    if (!pinned) togglePin(theme.theme_name);
-    onOpenChange(false);
-    navigate("/watchlist");
   };
 
   return (
@@ -290,15 +279,6 @@ export default function ThemeDrilldownModal({
                 <h2 className="text-xl font-bold text-foreground" style={{ fontFamily: "'Syne', sans-serif" }}>
                   {theme.theme_name}
                 </h2>
-                <button
-                  onClick={() => togglePin(theme.theme_name)}
-                  className={`rounded p-1 transition-all ${
-                    pinned ? "text-[hsl(var(--primary))]" : "text-muted-foreground hover:text-foreground"
-                  }`}
-                  title={pinned ? "Unpin" : "Pin to watchlist"}
-                >
-                  <Pin size={14} className={pinned ? "fill-current" : ""} />
-                </button>
               </div>
               {theme.notes && (
                 <p className="mt-1 text-xs text-muted-foreground italic">{theme.notes}</p>
@@ -549,12 +529,6 @@ export default function ThemeDrilldownModal({
               ? `Last updated: ${new Date(theme.lastUpdated).toLocaleTimeString()}`
               : "Demo data"}
           </span>
-          <button
-            onClick={handleViewWatchlist}
-            className="rounded-md border border-primary/40 bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary transition-colors hover:bg-primary/20"
-          >
-            {pinned ? "View in Watchlist" : "Pin & View Watchlist"}
-          </button>
         </div>
       </DialogContent>
     </Dialog>

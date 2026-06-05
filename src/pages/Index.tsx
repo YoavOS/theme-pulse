@@ -1,22 +1,19 @@
 import { useState, useMemo, useCallback, useRef, useEffect } from "react";
-import { getProcessedThemes, ThemeData } from "@/data/themeData";
+import { ThemeData } from "@/data/themeData";
 import { useLiveThemeData } from "@/hooks/useLiveThemeData";
-import ThemeCard from "@/components/ThemeCard";
 import ThemeDrilldownModal from "@/components/ThemeDrilldownModal";
 import ValidateTickersDialog from "@/components/ValidateTickersDialog";
-import { RefreshCw, Download, TrendingUp, TrendingDown, Wifi, WifiOff, Loader2, Settings, ScanLine, X, ShieldCheck, Brain, Bookmark, ChevronDown, LayoutDashboard, AlertTriangle, LayoutGrid, List, Flame, Circle, BarChart3, Calendar, Bell, Zap, Sparkles, Activity, DollarSign, Sun } from "lucide-react";
-import RankedListView from "@/components/dashboard/RankedListView";
+import {
+  RefreshCw, Download, Wifi, WifiOff, Loader2, Settings, ScanLine, X,
+  ShieldCheck, Brain, ChevronDown, LayoutDashboard, AlertTriangle,
+  BarChart3, Zap, Activity, DollarSign, Sun,
+} from "lucide-react";
 import HeatmapGridView from "@/components/dashboard/HeatmapGridView";
-import DashboardBubbleView from "@/components/dashboard/DashboardBubbleView";
-import BarChartView from "@/components/dashboard/BarChartView";
 import DemoDataConfirmDialog from "@/components/DemoDataConfirmDialog";
 import { getCacheAge } from "@/hooks/useScanCache";
-import { useDispersion, getDispersionColorClass } from "@/hooks/useDispersion";
-import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip";
-import { useSpyBenchmark, formatRS } from "@/hooks/useSpyBenchmark";
+import { TooltipProvider, Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
+import { useSpyBenchmark } from "@/hooks/useSpyBenchmark";
 import { useFullScan } from "@/hooks/useFullScan";
-import { EodRoutineButton } from "@/components/EodRoutineButton";
-import { useWatchlist } from "@/hooks/useWatchlistContext";
 import { useVolumeData } from "@/hooks/useVolumeData";
 import { Link } from "react-router-dom";
 import HelpButton from "@/components/HelpButton";
@@ -25,9 +22,6 @@ import { useThemeSearch } from "@/hooks/useThemeSearch";
 import { useThemeNews } from "@/hooks/useThemeNews";
 import { useFundamentals } from "@/hooks/useFundamentals";
 import NewsPanel from "@/components/NewsPanel";
-import ThemeMomentumPanel from "@/components/dashboard/ThemeMomentumPanel";
-import { useStockFundamentalsMap } from "@/hooks/useStockFundamentalsMap";
-import { useUnreadAlertCount } from "@/hooks/useUnreadAlertCount";
 
 const TIMEFRAMES = ["Today", "1W", "1M", "3M", "YTD"] as const;
 
@@ -39,13 +33,6 @@ function formatTime(d: Date) {
 }
 
 export default function Index() {
-  const [dashboardView, setDashboardView] = useState<"cards" | "list" | "heatmap" | "bubble" | "bars">(() => {
-    return (localStorage.getItem("dashboardView") as any) || "cards";
-  });
-  const switchView = useCallback((v: "cards" | "list" | "heatmap" | "bubble" | "bars") => {
-    setDashboardView(v);
-    localStorage.setItem("dashboardView", v);
-  }, []);
   const [activeTimeframe, setActiveTimeframe] = useState<string>("Today");
   const [showPlaceholders, setShowPlaceholders] = useState(false);
   const [selectedThemes, setSelectedThemes] = useState<Set<string>>(new Set());
@@ -54,19 +41,17 @@ export default function Index() {
   const [drilldownTheme, setDrilldownTheme] = useState<ThemeData | null>(null);
   const [showOptions, setShowOptions] = useState(false);
   const [showDemoConfirm, setShowDemoConfirm] = useState(false);
-  const [enhancedView, setEnhancedView] = useState<boolean>(() => {
-    if (typeof window === "undefined") return false;
-    return localStorage.getItem("enhancedView") === "true";
-  });
-  useEffect(() => { localStorage.setItem("enhancedView", String(enhancedView)); }, [enhancedView]);
-  const { pinned, alerts, getAlert } = useWatchlist();
-  const unreadAlertCount = useUnreadAlertCount();
-  const { fetchVolume, getThemeSignals, volumeMap } = useVolumeData();
-  const { fetchThemeNews, prefetchTopThemes, prefetchedThemes, getThemeNewsCount, getThemeArticles, hasNegativeNews, getAiSummary, marketNews, getThemeSentiment } = useThemeNews();
+
+  const { fetchVolume, getThemeSignals } = useVolumeData();
+  const {
+    fetchThemeNews, prefetchTopThemes, getThemeArticles,
+    getAiSummary, getThemeSentiment,
+  } = useThemeNews();
   const [newsPanelTheme, setNewsPanelTheme] = useState<ThemeData | null>(null);
   const [newsPanelSummary, setNewsPanelSummary] = useState<string | null>(null);
   const [newsPanelSummaryLoading, setNewsPanelSummaryLoading] = useState(false);
-  const { fetchFundamentals, getCachedFundamentals, getThemeFundamentalScore, isLoading: isFundLoading, prefetchTopThemes: prefetchFundamentals } = useFundamentals();
+  const [newsPanelSentiment, setNewsPanelSentiment] = useState<import("@/hooks/useThemeNews").SentimentData | null>(null);
+  const { fetchFundamentals, getCachedFundamentals, isLoading: isFundLoading } = useFundamentals();
   const [drilldownDefaultTab, setDrilldownDefaultTab] = useState<"tickers" | "news" | "fundamentals">("tickers");
 
   const {
@@ -83,16 +68,17 @@ export default function Index() {
     setScanResults,
   } = useLiveThemeData(activeTimeframe);
 
-  const dispersion = useDispersion(allThemes);
-  const { spy, getRelativeStrength } = useSpyBenchmark();
-  const { query: searchQuery, setQuery: setSearchQuery, isSearching, result: searchResult, clearSearch, runSearch, history: searchHistory } = useThemeSearch(allThemes);
+  const { spy } = useSpyBenchmark();
+  const {
+    query: searchQuery, setQuery: setSearchQuery, isSearching,
+    result: searchResult, clearSearch, runSearch, history: searchHistory,
+  } = useThemeSearch(allThemes);
 
   const searchMatchSet = useMemo(() => {
     if (!searchResult) return null;
     return new Set(searchResult.matchingThemes.map(n => n.toLowerCase()));
   }, [searchResult]);
 
-  // Full scan handler: receives themes + timeframe from scan
   const handleScanComplete = useCallback((themes: ThemeData[], timeframe: string) => {
     setScanResults(themes, timeframe);
   }, [setScanResults]);
@@ -101,29 +87,20 @@ export default function Index() {
     isRunning: isFullScanning,
     statusText: fullScanStatus,
     progress: scanProgress,
-    scanCompletedAt,
     startFullScan,
     clearProgress,
     loadTimeframe,
-    buildThemesFromPerf,
   } = useFullScan(handleScanComplete);
 
-
-  // When timeframe changes, try to load from scan cache
   const prevTimeframe = useRef(activeTimeframe);
   useEffect(() => {
     if (prevTimeframe.current !== activeTimeframe) {
       prevTimeframe.current = activeTimeframe;
-      // Try loading from scan performance cache
       loadTimeframe(activeTimeframe).then((loaded) => {
-        if (!loaded && !isLive && !isLoading) {
-          fetchLiveData();
-        }
+        if (!loaded && !isLive && !isLoading) fetchLiveData();
       });
     }
   }, [activeTimeframe, isLive, isLoading, fetchLiveData, loadTimeframe]);
-
-  const [newsPanelSentiment, setNewsPanelSentiment] = useState<import("@/hooks/useThemeNews").SentimentData | null>(null);
 
   const handleNewsBadgeClick = useCallback(async (theme: ThemeData) => {
     setNewsPanelTheme(theme);
@@ -135,48 +112,8 @@ export default function Index() {
     const summary = await getAiSummary(theme.theme_name, articles);
     setNewsPanelSummary(summary || null);
     setNewsPanelSummaryLoading(false);
-    // Sentiment is now available from the hook after getAiSummary returns
-    const sent = getThemeSentiment(theme.theme_name);
-    setNewsPanelSentiment(sent);
+    setNewsPanelSentiment(getThemeSentiment(theme.theme_name));
   }, [fetchThemeNews, getAiSummary, getThemeSentiment]);
-
-  // ── Theme Momentum Index slide-in panel ─────────────────────────────────
-  // Triggered by the "i" button on a heatmap card. We reuse the same news +
-  // AI summary plumbing as the news badge so the panel always shows the
-  // freshest narrative.
-  const [momentumPanelTheme, setMomentumPanelTheme] = useState<ThemeData | null>(null);
-  const [momentumPanelArticles, setMomentumPanelArticles] = useState<import("@/hooks/useThemeNews").NewsArticle[]>([]);
-  const [momentumPanelSummary, setMomentumPanelSummary] = useState<string | null>(null);
-  const [momentumPanelSummaryLoading, setMomentumPanelSummaryLoading] = useState(false);
-  const [momentumPanelSentiment, setMomentumPanelSentiment] = useState<import("@/hooks/useThemeNews").SentimentData | null>(null);
-
-  // Pull stock fundamentals (small one-off load — same hook RS Alpha uses).
-  const { map: stockFundamentalsMap } = useStockFundamentalsMap();
-
-  const handleMomentumInfoClick = useCallback(async (theme: ThemeData) => {
-    setMomentumPanelTheme(theme);
-    setMomentumPanelArticles([]);
-    setMomentumPanelSummary(null);
-    setMomentumPanelSummaryLoading(true);
-    setMomentumPanelSentiment(null);
-    const symbols = theme.tickers.map(t => t.symbol);
-    const articles = await fetchThemeNews(symbols);
-    setMomentumPanelArticles(articles);
-    const summary = await getAiSummary(theme.theme_name, articles);
-    setMomentumPanelSummary(summary || null);
-    setMomentumPanelSummaryLoading(false);
-    setMomentumPanelSentiment(getThemeSentiment(theme.theme_name));
-  }, [fetchThemeNews, getAiSummary, getThemeSentiment]);
-
-  const relVolBySymbol = useMemo(() => {
-    const m = new Map<string, number>();
-    for (const [sym, v] of Object.entries(volumeMap)) {
-      if (v && v.avg_20d > 0 && v.today_vol > 0) {
-        m.set(sym.toUpperCase(), v.today_vol / v.avg_20d);
-      }
-    }
-    return m;
-  }, [volumeMap]);
 
   const themes = useMemo(() => {
     if (showPlaceholders) return allThemes;
@@ -185,10 +122,12 @@ export default function Index() {
     );
   }, [allThemes, showPlaceholders]);
 
-  // Prefetch news for top 5 themes only (not all 56)
+  // Prefetch news for the top 5 most-moving themes
   useEffect(() => {
     if (isLive && themes.length > 0) {
-      const sorted = [...themes].sort((a, b) => Math.abs(b.performance_pct) - Math.abs(a.performance_pct));
+      const sorted = [...themes].sort(
+        (a, b) => Math.abs(b.performance_pct) - Math.abs(a.performance_pct),
+      );
       const top5 = sorted.slice(0, 5).map(t => ({
         name: t.theme_name,
         symbols: t.tickers.filter(tk => !tk.skipped).map(tk => tk.symbol),
@@ -196,10 +135,6 @@ export default function Index() {
       prefetchTopThemes(top5);
     }
   }, [isLive, themes, prefetchTopThemes]);
-
-  const strong = themes.filter((t) => t.category === "Strong");
-  const neutral = themes.filter((t) => t.category === "Neutral");
-  const weak = themes.filter((t) => t.category === "Weak");
 
   const nonEmptyThemeNames = allThemes
     .filter((t) => t.tickers.length > 0 || t.up_count > 0 || t.down_count > 0)
@@ -231,243 +166,25 @@ export default function Index() {
     URL.revokeObjectURL(url);
   };
 
-  // Shared tab definitions (reused in standard top-row and enhanced-mode left rail)
+  // Trigger volume fetch once themes are loaded so signals are populated.
+  useEffect(() => {
+    if (!isLive || themes.length === 0) return;
+    const allSymbols = themes.flatMap(t => t.tickers.filter(tk => !tk.skipped).map(tk => tk.symbol));
+    if (allSymbols.length > 0) fetchVolume(allSymbols);
+  }, [isLive, themes, fetchVolume]);
+
   const dashboardTabs = [
-    { to: "/", label: "Dashboard", icon: <LayoutDashboard size={14} />, active: true, color: "", badge: null as number | string | null, pulse: false },
-    { to: "/morning-brief", label: "Morning Brief", icon: <Sun size={14} />, active: false, color: "text-[hsl(40,90%,55%)]", badge: null as number | string | null, pulse: false },
-    { to: "/intelligence", label: "Intelligence", icon: <Brain size={14} />, active: false, color: "text-primary", badge: null as number | string | null, pulse: false },
-    { to: "/watchlist", label: "Watchlist", icon: <Bookmark size={14} />, active: false, color: "text-[hsl(40,80%,50%)]",
-      badge: pinned.length > 0 ? pinned.length : null, pulse: false },
-    { to: "/alerts", label: "Alerts", icon: <Bell size={14} />, active: false, color: "text-destructive",
-      badge: unreadAlertCount > 99 ? "99+" : unreadAlertCount > 0 ? unreadAlertCount : null, pulse: false },
-    { to: "/rs-alpha", label: "RS Alpha", icon: <Zap size={14} />, active: false, color: "text-[hsl(280,70%,60%)]",
-      badge: null as number | string | null, pulse: false },
-    { to: "/live", label: "Live Execution", icon: <Activity size={14} />, active: false, color: "text-[hsl(160,80%,45%)]",
-      badge: null as number | string | null, pulse: false },
-    { to: "/market-drivers", label: "Market Drivers", icon: <BarChart3 size={14} />, active: false, color: "text-[hsl(200,80%,55%)]",
-      badge: null as number | string | null, pulse: false },
-    { to: "/earnings", label: "Earnings", icon: <DollarSign size={14} />, active: false, color: "text-[hsl(40,90%,55%)]",
-      badge: null as number | string | null, pulse: false },
-    { to: "/eod-history", label: "EOD History", icon: <Calendar size={14} />, active: false, color: "text-gain-medium",
-      badge: null as number | string | null, pulse: false },
+    { to: "/", label: "Dashboard", icon: <LayoutDashboard size={14} />, active: true, color: "" },
+    { to: "/morning-brief", label: "Morning Brief", icon: <Sun size={14} />, active: false, color: "text-[hsl(40,90%,55%)]" },
+    { to: "/intelligence", label: "Intelligence", icon: <Brain size={14} />, active: false, color: "text-primary" },
+    { to: "/rs-alpha", label: "RS Alpha", icon: <Zap size={14} />, active: false, color: "text-[hsl(280,70%,60%)]" },
+    { to: "/live", label: "Live Execution", icon: <Activity size={14} />, active: false, color: "text-[hsl(160,80%,45%)]" },
+    { to: "/market-drivers", label: "Market Drivers", icon: <BarChart3 size={14} />, active: false, color: "text-[hsl(200,80%,55%)]" },
+    { to: "/earnings", label: "Earnings", icon: <DollarSign size={14} />, active: false, color: "text-[hsl(40,90%,55%)]" },
   ];
 
-  // Shared right-side action cluster (Full Scan, EOD, Enhanced toggle, Help, Options)
-  const renderHeaderActions = () => (
-    <>
-      {/* Full Scan */}
-      <button
-        onClick={startFullScan}
-        disabled={isFullScanning || isLoading}
-        className="rounded-md border border-primary/40 bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary transition-colors hover:bg-primary/20 disabled:opacity-50"
-        title="Update all themes sequentially"
-      >
-        {isFullScanning ? (
-          <span className="inline-flex items-center gap-1">
-            <Loader2 size={12} className="animate-spin" /> Scanning…
-          </span>
-        ) : (
-          <span className="inline-flex items-center gap-1">
-            <ScanLine size={12} /> Full Scan
-          </span>
-        )}
-      </button>
-      {fullScanStatus && (
-        <span className="hidden sm:inline-flex max-w-[200px] items-center gap-1 truncate text-[10px] text-muted-foreground" title={fullScanStatus}>
-          {fullScanStatus}
-          {!isFullScanning && fullScanStatus.includes("ticker") && (
-            <button onClick={clearProgress} className="ml-1 rounded p-0.5 text-destructive hover:bg-destructive/10" title="Clear">
-              <X size={10} />
-            </button>
-          )}
-        </span>
-      )}
-
-      {/* EOD Routine Button */}
-      <EodRoutineButton
-        onDashboardUpdate={handleScanComplete}
-        buildThemesFromPerf={buildThemesFromPerf}
-      />
-
-      {/* Enhanced View toggle */}
-      <TooltipProvider delayDuration={200}>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <button
-              onClick={() => setEnhancedView(v => !v)}
-              className={`inline-flex items-center gap-1 rounded-md border p-1.5 transition-colors ${
-                enhancedView
-                  ? "border-primary/50 bg-primary/15 text-primary"
-                  : "border-border text-muted-foreground hover:bg-accent hover:text-foreground"
-              }`}
-              aria-pressed={enhancedView}
-              title="Toggle Enhanced View"
-            >
-              <Sparkles size={14} />
-              <span className="hidden text-[11px] font-medium sm:inline">Enhanced</span>
-              <span
-                className={`relative ml-0.5 inline-block h-3.5 w-6 rounded-full transition-colors ${
-                  enhancedView ? "bg-primary" : "bg-muted-foreground/30"
-                }`}
-              >
-                <span
-                  className={`absolute top-0.5 h-2.5 w-2.5 rounded-full bg-background transition-transform ${
-                    enhancedView ? "translate-x-3" : "translate-x-0.5"
-                  }`}
-                />
-              </span>
-            </button>
-          </TooltipTrigger>
-          <TooltipContent side="bottom" className="max-w-[220px] text-xs">
-            <p className="font-semibold mb-1">Enhanced View</p>
-            <p className="text-muted-foreground">Premium gradient background, side navigation rail, and a clean toolbar above the cards. Cards themselves are unchanged.</p>
-          </TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
-
-      {/* Help button */}
-      <HelpButton />
-
-      {/* Options dropdown */}
-      <div className="relative">
-        <button
-          onClick={() => setShowOptions(!showOptions)}
-          className="inline-flex items-center gap-1 rounded-md border border-border p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-          title="More options"
-        >
-          <Settings size={14} />
-          <ChevronDown size={10} className={`transition-transform ${showOptions ? "rotate-180" : ""}`} />
-        </button>
-        {showOptions && (
-          <>
-            <div className="fixed inset-0 z-40" onClick={() => setShowOptions(false)} />
-            <div className="absolute right-0 top-full z-50 mt-1 w-56 rounded-lg border border-border bg-card p-1 shadow-xl">
-              {isLive ? (
-                <button
-                  onClick={() => { setShowDemoConfirm(true); setShowOptions(false); }}
-                  className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-xs text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
-                >
-                  <WifiOff size={13} /> Switch to Demo Data
-                </button>
-              ) : (
-                <button
-                  onClick={() => { fetchLiveData(); setShowOptions(false); }}
-                  disabled={isLoading}
-                  className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-xs text-gain-medium hover:bg-accent transition-colors disabled:opacity-50"
-                >
-                  <Wifi size={13} /> Go Live (All)
-                </button>
-              )}
-              <button
-                onClick={() => { setShowSelector(!showSelector); setShowOptions(false); }}
-                className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-xs text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
-              >
-                <ScanLine size={13} /> {showSelector ? "Hide" : "Select"} Themes
-              </button>
-              <button
-                onClick={() => { setShowPlaceholders(!showPlaceholders); setShowOptions(false); }}
-                className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-xs text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
-              >
-                <LayoutDashboard size={13} /> {showPlaceholders ? "Hide" : "Show"} Empty Themes
-              </button>
-              <button
-                onClick={() => { handleExport(); setShowOptions(false); }}
-                className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-xs text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
-              >
-                <Download size={13} /> Export CSV
-              </button>
-              <button
-                onClick={() => { setShowValidateDialog(true); setShowOptions(false); }}
-                className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-xs text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
-              >
-                <ShieldCheck size={13} /> Validate Tickers
-              </button>
-              <button
-                onClick={() => { isLive && fetchLiveData(); setShowOptions(false); }}
-                disabled={isLoading || !isLive}
-                className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-xs text-muted-foreground hover:bg-accent hover:text-foreground transition-colors disabled:opacity-30"
-              >
-                <RefreshCw size={13} /> Refresh Data
-              </button>
-              <div className="my-1 border-t border-border" />
-              <Link
-                to="/admin"
-                onClick={() => setShowOptions(false)}
-                className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-xs text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
-              >
-                <Settings size={13} /> Manage Themes & Tickers
-              </Link>
-            </div>
-          </>
-        )}
-      </div>
-    </>
-  );
-
   return (
-    <div className={`relative min-h-screen ${enhancedView ? "enhanced-view" : "bg-background"}`}>
-      {/* Enhanced background layer (only visible when toggle ON) */}
-      {enhancedView && (
-        <>
-          {/* Base deep gradient */}
-          <div
-            aria-hidden
-            className="pointer-events-none fixed inset-0 z-0 animate-fade-in"
-            style={{
-              background:
-                "linear-gradient(180deg, hsl(220 25% 6%) 0%, hsl(222 28% 4%) 45%, hsl(220 30% 3%) 100%)",
-            }}
-          />
-          {/* Aurora mesh blobs */}
-          <div
-            aria-hidden
-            className="pointer-events-none fixed inset-0 z-0 animate-fade-in"
-            style={{
-              background: [
-                "radial-gradient(900px 700px at 8% -5%, hsl(var(--primary) / 0.18), transparent 55%)",
-                "radial-gradient(800px 600px at 100% 0%, hsl(265 85% 60% / 0.14), transparent 55%)",
-                "radial-gradient(700px 500px at 50% 110%, hsl(190 90% 55% / 0.10), transparent 60%)",
-                "radial-gradient(600px 400px at 95% 85%, hsl(330 80% 60% / 0.07), transparent 60%)",
-              ].join(","),
-              filter: "saturate(1.1)",
-            }}
-          />
-          {/* Subtle grid pattern */}
-          <div
-            aria-hidden
-            className="pointer-events-none fixed inset-0 z-0 opacity-[0.04] animate-fade-in"
-            style={{
-              backgroundImage:
-                "linear-gradient(hsl(var(--primary)/0.7) 1px, transparent 1px), linear-gradient(90deg, hsl(var(--primary)/0.7) 1px, transparent 1px)",
-              backgroundSize: "56px 56px",
-              maskImage:
-                "radial-gradient(ellipse 90% 70% at 50% 30%, black 40%, transparent 85%)",
-              WebkitMaskImage:
-                "radial-gradient(ellipse 90% 70% at 50% 30%, black 40%, transparent 85%)",
-            }}
-          />
-          {/* Fine noise grain */}
-          <div
-            aria-hidden
-            className="pointer-events-none fixed inset-0 z-0 opacity-[0.05] mix-blend-overlay animate-fade-in"
-            style={{
-              backgroundImage:
-                "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 0.55 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>\")",
-            }}
-          />
-          {/* Vignette for depth */}
-          <div
-            aria-hidden
-            className="pointer-events-none fixed inset-0 z-0 animate-fade-in"
-            style={{
-              background:
-                "radial-gradient(ellipse 100% 80% at 50% 40%, transparent 55%, hsl(220 35% 2% / 0.55) 100%)",
-            }}
-          />
-        </>
-      )}
-      <div className="relative z-10">
-      {/* Stale data banner */}
+    <div className="relative min-h-screen bg-background">
       {isStale && isLive && (
         <div className="border-b border-[hsl(40,80%,50%)]/30 bg-[hsl(40,80%,50%)]/10 px-4 py-2 text-center text-xs text-[hsl(40,80%,50%)]">
           <AlertTriangle size={12} className="mr-1 inline" />
@@ -475,29 +192,23 @@ export default function Index() {
         </div>
       )}
 
-      {/* Demo data confirmation */}
       <DemoDataConfirmDialog
         open={showDemoConfirm}
         onConfirm={() => { resetToDemo(); setShowDemoConfirm(false); }}
         onCancel={() => setShowDemoConfirm(false)}
       />
-      {/* ─── ROW 1: Title + Status ──────────────────── */}
-      <header className={`sticky top-0 z-30 border-b transition-all ${enhancedView ? "border-white/5 bg-[hsl(220_25%_6%/0.55)] shadow-[0_1px_0_0_hsl(var(--primary)/0.18),0_20px_50px_-30px_hsl(var(--primary)/0.35)] backdrop-blur-xl backdrop-saturate-150" : "border-border bg-background/80 backdrop-blur-md"}`}>
-        <div className={`container ${enhancedView ? "py-4" : "py-3"}`}>
-          {/* Row 1: Title + Status */}
+
+      <header className="sticky top-0 z-30 border-b border-border bg-background/80 backdrop-blur-md">
+        <div className="container py-3">
+          {/* Row 1: title + status */}
           <div className="flex items-center justify-between gap-4">
             <div className="min-w-0">
-              <h1 className={`font-extrabold tracking-tight text-foreground ${enhancedView ? "text-2xl sm:text-[1.75rem]" : "text-xl sm:text-2xl"}`}>
+              <h1 className="text-xl sm:text-2xl font-extrabold tracking-tight text-foreground">
                 Best Performing Themes{" "}
                 <span className="text-primary">{formatDate(lastFetched)}</span>
               </h1>
-              {enhancedView && (
-                <p className="mt-0.5 text-[11px] text-muted-foreground">
-                  {formatTime(lastFetched)} · {themes.length} themes{isLive ? ` · ${symbolsFetched} symbols` : ""}
-                </p>
-              )}
             </div>
-            <div className={`flex items-center gap-2 text-xs text-muted-foreground ${enhancedView ? "flex-wrap justify-end" : ""}`}>
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
               {isLive ? (
                 <span className="inline-flex items-center gap-1 text-gain-medium">
                   <Wifi size={12} /> Live
@@ -523,21 +234,6 @@ export default function Index() {
                   Cached
                 </span>
               )}
-              {dispersion && (
-                <TooltipProvider delayDuration={200}>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <span className={`inline-flex items-center gap-1 rounded border ${getDispersionColorClass(dispersion.score).border} ${getDispersionColorClass(dispersion.score).bg} px-1.5 py-0.5 text-[10px] font-semibold ${getDispersionColorClass(dispersion.score).text} cursor-help`}>
-                        Dispersion: {dispersion.score.toFixed(1)}σ
-                      </span>
-                    </TooltipTrigger>
-                    <TooltipContent side="bottom" className="max-w-[220px] text-xs">
-                      <p className="font-semibold mb-1">{dispersion.label}</p>
-                      <p className="text-muted-foreground">{dispersion.tooltip}</p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              )}
               {spy.perf_1d !== null && (
                 <TooltipProvider delayDuration={200}>
                   <Tooltip>
@@ -551,27 +247,23 @@ export default function Index() {
                       </span>
                     </TooltipTrigger>
                     <TooltipContent side="bottom" className="max-w-[220px] text-xs">
-                      <p className="font-semibold mb-1">S&P 500 Benchmark</p>
+                      <p className="font-semibold mb-1">S&amp;P 500 Benchmark</p>
                       <p className="text-muted-foreground">All "vs SPY" values compare theme performance to this index</p>
                     </TooltipContent>
                   </Tooltip>
                 </TooltipProvider>
               )}
-              {!enhancedView && (
-                <>
-                  <span className="hidden sm:inline">· {formatTime(lastFetched)}</span>
-                  <span className="hidden sm:inline">· {themes.length} themes</span>
-                  {isLive && <span className="hidden sm:inline">· {symbolsFetched} symbols</span>}
-                </>
-              )}
+              <span className="hidden sm:inline">· {formatTime(lastFetched)}</span>
+              <span className="hidden sm:inline">· {themes.length} themes</span>
+              {isLive && <span className="hidden sm:inline">· {symbolsFetched} symbols</span>}
               {scanProgress && scanProgress.failed > 0 && (
                 <span className="text-[10px] text-destructive">⚠ {scanProgress.failed} unavailable</span>
               )}
             </div>
           </div>
 
-          {/* Search bar */}
-          <div className={enhancedView ? "mt-3" : "mt-2.5"}>
+          {/* Search */}
+          <div className="mt-2.5">
             <ThemeSearchBar
               query={searchQuery}
               setQuery={setSearchQuery}
@@ -582,106 +274,147 @@ export default function Index() {
             />
           </div>
 
-          {/* Row 2: Timeframes + Actions — STANDARD MODE ONLY (in enhanced, these move into the toolbar above the cards) */}
-          {!enhancedView && (
-            <div className="mt-2.5 flex items-center justify-between gap-3">
-              {/* Left: Timeframe pills */}
-              <div className="flex items-center gap-2">
-                <div className="flex rounded-md border border-border bg-secondary/50">
-                  {TIMEFRAMES.map((tf) => (
-                    <button
-                      key={tf}
-                      onClick={() => setActiveTimeframe(tf)}
-                      className={`px-3 py-1.5 text-xs font-semibold transition-colors ${
-                        activeTimeframe === tf
-                          ? "bg-primary text-primary-foreground"
-                          : "text-muted-foreground hover:text-foreground"
-                      }`}
-                    >
-                      {tf}
-                    </button>
-                  ))}
-                </div>
-
-                {/* View switcher */}
-                <TooltipProvider delayDuration={200}>
-                  <div className="flex items-center rounded-md border border-border bg-secondary/50">
-                    {([
-                      { key: "cards" as const, icon: <LayoutGrid size={14} />, label: "Card Grid" },
-                      { key: "list" as const, icon: <List size={14} />, label: "Ranked List" },
-                      { key: "heatmap" as const, icon: <Flame size={14} />, label: "Heatmap" },
-                      { key: "bars" as const, icon: <BarChart3 size={14} />, label: "Bar Chart" },
-                      { key: "bubble" as const, icon: <Circle size={14} />, label: "Bubble Chart" },
-                    ]).map((v) => (
-                      <Tooltip key={v.key}>
-                        <TooltipTrigger asChild>
-                          <button
-                            onClick={() => switchView(v.key)}
-                            className={`p-1.5 transition-colors ${
-                              dashboardView === v.key
-                                ? "bg-primary text-primary-foreground"
-                                : "text-muted-foreground hover:text-foreground"
-                            }`}
-                          >
-                            {v.icon}
-                          </button>
-                        </TooltipTrigger>
-                        <TooltipContent side="bottom" className="text-xs">{v.label}</TooltipContent>
-                      </Tooltip>
-                    ))}
-                  </div>
-                </TooltipProvider>
-              </div>
-
-              {/* Right: Primary actions — standard mode */}
-              <div className="flex items-center gap-2">
-                {renderHeaderActions()}
-              </div>
-            </div>
-          )}
-
-          {/* Enhanced mode: compact actions row only (timeframes/views moved above cards; tabs go to side rail) */}
-          {enhancedView && (
-            <div className="mt-3 flex items-center justify-end gap-2">
-              {renderHeaderActions()}
-            </div>
-          )}
-
-          {/* Row 3: Tab Navigation — STANDARD MODE ONLY (in enhanced, tabs move to left vertical rail) */}
-          {!enhancedView && (
-            <div className="mt-3 flex items-center gap-1 border-t border-border/50 pt-2.5">
-              {dashboardTabs.map((tab) => (
-                <Link
-                  key={tab.to}
-                  to={tab.to}
-                  className={`relative inline-flex items-center gap-1.5 rounded-md px-4 py-2 text-sm font-medium transition-colors ${
-                    tab.active
-                      ? "bg-primary/10 text-primary border-b-2 border-primary"
-                      : `text-muted-foreground hover:bg-accent hover:text-foreground ${tab.color}`
+          {/* Row 2: Timeframes + Actions */}
+          <div className="mt-2.5 flex items-center justify-between gap-3 flex-wrap">
+            <div className="flex rounded-md border border-border bg-secondary/50">
+              {TIMEFRAMES.map((tf) => (
+                <button
+                  key={tf}
+                  onClick={() => setActiveTimeframe(tf)}
+                  className={`px-3 py-1.5 text-xs font-semibold transition-colors ${
+                    activeTimeframe === tf
+                      ? "bg-primary text-primary-foreground"
+                      : "text-muted-foreground hover:text-foreground"
                   }`}
                 >
-                  <span className={tab.active ? "text-primary" : tab.color}>{tab.icon}</span>
-                  {tab.label}
-                  {tab.badge && (
-                    <span className={`inline-flex items-center gap-0.5 rounded-full px-1.5 py-0 text-[9px] font-bold ${
-                      tab.to === "/alerts"
-                        ? "bg-destructive text-destructive-foreground"
-                        : "bg-primary/20 text-primary"
-                    }`}>
-                      {tab.badge}
-                    </span>
-                  )}
-                  {tab.pulse && (
-                    <span className="h-2 w-2 rounded-full bg-[hsl(40,80%,50%)] animate-pulse" title="EOD not saved today" />
-                  )}
-                </Link>
+                  {tf}
+                </button>
               ))}
             </div>
-          )}
+
+            <div className="flex items-center gap-2">
+              <button
+                onClick={startFullScan}
+                disabled={isFullScanning || isLoading}
+                className="rounded-md border border-primary/40 bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary transition-colors hover:bg-primary/20 disabled:opacity-50"
+                title="Update all themes sequentially"
+              >
+                {isFullScanning ? (
+                  <span className="inline-flex items-center gap-1">
+                    <Loader2 size={12} className="animate-spin" /> Scanning…
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1">
+                    <ScanLine size={12} /> Full Scan
+                  </span>
+                )}
+              </button>
+              {fullScanStatus && (
+                <span className="hidden sm:inline-flex max-w-[200px] items-center gap-1 truncate text-[10px] text-muted-foreground" title={fullScanStatus}>
+                  {fullScanStatus}
+                  {!isFullScanning && fullScanStatus.includes("ticker") && (
+                    <button onClick={clearProgress} className="ml-1 rounded p-0.5 text-destructive hover:bg-destructive/10" title="Clear">
+                      <X size={10} />
+                    </button>
+                  )}
+                </span>
+              )}
+              <HelpButton />
+              <div className="relative">
+                <button
+                  onClick={() => setShowOptions(!showOptions)}
+                  className="inline-flex items-center gap-1 rounded-md border border-border p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                  title="More options"
+                >
+                  <Settings size={14} />
+                  <ChevronDown size={10} className={`transition-transform ${showOptions ? "rotate-180" : ""}`} />
+                </button>
+                {showOptions && (
+                  <>
+                    <div className="fixed inset-0 z-40" onClick={() => setShowOptions(false)} />
+                    <div className="absolute right-0 top-full z-50 mt-1 w-56 rounded-lg border border-border bg-card p-1 shadow-xl">
+                      {isLive ? (
+                        <button
+                          onClick={() => { setShowDemoConfirm(true); setShowOptions(false); }}
+                          className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-xs text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+                        >
+                          <WifiOff size={13} /> Switch to Demo Data
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => { fetchLiveData(); setShowOptions(false); }}
+                          disabled={isLoading}
+                          className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-xs text-gain-medium hover:bg-accent transition-colors disabled:opacity-50"
+                        >
+                          <Wifi size={13} /> Go Live (All)
+                        </button>
+                      )}
+                      <button
+                        onClick={() => { setShowSelector(!showSelector); setShowOptions(false); }}
+                        className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-xs text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+                      >
+                        <ScanLine size={13} /> {showSelector ? "Hide" : "Select"} Themes
+                      </button>
+                      <button
+                        onClick={() => { setShowPlaceholders(!showPlaceholders); setShowOptions(false); }}
+                        className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-xs text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+                      >
+                        <LayoutDashboard size={13} /> {showPlaceholders ? "Hide" : "Show"} Empty Themes
+                      </button>
+                      <button
+                        onClick={() => { handleExport(); setShowOptions(false); }}
+                        className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-xs text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+                      >
+                        <Download size={13} /> Export CSV
+                      </button>
+                      <button
+                        onClick={() => { setShowValidateDialog(true); setShowOptions(false); }}
+                        className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-xs text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+                      >
+                        <ShieldCheck size={13} /> Validate Tickers
+                      </button>
+                      <button
+                        onClick={() => { isLive && fetchLiveData(); setShowOptions(false); }}
+                        disabled={isLoading || !isLive}
+                        className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-xs text-muted-foreground hover:bg-accent hover:text-foreground transition-colors disabled:opacity-30"
+                      >
+                        <RefreshCw size={13} /> Refresh Data
+                      </button>
+                      <div className="my-1 border-t border-border" />
+                      <Link
+                        to="/admin"
+                        onClick={() => setShowOptions(false)}
+                        className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-xs text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+                      >
+                        <Settings size={13} /> Manage Themes &amp; Tickers
+                      </Link>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Row 3: tab navigation */}
+          <div className="mt-3 flex items-center gap-1 border-t border-border/50 pt-2.5 flex-wrap">
+            {dashboardTabs.map((tab) => (
+              <Link
+                key={tab.to}
+                to={tab.to}
+                className={`relative inline-flex items-center gap-1.5 rounded-md px-4 py-2 text-sm font-medium transition-colors ${
+                  tab.active
+                    ? "bg-primary/10 text-primary border-b-2 border-primary"
+                    : `text-muted-foreground hover:bg-accent hover:text-foreground ${tab.color}`
+                }`}
+              >
+                <span className={tab.active ? "text-primary" : tab.color}>{tab.icon}</span>
+                {tab.label}
+              </Link>
+            ))}
+          </div>
         </div>
       </header>
 
-      {/* Loading overlay */}
       {isLoading && (
         <div className="container py-4">
           <div className="flex items-center gap-3 rounded-lg border border-border bg-card p-4">
@@ -696,7 +429,6 @@ export default function Index() {
         </div>
       )}
 
-      {/* ─── THEME SELECTOR ──────────────────────────── */}
       {showSelector && (
         <div className="container py-4">
           <div className="rounded-lg border border-border bg-card p-4">
@@ -705,8 +437,8 @@ export default function Index() {
                 <p className="text-sm font-medium text-foreground">
                   Select Themes to Refresh ({selectedThemes.size} selected)
                 </p>
-              <p className="text-xs text-muted-foreground">
-                  Select specific themes to refresh. Finnhub free: 60 calls/min — plenty for normal use.
+                <p className="text-xs text-muted-foreground">
+                  Finnhub free: 60 calls/min — plenty for normal use.
                 </p>
               </div>
               <div className="flex items-center gap-2">
@@ -751,261 +483,51 @@ export default function Index() {
         </div>
       )}
 
-      <div className={enhancedView ? "container px-4 py-8 sm:px-8 sm:py-10" : ""}>
-        <div className={enhancedView ? "flex gap-6 lg:gap-8" : ""}>
-          {/* ── Enhanced-mode left vertical nav rail ── */}
-          {enhancedView && (
-            <aside className="sticky top-[140px] hidden h-fit w-52 shrink-0 lg:block">
-              <nav className="flex flex-col gap-1 rounded-2xl border border-white/[0.06] bg-gradient-to-b from-white/[0.03] to-white/[0.005] p-2 shadow-[0_20px_40px_-30px_hsl(var(--primary)/0.3),inset_0_1px_0_0_hsl(0_0%_100%/0.04)] backdrop-blur-md">
-                <p className="px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">Navigate</p>
-                {dashboardTabs.map((tab) => (
-                  <Link
-                    key={tab.to}
-                    to={tab.to}
-                    className={`group relative inline-flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-medium transition-all ${
-                      tab.active
-                        ? "bg-primary/15 text-primary shadow-[inset_0_0_0_1px_hsl(var(--primary)/0.3)]"
-                        : `text-muted-foreground hover:bg-white/[0.04] hover:text-foreground ${tab.color}`
-                    }`}
-                  >
-                    {tab.active && (
-                      <span className="absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r-full bg-primary shadow-[0_0_12px_hsl(var(--primary)/0.6)]" />
-                    )}
-                    <span className={tab.active ? "text-primary" : tab.color}>{tab.icon}</span>
-                    <span className="flex-1">{tab.label}</span>
-                    {tab.badge && (
-                      <span className={`inline-flex items-center justify-center rounded-full px-1.5 py-0 text-[9px] font-bold ${
-                        tab.to === "/alerts"
-                          ? "bg-destructive text-destructive-foreground"
-                          : "bg-primary/20 text-primary"
-                      }`}>
-                        {tab.badge}
-                      </span>
-                    )}
-                    {tab.pulse && (
-                      <span className="h-2 w-2 rounded-full bg-[hsl(40,80%,50%)] animate-pulse" title="EOD not saved today" />
-                    )}
-                  </Link>
-                ))}
-              </nav>
-            </aside>
-          )}
-
-          {/* ── Main content column ── */}
-          <main className={`min-w-0 flex-1 transition-all ${enhancedView ? "" : "container py-6"}`}>
-            {/* Mobile-only horizontal nav (Enhanced mode, lg-) */}
-            {enhancedView && (
-              <nav className="mb-4 flex gap-1.5 overflow-x-auto rounded-xl border border-white/[0.06] bg-white/[0.02] p-1.5 backdrop-blur-md lg:hidden">
-                {dashboardTabs.map((tab) => (
-                  <Link
-                    key={tab.to}
-                    to={tab.to}
-                    className={`relative inline-flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-all ${
-                      tab.active
-                        ? "bg-primary/15 text-primary"
-                        : `text-muted-foreground hover:bg-white/[0.04] hover:text-foreground ${tab.color}`
-                    }`}
-                  >
-                    <span className={tab.active ? "text-primary" : tab.color}>{tab.icon}</span>
-                    {tab.label}
-                  </Link>
-                ))}
-              </nav>
+      <main className="container py-6">
+        {searchResult && (
+          <div className="mb-4 flex items-center gap-2 rounded-lg border border-primary/20 bg-primary/5 px-4 py-2.5 text-sm">
+            <span className="font-medium text-foreground">
+              {searchResult.matchingThemes.length > 0
+                ? `Showing ${searchResult.matchingThemes.length} theme${searchResult.matchingThemes.length === 1 ? "" : "s"} matching "${searchQuery}"`
+                : `No themes match your query`}
+            </span>
+            {searchResult.explanation && (
+              <span className="text-xs text-muted-foreground">· {searchResult.explanation}</span>
             )}
+            <button onClick={clearSearch} className="ml-auto inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground">
+              Clear <X size={12} />
+            </button>
+          </div>
+        )}
 
-            {/* Search results banner */}
-            {searchResult && (
-              <div className="mb-4 flex items-center gap-2 rounded-lg border border-primary/20 bg-primary/5 px-4 py-2.5 text-sm">
-                <span className="font-medium text-foreground">
-                  {searchResult.matchingThemes.length > 0
-                    ? `Showing ${searchResult.matchingThemes.length} theme${searchResult.matchingThemes.length === 1 ? "" : "s"} matching "${searchQuery}"`
-                    : `No themes match your query`}
-                </span>
-                {searchResult.explanation && (
-                  <span className="text-xs text-muted-foreground">· {searchResult.explanation}</span>
-                )}
-                <button onClick={clearSearch} className="ml-auto inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground">
-                  Clear <X size={12} />
-                </button>
-              </div>
-            )}
+        <HeatmapGridView
+          themes={themes}
+          onCardClick={setDrilldownTheme}
+          onInfoClick={(t) => { setDrilldownTheme(t); setDrilldownDefaultTab("news"); }}
+          getThemeSignals={getThemeSignals}
+          dimmedThemes={searchMatchSet}
+        />
+      </main>
 
-            {/* Enhanced-mode toolbar above the cards: Timeframes (left) + View switcher (right) */}
-            {enhancedView && (
-              <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/[0.06] bg-white/[0.025] px-3 py-2 shadow-[0_10px_30px_-20px_hsl(var(--primary)/0.3),inset_0_1px_0_0_hsl(0_0%_100%/0.04)] backdrop-blur-md">
-                <div className="flex items-center gap-2">
-                  <span className="px-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">Timeframe</span>
-                  <div className="flex rounded-lg border border-white/[0.06] bg-black/20">
-                    {TIMEFRAMES.map((tf) => (
-                      <button
-                        key={tf}
-                        onClick={() => setActiveTimeframe(tf)}
-                        className={`px-3 py-1.5 text-xs font-semibold transition-colors ${
-                          activeTimeframe === tf
-                            ? "bg-primary text-primary-foreground"
-                            : "text-muted-foreground hover:text-foreground"
-                        }`}
-                      >
-                        {tf}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <span className="px-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">View</span>
-                  <TooltipProvider delayDuration={200}>
-                    <div className="flex items-center rounded-lg border border-white/[0.06] bg-black/20">
-                      {([
-                        { key: "cards" as const, icon: <LayoutGrid size={14} />, label: "Card Grid" },
-                        { key: "list" as const, icon: <List size={14} />, label: "Ranked List" },
-                        { key: "heatmap" as const, icon: <Flame size={14} />, label: "Heatmap" },
-                        { key: "bars" as const, icon: <BarChart3 size={14} />, label: "Bar Chart" },
-                        { key: "bubble" as const, icon: <Circle size={14} />, label: "Bubble Chart" },
-                      ]).map((v) => (
-                        <Tooltip key={v.key}>
-                          <TooltipTrigger asChild>
-                            <button
-                              onClick={() => switchView(v.key)}
-                              className={`p-1.5 transition-colors ${
-                                dashboardView === v.key
-                                  ? "bg-primary text-primary-foreground"
-                                  : "text-muted-foreground hover:text-foreground"
-                              }`}
-                            >
-                              {v.icon}
-                            </button>
-                          </TooltipTrigger>
-                          <TooltipContent side="bottom" className="text-xs">{v.label}</TooltipContent>
-                        </Tooltip>
-                      ))}
-                    </div>
-                  </TooltipProvider>
-                </div>
-              </div>
-            )}
-
-            <div
-              className={`relative transition-opacity duration-200 ${
-                enhancedView
-                  ? "rounded-3xl border border-white/[0.06] bg-gradient-to-b from-white/[0.025] to-white/[0.005] p-6 shadow-[0_40px_80px_-40px_hsl(var(--primary)/0.35),0_0_0_1px_hsl(var(--border)/0.35),inset_0_1px_0_0_hsl(0_0%_100%/0.04)] backdrop-blur-md sm:p-8"
-                  : ""
-              }`}
-              key={dashboardView}
-            >
-          {dashboardView === "cards" && (
-            <>
-              <Section
-                icon={<TrendingUp size={18} />}
-                title="Strong / Best Performing"
-                accent="primary"
-                themes={strong}
-                onCardClick={setDrilldownTheme}
-                fetchVolume={fetchVolume}
-                getThemeSignals={getThemeSignals}
-                dimmedThemes={searchMatchSet}
-                getNewsCount={getThemeNewsCount}
-                hasNegativeNews={hasNegativeNews}
-                onNewsBadgeClick={handleNewsBadgeClick}
-                getThemeFundamentalScore={getThemeFundamentalScore}
-                onFundamentalBadgeClick={(t) => { setDrilldownTheme(t); setDrilldownDefaultTab("fundamentals"); }}
-                getThemeSentiment={getThemeSentiment}
-              />
-              {neutral.length > 0 && (
-                <Section
-                  icon={<TrendingUp size={18} />}
-                  title="Neutral / Mixed"
-                  accent="muted"
-                  themes={neutral}
-                  onCardClick={setDrilldownTheme}
-                  fetchVolume={fetchVolume}
-                  getThemeSignals={getThemeSignals}
-                  dimmedThemes={searchMatchSet}
-                  getNewsCount={getThemeNewsCount}
-                  hasNegativeNews={hasNegativeNews}
-                  onNewsBadgeClick={handleNewsBadgeClick}
-                  getThemeFundamentalScore={getThemeFundamentalScore}
-                  onFundamentalBadgeClick={(t) => { setDrilldownTheme(t); setDrilldownDefaultTab("fundamentals"); }}
-                  getThemeSentiment={getThemeSentiment}
-                />
-              )}
-              {weak.length > 0 && (
-                <Section
-                  icon={<TrendingDown size={18} />}
-                  title="Weaker / Lagging"
-                  accent="destructive"
-                  themes={weak}
-                  onCardClick={setDrilldownTheme}
-                  fetchVolume={fetchVolume}
-                  getThemeSignals={getThemeSignals}
-                  dimmedThemes={searchMatchSet}
-                  getNewsCount={getThemeNewsCount}
-                  hasNegativeNews={hasNegativeNews}
-                  onNewsBadgeClick={handleNewsBadgeClick}
-                  getThemeFundamentalScore={getThemeFundamentalScore}
-                  onFundamentalBadgeClick={(t) => { setDrilldownTheme(t); setDrilldownDefaultTab("fundamentals"); }}
-                  getThemeSentiment={getThemeSentiment}
-                />
-              )}
-            </>
-          )}
-
-          {dashboardView === "list" && (
-            <RankedListView
-              themes={themes}
-              onCardClick={setDrilldownTheme}
-              getThemeSignals={getThemeSignals}
-              dimmedThemes={searchMatchSet}
-              getNewsCount={getThemeNewsCount}
-              getThemeFundamentalScore={getThemeFundamentalScore}
-              getThemeSentiment={getThemeSentiment}
-            />
-          )}
-
-          {dashboardView === "heatmap" && (
-            <HeatmapGridView
-              themes={themes}
-              onCardClick={setDrilldownTheme}
-              onInfoClick={handleMomentumInfoClick}
-              getThemeSignals={getThemeSignals}
-              dimmedThemes={searchMatchSet}
-            />
-          )}
-
-          {dashboardView === "bubble" && (
-            <DashboardBubbleView
-              themes={themes}
-              getThemeSignals={getThemeSignals}
-              dimmedThemes={searchMatchSet}
-            />
-          )}
-
-          {dashboardView === "bars" && (
-            <BarChartView
-              themes={themes}
-              onCardClick={setDrilldownTheme}
-              getThemeSignals={getThemeSignals}
-              dimmedThemes={searchMatchSet}
-              getThemeFundamentalScore={getThemeFundamentalScore}
-            />
-          )}
-            </div>
-          </main>
-        </div>
-      </div>
-
-      {/* ─── FOOTER ──────────────────────────────────── */}
       <footer className="border-t border-border py-6 text-center text-xs text-muted-foreground">
         {isLive
           ? `Live data via Finnhub · ${symbolsFetched} symbols fetched`
-          : "Demo data · Click \"Go Live\" to fetch real-time prices via Finnhub"
-        }
+          : "Demo data · Click \"Go Live\" to fetch real-time prices via Finnhub"}
       </footer>
 
       <ValidateTickersDialog open={showValidateDialog} onOpenChange={setShowValidateDialog} />
-      <ThemeDrilldownModal theme={drilldownTheme} open={!!drilldownTheme} onOpenChange={(o) => { if (!o) { setDrilldownTheme(null); setDrilldownDefaultTab("tickers"); } }} newsArticles={drilldownTheme ? getThemeArticles(drilldownTheme.tickers.map(t => t.symbol)) : []} fetchNewsForTheme={fetchThemeNews} fundamentals={drilldownTheme ? getCachedFundamentals(drilldownTheme.tickers.filter(t => !t.skipped).map(t => t.symbol)) : null} fetchFundamentals={fetchFundamentals} isFundamentalsLoading={drilldownTheme ? isFundLoading(drilldownTheme.tickers.filter(t => !t.skipped).map(t => t.symbol)) : false} defaultTab={drilldownDefaultTab} />
+      <ThemeDrilldownModal
+        theme={drilldownTheme}
+        open={!!drilldownTheme}
+        onOpenChange={(o) => { if (!o) { setDrilldownTheme(null); setDrilldownDefaultTab("tickers"); } }}
+        newsArticles={drilldownTheme ? getThemeArticles(drilldownTheme.tickers.map(t => t.symbol)) : []}
+        fetchNewsForTheme={fetchThemeNews}
+        fundamentals={drilldownTheme ? getCachedFundamentals(drilldownTheme.tickers.filter(t => !t.skipped).map(t => t.symbol)) : null}
+        fetchFundamentals={fetchFundamentals}
+        isFundamentalsLoading={drilldownTheme ? isFundLoading(drilldownTheme.tickers.filter(t => !t.skipped).map(t => t.symbol)) : false}
+        defaultTab={drilldownDefaultTab}
+      />
 
-      {/* News Panel (slide-in) */}
       {newsPanelTheme && (
         <NewsPanel
           themeName={newsPanelTheme.theme_name}
@@ -1016,126 +538,6 @@ export default function Index() {
           sentiment={newsPanelSentiment}
         />
       )}
-
-      {/* Theme Momentum Index slide-in panel */}
-      <ThemeMomentumPanel
-        theme={momentumPanelTheme}
-        open={!!momentumPanelTheme}
-        onClose={() => { setMomentumPanelTheme(null); setMomentumPanelSentiment(null); }}
-        articles={momentumPanelArticles}
-        aiSummary={momentumPanelSummary}
-        isLoadingSummary={momentumPanelSummaryLoading}
-        sentiment={momentumPanelSentiment}
-        fundamentalsBySymbol={stockFundamentalsMap}
-        relVolBySymbol={relVolBySymbol}
-      />
-      </div>
     </div>
-  );
-}
-
-function Section({
-  icon,
-  title,
-  accent,
-  themes,
-  onCardClick,
-  fetchVolume,
-  getThemeSignals,
-  dimmedThemes,
-  getNewsCount,
-  hasNegativeNews,
-  onNewsBadgeClick,
-  getThemeFundamentalScore,
-  onFundamentalBadgeClick,
-  getThemeSentiment,
-}: {
-  icon: React.ReactNode;
-  title: string;
-  accent: "primary" | "destructive" | "muted";
-  themes: ThemeData[];
-  onCardClick?: (theme: ThemeData) => void;
-  fetchVolume?: (symbols: string[]) => void;
-  getThemeSignals?: (symbols: string[]) => import("@/hooks/useVolumeData").ThemeDemandSignals;
-  dimmedThemes?: Set<string> | null;
-  getNewsCount?: (symbols: string[]) => number;
-  hasNegativeNews?: (symbols: string[]) => boolean;
-  onNewsBadgeClick?: (theme: ThemeData) => void;
-  getThemeFundamentalScore?: (symbols: string[]) => number | null;
-  onFundamentalBadgeClick?: (theme: ThemeData) => void;
-  getThemeSentiment?: (themeName: string) => import("@/hooks/useThemeNews").SentimentData | null;
-}) {
-  const accentColor =
-    accent === "primary"
-      ? "text-primary"
-      : accent === "destructive"
-      ? "text-destructive"
-      : "text-muted-foreground";
-
-  // Compute aggregate volume badge for section
-  let volBadge: React.ReactNode = null;
-  if (getThemeSignals && themes.length > 0) {
-    try {
-      const relVols = themes
-        .map(t => {
-          const s = getThemeSignals(t.tickers.map(tk => tk.symbol));
-          return s.relVol;
-        })
-        .filter((v): v is number => v !== null);
-      if (relVols.length > 0) {
-        const avgRel = relVols.reduce((a, b) => a + b, 0) / relVols.length;
-        if (avgRel > 1.4) {
-          volBadge = <span className="inline-flex items-center gap-0.5 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">⚡ elevated volume</span>;
-        } else if (avgRel < 0.8) {
-          volBadge = <span className="inline-flex items-center rounded-full bg-secondary/60 px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">low volume</span>;
-        }
-      }
-    } catch {}
-  }
-
-  return (
-    <section className="mb-8">
-      <div className="mb-4 flex items-center gap-2">
-        <span className={accentColor}>{icon}</span>
-        <h2 className={`text-sm font-bold uppercase tracking-widest ${accentColor}`}>
-          {title}
-        </h2>
-        <span className="rounded-full bg-secondary px-2 py-0.5 text-xs text-muted-foreground">
-          {themes.length}
-        </span>
-        {volBadge}
-      </div>
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 min-[1800px]:grid-cols-4">
-        {themes.map((t, i) => {
-          const isDimmed = dimmedThemes ? !dimmedThemes.has(t.theme_name.toLowerCase()) : false;
-          const symbols = t.tickers.map(tk => tk.symbol);
-          const nc = getNewsCount ? getNewsCount(symbols) : 0;
-          const neg = hasNegativeNews ? hasNegativeNews(symbols) : false;
-          const fScore = getThemeFundamentalScore ? getThemeFundamentalScore(t.tickers.filter(tk => !tk.skipped).map(tk => tk.symbol)) : null;
-          const sentiment = getThemeSentiment ? getThemeSentiment(t.theme_name) : null;
-          return (
-            <div
-              key={t.theme_name}
-              className="transition-all duration-300"
-              style={isDimmed ? { opacity: 0.3, filter: "grayscale(60%)" } : {}}
-            >
-              <ThemeCard
-                theme={t}
-                index={i}
-                onClick={onCardClick}
-                fetchVolume={fetchVolume}
-                getThemeSignals={getThemeSignals}
-                newsCount={nc}
-                newsNegative={neg}
-                onNewsBadgeClick={onNewsBadgeClick}
-                fundamentalScore={fScore}
-                onFundamentalBadgeClick={onFundamentalBadgeClick}
-                newsSentiment={sentiment?.sentiment || null}
-              />
-            </div>
-          );
-        })}
-      </div>
-    </section>
   );
 }
