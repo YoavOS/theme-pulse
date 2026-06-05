@@ -105,8 +105,6 @@ export default function ThemeDrilldownModal({
   isFundamentalsLoading?: boolean;
   defaultTab?: "tickers" | "news" | "fundamentals";
 }) {
-   const { isPinned, togglePin } = useWatchlist();
-   const navigate = useNavigate();
    const [sortKey, setSortKey] = useState<SortKey>(defaultSortKey || "pct");
    const [sortDir, setSortDir] = useState<SortDir>("desc");
    const [extras, setExtras] = useState<Record<string, TickerExtra>>({});
