@@ -1,9 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { ArrowLeft, BarChart3, Waves, RefreshCw } from "lucide-react";
+import { ArrowLeft, BarChart3, Waves } from "lucide-react";
 import { useThemeIntelligence } from "@/hooks/useThemeIntelligence";
-import { supabase } from "@/integrations/supabase/client";
-import { toast } from "sonner";
 import OverviewTab from "@/components/intelligence/OverviewTab";
 import MoneyFlowTab from "@/components/intelligence/MoneyFlowTab";
 import React from "react";
@@ -19,41 +17,11 @@ type SubTabId = typeof SUB_TABS[number]["id"];
 
 export default function ThemeIntelligence() {
   const [activeTab, setActiveTab] = useState<SubTabId>("overview");
-  const [isBackfilling, setIsBackfilling] = useState(false);
-  const { themes, accelerating, fading, isLoading, refetch } = useThemeIntelligence();
-
-  const runBackfill = async () => {
-    if (isBackfilling) return;
-    setIsBackfilling(true);
-    const tId = toast.loading("Backfilling historical data via Yahoo…");
-    try {
-      let offset = 0;
-      let done = false;
-      let totalUpdated = 0;
-      while (!done) {
-        const { data, error } = await supabase.functions.invoke("backfill-theme-performance", {
-          body: { offset, limit: 30 },
-        });
-        if (error) throw new Error(error.message);
-        if (data?.error) throw new Error(data.error);
-        done = data.done;
-        offset = data.next_offset ?? offset;
-        totalUpdated += data.chunkUpdated ?? 0;
-        toast.loading(`Backfilled ${data.processed}/${data.total} symbols…`, { id: tId });
-      }
-      toast.success(`Done — refreshed ${totalUpdated} symbols`, { id: tId });
-      await refetch();
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : String(e), { id: tId });
-    } finally {
-      setIsBackfilling(false);
-    }
-  };
+  const { themes, isLoading } = useThemeIntelligence();
 
   return (
     <CollapsibleProvider key={activeTab} storageKey={`intel-collapsibles-${activeTab}`}>
       <div className="min-h-screen bg-background">
-        {/* Header */}
         <header className="sticky top-0 z-30 border-b border-border bg-background/80 backdrop-blur-md">
           <div className="container flex items-center justify-between py-3">
             <div className="flex items-center gap-3">
@@ -72,15 +40,6 @@ export default function ThemeIntelligence() {
             </div>
             <div className="flex items-center gap-2">
               <ExpandCollapseAll />
-              <button
-                onClick={runBackfill}
-                disabled={isBackfilling}
-                className="flex items-center gap-1.5 rounded-md border border-border bg-background/50 px-2.5 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-60"
-                title="Refresh 1W/1M/3M/YTD via Yahoo Finance"
-              >
-                <RefreshCw size={12} className={isBackfilling ? "animate-spin" : ""} />
-                {isBackfilling ? "Refreshing…" : "Refresh historical"}
-              </button>
               <HelpButton />
             </div>
           </div>

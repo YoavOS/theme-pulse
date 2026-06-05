@@ -529,12 +529,6 @@ export default function ThemeDrilldownModal({
               ? `Last updated: ${new Date(theme.lastUpdated).toLocaleTimeString()}`
               : "Demo data"}
           </span>
-          <button
-            onClick={handleViewWatchlist}
-            className="rounded-md border border-primary/40 bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary transition-colors hover:bg-primary/20"
-          >
-            {pinned ? "View in Watchlist" : "Pin & View Watchlist"}
-          </button>
         </div>
       </DialogContent>
     </Dialog>
