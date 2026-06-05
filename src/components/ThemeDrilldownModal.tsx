@@ -1,9 +1,7 @@
 import { useState, useMemo, useEffect } from "react";
 import { ThemeData } from "@/data/themeData";
-import { useWatchlist } from "@/hooks/useWatchlistContext";
 import { supabase } from "@/integrations/supabase/client";
-import { Pin, X, ExternalLink, ArrowUpDown, Newspaper, BarChart3 } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { X, ExternalLink, ArrowUpDown, Newspaper, BarChart3 } from "lucide-react";
 import { useSpyBenchmark, formatRS } from "@/hooks/useSpyBenchmark";
 import { NewsArticle } from "@/hooks/useThemeNews";
 import { NewsTabContent } from "@/components/NewsPanel";
