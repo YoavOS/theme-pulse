@@ -123,7 +123,8 @@ Deno.serve(async (req) => {
         } else {
           swapped = Number(c ?? 0);
           console.log(`Swap complete: published ${swapped} symbols to live universe`);
-          // Kick off RS recalculation across the new universe (fire-and-forget loop)
+          // Wipe staging so we never keep a "previous universe" snapshot.
+          try { await supabase.rpc("truncate_qualified_rs_staging"); } catch (e) { console.error("truncate staging error:", e); }
           (async () => {
             try {
               let offset = 0;
