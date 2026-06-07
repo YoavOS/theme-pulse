@@ -317,6 +317,34 @@ export default function StorageManager() {
           </Card>
         </div>
 
+        {/* ===== Free Tier Capacity ===== */}
+        {(() => {
+          const FREE_LIMIT_MB = 500; // Lovable Cloud / Supabase free tier DB cap
+          const usedPct = Math.min(100, (totalMb / FREE_LIMIT_MB) * 100);
+          let zone: { label: string; cls: string; bar: string; note: string };
+          if (usedPct >= 85) zone = { label: "Danger Zone", cls: "text-destructive border-destructive/40 bg-destructive/5", bar: "bg-destructive", note: "Approaching the 500 MB free-tier cap — clear caches or upgrade soon." };
+          else if (usedPct >= 60) zone = { label: "Caution Zone", cls: "text-[hsl(40_90%_60%)] border-[hsl(40_90%_60%)]/30 bg-[hsl(40_90%_60%)]/5", bar: "bg-[hsl(40_90%_60%)]", note: "Headroom is shrinking — consider clearing Yahoo cache and old queues." };
+          else zone = { label: "Safe Zone", cls: "text-[hsl(152_80%_55%)] border-[hsl(152_80%_55%)]/30 bg-[hsl(152_80%_55%)]/5", bar: "bg-[hsl(152_80%_55%)]", note: "Well within the 500 MB free-tier database limit." };
+          return (
+            <Card className={`p-4 border ${zone.cls}`}>
+              <div className="flex items-center justify-between gap-3 flex-wrap">
+                <div className="flex items-center gap-2 text-xs uppercase tracking-wider text-muted-foreground">
+                  <ShieldCheck size={12} /> Free Tier Capacity
+                </div>
+                <div className={`text-sm font-bold ${zone.cls.split(" ")[0]}`}>{zone.label}</div>
+              </div>
+              <div className="mt-2 flex items-baseline gap-2 font-['DM_Mono',monospace]">
+                <span className="text-2xl font-bold text-foreground">{totalMb.toFixed(1)} MB</span>
+                <span className="text-xs text-muted-foreground">/ {FREE_LIMIT_MB} MB used ({usedPct.toFixed(1)}%)</span>
+              </div>
+              <div className="mt-2 h-2 w-full rounded-full bg-muted overflow-hidden">
+                <div className={`h-full ${zone.bar} transition-all`} style={{ width: `${usedPct}%` }} />
+              </div>
+              <div className="mt-2 text-[11px] text-muted-foreground">{zone.note}</div>
+            </Card>
+          );
+        })()}
+
         {/* ===== Smart Recommendations ===== */}
         {recommendations.length > 0 && (
           <Card className="p-4 border-[hsl(152_60%_45%/0.3)] bg-[hsl(152_60%_45%/0.04)]">
