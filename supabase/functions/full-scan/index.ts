@@ -8,10 +8,10 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getHistoricalData } from "../_shared/yahooHistory.ts";
 
 const FINNHUB_KEY = Deno.env.get("FINNHUB_API_KEY") || "";
-const TICKERS_PER_CHUNK = 12; // tickers per edge function invocation
-const CALL_DELAY_MS = 1100; // 1100ms between API calls ≈ 1 call/sec (safe for 60/min free tier)
-const MAX_RETRIES = 2;
-const RETRY_DELAY_MS = 30000;
+const TICKERS_PER_CHUNK = 100; // tickers per edge function invocation (Yahoo-first → safe to parallelize)
+const CONCURRENCY = 25;        // concurrent in-flight Yahoo requests
+const MAX_RETRIES = 1;
+const RETRY_DELAY_MS = 15000;
 
 function delay(ms: number) {
   return new Promise((r) => setTimeout(r, ms));
