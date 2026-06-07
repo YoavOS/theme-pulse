@@ -26,6 +26,41 @@ function derive1dReturn(history: HistoricalResult | undefined): number | null {
   return Math.round(((last - prev) / prev) * 10000) / 100;
 }
 
+/**
+ * Compute "RS New High Before Price" within a window of bars.
+ * Returns { hit, daysAgo } where:
+ *   hit      = RS line made its window-high within the last 5 bars
+ *              AND price's window-high happened strictly earlier than the RS high
+ *              (i.e. RS is leading, price hasn't confirmed).
+ *   daysAgo  = bars between today and the RS-high bar (0 = today).
+ */
+function computeRsNewHigh(
+  stockBars: { ts: number; close: number | null }[],
+  spyByTs: Map<number, number>,
+  windowBars: number,
+): { hit: boolean; daysAgo: number | null } {
+  const aligned: { close: number; rs: number }[] = [];
+  for (const b of stockBars) {
+    if (b.close === null || b.close <= 0) continue;
+    const sp = spyByTs.get(b.ts);
+    if (!sp || sp <= 0) continue;
+    aligned.push({ close: b.close, rs: b.close / sp });
+  }
+  if (aligned.length < 10) return { hit: false, daysAgo: null };
+  const slice = aligned.slice(-windowBars);
+  const lastIdx = slice.length - 1;
+
+  let rsMax = -Infinity, rsMaxIdx = 0;
+  let pxMax = -Infinity, pxMaxIdx = 0;
+  for (let i = 0; i < slice.length; i++) {
+    if (slice[i].rs >= rsMax) { rsMax = slice[i].rs; rsMaxIdx = i; }
+    if (slice[i].close >= pxMax) { pxMax = slice[i].close; pxMaxIdx = i; }
+  }
+  const daysAgo = lastIdx - rsMaxIdx;
+  const hit = daysAgo <= 5 && pxMaxIdx < rsMaxIdx;
+  return { hit, daysAgo };
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
