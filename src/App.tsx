@@ -13,6 +13,7 @@ import LiveExecution from "./pages/LiveExecution";
 import Earnings from "./pages/Earnings";
 import MarketDrivers from "./pages/MarketDrivers";
 import MorningBrief from "./pages/MorningBrief";
+import StorageManager from "./pages/StorageManager";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -34,6 +35,7 @@ const App = () => (
             <Route path="/earnings" element={<Earnings />} />
             <Route path="/market-drivers" element={<MarketDrivers />} />
             <Route path="/morning-brief" element={<MorningBrief />} />
+            <Route path="/storage" element={<StorageManager />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>

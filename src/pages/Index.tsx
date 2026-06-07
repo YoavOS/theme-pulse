@@ -6,7 +6,7 @@ import ValidateTickersDialog from "@/components/ValidateTickersDialog";
 import {
   RefreshCw, Download, Wifi, WifiOff, Loader2, Settings, ScanLine, X,
   ShieldCheck, Brain, ChevronDown, LayoutDashboard, AlertTriangle,
-  BarChart3, Zap, Activity, DollarSign, Sun,
+  BarChart3, Zap, Activity, DollarSign, Sun, Database,
 } from "lucide-react";
 import HeatmapGridView from "@/components/dashboard/HeatmapGridView";
 import DemoDataConfirmDialog from "@/components/DemoDataConfirmDialog";
@@ -181,6 +181,7 @@ export default function Index() {
     { to: "/live", label: "Live Execution", icon: <Activity size={14} />, active: false, color: "text-[hsl(160,80%,45%)]" },
     { to: "/market-drivers", label: "Market Drivers", icon: <BarChart3 size={14} />, active: false, color: "text-[hsl(200,80%,55%)]" },
     { to: "/earnings", label: "Earnings", icon: <DollarSign size={14} />, active: false, color: "text-[hsl(40,90%,55%)]" },
+    { to: "/storage", label: "Storage", icon: <Database size={14} />, active: false, color: "text-muted-foreground" },
   ];
 
   return (

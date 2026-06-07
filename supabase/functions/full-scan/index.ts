@@ -8,10 +8,10 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getHistoricalData } from "../_shared/yahooHistory.ts";
 
 const FINNHUB_KEY = Deno.env.get("FINNHUB_API_KEY") || "";
-const TICKERS_PER_CHUNK = 12; // tickers per edge function invocation
-const CALL_DELAY_MS = 1100; // 1100ms between API calls ≈ 1 call/sec (safe for 60/min free tier)
-const MAX_RETRIES = 2;
-const RETRY_DELAY_MS = 30000;
+const TICKERS_PER_CHUNK = 100; // tickers per edge function invocation (Yahoo-first → safe to parallelize)
+const CONCURRENCY = 25;        // concurrent in-flight Yahoo requests
+const MAX_RETRIES = 1;
+const RETRY_DELAY_MS = 15000;
 
 function delay(ms: number) {
   return new Promise((r) => setTimeout(r, ms));
@@ -210,43 +210,46 @@ Deno.serve(async (req) => {
       let failed = 0;
       const results: { symbol: string; status: string }[] = [];
 
-      // Process tickers SEQUENTIALLY — one at a time
-      for (const { symbol } of pending) {
-        const data = await fetchTickerData(sb, symbol);
+      // Process tickers IN PARALLEL — Yahoo-first means we don't need the Finnhub 1/sec gate.
+      // Fan out CONCURRENCY at a time.
+      const pendingSymbols = pending.map(p => p.symbol);
+      const inFlight: Promise<void>[] = [];
+      let cursor = 0;
 
-        if (data.error) {
-          console.log(`FAILED ${symbol}: ${data.error}`);
-          await sb.from("ticker_performance").update({
-            status: "failed",
-            perf_1d: data.perf_1d,
-            perf_1w: data.perf_1w,
-            perf_1m: data.perf_1m,
-            perf_3m: data.perf_3m,
-            perf_ytd: data.perf_ytd,
-            price: data.price,
-            last_scanned: new Date().toISOString(),
-          }).eq("symbol", symbol);
+      const runOne = async (symbol: string) => {
+        const data = await fetchTickerData(sb, symbol);
+        const isFailed = !!data.error;
+        await sb.from("ticker_performance").update({
+          status: isFailed ? "failed" : "done",
+          perf_1d: data.perf_1d,
+          perf_1w: data.perf_1w,
+          perf_1m: data.perf_1m,
+          perf_3m: data.perf_3m,
+          perf_ytd: data.perf_ytd,
+          price: data.price,
+          last_scanned: new Date().toISOString(),
+        }).eq("symbol", symbol);
+        if (isFailed) {
           failed++;
           results.push({ symbol, status: "failed" });
+          console.log(`FAILED ${symbol}: ${data.error}`);
         } else {
-          await sb.from("ticker_performance").update({
-            status: "done",
-            perf_1d: data.perf_1d,
-            perf_1w: data.perf_1w,
-            perf_1m: data.perf_1m,
-            perf_3m: data.perf_3m,
-            perf_ytd: data.perf_ytd,
-            price: data.price,
-            last_scanned: new Date().toISOString(),
-          }).eq("symbol", symbol);
           processed++;
           results.push({ symbol, status: "done" });
-          console.log(`OK ${symbol}: 1D=${data.perf_1d}% 1W=${data.perf_1w}% 1M=${data.perf_1m}% price=${data.price}`);
         }
+      };
 
-        // Delay between tickers
-        await delay(CALL_DELAY_MS);
+      const worker = async () => {
+        while (cursor < pendingSymbols.length) {
+          const idx = cursor++;
+          await runOne(pendingSymbols[idx]);
+        }
+      };
+
+      for (let i = 0; i < Math.min(CONCURRENCY, pendingSymbols.length); i++) {
+        inFlight.push(worker());
       }
+      await Promise.all(inFlight);
 
       // Check remaining
       const { count: remainingCount } = await sb.from("ticker_performance").select("*", { count: "exact", head: true }).in("status", ["pending"]);

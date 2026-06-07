@@ -121,25 +121,24 @@ Deno.serve(async (req) => {
     const quoteMap: Record<string, QuoteResult> = {};
     let rateLimited = false;
 
-    if (useHistorical) {
-      // Historical: shared helper (cache → EOD → Yahoo). Small batch since Yahoo is slower.
-      const batchSize = 5;
-      for (let i = 0; i < uniqueSymbols.length; i += batchSize) {
-        const batch = uniqueSymbols.slice(i, i + batchSize);
-        const results = await Promise.all(batch.map(s => fetchHistoricalQuote(sb, s, yahooPeriod!)));
-        for (const r of results) quoteMap[r.symbol] = r;
+    // Yahoo-first means we can fan out aggressively for both today and historical.
+    const CONCURRENCY = 25;
+    const fetcher = useHistorical
+      ? (s: string) => fetchHistoricalQuote(sb, s, yahooPeriod!)
+      : (s: string) => fetchQuoteDaily(s);
+
+    let cursor = 0;
+    const runWorker = async () => {
+      while (cursor < uniqueSymbols.length) {
+        const idx = cursor++;
+        const r = await fetcher(uniqueSymbols[idx]);
+        quoteMap[r.symbol] = r;
+        if (r.error === "rate_limited") rateLimited = true;
       }
-    } else {
-      // Today: Finnhub /quote (still works on free tier).
-      const batchSize = 10;
-      for (let i = 0; i < uniqueSymbols.length; i += batchSize) {
-        const batch = uniqueSymbols.slice(i, i + batchSize);
-        const results = await Promise.all(batch.map(s => fetchQuoteDaily(s)));
-        for (const r of results) quoteMap[r.symbol] = r;
-        if (results.some(r => r.error === "rate_limited")) { rateLimited = true; break; }
-        if (i + batchSize < uniqueSymbols.length) await new Promise(r => setTimeout(r, 1200));
-      }
-    }
+    };
+    await Promise.all(
+      Array.from({ length: Math.min(CONCURRENCY, uniqueSymbols.length) }, () => runWorker())
+    );
 
     const themes = themeEntries.map(({ name, description, symbols }) => {
       const tickers = symbols.map(s => {
