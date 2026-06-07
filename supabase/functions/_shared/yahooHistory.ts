@@ -38,20 +38,7 @@ const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML,
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-// Map a YahooPeriod → approximate cutoff date (for EOD lookup).
-function periodCutoffDate(period: YahooPeriod): Date {
-  const d = new Date();
-  switch (period) {
-    case "1d":  d.setDate(d.getDate() - 1); break;
-    case "5d":  d.setDate(d.getDate() - 7); break;
-    case "1mo": d.setDate(d.getDate() - 30); break;
-    case "3mo": d.setDate(d.getDate() - 90); break;
-    case "6mo": d.setDate(d.getDate() - 180); break;
-    case "1y":  d.setFullYear(d.getFullYear() - 1); break;
-    case "ytd": return new Date(new Date().getFullYear(), 0, 1);
-  }
-  return d;
-}
+// (legacy periodCutoffDate removed — cutoffs now derive from periodCutoffSeconds below.)
 
 // Period → seconds cutoff (used for slicing 6mo OHLC).
 function periodCutoffSeconds(period: YahooPeriod): number {
