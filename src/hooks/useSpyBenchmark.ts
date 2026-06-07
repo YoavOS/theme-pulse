@@ -41,11 +41,8 @@ export function useSpyBenchmark() {
   const fetchSpy = useCallback(async () => {
     setIsLoading(true);
     try {
-      const { data } = await supabase
-        .from("ticker_performance")
-        .select("perf_1d, perf_1w, perf_1m, perf_3m, perf_ytd, price")
-        .eq("symbol", "SPY")
-        .single();
+      // ticker_performance table removed; SPY now sourced from live session data.
+      const data: any = null;
 
       if (data) {
         const spyData: SpyData = {
