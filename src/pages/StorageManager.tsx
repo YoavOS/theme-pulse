@@ -29,6 +29,7 @@ interface TableMeta {
   description: string;
   protected?: boolean;
   rescanRoute?: string;
+  trimRpc?: string; // optional dedupe/trim RPC name
 }
 
 interface SectionMeta {
@@ -67,7 +68,7 @@ const SECTIONS: SectionMeta[] = [
       { table: "theme_tickers", label: "Theme tickers", description: "Symbols mapped to each theme.", protected: true },
       { table: "ticker_performance", label: "Performance snapshot", description: "Latest 1D/1W/1M/3M/YTD per ticker — what the Dashboard scan writes.", rescanRoute: "/" },
       { table: "ticker_volume_cache", label: "Volume cache", description: "Per-ticker volume averages used for Rel Vol / dry-up signals.", rescanRoute: "/intelligence" },
-      { table: "yahoo_history_cache", label: "Yahoo history cache", description: "Cached historical OHLC pulled from Yahoo Finance." },
+      { table: "yahoo_history_cache", label: "Yahoo history cache", description: "Cached historical OHLC pulled from Yahoo Finance. Only the 6-month snapshot is stored; shorter timeframes (5d/1mo/3mo/YTD) are derived on the fly.", trimRpc: "trim_yahoo_cache" },
     ],
   },
   {
@@ -180,6 +181,24 @@ export default function StorageManager() {
     }
   };
 
+  const trimTable = async (rpc: string, label: string) => {
+    setWorking(label);
+    try {
+      const { data, error } = await supabase.rpc(rpc);
+      if (error) throw error;
+      const row = Array.isArray(data) ? data[0] : data;
+      const rows = Number(row?.removed_rows ?? 0);
+      const bytes = Number(row?.freed_bytes ?? 0);
+      const mb = (bytes / 1024 / 1024).toFixed(1);
+      toast({ title: `${label} trimmed`, description: `Removed ${rows.toLocaleString()} rows · freed ${mb} MB` });
+      await load();
+    } catch (e) {
+      toast({ title: `${label} trim failed`, description: String((e as Error).message || e), variant: "destructive" });
+    } finally {
+      setWorking(null);
+    }
+  };
+
   const { totalBytes, totalRows, top3, health, recommendations } = useMemo(() => {
     const all = Object.values(stats);
     const totalBytes = all.reduce((s, r) => s + (r.size_bytes || 0), 0);
@@ -200,7 +219,15 @@ export default function StorageManager() {
     // Smart recommendations
     const recs: { id: string; icon: typeof Trash2; text: string; action?: () => void; freeMb: number }[] = [];
     const yahoo = stats["yahoo_history_cache"];
-    if (yahoo && yahoo.size_bytes > 5 * 1024 * 1024) {
+    if (yahoo && yahoo.size_bytes > 8 * 1024 * 1024) {
+      recs.push({
+        id: "yahoo-trim",
+        icon: Layers,
+        text: `Trim Yahoo cache — dedupe per-period rows & drop snapshots older than 14 days (cache is ${(yahoo.size_bytes / 1024 / 1024).toFixed(1)} MB)`,
+        action: () => trimTable("trim_yahoo_cache", "Yahoo history cache"),
+        freeMb: yahoo.size_bytes / 1024 / 1024 * 0.7,
+      });
+    } else if (yahoo && yahoo.size_bytes > 5 * 1024 * 1024) {
       recs.push({
         id: "yahoo",
         icon: Trash2,
@@ -470,6 +497,18 @@ export default function StorageManager() {
                         {t.rescanRoute && (
                           <Button asChild size="sm" variant="ghost">
                             <Link to={t.rescanRoute}><RefreshCw />Re-scan</Link>
+                          </Button>
+                        )}
+                        {t.trimRpc && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            disabled={busy || !!working}
+                            onClick={() => trimTable(t.trimRpc!, t.label)}
+                            title="Remove duplicate-period rows, stale snapshots, and orphan tickers"
+                          >
+                            {busy ? <Loader2 className="animate-spin" /> : <Layers />}
+                            Trim
                           </Button>
                         )}
                         <Button

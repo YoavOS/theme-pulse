@@ -741,6 +741,16 @@ export type Database = {
           table_name: string
         }[]
       }
+      get_yahoo_cache_breakdown: {
+        Args: never
+        Returns: {
+          newest: string
+          oldest: string
+          payload_bytes: number
+          period: string
+          row_count: number
+        }[]
+      }
       recompute_rs_scan_progress: { Args: never; Returns: undefined }
       release_universe_scan_lock: { Args: never; Returns: undefined }
       set_fundamentals_cron_active: {
@@ -752,6 +762,13 @@ export type Database = {
         Returns: undefined
       }
       swap_qualified_rs_universe: { Args: never; Returns: number }
+      trim_yahoo_cache: {
+        Args: never
+        Returns: {
+          freed_bytes: number
+          removed_rows: number
+        }[]
+      }
       truncate_qualified_rs_staging: { Args: never; Returns: undefined }
       truncate_storage_table: {
         Args: { p_force?: boolean; p_table: string }
