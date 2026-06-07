@@ -53,36 +53,65 @@ function periodCutoffDate(period: YahooPeriod): Date {
   return d;
 }
 
-// 1. Cache lookup
+// Period → seconds cutoff (used for slicing 6mo OHLC).
+function periodCutoffSeconds(period: YahooPeriod): number {
+  const now = Math.floor(Date.now() / 1000);
+  switch (period) {
+    case "1d":  return now - 1 * 86400;
+    case "5d":  return now - 7 * 86400;
+    case "1mo": return now - 30 * 86400;
+    case "3mo": return now - 90 * 86400;
+    case "6mo": return now - 180 * 86400;
+    case "1y":  return now - 365 * 86400;
+    case "ytd": return Math.floor(new Date(new Date().getFullYear(), 0, 1).getTime() / 1000);
+  }
+}
+
+// Cache helper: which row to read for a given requested period.
+// We always persist a single "6mo" row per symbol and derive 1d/5d/1mo/3mo/ytd
+// from it. "1y" still gets its own row because it needs a longer history.
+function storagePeriodFor(p: YahooPeriod): YahooPeriod {
+  return p === "1y" ? "1y" : "6mo";
+}
+
+function buildResultFromOhlc(symbol: string, period: YahooPeriod, ohlc: OHLCBar[], source: HistoricalResult["source"], fetchedAt: string): HistoricalResult {
+  if (period === storagePeriodFor(period)) {
+    // Full window — no slicing.
+    const start = ohlc.find(b => b.close !== null)?.close ?? null;
+    const end = [...ohlc].reverse().find(b => b.close !== null)?.close ?? null;
+    const ret = start && end && start > 0 ? Math.round(((end - start) / start) * 10000) / 100 : null;
+    return { symbol, period, startPrice: start, endPrice: end, returnPct: ret, ohlc, dataPoints: ohlc.length, source, fetchedAt };
+  }
+  const cutoff = periodCutoffSeconds(period);
+  const slice = ohlc.filter(b => b.ts >= cutoff && b.close !== null);
+  const start = slice[0]?.close ?? null;
+  const end = slice[slice.length - 1]?.close ?? null;
+  const ret = start && end && start > 0 ? Math.round(((end - start) / start) * 10000) / 100 : null;
+  return { symbol, period, startPrice: start, endPrice: end, returnPct: ret, ohlc: slice, dataPoints: slice.length, source, fetchedAt };
+}
+
+// 1. Cache lookup — reads the canonical (6mo / 1y) row and slices for shorter requests.
 async function readCache(
   sb: SupabaseClient,
   symbol: string,
   period: YahooPeriod
 ): Promise<HistoricalResult | null> {
+  const storagePeriod = storagePeriodFor(period);
   const { data } = await sb
     .from("yahoo_history_cache")
-    .select("symbol, period, return_pct, start_price, end_price, ohlc, data_points, fetched_at")
+    .select("ohlc, fetched_at")
     .eq("symbol", symbol)
-    .eq("period", period)
+    .eq("period", storagePeriod)
     .gte("fetched_at", new Date(Date.now() - CACHE_TTL_MS).toISOString())
     .maybeSingle();
 
   if (!data) return null;
-  return {
-    symbol,
-    period,
-    startPrice: data.start_price !== null ? Number(data.start_price) : null,
-    endPrice: data.end_price !== null ? Number(data.end_price) : null,
-    returnPct: data.return_pct !== null ? Number(data.return_pct) : null,
-    ohlc: Array.isArray(data.ohlc) ? (data.ohlc as OHLCBar[]) : [],
-    dataPoints: data.data_points ?? 0,
-    source: "cache",
-    fetchedAt: data.fetched_at,
-  };
+  const ohlc = Array.isArray(data.ohlc) ? (data.ohlc as OHLCBar[]) : [];
+  if (ohlc.length === 0) return null;
+  return buildResultFromOhlc(symbol, period, ohlc, "cache", data.fetched_at);
 }
 
-// 2. EOD lookup — returns return_pct only (not full OHLC).
-//    Used for short, recent periods where we already have internal data.
+// 2. EOD lookup — unchanged.
 async function readEod(
   sb: SupabaseClient,
   symbol: string,
@@ -90,7 +119,7 @@ async function readEod(
   todayPrice: number | null
 ): Promise<HistoricalResult | null> {
   if (!todayPrice || todayPrice <= 0) return null;
-  const cutoff = periodCutoffDate(period);
+  const cutoff = new Date(periodCutoffSeconds(period) * 1000);
   const cutoffStr = cutoff.toISOString().slice(0, 10);
 
   const { data: row } = await sb
@@ -107,24 +136,14 @@ async function readEod(
   const ret = Math.round(((todayPrice - start) / start) * 10000) / 100;
 
   return {
-    symbol,
-    period,
-    startPrice: start,
-    endPrice: todayPrice,
-    returnPct: ret,
-    ohlc: [],
-    dataPoints: 1,
-    source: "eod",
-    fetchedAt: new Date().toISOString(),
+    symbol, period, startPrice: start, endPrice: todayPrice, returnPct: ret,
+    ohlc: [], dataPoints: 1, source: "eod", fetchedAt: new Date().toISOString(),
   };
 }
 
-// 3. Yahoo network call
-async function fetchFromYahoo(
-  symbol: string,
-  period: YahooPeriod
-): Promise<HistoricalResult | null> {
-  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=${period}&interval=1d&includePrePost=false`;
+// 3. Yahoo network call — always fetches the storage period (6mo / 1y), never the short period.
+async function fetchFromYahoo(symbol: string, fetchPeriod: YahooPeriod): Promise<HistoricalResult | null> {
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=${fetchPeriod}&interval=1d&includePrePost=false`;
   try {
     const res = await fetch(url, { headers: { "User-Agent": UA, "Accept": "application/json" } });
     if (!res.ok) return null;
@@ -141,37 +160,21 @@ async function fetchFromYahoo(
     const vols: (number | null)[] = q.volume ?? [];
 
     const ohlc: OHLCBar[] = ts.map((t, i) => ({
-      ts: t,
-      open: opens[i] ?? null,
-      high: highs[i] ?? null,
-      low: lows[i] ?? null,
-      close: closes[i] ?? null,
-      volume: vols[i] ?? null,
+      ts: t, open: opens[i] ?? null, high: highs[i] ?? null,
+      low: lows[i] ?? null, close: closes[i] ?? null, volume: vols[i] ?? null,
     })).filter((b) => b.close !== null);
 
     if (ohlc.length < 2) return null;
-    const start = ohlc[0].close as number;
-    const end = ohlc[ohlc.length - 1].close as number;
-    if (start <= 0) return null;
-    const ret = Math.round(((end - start) / start) * 10000) / 100;
 
-    return {
-      symbol,
-      period,
-      startPrice: start,
-      endPrice: end,
-      returnPct: ret,
-      ohlc,
-      dataPoints: ohlc.length,
-      source: "yahoo",
-      fetchedAt: new Date().toISOString(),
-    };
+    return buildResultFromOhlc(symbol, fetchPeriod, ohlc, "yahoo", new Date().toISOString());
   } catch {
     return null;
   }
 }
 
 async function writeCache(sb: SupabaseClient, r: HistoricalResult) {
+  // Only persist the canonical storage period.
+  if (r.period !== storagePeriodFor(r.period)) return;
   await sb.from("yahoo_history_cache").upsert(
     {
       symbol: r.symbol,
@@ -189,7 +192,7 @@ async function writeCache(sb: SupabaseClient, r: HistoricalResult) {
 
 /**
  * Get historical data for a symbol over a period.
- * Order: cache → eod (if todayPrice given) → Yahoo.
+ * Order: cache (canonical 6mo/1y, sliced) → eod → Yahoo (fetches 6mo/1y, caches, slices).
  */
 export async function getHistoricalData(
   sb: SupabaseClient,
@@ -209,26 +212,22 @@ export async function getHistoricalData(
     if (eod && eod.returnPct !== null) return eod;
   }
 
-  // 3. Yahoo
+  // 3. Yahoo — always pull the canonical storage period, cache it, then derive the requested slice.
   await sleep(YAHOO_DELAY_MS);
-  const fromYahoo = await fetchFromYahoo(symbol, period);
+  const storagePeriod = storagePeriodFor(period);
+  const fromYahoo = await fetchFromYahoo(symbol, storagePeriod);
   if (fromYahoo) {
     await writeCache(sb, fromYahoo);
-    return fromYahoo;
+    if (storagePeriod === period) return fromYahoo;
+    return buildResultFromOhlc(symbol, period, fromYahoo.ohlc, "yahoo", fromYahoo.fetchedAt);
   }
 
   return {
-    symbol,
-    period,
-    startPrice: null,
-    endPrice: null,
-    returnPct: null,
-    ohlc: [],
-    dataPoints: 0,
-    source: "none",
-    fetchedAt: new Date().toISOString(),
+    symbol, period, startPrice: null, endPrice: null, returnPct: null,
+    ohlc: [], dataPoints: 0, source: "none", fetchedAt: new Date().toISOString(),
   };
 }
+
 
 /**
  * Helper for "fetch many symbols in parallel with throttling".
