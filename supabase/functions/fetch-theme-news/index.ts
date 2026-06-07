@@ -236,64 +236,13 @@ Deno.serve(async (req) => {
     const symbolsToFetch: string[] = (symbols as string[]).slice(0, 8);
     const allArticles: Article[] = [];
 
-    // ---------- 1. Per-symbol cache check (Finnhub-style stored per symbol) ----------
-    const symbolsNeedingFetch: string[] = [];
-    for (const sym of symbolsToFetch) {
-      const { data: cached } = await sb
-        .from("news_cache")
-        .select("symbol, category, headline, summary, url, source, published_at")
-        .eq("symbol", sym)
-        .gte("fetched_at", cacheCutoff)
-        .limit(15);
-      if (cached && cached.length > 0) {
-        for (const row of cached) {
-          allArticles.push({
-            symbol: row.symbol,
-            category: row.category,
-            headline: row.headline,
-            summary: row.summary,
-            url: row.url || "",
-            source: row.source,
-            published_at: row.published_at,
-          });
-        }
-        console.log(`Cache hit for ${sym}: ${cached.length} articles`);
-      } else {
-        symbolsNeedingFetch.push(sym);
-      }
-    }
+    // News is fetched fresh every request — no persistent cache.
+    // (Strict "lightweight DB" policy: temporary news data is never stored.)
+    const symbolsNeedingFetch: string[] = [...symbolsToFetch];
 
-    // ---------- 2. Cached NewsData (broad query) — keyed by category 'newsdata' + first symbol ----------
-    let needsNewsDataSymbols = symbolsToFetch.length > 0;
-    if (needsNewsDataSymbols && symbolsToFetch.length > 0) {
-      const ndKey = `newsdata:${symbolsToFetch.slice(0, 5).sort().join(",")}`;
-      const { data: ndCached } = await sb
-        .from("news_cache")
-        .select("symbol, category, headline, summary, url, source, published_at")
-        .eq("category", ndKey)
-        .gte("fetched_at", cacheCutoff)
-        .limit(15);
-      if (ndCached && ndCached.length > 0) {
-        for (const row of ndCached) {
-          allArticles.push({
-            symbol: null,
-            category: row.category,
-            headline: row.headline,
-            summary: row.summary,
-            url: row.url || "",
-            source: row.source,
-            published_at: row.published_at,
-          });
-        }
-        console.log(`Cache hit for NewsData broad query: ${ndCached.length} articles`);
-        needsNewsDataSymbols = false;
-      }
-    }
+    // ---------- Parallel fetch from both sources ----------
+    const fetchTasks: Promise<{ articles: Article[] }>[] = [];
 
-    // ---------- 3. Parallel fetch from both sources for what's missing ----------
-    const fetchTasks: Promise<{ articles: Article[]; cacheKey?: string }>[] = [];
-
-    // Finnhub per symbol (sequential under task to respect rate limit)
     if (symbolsNeedingFetch.length > 0) {
       fetchTasks.push((async () => {
         const out: Article[] = [];
@@ -306,73 +255,30 @@ Deno.serve(async (req) => {
       })());
     }
 
-    // NewsData broad symbol query (single call)
-    if (needsNewsDataSymbols && symbolsToFetch.length > 0) {
-      const ndKey = `newsdata:${symbolsToFetch.slice(0, 5).sort().join(",")}`;
+    if (symbolsToFetch.length > 0) {
       fetchTasks.push((async () => {
         const arts = await fetchNewsDataForSymbols(symbolsToFetch);
-        return { articles: arts.map((a) => ({ ...a, category: ndKey })), cacheKey: ndKey };
+        return { articles: arts };
       })());
     }
 
-    // Categories — query both providers in parallel
     for (const cat of categories as string[]) {
-      // Cache check first
-      const { data: catCached } = await sb
-        .from("news_cache")
-        .select("symbol, category, headline, summary, url, source, published_at")
-        .eq("category", cat)
-        .is("symbol", null)
-        .gte("fetched_at", cacheCutoff)
-        .limit(20);
-      if (catCached && catCached.length > 0) {
-        for (const row of catCached) {
-          allArticles.push({
-            symbol: null,
-            category: row.category,
-            headline: row.headline,
-            summary: row.summary,
-            url: row.url || "",
-            source: row.source,
-            published_at: row.published_at,
-          });
-        }
-        console.log(`Cache hit for category ${cat}: ${catCached.length} articles`);
-      } else {
-        fetchTasks.push((async () => {
-          const [fh, nd] = await Promise.all([
-            fetchFinnhubForCategory(cat),
-            fetchNewsDataForCategory(cat),
-          ]);
-          return { articles: [...fh, ...nd] };
-        })());
-      }
+      fetchTasks.push((async () => {
+        const [fh, nd] = await Promise.all([
+          fetchFinnhubForCategory(cat),
+          fetchNewsDataForCategory(cat),
+        ]);
+        return { articles: [...fh, ...nd] };
+      })());
     }
 
     const results = await Promise.all(fetchTasks);
     for (const r of results) allArticles.push(...r.articles);
 
-    // ---------- 4. Dedupe + rank ----------
+    // ---------- Dedupe + rank ----------
     const deduped = dedupeArticles(allArticles);
     const ranked = rankArticles(deduped);
 
-    // ---------- 5. Persist newly fetched (avoid re-storing cache hits — upsert is idempotent on URL) ----------
-    const fetchedNew = ranked.filter((a) => a.url);
-    if (fetchedNew.length > 0) {
-      for (let i = 0; i < fetchedNew.length; i += 50) {
-        const batch = fetchedNew.slice(i, i + 50).map((a) => ({
-          symbol: a.symbol,
-          category: a.category,
-          headline: a.headline,
-          summary: a.summary,
-          url: a.url,
-          source: a.source,
-          published_at: a.published_at,
-          fetched_at: new Date().toISOString(),
-        }));
-        await sb.from("news_cache").upsert(batch, { onConflict: "url", ignoreDuplicates: true });
-      }
-    }
 
     // ---------- 6. Group results ----------
     const bySymbol: Record<string, Article[]> = {};
