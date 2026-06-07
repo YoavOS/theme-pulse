@@ -424,6 +424,7 @@ export default function RsAlpha() {
   const rebuildPctDone = progress.totalQueued > 0
     ? Math.min(100, Math.round((progress.processed / progress.totalQueued) * 100))
     : 0;
+  const liveUniverseSynced = progress.status === "complete" && progress.qualified > 0 && stocks.length === progress.qualified;
 
   const formatEta = (sec: number | null): string => {
     if (sec === null || sec <= 0) return "—";
@@ -800,7 +801,7 @@ export default function RsAlpha() {
           </div>
         )}
 
-        {progress.status === "complete" && progress.totalQueued > 0 && !isRebuilding && (
+        {progress.status === "complete" && progress.totalQueued > 0 && !isRebuilding && liveUniverseSynced && (
           <div className="container pb-2">
             <div className="rounded-md border border-[hsl(160,70%,50%)]/30 bg-[hsl(160,70%,50%)]/5 px-3 py-1.5 text-xs text-[hsl(160,70%,50%)]">
               ✓ Universe published — {progress.qualified} stocks now live (atomically swapped from staging).
