@@ -1239,6 +1239,7 @@ export default function LiveExecution() {
           rs6m: null,
           rsOverall: extra?.rs_overall ?? null,
           rsCalculatedAt: null,
+          rsNh20d: null, rsNh20dDaysAgo: null, rsNh6m: null, rsNh6mDaysAgo: null,
         });
       }
     }

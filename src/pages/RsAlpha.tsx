@@ -37,7 +37,8 @@ function growthBadge(f: ReturnType<typeof useStockFundamentalsMap>["map"] extend
 }
 
 type TabId = "overall" | "1d" | "1w" | "1m" | "3m" | "6m";
-type SortField = "rank" | "symbol" | "company" | "rs" | "rating" | "stockReturn" | "spyReturn" | "price" | "coil" | "ema9d" | "ema21d" | "ema9w";
+type SortField = "rank" | "symbol" | "company" | "rs" | "rating" | "stockReturn" | "spyReturn" | "price" | "coil" | "ema9d" | "ema21d" | "ema9w" | "rsNh";
+type RsNhFilter = "off" | "20d" | "6m" | "any";
 type SortDir = "asc" | "desc";
 
 const RS_WEIGHTS_KEY = "rs-overall-weights-v2";
@@ -211,6 +212,11 @@ export default function RsAlpha() {
   const [emaDistances, setEmaDistances] = useState<Map<string, EmaDistanceInfo>>(new Map());
   const [emaLoading, setEmaLoading] = useState(false);
   const [qqqPctChange, setQqqPctChange] = useState<number | null>(null);
+  const [rsNhFilter, setRsNhFilter] = useState<RsNhFilter>(() => {
+    if (typeof window === "undefined") return "off";
+    return (localStorage.getItem("rs-nh-filter") as RsNhFilter) || "off";
+  });
+  useEffect(() => { localStorage.setItem("rs-nh-filter", rsNhFilter); }, [rsNhFilter]);
 
   useEffect(() => { setShowAll(false); }, [activeTab]);
   useEffect(() => { localStorage.setItem("rs-hide-otc", String(hideOtc)); }, [hideOtc]);
@@ -338,7 +344,7 @@ export default function RsAlpha() {
 
   const toggleSort = (field: SortField) => {
     // EMA distance + Coil sort: smaller is better → default ascending.
-    const ascByDefault = field === "coil" || field === "ema9d" || field === "ema21d" || field === "ema9w";
+    const ascByDefault = field === "coil" || field === "ema9d" || field === "ema21d" || field === "ema9w" || field === "rsNh";
     if (sortField === field) setSortDir(d => d === "desc" ? "asc" : "desc");
     else { setSortField(field); setSortDir(ascByDefault ? "asc" : "desc"); }
   };
@@ -358,6 +364,13 @@ export default function RsAlpha() {
           return false;
         }
       }
+      if (rsNhFilter !== "off") {
+        const hit20 = !!s.rsNh20d;
+        const hit6 = !!s.rsNh6m;
+        if (rsNhFilter === "20d" && !hit20) return false;
+        if (rsNhFilter === "6m" && !hit6) return false;
+        if (rsNhFilter === "any" && !hit20 && !hit6) return false;
+      }
       return true;
     });
     const rsValues = filtered.map(s => getRsForTab(s, activeTab));
@@ -375,6 +388,16 @@ export default function RsAlpha() {
         case "stockReturn": return mul * ((getReturnField(a, activeTab) ?? -999) - (getReturnField(b, activeTab) ?? -999));
         case "spyReturn": return mul * ((getSpyField(a, activeTab) ?? -999) - (getSpyField(b, activeTab) ?? -999));
         case "price": return mul * ((a.price ?? 0) - (b.price ?? 0));
+        case "rsNh": {
+          // Freshest signal first when ascending: prefer hit, then smallest daysAgo.
+          const score = (s: RsStock) => {
+            const d20 = s.rsNh20d ? (s.rsNh20dDaysAgo ?? 0) : null;
+            const d6 = s.rsNh6m ? (s.rsNh6mDaysAgo ?? 0) + 100 : null;
+            const cands = [d20, d6].filter((x): x is number => x !== null);
+            return cands.length ? Math.min(...cands) : 9999;
+          };
+          return mul * (score(a) - score(b));
+        }
         case "coil": {
           const av = coilScores.get(a.symbol)?.score ?? 999;
           const bv = coilScores.get(b.symbol)?.score ?? 999;
@@ -396,7 +419,7 @@ export default function RsAlpha() {
     });
     return { sortedStocks: sorted, ratingMap: map, growthFilteredOutCount: droppedByGrowth };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stocks, activeTab, sortField, sortDir, hideOtc, weights, growthFilters, fundamentalsMap, coilScores, emaDistances]);
+  }, [stocks, activeTab, sortField, sortDir, hideOtc, weights, growthFilters, fundamentalsMap, coilScores, emaDistances, rsNhFilter]);
 
   const otcHiddenCount = useMemo(
     () => hideOtc ? stocks.filter(s => isOtcSymbol(s.symbol) && getRsForTab(s, activeTab) !== null).length : 0,
@@ -771,6 +794,43 @@ export default function RsAlpha() {
             )}
           </div>
         </div>
+
+        {/* RS New High Before Price filter */}
+        <div className="container pb-2">
+          <div className="flex flex-wrap items-center gap-2 rounded-md border border-border bg-card/30 px-3 py-2 text-xs">
+            <Filter size={11} className="shrink-0" />
+            <span className="font-medium text-foreground">RS New High Before Price</span>
+            <span className="text-[10px] text-muted-foreground" title="Stocks where the Relative Strength line (vs SPY) made a new high in the window, but price hasn't confirmed yet. Classic institutional accumulation signal.">
+              <Info size={10} className="inline" />
+            </span>
+            <div className="flex items-center gap-1 ml-1">
+              {([
+                { id: "off", label: "Off" },
+                { id: "20d", label: "20D" },
+                { id: "6m", label: "6M" },
+                { id: "any", label: "Any" },
+              ] as { id: RsNhFilter; label: string }[]).map(opt => (
+                <button
+                  key={opt.id}
+                  onClick={() => setRsNhFilter(opt.id)}
+                  className={`rounded px-2 py-0.5 text-[11px] border transition-colors ${
+                    rsNhFilter === opt.id
+                      ? "border-[hsl(140,70%,45%)] bg-[hsl(140,70%,45%)]/15 text-[hsl(140,70%,55%)] font-medium"
+                      : "border-border text-muted-foreground hover:bg-accent hover:text-foreground"
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+            {rsNhFilter !== "off" && (
+              <span className="ml-auto text-[10px] text-muted-foreground">
+                {sortedStocks.filter(s => s.rsNh20d || s.rsNh6m).length.toLocaleString()} matches
+              </span>
+            )}
+          </div>
+        </div>
+
         {(isRebuilding || isPaused || (progress.totalQueued > 0 && progress.processed < progress.totalQueued)) && (
           <div className="container pb-2">
             <div className={`rounded-md border px-3 py-2 text-xs ${isPaused ? "border-amber-500/30 bg-amber-500/5" : "border-accent/30 bg-accent/5"}`}>
@@ -1024,6 +1084,7 @@ export default function RsAlpha() {
                       <th className="px-3 py-2.5 text-right"><SortHeader field="rs" label="RS Score" className="justify-end" /></th>
                       <th className="px-3 py-2.5 text-right"><SortHeader field="stockReturn" label="Stock Return" className="justify-end" /></th>
                       <th className="px-3 py-2.5 text-right"><SortHeader field="spyReturn" label="SPY Return" className="justify-end" /></th>
+                      <th className="px-2 py-2.5 text-center" title="RS New High Before Price — RS line (vs SPY) hit a new high while price hasn't"><SortHeader field="rsNh" label="RS NH" className="justify-center" /></th>
                       <th className="px-3 py-2.5 text-right"><SortHeader field="coil" label="Tight Range" className="justify-end" /></th>
                       <th className="px-2 py-2.5 text-right" title="Distance from current price to 9-day EMA"><SortHeader field="ema9d" label="To 9D EMA" className="justify-end" /></th>
                       <th className="px-2 py-2.5 text-right" title="Distance from current price to 21-day EMA"><SortHeader field="ema21d" label="To 21D EMA" className="justify-end" /></th>
@@ -1063,6 +1124,25 @@ export default function RsAlpha() {
                           </td>
                           <td className={`px-3 py-2 text-right font-mono text-xs ${spy !== null && spy >= 0 ? "text-[hsl(160,60%,55%)]" : "text-destructive/80"}`}>
                             {pctDisplay(spy)}
+                          </td>
+                          <td className="px-2 py-2 text-center">
+                            {stock.rsNh20d ? (
+                              <span
+                                className="inline-flex items-center rounded-full border border-[hsl(140,70%,45%)] bg-[hsl(140,70%,45%)]/15 px-1.5 py-0.5 text-[10px] font-semibold text-[hsl(140,70%,55%)]"
+                                title={`RS line vs SPY made a new 20-day high ${stock.rsNh20dDaysAgo ?? 0}d ago, price has not confirmed`}
+                              >
+                                RS NH +{stock.rsNh20dDaysAgo ?? 0}d
+                              </span>
+                            ) : stock.rsNh6m ? (
+                              <span
+                                className="inline-flex items-center rounded-full border border-[hsl(140,50%,40%)]/60 px-1.5 py-0.5 text-[10px] font-medium text-[hsl(140,50%,55%)]"
+                                title={`RS line vs SPY made a new 6-month high ${stock.rsNh6mDaysAgo ?? 0}d ago, price has not confirmed`}
+                              >
+                                6M +{stock.rsNh6mDaysAgo ?? 0}d
+                              </span>
+                            ) : (
+                              <span className="text-muted-foreground/50">—</span>
+                            )}
                           </td>
                           <td className="px-3 py-2 text-right">
                             <div className="flex items-center justify-end gap-2">

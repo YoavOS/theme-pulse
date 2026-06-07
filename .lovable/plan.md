@@ -1,43 +1,59 @@
-## Yes — the Yahoo cache can be cut by ~60–70%
+## Goal
 
-Current state: `yahoo_history_cache` holds 6,812 rows / ~27 MB. The breakdown explains why:
+Add **"RS New High Before Price"** as a leading-indicator filter (no need for a column) in RS Alpha, with zero new cached history (reuse the 6mo bars already in `yahoo_history_cache`).
 
-| Period | Rows  | OHLC payload |
-|--------|-------|--------------|
-| 6mo    | 1,583 | 7.1 MB       |
-| 3mo    | 1,583 | 3.9 MB       |
-| ytd    |   481 | 1.9 MB       |
-| 1mo    | 1,583 | 1.7 MB       |
-| 5d     | 1,582 | 1.3 MB       |
+## What gets detected
 
-Every ticker is stored 4–5 times — once per period — even though `6mo` already contains every bar `3mo`, `1mo`, `5d`, and `ytd` need. We can derive the shorter periods from the longest one and drop the duplicates.
+For each qualified stock, build the **RS line** = `stock_close / SPY_close` per trading day from the existing 6mo OHLC cache, then evaluate two windows:
 
-## Plan
+- **Short window — 20 trading days** (always available from 6mo data)
+- **Long window — 6 months** (full cached series, used as the "52-week-style" proxy; true 52w would require doubling cache to 1y and is **not** worth the storage cost — noted as a future opt-in)
 
-### 1. Make the cache "longest-period-wins"
-- Update `_shared/yahooHistory.ts` so reads for `5d` / `1mo` / `3mo` / `ytd` first check whether a `6mo` row exists for that symbol and slice the OHLC array in memory. Only fall back to a Yahoo network fetch (and a fresh `6mo` insert) if nothing is cached.
-- Writes stop creating per-period rows. We persist a single `6mo` row per symbol; `start_price`/`end_price`/`return_pct` for shorter periods are computed on the fly.
+A row qualifies as **RS NH Before Price** when, in the chosen window:
 
-### 2. One-shot cleanup migration
-- Delete every row where `period <> '6mo'`. Frees ~9 MB immediately.
-- Delete `6mo` rows older than 14 days (`fetched_at < now() - interval '14 days'`) — stale snapshots that will be re-fetched on demand.
-- Delete rows for symbols not in `theme_tickers` and not equal to `SPY` — orphans from old universes.
+- RS line's max occurs on (or within the last few bars of) the most recent bar, **AND**
+- Price's max does **not** occur in that same recent slice.
 
-### 3. Storage Manager: dedicated Yahoo controls
-- Add two buttons on the `yahoo_history_cache` card:
-  - **Trim duplicates** — runs a SECURITY DEFINER RPC `trim_yahoo_cache()` that performs the three deletes above and returns `{ removed_rows, freed_bytes }`.
-  - **Clear all** — already exists; keep it.
-- Show a small inline breakdown (rows per period) under the card so it's obvious where the size comes from.
+We also store `**rs_nh_days_ago**` = trading days between today's bar and the bar that set the RS-line max.
 
-### 4. Optional, low-risk: shrink the OHLC JSON shape
-- Today each bar is `{ ts, open, high, low, close, volume }`. For return/perf math we only read `ts` + `close`. A follow-up could store `{t,c}` only and cut another ~50% off the remaining payload. Out of scope for this pass unless you want it included.
+## Storage-sensitive design (the important part)
 
-## Expected result
-- Cache drops from ~27 MB → ~7 MB right after the trim.
-- Steady-state size stays bounded because new fetches only insert `6mo` rows and old ones expire after 14 days.
-- Free-tier capacity bar drops from ~6% to ~2% used.
+- **No new tables, no new cache rows.** All inputs come from `yahoo_history_cache` (6mo) which the universe scan already populates.
+- **4 tiny columns** added to `qualified_rs_universe` (+ staging twin). All `smallint` / `boolean` — well under 10 bytes per row → ~30 KB total for the whole universe.
+  - `rs_nh_20d` boolean
+  - `rs_nh_20d_days_ago` smallint
+  - `rs_nh_6m` boolean
+  - `rs_nh_6m_days_ago` smallint
+- Computed **inline inside `calculate-rs-scores**` (already loads each symbol's 6mo bars + SPY's 6mo bars). Zero extra Yahoo calls, zero extra cache writes.
+- Benchmark is **SPY only** for v1 (matches existing RS pipeline). QQQ toggle deferred — would require caching QQQ history; out of scope to keep storage flat.
 
-## Technical details
-- Files: `supabase/functions/_shared/yahooHistory.ts`, `src/pages/StorageManager.tsx`, new migration adding `trim_yahoo_cache()` RPC (granted to `authenticated` + `service_role`).
-- No schema changes to `yahoo_history_cache` — just data deletes and a new RPC.
-- Edge functions that call `getHistoricalData(sb, symbol, period, ...)` keep the same signature; the slicing happens inside the helper so callers are unchanged.
+## UI changes (RS Alpha tab)
+
+- New compact column **"RS NH"** in the main RS Alpha table.
+  - If `rs_nh_20d && !price_nh_20d` → green badge `RS NH +Nd` (N = `rs_nh_20d_days_ago`).
+  - If only `rs_nh_6m && !price_nh_6m` → softer outline badge `RS NH 6M +Nd`.
+  - Otherwise blank.
+- New **filter chip** in the existing RS Alpha filter row: *"RS New High Before Price"* with two sub-options (20D / 6M). Multi-selectable, integrates with the current filter state.
+- Sortable: click header sorts by `rs_nh_20d_days_ago` ascending (freshest signals first).
+- Tooltip on the column header explains the meaning in one line.
+
+## Files touched
+
+1. **Migration** — add 4 columns to `qualified_rs_universe` + `qualified_rs_universe_staging`; update `swap_qualified_rs_universe()` to copy them.
+2. `**supabase/functions/calculate-rs-scores/index.ts**` — after loading 6mo bars (already done), compute the 4 values per symbol from in-memory OHLC + SPY OHLC and include them in the upsert. No extra fetches.
+3. `**src/hooks/useRsAlpha.ts**` — extend `RsStock` with the 4 fields, map from row.
+4. `**src/pages/RsAlpha.tsx**` — new column, badge, filter chip, sort handler.
+5. `**src/integrations/supabase/types.ts**` — auto-regenerates after migration.
+
+## Why this is the cheapest possible version
+
+- Reuses the cache trim already done in the previous task (6mo-only rows).
+- All math runs during the existing RS recalc loop — no new edge function, no new cron, no new table.
+- 4 numeric/boolean columns on ~2–3k rows ≈ negligible (< 50 KB).
+- If you ever want true 52-week, the only added cost would be switching SPY (one symbol) to a `1y` cached row; individual stocks could keep 6mo because most names that matter won't have 52w highs that 6mo misses for this signal.
+
+## Out of scope (can add later, flagged in code comments)
+
+- QQQ benchmark toggle.
+- True 52-week window (needs 1y SPY cache row).
+- Historical chart of the RS line in the drilldown.

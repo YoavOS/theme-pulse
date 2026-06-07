@@ -58,6 +58,10 @@ export interface RsStock {
   rs6m: number | null;
   rsOverall: number | null;
   rsCalculatedAt: string | null;
+  rsNh20d: boolean | null;
+  rsNh20dDaysAgo: number | null;
+  rsNh6m: boolean | null;
+  rsNh6mDaysAgo: number | null;
 }
 
 export interface RebuildProgress {
@@ -144,6 +148,10 @@ export function useRsAlpha() {
         rs6m: toNumberOrNull(r.rs_6m),
         rsOverall: toNumberOrNull(r.rs_overall),
         rsCalculatedAt: r.rs_calculated_at,
+        rsNh20d: (r as any).rs_nh_20d ?? null,
+        rsNh20dDaysAgo: (r as any).rs_nh_20d_days_ago ?? null,
+        rsNh6m: (r as any).rs_nh_6m ?? null,
+        rsNh6mDaysAgo: (r as any).rs_nh_6m_days_ago ?? null,
       }});
       setStocks(mapped);
     } catch (e) {
