@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { Link } from "react-router-dom";
-import { ArrowLeft, BarChart3, Waves } from "lucide-react";
+import { ArrowLeft, BarChart3, Waves, ScanLine, Loader2 } from "lucide-react";
 import { useThemeIntelligence } from "@/hooks/useThemeIntelligence";
+import { useFullScan } from "@/hooks/useFullScan";
 import OverviewTab from "@/components/intelligence/OverviewTab";
 import MoneyFlowTab from "@/components/intelligence/MoneyFlowTab";
 import React from "react";
@@ -17,7 +18,14 @@ type SubTabId = typeof SUB_TABS[number]["id"];
 
 export default function ThemeIntelligence() {
   const [activeTab, setActiveTab] = useState<SubTabId>("overview");
-  const { themes, isLoading } = useThemeIntelligence();
+  const { themes, isLoading, refetch } = useThemeIntelligence();
+  const handleScanDone = useCallback(() => { refetch(); }, [refetch]);
+  const {
+    isRunning: isScanning,
+    statusText: scanStatus,
+    progress: scanProgress,
+    startFullScan,
+  } = useFullScan(handleScanDone);
 
   return (
     <CollapsibleProvider key={activeTab} storageKey={`intel-collapsibles-${activeTab}`}>
