@@ -901,7 +901,7 @@ export default function RsAlpha() {
             <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
               <div className="rounded-lg border border-border bg-card p-3">
                 <div className="text-xs text-muted-foreground">Qualified Stocks</div>
-                <div className="text-xl font-bold text-foreground">{sortedStocks.length}</div>
+                <div className="text-xl font-bold text-foreground">{stocks.length}</div>
               </div>
               <div className="rounded-lg border border-border bg-card p-3">
                 <div className="text-xs text-muted-foreground">Positive RS</div>
