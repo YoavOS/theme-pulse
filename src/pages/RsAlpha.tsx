@@ -1125,6 +1125,25 @@ export default function RsAlpha() {
                           <td className={`px-3 py-2 text-right font-mono text-xs ${spy !== null && spy >= 0 ? "text-[hsl(160,60%,55%)]" : "text-destructive/80"}`}>
                             {pctDisplay(spy)}
                           </td>
+                          <td className="px-2 py-2 text-center">
+                            {stock.rsNh20d ? (
+                              <span
+                                className="inline-flex items-center rounded-full border border-[hsl(140,70%,45%)] bg-[hsl(140,70%,45%)]/15 px-1.5 py-0.5 text-[10px] font-semibold text-[hsl(140,70%,55%)]"
+                                title={`RS line vs SPY made a new 20-day high ${stock.rsNh20dDaysAgo ?? 0}d ago, price has not confirmed`}
+                              >
+                                RS NH +{stock.rsNh20dDaysAgo ?? 0}d
+                              </span>
+                            ) : stock.rsNh6m ? (
+                              <span
+                                className="inline-flex items-center rounded-full border border-[hsl(140,50%,40%)]/60 px-1.5 py-0.5 text-[10px] font-medium text-[hsl(140,50%,55%)]"
+                                title={`RS line vs SPY made a new 6-month high ${stock.rsNh6mDaysAgo ?? 0}d ago, price has not confirmed`}
+                              >
+                                6M +{stock.rsNh6mDaysAgo ?? 0}d
+                              </span>
+                            ) : (
+                              <span className="text-muted-foreground/50">—</span>
+                            )}
+                          </td>
                           <td className="px-3 py-2 text-right">
                             <div className="flex items-center justify-end gap-2">
                               {coil?.ranges?.length ? (
