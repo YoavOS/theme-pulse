@@ -44,8 +44,6 @@ verify_jwt = false
 [functions.tight-range-scores]
 verify_jwt = false
 
-[functions.ema9w-distance]
-verify_jwt = false
 
 [functions.ema-distances]
 verify_jwt = false
