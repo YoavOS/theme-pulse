@@ -1084,6 +1084,7 @@ export default function RsAlpha() {
                       <th className="px-3 py-2.5 text-right"><SortHeader field="rs" label="RS Score" className="justify-end" /></th>
                       <th className="px-3 py-2.5 text-right"><SortHeader field="stockReturn" label="Stock Return" className="justify-end" /></th>
                       <th className="px-3 py-2.5 text-right"><SortHeader field="spyReturn" label="SPY Return" className="justify-end" /></th>
+                      <th className="px-2 py-2.5 text-center" title="RS New High Before Price — RS line (vs SPY) hit a new high while price hasn't"><SortHeader field="rsNh" label="RS NH" className="justify-center" /></th>
                       <th className="px-3 py-2.5 text-right"><SortHeader field="coil" label="Tight Range" className="justify-end" /></th>
                       <th className="px-2 py-2.5 text-right" title="Distance from current price to 9-day EMA"><SortHeader field="ema9d" label="To 9D EMA" className="justify-end" /></th>
                       <th className="px-2 py-2.5 text-right" title="Distance from current price to 21-day EMA"><SortHeader field="ema21d" label="To 21D EMA" className="justify-end" /></th>
