@@ -13,6 +13,7 @@ import LiveExecution from "./pages/LiveExecution";
 import Earnings from "./pages/Earnings";
 import MarketDrivers from "./pages/MarketDrivers";
 import MorningBrief from "./pages/MorningBrief";
+import StorageManager from "./pages/StorageManager";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
