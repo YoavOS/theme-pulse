@@ -29,6 +29,7 @@ interface TableMeta {
   description: string;
   protected?: boolean;
   rescanRoute?: string;
+  trimRpc?: string; // optional dedupe/trim RPC name
 }
 
 interface SectionMeta {
