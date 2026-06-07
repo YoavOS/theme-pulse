@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { supabase as _supabaseTyped } from "@/integrations/supabase/client";
+const supabase: any = _supabaseTyped;
 
 // ── Filter thresholds (single source of truth — must match process-universe-queue/index.ts) ──
 export const RS_FILTER_THRESHOLDS = {
