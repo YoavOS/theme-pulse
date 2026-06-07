@@ -13,8 +13,6 @@ verify_jwt = false
 [functions.generate-theme-narrative]
 verify_jwt = false
 
-[functions.generate-weekly-report]
-verify_jwt = false
 
 [functions.natural-language-search]
 verify_jwt = false
@@ -46,8 +44,6 @@ verify_jwt = false
 [functions.tight-range-scores]
 verify_jwt = false
 
-[functions.ema9w-distance]
-verify_jwt = false
 
 [functions.ema-distances]
 verify_jwt = false
