@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { supabase as _supabaseTyped } from "@/integrations/supabase/client";
+const supabase: any = _supabaseTyped;
 
 export type Timeframe = "today" | "1W" | "1M" | "3M";
 

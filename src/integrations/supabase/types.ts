@@ -14,138 +14,6 @@ export type Database = {
   }
   public: {
     Tables: {
-      alert_history: {
-        Row: {
-          alert_type: string
-          date: string
-          description: string
-          id: string
-          metadata: Json | null
-          severity: string
-          theme_name: string
-          threshold: number | null
-          ticker_symbol: string | null
-          title: string
-          triggered_at: string | null
-          value_after: number | null
-          value_before: number | null
-        }
-        Insert: {
-          alert_type: string
-          date: string
-          description: string
-          id?: string
-          metadata?: Json | null
-          severity: string
-          theme_name: string
-          threshold?: number | null
-          ticker_symbol?: string | null
-          title: string
-          triggered_at?: string | null
-          value_after?: number | null
-          value_before?: number | null
-        }
-        Update: {
-          alert_type?: string
-          date?: string
-          description?: string
-          id?: string
-          metadata?: Json | null
-          severity?: string
-          theme_name?: string
-          threshold?: number | null
-          ticker_symbol?: string | null
-          title?: string
-          triggered_at?: string | null
-          value_after?: number | null
-          value_before?: number | null
-        }
-        Relationships: []
-      }
-      eod_prices: {
-        Row: {
-          close_price: number
-          created_at: string | null
-          date: string
-          high_price: number | null
-          id: string
-          is_backfill: boolean | null
-          low_price: number | null
-          open_price: number | null
-          source: string | null
-          symbol: string
-          theme_name: string
-          volume: number | null
-        }
-        Insert: {
-          close_price: number
-          created_at?: string | null
-          date: string
-          high_price?: number | null
-          id?: string
-          is_backfill?: boolean | null
-          low_price?: number | null
-          open_price?: number | null
-          source?: string | null
-          symbol: string
-          theme_name: string
-          volume?: number | null
-        }
-        Update: {
-          close_price?: number
-          created_at?: string | null
-          date?: string
-          high_price?: number | null
-          id?: string
-          is_backfill?: boolean | null
-          low_price?: number | null
-          open_price?: number | null
-          source?: string | null
-          symbol?: string
-          theme_name?: string
-          volume?: number | null
-        }
-        Relationships: []
-      }
-      eod_save_sessions: {
-        Row: {
-          completed_at: string | null
-          date: string
-          dispersion_score: number | null
-          failed_count: number | null
-          failed_symbols: string[] | null
-          id: string
-          saved_count: number | null
-          started_at: string | null
-          status: string | null
-          total_tickers: number | null
-        }
-        Insert: {
-          completed_at?: string | null
-          date: string
-          dispersion_score?: number | null
-          failed_count?: number | null
-          failed_symbols?: string[] | null
-          id?: string
-          saved_count?: number | null
-          started_at?: string | null
-          status?: string | null
-          total_tickers?: number | null
-        }
-        Update: {
-          completed_at?: string | null
-          date?: string
-          dispersion_score?: number | null
-          failed_count?: number | null
-          failed_symbols?: string[] | null
-          id?: string
-          saved_count?: number | null
-          started_at?: string | null
-          status?: string | null
-          total_tickers?: number | null
-        }
-        Relationships: []
-      }
       full_update_progress: {
         Row: {
           id: string
@@ -356,75 +224,6 @@ export type Database = {
           processed_at?: string | null
           status?: string
           symbol?: string
-        }
-        Relationships: []
-      }
-      last_scan_cache: {
-        Row: {
-          id: number
-          scanned_at: string
-          symbols_fetched: number | null
-          themes_data: Json
-          timeframe: string
-        }
-        Insert: {
-          id?: number
-          scanned_at?: string
-          symbols_fetched?: number | null
-          themes_data?: Json
-          timeframe?: string
-        }
-        Update: {
-          id?: number
-          scanned_at?: string
-          symbols_fetched?: number | null
-          themes_data?: Json
-          timeframe?: string
-        }
-        Relationships: []
-      }
-      news_cache: {
-        Row: {
-          ai_summary: string | null
-          ai_summary_generated_at: string | null
-          ai_summary_theme: string | null
-          category: string | null
-          fetched_at: string | null
-          headline: string
-          id: string
-          published_at: string | null
-          source: string | null
-          summary: string | null
-          symbol: string | null
-          url: string | null
-        }
-        Insert: {
-          ai_summary?: string | null
-          ai_summary_generated_at?: string | null
-          ai_summary_theme?: string | null
-          category?: string | null
-          fetched_at?: string | null
-          headline: string
-          id?: string
-          published_at?: string | null
-          source?: string | null
-          summary?: string | null
-          symbol?: string | null
-          url?: string | null
-        }
-        Update: {
-          ai_summary?: string | null
-          ai_summary_generated_at?: string | null
-          ai_summary_theme?: string | null
-          category?: string | null
-          fetched_at?: string | null
-          headline?: string
-          id?: string
-          published_at?: string | null
-          source?: string | null
-          summary?: string | null
-          symbol?: string | null
-          url?: string | null
         }
         Relationships: []
       }
@@ -770,36 +569,6 @@ export type Database = {
         }
         Relationships: []
       }
-      theme_breadth_history: {
-        Row: {
-          advancing: number | null
-          breadth_pct: number | null
-          date: string
-          declining: number | null
-          id: string
-          theme_name: string
-          total: number | null
-        }
-        Insert: {
-          advancing?: number | null
-          breadth_pct?: number | null
-          date: string
-          declining?: number | null
-          id?: string
-          theme_name: string
-          total?: number | null
-        }
-        Update: {
-          advancing?: number | null
-          breadth_pct?: number | null
-          date?: string
-          declining?: number | null
-          id?: string
-          theme_name?: string
-          total?: number | null
-        }
-        Relationships: []
-      }
       theme_tickers: {
         Row: {
           added_at: string
@@ -853,42 +622,6 @@ export type Database = {
         }
         Relationships: []
       }
-      ticker_performance: {
-        Row: {
-          last_scanned: string | null
-          perf_1d: number | null
-          perf_1m: number | null
-          perf_1w: number | null
-          perf_3m: number | null
-          perf_ytd: number | null
-          price: number | null
-          status: string
-          symbol: string
-        }
-        Insert: {
-          last_scanned?: string | null
-          perf_1d?: number | null
-          perf_1m?: number | null
-          perf_1w?: number | null
-          perf_3m?: number | null
-          perf_ytd?: number | null
-          price?: number | null
-          status?: string
-          symbol: string
-        }
-        Update: {
-          last_scanned?: string | null
-          perf_1d?: number | null
-          perf_1m?: number | null
-          perf_1w?: number | null
-          perf_3m?: number | null
-          perf_ytd?: number | null
-          price?: number | null
-          status?: string
-          symbol?: string
-        }
-        Relationships: []
-      }
       ticker_volume_cache: {
         Row: {
           avg_10d: number | null
@@ -913,63 +646,6 @@ export type Database = {
           last_updated?: string | null
           symbol?: string
           today_vol?: number | null
-        }
-        Relationships: []
-      }
-      volume_history: {
-        Row: {
-          avg_rel_vol: number | null
-          id: string
-          sustained_vol_pct: number | null
-          theme_name: string
-          week_ending: string
-        }
-        Insert: {
-          avg_rel_vol?: number | null
-          id?: string
-          sustained_vol_pct?: number | null
-          theme_name: string
-          week_ending: string
-        }
-        Update: {
-          avg_rel_vol?: number | null
-          id?: string
-          sustained_vol_pct?: number | null
-          theme_name?: string
-          week_ending?: string
-        }
-        Relationships: []
-      }
-      weekly_reports: {
-        Row: {
-          biggest_reversals: Json | null
-          bottom_themes: Json | null
-          generated_at: string | null
-          id: string
-          narrative: string
-          top_themes: Json | null
-          volume_anomalies: Json | null
-          week_ending: string
-        }
-        Insert: {
-          biggest_reversals?: Json | null
-          bottom_themes?: Json | null
-          generated_at?: string | null
-          id?: string
-          narrative: string
-          top_themes?: Json | null
-          volume_anomalies?: Json | null
-          week_ending: string
-        }
-        Update: {
-          biggest_reversals?: Json | null
-          bottom_themes?: Json | null
-          generated_at?: string | null
-          id?: string
-          narrative?: string
-          top_themes?: Json | null
-          volume_anomalies?: Json | null
-          week_ending?: string
         }
         Relationships: []
       }
@@ -1020,21 +696,6 @@ export type Database = {
           symbol: string
         }[]
       }
-      get_eod_baselines: {
-        Args: {
-          p_date_1m: string
-          p_date_1w: string
-          p_date_3m: string
-          p_date_ytd: string
-          p_symbols: string[]
-        }
-        Returns: {
-          baseline_date: string
-          close_price: number
-          symbol: string
-          timeframe: string
-        }[]
-      }
       recompute_rs_scan_progress: { Args: never; Returns: undefined }
       release_universe_scan_lock: { Args: never; Returns: undefined }
       set_fundamentals_cron_active: {
@@ -1046,6 +707,7 @@ export type Database = {
         Returns: undefined
       }
       swap_qualified_rs_universe: { Args: never; Returns: number }
+      truncate_qualified_rs_staging: { Args: never; Returns: undefined }
       try_universe_scan_lock: { Args: never; Returns: boolean }
     }
     Enums: {

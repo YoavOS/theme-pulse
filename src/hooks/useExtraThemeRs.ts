@@ -72,12 +72,8 @@ export function useExtraThemeRs(missingSymbols: string[]): {
         sinceDate.setDate(sinceDate.getDate() - EOD_LOOKBACK_DAYS);
         const sinceStr = sinceDate.toISOString().slice(0, 10);
 
-        const { data: eod } = await supabase
-          .from("eod_prices")
-          .select("symbol, date, close_price")
-          .in("symbol", missingSymbols.map((s) => s.toUpperCase()))
-          .gte("date", sinceStr)
-          .order("date", { ascending: false });
+        // eod_prices table removed in lightweight cleanup — no historical fallback available.
+        const eod: any[] | null = null;
 
         const bySym = new Map<string, { date: string; close: number }[]>();
         for (const r of eod ?? []) {
