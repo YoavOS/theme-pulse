@@ -32,6 +32,22 @@ function closeNDaysAgo(ohlc: { ts: number; close: number | null }[], daysAgo: nu
   return null;
 }
 
+async function fetchYahooQuote(symbol: string): Promise<{ price: number; prevClose: number } | null> {
+  try {
+    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=5d&interval=1d`;
+    const res = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0", "Accept": "application/json" } });
+    if (!res.ok) return null;
+    const j = await res.json();
+    const r = j?.chart?.result?.[0];
+    const meta = r?.meta;
+    if (!meta) return null;
+    const price = Number(meta.regularMarketPrice);
+    const prevClose = Number(meta.chartPreviousClose ?? meta.previousClose);
+    if (!price || !prevClose) return null;
+    return { price, prevClose };
+  } catch { return null; }
+}
+
 async function fetchTickerData(
   sb: ReturnType<typeof createClient>,
   symbol: string
@@ -40,28 +56,33 @@ async function fetchTickerData(
 }> {
   const result = { perf_1d: 0, perf_1w: 0, perf_1m: 0, perf_3m: 0, perf_ytd: 0, price: 0 };
 
-  // 1. Fetch live quote from Finnhub (still works on free tier)
-  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-    try {
-      const res = await fetch(`https://finnhub.io/api/v1/quote?symbol=${encodeURIComponent(symbol)}&token=${FINNHUB_KEY}`);
-      if (res.status === 429) {
-        if (attempt < MAX_RETRIES) { await delay(RETRY_DELAY_MS); continue; }
-        return { ...result, error: "rate_limited_quote" };
+  // 1. Live quote — Yahoo first, Finnhub fallback.
+  const yq = await fetchYahooQuote(symbol);
+  if (yq) {
+    result.price = yq.price;
+    result.perf_1d = Math.round(((yq.price - yq.prevClose) / yq.prevClose) * 10000) / 100;
+  } else {
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        const res = await fetch(`https://finnhub.io/api/v1/quote?symbol=${encodeURIComponent(symbol)}&token=${FINNHUB_KEY}`);
+        if (res.status === 429) {
+          if (attempt < MAX_RETRIES) { await delay(RETRY_DELAY_MS); continue; }
+          return { ...result, error: "rate_limited_quote" };
+        }
+        if (!res.ok) return { ...result, error: `http_${res.status}` };
+        const data = await res.json();
+        if (!data || (data.c === 0 && data.pc === 0)) return { ...result, error: "no_data" };
+        result.perf_1d = Math.round((data.dp ?? ((data.c - data.pc) / data.pc) * 100) * 100) / 100;
+        result.price = data.c;
+        break;
+      } catch (e) {
+        if (attempt >= MAX_RETRIES) return { ...result, error: String(e) };
+        await delay(5000);
       }
-      if (!res.ok) return { ...result, error: `http_${res.status}` };
-      const data = await res.json();
-      if (!data || (data.c === 0 && data.pc === 0)) return { ...result, error: "no_data" };
-      result.perf_1d = Math.round((data.dp ?? ((data.c - data.pc) / data.pc) * 100) * 100) / 100;
-      result.price = data.c;
-      break;
-    } catch (e) {
-      if (attempt >= MAX_RETRIES) return { ...result, error: String(e) };
-      await delay(5000);
     }
   }
 
-  // 2. Fetch YTD historical via shared Yahoo helper (cache → EOD → Yahoo).
-  //    One call covers 1W/1M/3M/YTD by walking the OHLC array.
+  // 2. Historical (1W/1M/3M/YTD) via Yahoo (cache → Yahoo).
   try {
     const hist = await getHistoricalData(sb, symbol, "ytd", {
       todayPrice: result.price,
@@ -71,28 +92,21 @@ async function fetchTickerData(
     if (hist.ohlc && hist.ohlc.length > 1) {
       const ohlc = hist.ohlc;
       const lastClose = (ohlc[ohlc.length - 1].close as number) ?? result.price;
-
-      // YTD: first bar of the year vs latest
       const firstClose = ohlc[0].close as number;
       if (firstClose) result.perf_ytd = calcPct(firstClose, lastClose);
-
       const c3m = closeNDaysAgo(ohlc, 90);
       if (c3m) result.perf_3m = calcPct(c3m, lastClose);
-
       const c1m = closeNDaysAgo(ohlc, 30);
       if (c1m) result.perf_1m = calcPct(c1m, lastClose);
-
       const c1w = closeNDaysAgo(ohlc, 7);
       if (c1w) result.perf_1w = calcPct(c1w, lastClose);
     } else if (hist.returnPct !== null) {
-      // Fell back to a single-point EOD lookup → only YTD is meaningful.
       result.perf_ytd = hist.returnPct;
     } else {
       console.log(`No historical data for ${symbol} (source=${hist.source})`);
     }
   } catch (e) {
     console.log(`Historical fetch failed for ${symbol}: ${e}`);
-    // Keep daily quote — historical stays 0.
   }
 
   return result;

@@ -27,8 +27,26 @@ function timeframeToYahooPeriod(timeframe: string): YahooPeriod | null {
   }
 }
 
-// Today: Finnhub /quote (still works on free tier).
+// Today: Yahoo /chart first (range=5d), Finnhub /quote as fallback.
+async function fetchYahooDaily(symbol: string): Promise<QuoteResult | null> {
+  try {
+    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=5d&interval=1d`;
+    const res = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0", "Accept": "application/json" } });
+    if (!res.ok) return null;
+    const j = await res.json();
+    const meta = j?.chart?.result?.[0]?.meta;
+    if (!meta) return null;
+    const price = Number(meta.regularMarketPrice);
+    const prev = Number(meta.chartPreviousClose ?? meta.previousClose);
+    if (!price || !prev) return null;
+    const pct = Math.round(((price - prev) / prev) * 10000) / 100;
+    return { symbol, pct, price };
+  } catch { return null; }
+}
+
 async function fetchQuoteDaily(symbol: string): Promise<QuoteResult> {
+  const y = await fetchYahooDaily(symbol);
+  if (y) return y;
   try {
     const url = `https://finnhub.io/api/v1/quote?symbol=${encodeURIComponent(symbol)}&token=${FINNHUB_KEY}`;
     const res = await fetch(url);
