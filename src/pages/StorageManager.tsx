@@ -181,6 +181,24 @@ export default function StorageManager() {
     }
   };
 
+  const trimTable = async (rpc: string, label: string) => {
+    setWorking(label);
+    try {
+      const { data, error } = await supabase.rpc(rpc);
+      if (error) throw error;
+      const row = Array.isArray(data) ? data[0] : data;
+      const rows = Number(row?.removed_rows ?? 0);
+      const bytes = Number(row?.freed_bytes ?? 0);
+      const mb = (bytes / 1024 / 1024).toFixed(1);
+      toast({ title: `${label} trimmed`, description: `Removed ${rows.toLocaleString()} rows · freed ${mb} MB` });
+      await load();
+    } catch (e) {
+      toast({ title: `${label} trim failed`, description: String((e as Error).message || e), variant: "destructive" });
+    } finally {
+      setWorking(null);
+    }
+  };
+
   const { totalBytes, totalRows, top3, health, recommendations } = useMemo(() => {
     const all = Object.values(stats);
     const totalBytes = all.reduce((s, r) => s + (r.size_bytes || 0), 0);
