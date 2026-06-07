@@ -463,7 +463,7 @@ export default function RsAlpha() {
             {/* Start / Resume / Continue */}
             {!isRebuilding && (
               <button
-                onClick={() => setUniverseSettingsOpen("resume")}
+                onClick={() => setUniverseSettingsOpen("restart")}
                 disabled={isMutatingScan}
                 className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-50"
                 title={isPaused ? "Resume the paused scan" : "Start or continue the qualified universe scan"}
@@ -890,7 +890,7 @@ export default function RsAlpha() {
               Click <em>Rebuild Qualified Universe</em> to scan the full US market and find stocks meeting all four quality criteria.
               The scan runs in the background and takes 6–10 hours; results stream in as stocks qualify.
             </p>
-            <button onClick={() => setUniverseSettingsOpen("resume")} disabled={isMutatingScan} className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50">
+            <button onClick={() => setUniverseSettingsOpen("restart")} disabled={isMutatingScan} className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50">
               {isMutatingScan ? "Starting…" : "Update Stock List"}
             </button>
           </div>
@@ -1186,7 +1186,7 @@ export default function RsAlpha() {
         onConfirm={(filters) => {
           const mode = universeSettingsOpen ?? "resume";
           setUniverseSettingsOpen(null);
-          if (mode === "restart" && !confirm("Restart the scan from scratch? Your current live universe stays in use until the new scan completes — only the in-progress staging is cleared.")) return;
+          if (!confirm("Start a fresh universe scan? This wipes the current scan queue and reseeds the full US market. Your live universe keeps serving reads until the new scan finishes and publishes.")) return;
           rebuildUniverse(mode, filters as unknown as Record<string, unknown>);
         }}
       />

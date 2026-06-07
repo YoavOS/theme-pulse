@@ -5,6 +5,10 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+// Per project policy: every click on "Update Stock List" is a hard restart.
+// We always wipe the queue + staging, re-fetch Finnhub's US universe, reseed,
+// re-enable the cron, release any stale advisory lock, and kick off one
+// processing tick so the user sees immediate progress.
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
@@ -16,61 +20,28 @@ Deno.serve(async (req) => {
 
     const supabase = createClient(SB_URL, SB_KEY);
 
-    // Parse optional body: { mode: "resume" | "restart", filters?: {...} }
-    let mode: "resume" | "restart" = "resume";
     let filters: any = null;
     try {
       const body = await req.json();
-      if (body?.mode === "restart") mode = "restart";
       if (body?.filters && typeof body.filters === "object") filters = body.filters;
     } catch (_) { /* no body */ }
 
-    // Persist filters on progress row so cron worker reads them on every tick
+    // Release any leftover advisory lock from a previous crashed worker so the
+    // very first cron tick after restart can actually do work.
+    try { await supabase.rpc("release_universe_scan_lock"); } catch (_) { /* fine if not held */ }
+
+    // Persist filters before reseeding so the worker reads them on every tick.
     if (filters) {
       await supabase.from("rs_scan_progress").update({ filters }).eq("id", 1);
     }
 
-    // ── Check if there's already pending/processing work ──
-    const { count: pendingCount } = await supabase
-      .from("stock_scan_queue")
-      .select("*", { count: "exact", head: true })
-      .in("status", ["pending", "processing"]);
-
-    // ── RESUME path: pending work exists and user did not force restart ──
-    if (mode === "resume" && (pendingCount ?? 0) > 0) {
-      // Recover any "processing" symbols stuck from a dead worker (>5 min old)
-      const fiveMinAgo = new Date(Date.now() - 5 * 60_000).toISOString();
-      await supabase
-        .from("stock_scan_queue")
-        .update({ status: "pending" })
-        .eq("status", "processing")
-        .lt("enqueued_at", fiveMinAgo);
-
-      // Mark progress as running again
-      await supabase
-        .from("rs_scan_progress")
-        .update({ status: "running", last_updated: new Date().toISOString() })
-        .eq("id", 1);
-
-      // Re-enable cron job
-      try {
-        await supabase.rpc("set_universe_cron_active", { p_active: true });
-      } catch (_) { /* function may not exist yet, ignore */ }
-
-      return new Response(
-        JSON.stringify({ ok: true, mode: "resumed", pending: pendingCount }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    // ── RESTART path: fetch full universe and reseed ──
+    // ── Fetch full Finnhub US universe ──
     const res = await fetch(
       `https://finnhub.io/api/v1/stock/symbol?exchange=US&token=${FINNHUB_KEY}`
     );
     if (!res.ok) throw new Error(`Finnhub symbol list failed: ${res.status}`);
     const data = await res.json();
 
-    // Allowed major US exchanges only — block OTC/Pink/Grey markets at the source.
     const ALLOWED_MICS = new Set([
       "XNYS", "XNAS", "XASE", "ARCX", "BATS", "IEXG", "XCIS", "XNGS", "XNCM", "XNMS",
     ]);
@@ -79,25 +50,20 @@ Deno.serve(async (req) => {
     const symbols: string[] = data
       .filter((s: any) => {
         if (!s.symbol || s.type !== "Common Stock") return false;
-        // Block any ticker with suffixes (.PK / .OB / .OTC etc.)
         if (s.symbol.includes(".")) return false;
-        // Block 5-letter symbols ending in F (foreign OTC convention, e.g. FKURF)
         if (/^[A-Z]{5}$/.test(s.symbol) && s.symbol.endsWith("F")) return false;
-        // Block by exchange MIC if present — only allow whitelisted majors
         if (s.mic && !ALLOWED_MICS.has(s.mic)) return false;
-        // Block by exchange string mentioning OTC/Pink/Grey
         if (s.exchange && OTC_HINT.test(s.exchange)) return false;
         return true;
       })
       .map((s: any) => s.symbol);
 
-    console.log(`Seeding ${symbols.length} symbols into scan queue (OTC excluded)`);
+    console.log(`Reseeding ${symbols.length} symbols into scan queue (hard restart).`);
 
-    // Clear queue + STAGING universe (NOT the live universe — keep it usable until swap)
+    // Wipe queue + STAGING (NOT the live universe — keep it serving reads until the new swap publishes).
     await supabase.from("stock_scan_queue").delete().neq("symbol", "__none__");
     await supabase.from("qualified_rs_universe_staging").delete().neq("symbol", "__none__");
 
-    // Insert in batches of 1000
     let inserted = 0;
     for (let i = 0; i < symbols.length; i += 1000) {
       const batch = symbols.slice(i, i + 1000).map((s) => ({
@@ -111,7 +77,7 @@ Deno.serve(async (req) => {
       else inserted += batch.length;
     }
 
-    // Reset progress tracker
+    // Reset progress tracker.
     await supabase
       .from("rs_scan_progress")
       .update({
@@ -125,10 +91,17 @@ Deno.serve(async (req) => {
       })
       .eq("id", 1);
 
-    // Enable cron
+    // Enable cron worker.
     try {
       await supabase.rpc("set_universe_cron_active", { p_active: true });
-    } catch (_) { /* ignore if helper not deployed */ }
+    } catch (e) {
+      console.error("set_universe_cron_active failed:", e);
+    }
+
+    // Kick off one tick immediately so the user sees progress instead of
+    // waiting up to a minute for the cron.
+    supabase.functions.invoke("process-universe-queue", { body: {} })
+      .catch((e) => console.error("initial process-universe-queue tick failed:", e));
 
     return new Response(
       JSON.stringify({ ok: true, mode: "restarted", total_queued: inserted }),
