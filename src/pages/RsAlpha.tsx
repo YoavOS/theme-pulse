@@ -419,7 +419,7 @@ export default function RsAlpha() {
     });
     return { sortedStocks: sorted, ratingMap: map, growthFilteredOutCount: droppedByGrowth };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stocks, activeTab, sortField, sortDir, hideOtc, weights, growthFilters, fundamentalsMap, coilScores, emaDistances]);
+  }, [stocks, activeTab, sortField, sortDir, hideOtc, weights, growthFilters, fundamentalsMap, coilScores, emaDistances, rsNhFilter]);
 
   const otcHiddenCount = useMemo(
     () => hideOtc ? stocks.filter(s => isOtcSymbol(s.symbol) && getRsForTab(s, activeTab) !== null).length : 0,
