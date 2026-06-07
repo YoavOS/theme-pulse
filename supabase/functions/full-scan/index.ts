@@ -210,43 +210,46 @@ Deno.serve(async (req) => {
       let failed = 0;
       const results: { symbol: string; status: string }[] = [];
 
-      // Process tickers SEQUENTIALLY — one at a time
-      for (const { symbol } of pending) {
-        const data = await fetchTickerData(sb, symbol);
+      // Process tickers IN PARALLEL — Yahoo-first means we don't need the Finnhub 1/sec gate.
+      // Fan out CONCURRENCY at a time.
+      const pendingSymbols = pending.map(p => p.symbol);
+      const inFlight: Promise<void>[] = [];
+      let cursor = 0;
 
-        if (data.error) {
-          console.log(`FAILED ${symbol}: ${data.error}`);
-          await sb.from("ticker_performance").update({
-            status: "failed",
-            perf_1d: data.perf_1d,
-            perf_1w: data.perf_1w,
-            perf_1m: data.perf_1m,
-            perf_3m: data.perf_3m,
-            perf_ytd: data.perf_ytd,
-            price: data.price,
-            last_scanned: new Date().toISOString(),
-          }).eq("symbol", symbol);
+      const runOne = async (symbol: string) => {
+        const data = await fetchTickerData(sb, symbol);
+        const isFailed = !!data.error;
+        await sb.from("ticker_performance").update({
+          status: isFailed ? "failed" : "done",
+          perf_1d: data.perf_1d,
+          perf_1w: data.perf_1w,
+          perf_1m: data.perf_1m,
+          perf_3m: data.perf_3m,
+          perf_ytd: data.perf_ytd,
+          price: data.price,
+          last_scanned: new Date().toISOString(),
+        }).eq("symbol", symbol);
+        if (isFailed) {
           failed++;
           results.push({ symbol, status: "failed" });
+          console.log(`FAILED ${symbol}: ${data.error}`);
         } else {
-          await sb.from("ticker_performance").update({
-            status: "done",
-            perf_1d: data.perf_1d,
-            perf_1w: data.perf_1w,
-            perf_1m: data.perf_1m,
-            perf_3m: data.perf_3m,
-            perf_ytd: data.perf_ytd,
-            price: data.price,
-            last_scanned: new Date().toISOString(),
-          }).eq("symbol", symbol);
           processed++;
           results.push({ symbol, status: "done" });
-          console.log(`OK ${symbol}: 1D=${data.perf_1d}% 1W=${data.perf_1w}% 1M=${data.perf_1m}% price=${data.price}`);
         }
+      };
 
-        // Delay between tickers
-        await delay(CALL_DELAY_MS);
+      const worker = async () => {
+        while (cursor < pendingSymbols.length) {
+          const idx = cursor++;
+          await runOne(pendingSymbols[idx]);
+        }
+      };
+
+      for (let i = 0; i < Math.min(CONCURRENCY, pendingSymbols.length); i++) {
+        inFlight.push(worker());
       }
+      await Promise.all(inFlight);
 
       // Check remaining
       const { count: remainingCount } = await sb.from("ticker_performance").select("*", { count: "exact", head: true }).in("status", ["pending"]);
