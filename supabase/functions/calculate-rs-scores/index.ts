@@ -137,6 +137,13 @@ Deno.serve(async (req) => {
       "6mo": history6m.SPY?.returnPct ?? null,
     };
 
+    // SPY closes indexed by ts for RS-line construction (6mo == full series).
+    const spyByTs = new Map<number, number>();
+    for (const b of history6m.SPY?.ohlc ?? []) {
+      if (b.close !== null && b.close > 0) spyByTs.set(b.ts, b.close);
+    }
+
+
     const updates: any[] = [];
     for (const u of universe) {
       const sym = u.symbol;
