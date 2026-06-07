@@ -1,79 +1,43 @@
-## Part 1 — Speed up scans (cache-first + parallel refresh)
+## Yes — the Yahoo cache can be cut by ~60–70%
 
-**Pattern:** Every scan-bound hook (Theme Performance, Full Scan / Dashboard, Volume, Theme Intelligence) will:
-1. On mount, **instantly hydrate** from the most recent DB snapshot (`ticker_performance`, `themes`/`theme_tickers`, `ticker_volume_cache`, `yahoo_history_cache`) — no spinner, data on screen in <500ms.
-2. Show a small "Refreshing…" pill in the header.
-3. Kick off a background refresh that fans out **25 concurrent Yahoo requests** (instead of sequential 1100ms-delayed Finnhub loop). Finnhub stays as fallback only.
-4. When refresh resolves, swap the cached snapshot for fresh data and update the "Last updated" timestamp.
+Current state: `yahoo_history_cache` holds 6,812 rows / ~27 MB. The breakdown explains why:
 
-**Edge function changes:**
-- `full-scan`: replace the sequential ticker loop with `Promise.all` batches of 25, Yahoo-first (already added), Finnhub fallback only on Yahoo failure. Skip tickers whose `ticker_performance.last_scanned` is <15 min old unless `?force=true`.
-- `fetch-themes`: same parallelization — batch theme tickers in groups of 25, Yahoo-first. Add `?maxAgeMinutes=15` short-circuit that returns cached `themes` rows if fresh.
-- `useFullScan`, `useThemeIntelligence`, `useVolumeData`, `useLiveThemeData`: read cached rows immediately, then call edge function with `force=false` by default; a "Force refresh" toggle in the Storage tab can force re-fetch.
+| Period | Rows  | OHLC payload |
+|--------|-------|--------------|
+| 6mo    | 1,583 | 7.1 MB       |
+| 3mo    | 1,583 | 3.9 MB       |
+| ytd    |   481 | 1.9 MB       |
+| 1mo    | 1,583 | 1.7 MB       |
+| 5d     | 1,582 | 1.3 MB       |
 
-**Expected result:** Theme/Dashboard scans feel as instant as RS Scores on warm cache, and full cold refresh drops from ~5–10 min to ~30–60s thanks to 25× parallelism.
+Every ticker is stored 4–5 times — once per period — even though `6mo` already contains every bar `3mo`, `1mo`, `5d`, and `ytd` need. We can derive the shorter periods from the longest one and drop the duplicates.
 
-## Part 2 — Storage Manager tab
+## Plan
 
-**Route:** new top-level nav entry `/storage` → `src/pages/StorageManager.tsx`, added to `App.tsx` routes and to the nav bar (alongside RS Alpha, Intelligence, etc.).
+### 1. Make the cache "longest-period-wins"
+- Update `_shared/yahooHistory.ts` so reads for `5d` / `1mo` / `3mo` / `ytd` first check whether a `6mo` row exists for that symbol and slice the OHLC array in memory. Only fall back to a Yahoo network fetch (and a fresh `6mo` insert) if nothing is cached.
+- Writes stop creating per-period rows. We persist a single `6mo` row per symbol; `start_price`/`end_price`/`return_pct` for shorter periods are computed on the fly.
 
-**Layout:** one accordion section per app area. Each section header shows total row count + total size. Inside, one card per backing table:
+### 2. One-shot cleanup migration
+- Delete every row where `period <> '6mo'`. Frees ~9 MB immediately.
+- Delete `6mo` rows older than 14 days (`fetched_at < now() - interval '14 days'`) — stale snapshots that will be re-fetched on demand.
+- Delete rows for symbols not in `theme_tickers` and not equal to `SPY` — orphans from old universes.
 
-```text
-RS Alpha
-├─ qualified_rs_universe           1,446 rows · Updated 2h ago · Medium
-├─ qualified_rs_universe_staging       0 rows · empty           · Small
-├─ stock_scan_queue                1,446 rows · Updated 2h ago · Medium
-├─ rs_scan_progress                    1 row  · Updated 2h ago · Small
-└─ stock_fundamentals              1,220 rows · Updated 1d ago · Large  ⚠
-   [Clear cache] [Re-scan]
+### 3. Storage Manager: dedicated Yahoo controls
+- Add two buttons on the `yahoo_history_cache` card:
+  - **Trim duplicates** — runs a SECURITY DEFINER RPC `trim_yahoo_cache()` that performs the three deletes above and returns `{ removed_rows, freed_bytes }`.
+  - **Clear all** — already exists; keep it.
+- Show a small inline breakdown (rows per period) under the card so it's obvious where the size comes from.
 
-Theme Intelligence
-├─ themes / theme_tickers
-├─ ticker_performance
-├─ ticker_volume_cache
-└─ theme news cache (yahoo_history_cache filtered)
+### 4. Optional, low-risk: shrink the OHLC JSON shape
+- Today each bar is `{ ts, open, high, low, close, volume }`. For return/perf math we only read `ts` + `close`. A follow-up could store `{t,c}` only and cut another ~50% off the remaining payload. Out of scope for this pass unless you want it included.
 
-Live Execution / Market Drivers / Morning Brief / Earnings
-└─ fundamentals_cache, stock drivers cache, etc.
-```
+## Expected result
+- Cache drops from ~27 MB → ~7 MB right after the trim.
+- Steady-state size stays bounded because new fetches only insert `6mo` rows and old ones expire after 14 days.
+- Free-tier capacity bar drops from ~6% to ~2% used.
 
-**Per-card data shown:**
-- Table label + plain-English description ("Cached theme performance snapshots")
-- Row count (from `count(*)`)
-- Last updated (max `updated_at` / `last_scanned`)
-- Size badge: Small (<100 rows), Medium (<5k), Large (≥5k)
-- Warning icon when row count or staleness crosses a threshold
-- Action buttons with simple confirm dialog:
-  - **Clear cache** (truncates that table; staging tables only — never touches live `qualified_rs_universe` without typed confirm)
-  - **Re-scan** (deep-links to the page where the scan lives)
-
-**Global action bar (top of page):**
-- Clear Old Universes — wipes `qualified_rs_universe_staging` + old `stock_scan_queue` rows
-- Clear News & Temporary Data — wipes news caches
-- Clear All Yahoo Cache — truncates `yahoo_history_cache`
-- **Full Memory Reset** — typed confirmation ("type RESET") that wipes all caches but keeps live universe + fundamentals
-
-**Backend:** one new edge function `storage-stats` returning `{ table, rowCount, lastUpdated, sizeBytes }` for the curated table list (uses `pg_total_relation_size` + `count(*)`). One new edge function `storage-clear` that accepts `{ table }` and runs the corresponding `TRUNCATE` via SECURITY DEFINER RPCs (one RPC per allowed table, no dynamic SQL). All clear RPCs require an authenticated user.
-
-## Files touched
-
-**New:**
-- `src/pages/StorageManager.tsx`
-- `src/hooks/useStorageStats.ts`
-- `supabase/functions/storage-stats/index.ts`
-- `supabase/functions/storage-clear/index.ts`
-- Migration: SECURITY DEFINER `truncate_*` RPCs for each clearable table
-
-**Edited:**
-- `src/App.tsx` (route)
-- `src/components/NavLink.tsx` or wherever the top nav lives (add link)
-- `supabase/functions/full-scan/index.ts` (parallel batches + 15-min cache short-circuit)
-- `supabase/functions/fetch-themes/index.ts` (parallel batches + cache short-circuit)
-- `src/hooks/useFullScan.ts`, `useThemeIntelligence.ts`, `useVolumeData.ts`, `useLiveThemeData.ts` (cache-first hydration + background refresh)
-
-## Out of scope
-
-- Re-architecting the EOD pipeline
-- Adding paid Yahoo/Finnhub tiers
-- Per-user storage quotas
+## Technical details
+- Files: `supabase/functions/_shared/yahooHistory.ts`, `src/pages/StorageManager.tsx`, new migration adding `trim_yahoo_cache()` RPC (granted to `authenticated` + `service_role`).
+- No schema changes to `yahoo_history_cache` — just data deletes and a new RPC.
+- Edge functions that call `getHistoricalData(sb, symbol, period, ...)` keep the same signature; the slicing happens inside the helper so callers are unchanged.
