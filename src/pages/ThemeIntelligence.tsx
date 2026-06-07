@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { Link } from "react-router-dom";
-import { ArrowLeft, BarChart3, Waves } from "lucide-react";
+import { ArrowLeft, BarChart3, Waves, ScanLine, Loader2 } from "lucide-react";
 import { useThemeIntelligence } from "@/hooks/useThemeIntelligence";
+import { useFullScan } from "@/hooks/useFullScan";
 import OverviewTab from "@/components/intelligence/OverviewTab";
 import MoneyFlowTab from "@/components/intelligence/MoneyFlowTab";
 import React from "react";
@@ -17,7 +18,14 @@ type SubTabId = typeof SUB_TABS[number]["id"];
 
 export default function ThemeIntelligence() {
   const [activeTab, setActiveTab] = useState<SubTabId>("overview");
-  const { themes, isLoading } = useThemeIntelligence();
+  const { themes, isLoading, refetch } = useThemeIntelligence();
+  const handleScanDone = useCallback(() => { refetch(); }, [refetch]);
+  const {
+    isRunning: isScanning,
+    statusText: scanStatus,
+    progress: scanProgress,
+    startFullScan,
+  } = useFullScan(handleScanDone);
 
   return (
     <CollapsibleProvider key={activeTab} storageKey={`intel-collapsibles-${activeTab}`}>
@@ -36,9 +44,28 @@ export default function ThemeIntelligence() {
               </h1>
               <span className="text-xs text-muted-foreground">
                 {themes.length} themes · {isLoading ? "loading…" : "live"}
+                {scanProgress && isScanning && (
+                  <> · {scanProgress.done}/{scanProgress.total}</>
+                )}
               </span>
             </div>
             <div className="flex items-center gap-2">
+              <button
+                onClick={startFullScan}
+                disabled={isScanning || isLoading}
+                className="rounded-md border border-primary/40 bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary transition-colors hover:bg-primary/20 disabled:opacity-50"
+                title={scanStatus || "Run a fresh ticker scan and refresh intelligence"}
+              >
+                {isScanning ? (
+                  <span className="inline-flex items-center gap-1">
+                    <Loader2 size={12} className="animate-spin" /> Scanning…
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1">
+                    <ScanLine size={12} /> Scan
+                  </span>
+                )}
+              </button>
               <ExpandCollapseAll />
               <HelpButton />
             </div>

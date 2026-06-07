@@ -622,6 +622,42 @@ export type Database = {
         }
         Relationships: []
       }
+      ticker_performance: {
+        Row: {
+          last_scanned: string | null
+          perf_1d: number
+          perf_1m: number
+          perf_1w: number
+          perf_3m: number
+          perf_ytd: number
+          price: number
+          status: string
+          symbol: string
+        }
+        Insert: {
+          last_scanned?: string | null
+          perf_1d?: number
+          perf_1m?: number
+          perf_1w?: number
+          perf_3m?: number
+          perf_ytd?: number
+          price?: number
+          status?: string
+          symbol: string
+        }
+        Update: {
+          last_scanned?: string | null
+          perf_1d?: number
+          perf_1m?: number
+          perf_1w?: number
+          perf_3m?: number
+          perf_ytd?: number
+          price?: number
+          status?: string
+          symbol?: string
+        }
+        Relationships: []
+      }
       ticker_volume_cache: {
         Row: {
           avg_10d: number | null
