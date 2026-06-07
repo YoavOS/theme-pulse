@@ -794,6 +794,43 @@ export default function RsAlpha() {
             )}
           </div>
         </div>
+
+        {/* RS New High Before Price filter */}
+        <div className="container pb-2">
+          <div className="flex flex-wrap items-center gap-2 rounded-md border border-border bg-card/30 px-3 py-2 text-xs">
+            <Filter size={11} className="shrink-0" />
+            <span className="font-medium text-foreground">RS New High Before Price</span>
+            <span className="text-[10px] text-muted-foreground" title="Stocks where the Relative Strength line (vs SPY) made a new high in the window, but price hasn't confirmed yet. Classic institutional accumulation signal.">
+              <Info size={10} className="inline" />
+            </span>
+            <div className="flex items-center gap-1 ml-1">
+              {([
+                { id: "off", label: "Off" },
+                { id: "20d", label: "20D" },
+                { id: "6m", label: "6M" },
+                { id: "any", label: "Any" },
+              ] as { id: RsNhFilter; label: string }[]).map(opt => (
+                <button
+                  key={opt.id}
+                  onClick={() => setRsNhFilter(opt.id)}
+                  className={`rounded px-2 py-0.5 text-[11px] border transition-colors ${
+                    rsNhFilter === opt.id
+                      ? "border-[hsl(140,70%,45%)] bg-[hsl(140,70%,45%)]/15 text-[hsl(140,70%,55%)] font-medium"
+                      : "border-border text-muted-foreground hover:bg-accent hover:text-foreground"
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+            {rsNhFilter !== "off" && (
+              <span className="ml-auto text-[10px] text-muted-foreground">
+                {sortedStocks.filter(s => s.rsNh20d || s.rsNh6m).length.toLocaleString()} matches
+              </span>
+            )}
+          </div>
+        </div>
+
         {(isRebuilding || isPaused || (progress.totalQueued > 0 && progress.processed < progress.totalQueued)) && (
           <div className="container pb-2">
             <div className={`rounded-md border px-3 py-2 text-xs ${isPaused ? "border-amber-500/30 bg-amber-500/5" : "border-accent/30 bg-accent/5"}`}>
