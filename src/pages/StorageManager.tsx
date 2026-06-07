@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { Link } from "react-router-dom";
 import { supabase as _supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -11,11 +11,10 @@ import {
 import { Input } from "@/components/ui/input";
 import {
   Database, Trash2, AlertTriangle, RefreshCw, Loader2, ArrowLeft, ShieldAlert,
+  HardDrive, Activity, TrendingUp, Lightbulb, CheckCircle2, ShieldCheck, Clock, Layers,
 } from "lucide-react";
 
 const supabase: any = _supabase;
-
-type SizeBadge = "Small" | "Medium" | "Large";
 
 interface TableStat {
   table_name: string;
@@ -35,6 +34,7 @@ interface TableMeta {
 interface SectionMeta {
   id: string;
   title: string;
+  icon: typeof Database;
   route: string;
   tables: TableMeta[];
 }
@@ -43,6 +43,7 @@ const SECTIONS: SectionMeta[] = [
   {
     id: "rs-alpha",
     title: "RS Alpha",
+    icon: TrendingUp,
     route: "/rs-alpha",
     tables: [
       { table: "qualified_rs_universe", label: "Live universe", description: "Active qualified stocks shown on RS Alpha.", protected: true, rescanRoute: "/rs-alpha" },
@@ -59,6 +60,7 @@ const SECTIONS: SectionMeta[] = [
   {
     id: "theme-intelligence",
     title: "Theme Intelligence",
+    icon: Layers,
     route: "/intelligence",
     tables: [
       { table: "themes", label: "Themes", description: "Theme definitions.", protected: true },
@@ -70,7 +72,8 @@ const SECTIONS: SectionMeta[] = [
   },
   {
     id: "live-and-other",
-    title: "Live Execution / Market Drivers / Morning Brief / Earnings",
+    title: "Live Execution / Market Drivers / Earnings",
+    icon: Activity,
     route: "/live",
     tables: [
       { table: "fundamentals_cache", label: "Fundamentals cache (shared)", description: "Same cache shown above — used by Live Execution snapshots." },
@@ -97,12 +100,26 @@ function fmtAgo(ts: string | null): string {
   return `${d}d ago`;
 }
 
-function sizeBadge(rows: number, bytes: number): { label: SizeBadge; cls: string; warn: boolean } {
+type SizeTier = "small" | "medium" | "large";
+
+function sizeTier(rows: number, bytes: number): SizeTier {
   const mb = bytes / 1024 / 1024;
-  if (rows >= 5000 || mb >= 50) return { label: "Large", cls: "bg-destructive/15 text-destructive border-destructive/30", warn: true };
-  if (rows >= 200 || mb >= 5) return { label: "Medium", cls: "bg-[hsl(40,80%,50%)]/15 text-[hsl(40,90%,60%)] border-[hsl(40,80%,50%)]/30", warn: false };
-  return { label: "Small", cls: "bg-muted text-muted-foreground border-border", warn: false };
+  if (rows >= 5000 || mb >= 50) return "large";
+  if (rows >= 200 || mb >= 5) return "medium";
+  return "small";
 }
+
+const TIER_BADGE: Record<SizeTier, string> = {
+  small:  "bg-[hsl(152_60%_45%/0.12)] text-[hsl(152_80%_55%)] border-[hsl(152_60%_45%/0.3)]",
+  medium: "bg-[hsl(40_80%_50%/0.12)] text-[hsl(40_90%_60%)] border-[hsl(40_80%_50%/0.3)]",
+  large:  "bg-destructive/15 text-destructive border-destructive/30",
+};
+const TIER_LABEL: Record<SizeTier, string> = { small: "Small", medium: "Medium", large: "Large" };
+const TIER_BAR: Record<SizeTier, string> = {
+  small: "bg-[hsl(152_80%_55%)]",
+  medium: "bg-[hsl(40_90%_60%)]",
+  large: "bg-destructive",
+};
 
 export default function StorageManager() {
   const { toast } = useToast();
@@ -163,8 +180,75 @@ export default function StorageManager() {
     }
   };
 
-  const totalBytes = Object.values(stats).reduce((s, r) => s + (r.size_bytes || 0), 0);
-  const totalRows = Object.values(stats).reduce((s, r) => s + (r.row_count || 0), 0);
+  const { totalBytes, totalRows, top3, health, recommendations } = useMemo(() => {
+    const all = Object.values(stats);
+    const totalBytes = all.reduce((s, r) => s + (r.size_bytes || 0), 0);
+    const totalRows = all.reduce((s, r) => s + (r.row_count || 0), 0);
+
+    // Top 3 biggest consumers (by bytes, fallback to rows)
+    const top3 = [...all]
+      .sort((a, b) => (b.size_bytes || 0) - (a.size_bytes || 0) || (b.row_count || 0) - (a.row_count || 0))
+      .slice(0, 3);
+
+    const totalMb = totalBytes / 1024 / 1024;
+    const largeCount = all.filter(r => sizeTier(r.row_count, r.size_bytes) === "large").length;
+    let health: { label: "Good" | "Warning" | "Critical"; cls: string; icon: typeof CheckCircle2 };
+    if (largeCount >= 3 || totalMb > 500) health = { label: "Critical", cls: "text-destructive", icon: AlertTriangle };
+    else if (largeCount >= 1 || totalMb > 100) health = { label: "Warning", cls: "text-[hsl(40_90%_60%)]", icon: AlertTriangle };
+    else health = { label: "Good", cls: "text-[hsl(152_80%_55%)]", icon: CheckCircle2 };
+
+    // Smart recommendations
+    const recs: { id: string; icon: typeof Trash2; text: string; action?: () => void; freeMb: number }[] = [];
+    const yahoo = stats["yahoo_history_cache"];
+    if (yahoo && yahoo.size_bytes > 5 * 1024 * 1024) {
+      recs.push({
+        id: "yahoo",
+        icon: Trash2,
+        text: `Clear Yahoo cache — would free ~${(yahoo.size_bytes / 1024 / 1024).toFixed(1)} MB`,
+        action: () => clearGroup([{ table: "yahoo_history_cache", force: false }], "Clear Yahoo cache"),
+        freeMb: yahoo.size_bytes / 1024 / 1024,
+      });
+    }
+    const staging = stats["qualified_rs_universe_staging"];
+    if (staging && staging.row_count > 0) {
+      recs.push({
+        id: "staging",
+        icon: Trash2,
+        text: `Clear ${staging.row_count.toLocaleString()} stale staging rows — would free ${fmtBytes(staging.size_bytes)}`,
+        action: () => clearGroup([{ table: "qualified_rs_universe_staging", force: false }], "Clear staging universe"),
+        freeMb: staging.size_bytes / 1024 / 1024,
+      });
+    }
+    const queues = ["stock_scan_queue", "fundamentals_scan_queue"]
+      .map(t => stats[t]).filter(r => r && r.row_count > 100);
+    if (queues.length > 0) {
+      const sumBytes = queues.reduce((s, r) => s + r!.size_bytes, 0);
+      recs.push({
+        id: "queues",
+        icon: Trash2,
+        text: `Drain completed scan queues — would free ${fmtBytes(sumBytes)}`,
+        action: () => clearGroup(
+          queues.map(q => ({ table: q!.table_name, force: false })),
+          "Clear scan queues"
+        ),
+        freeMb: sumBytes / 1024 / 1024,
+      });
+    }
+    const oldYahoo = yahoo?.last_updated ? (Date.now() - new Date(yahoo.last_updated).getTime()) > 7 * 86400_000 : false;
+    if (oldYahoo) {
+      recs.push({
+        id: "stale-yahoo",
+        icon: Clock,
+        text: "Yahoo cache hasn't been refreshed in over a week — consider clearing it.",
+        freeMb: 0,
+      });
+    }
+
+    return { totalBytes, totalRows, top3, health, recommendations: recs };
+  }, [stats]);
+
+  const totalMb = totalBytes / 1024 / 1024;
+  const HealthIcon = health.icon;
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -175,20 +259,93 @@ export default function StorageManager() {
           </Link>
           <Database size={18} className="text-primary" />
           <h1 className="font-['Syne',sans-serif] text-xl font-bold">Storage Manager</h1>
-          <div className="ml-auto flex items-center gap-3 text-xs text-muted-foreground">
-            <span>{totalRows.toLocaleString()} rows</span>
-            <span>·</span>
-            <span>{fmtBytes(totalBytes)} total</span>
-            <Button size="sm" variant="outline" onClick={load} disabled={isLoading}>
-              {isLoading ? <Loader2 className="animate-spin" /> : <RefreshCw />}
-              Refresh
-            </Button>
-          </div>
+          <Button size="sm" variant="outline" className="ml-auto" onClick={load} disabled={isLoading}>
+            {isLoading ? <Loader2 className="animate-spin" /> : <RefreshCw />}
+            Refresh
+          </Button>
         </div>
       </header>
 
       <main className="container py-6 space-y-6">
-        {/* Global actions */}
+        {/* ===== Summary Dashboard ===== */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+          <Card className="p-4 border-border">
+            <div className="flex items-center gap-2 text-xs uppercase tracking-wider text-muted-foreground">
+              <HardDrive size={12} /> Total Size
+            </div>
+            <div className="mt-1 text-2xl font-bold font-['DM_Mono',monospace]">{totalMb.toFixed(1)} <span className="text-sm font-normal text-muted-foreground">MB</span></div>
+            <div className="text-[11px] text-muted-foreground mt-1">{Object.keys(stats).length} tables tracked</div>
+          </Card>
+          <Card className="p-4 border-border">
+            <div className="flex items-center gap-2 text-xs uppercase tracking-wider text-muted-foreground">
+              <Database size={12} /> Total Rows
+            </div>
+            <div className="mt-1 text-2xl font-bold font-['DM_Mono',monospace]">{totalRows.toLocaleString()}</div>
+            <div className="text-[11px] text-muted-foreground mt-1">across all tracked tables</div>
+          </Card>
+          <Card className={`p-4 border-border`}>
+            <div className="flex items-center gap-2 text-xs uppercase tracking-wider text-muted-foreground">
+              <ShieldCheck size={12} /> Health
+            </div>
+            <div className={`mt-1 flex items-center gap-2 text-2xl font-bold ${health.cls}`}>
+              <HealthIcon size={20} />{health.label}
+            </div>
+            <div className="text-[11px] text-muted-foreground mt-1">
+              {health.label === "Good" && "All tables within normal bounds"}
+              {health.label === "Warning" && "Some tables are getting large"}
+              {health.label === "Critical" && "Several tables need attention"}
+            </div>
+          </Card>
+          <Card className="p-4 border-border">
+            <div className="flex items-center gap-2 text-xs uppercase tracking-wider text-muted-foreground">
+              <TrendingUp size={12} /> Top Consumers
+            </div>
+            <div className="mt-2 space-y-1">
+              {top3.length === 0 && <div className="text-xs text-muted-foreground">—</div>}
+              {top3.map(t => {
+                const tier = sizeTier(t.row_count, t.size_bytes);
+                return (
+                  <div key={t.table_name} className="flex items-center justify-between gap-2 text-[11px]">
+                    <span className="truncate font-mono">{t.table_name}</span>
+                    <span className={`shrink-0 font-mono ${tier === "large" ? "text-destructive" : tier === "medium" ? "text-[hsl(40_90%_60%)]" : "text-muted-foreground"}`}>
+                      {fmtBytes(t.size_bytes)}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </Card>
+        </div>
+
+        {/* ===== Smart Recommendations ===== */}
+        {recommendations.length > 0 && (
+          <Card className="p-4 border-[hsl(152_60%_45%/0.3)] bg-[hsl(152_60%_45%/0.04)]">
+            <div className="flex items-center gap-2 mb-2">
+              <Lightbulb size={14} className="text-[hsl(152_80%_55%)]" />
+              <span className="text-sm font-semibold">Smart recommendations</span>
+            </div>
+            <div className="space-y-1.5">
+              {recommendations.map(r => {
+                const Icon = r.icon;
+                return (
+                  <div key={r.id} className="flex items-center justify-between gap-3 rounded-md border border-border bg-background/40 px-3 py-2">
+                    <div className="flex items-center gap-2 text-sm">
+                      <Icon size={13} className="text-muted-foreground" />
+                      <span>{r.text}</span>
+                    </div>
+                    {r.action && (
+                      <Button size="sm" variant="outline" disabled={!!working} onClick={r.action}>
+                        Apply
+                      </Button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </Card>
+        )}
+
+        {/* ===== Quick actions ===== */}
         <Card className="p-4 border-border">
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-sm font-medium mr-2">Quick actions:</span>
@@ -209,20 +366,23 @@ export default function StorageManager() {
             </Button>
           </div>
           <p className="mt-2 text-xs text-muted-foreground">
-            Full reset wipes all caches and snapshots. Live universe, themes, and stored fundamentals are protected and require typing <span className="font-mono">RESET</span> to confirm.
+            Full reset wipes every cache and snapshot. Live universe, themes, and stored fundamentals are protected and require typing <span className="font-mono">RESET</span> to confirm.
           </p>
         </Card>
 
+        {/* ===== Per-section / per-table cards ===== */}
         {SECTIONS.map((section) => {
+          const SectionIcon = section.icon;
           const sectionRows = section.tables.reduce((s, t) => s + (stats[t.table]?.row_count || 0), 0);
           const sectionBytes = section.tables.reduce((s, t) => s + (stats[t.table]?.size_bytes || 0), 0);
           return (
             <section key={section.id}>
-              <div className="mb-2 flex items-baseline justify-between border-b border-border pb-1">
-                <h2 className="text-lg font-semibold">
+              <div className="mb-3 flex items-baseline justify-between border-b border-border pb-2">
+                <h2 className="flex items-center gap-2 text-lg font-semibold">
+                  <SectionIcon size={16} className="text-primary" />
                   <Link to={section.route} className="hover:text-primary transition-colors">{section.title}</Link>
                 </h2>
-                <span className="text-xs text-muted-foreground">
+                <span className="text-xs text-muted-foreground font-mono">
                   {sectionRows.toLocaleString()} rows · {fmtBytes(sectionBytes)}
                 </span>
               </div>
@@ -231,8 +391,10 @@ export default function StorageManager() {
                   const s = stats[t.table];
                   const rows = s?.row_count ?? 0;
                   const bytes = s?.size_bytes ?? 0;
-                  const badge = sizeBadge(rows, bytes);
+                  const tier = sizeTier(rows, bytes);
                   const busy = working === t.table;
+                  // Fill bar proportional to share of total (capped)
+                  const sharePct = totalBytes > 0 ? Math.min(100, (bytes / totalBytes) * 100) : 0;
                   return (
                     <Card key={`${section.id}-${t.table}`} className="p-3 border-border">
                       <div className="flex items-start justify-between gap-3">
@@ -241,38 +403,56 @@ export default function StorageManager() {
                             <h3 className="text-sm font-semibold">{t.label}</h3>
                             <code className="text-[10px] text-muted-foreground">{t.table}</code>
                             {t.protected && (
-                              <span className="rounded border border-border bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">protected</span>
+                              <span className="rounded border border-border bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground flex items-center gap-1">
+                                <ShieldCheck size={9} />protected
+                              </span>
                             )}
                           </div>
                           <p className="mt-0.5 text-xs text-muted-foreground">{t.description}</p>
                         </div>
-                        <span className={`shrink-0 rounded border px-2 py-0.5 text-[10px] font-medium ${badge.cls}`}>
-                          {badge.warn && <AlertTriangle size={10} className="inline mr-1" />}
-                          {badge.label}
+                        <span className={`shrink-0 rounded border px-2 py-0.5 text-[10px] font-medium flex items-center gap-1 ${TIER_BADGE[tier]}`}>
+                          {tier === "large" && <AlertTriangle size={10} />}
+                          {TIER_LABEL[tier]}
                         </span>
                       </div>
-                      <div className="mt-2 flex items-center justify-between text-xs">
-                        <div className="flex gap-3 font-mono">
-                          <span>{rows.toLocaleString()} rows</span>
-                          <span className="text-muted-foreground">{fmtBytes(bytes)}</span>
-                          <span className="text-muted-foreground">{fmtAgo(s?.last_updated ?? null)}</span>
+
+                      {/* Stats row */}
+                      <div className="mt-2 grid grid-cols-3 gap-2 text-xs">
+                        <div>
+                          <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Rows</div>
+                          <div className="font-mono font-semibold">{rows.toLocaleString()}</div>
                         </div>
-                        <div className="flex gap-1.5">
-                          {t.rescanRoute && (
-                            <Button asChild size="sm" variant="ghost">
-                              <Link to={t.rescanRoute}><RefreshCw />Re-scan</Link>
-                            </Button>
-                          )}
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            disabled={busy || !!working}
-                            onClick={() => setConfirm({ table: t.table, label: t.label, force: !!t.protected })}
-                          >
-                            {busy ? <Loader2 className="animate-spin" /> : <Trash2 />}
-                            Clear
+                        <div>
+                          <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Size</div>
+                          <div className="font-mono font-semibold">{fmtBytes(bytes)}</div>
+                        </div>
+                        <div>
+                          <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Updated</div>
+                          <div className="font-mono">{fmtAgo(s?.last_updated ?? null)}</div>
+                        </div>
+                      </div>
+
+                      {/* Size share bar */}
+                      <div className="mt-2 h-1 w-full rounded-full bg-muted overflow-hidden">
+                        <div className={`h-full ${TIER_BAR[tier]} transition-all`} style={{ width: `${sharePct}%` }} />
+                      </div>
+
+                      {/* Actions */}
+                      <div className="mt-2 flex items-center justify-end gap-1.5">
+                        {t.rescanRoute && (
+                          <Button asChild size="sm" variant="ghost">
+                            <Link to={t.rescanRoute}><RefreshCw />Re-scan</Link>
                           </Button>
-                        </div>
+                        )}
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={busy || !!working}
+                          onClick={() => setConfirm({ table: t.table, label: t.label, force: !!t.protected })}
+                        >
+                          {busy ? <Loader2 className="animate-spin" /> : <Trash2 />}
+                          Clear
+                        </Button>
                       </div>
                     </Card>
                   );
