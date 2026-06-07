@@ -1186,7 +1186,7 @@ export default function RsAlpha() {
         onConfirm={(filters) => {
           const mode = universeSettingsOpen ?? "resume";
           setUniverseSettingsOpen(null);
-          if (mode === "restart" && !confirm("Restart the scan from scratch? Your current live universe stays in use until the new scan completes — only the in-progress staging is cleared.")) return;
+          if (!confirm("Start a fresh universe scan? This wipes the current scan queue and reseeds the full US market. Your live universe keeps serving reads until the new scan finishes and publishes.")) return;
           rebuildUniverse(mode, filters as unknown as Record<string, unknown>);
         }}
       />
