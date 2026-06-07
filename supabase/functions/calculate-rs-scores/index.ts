@@ -179,6 +179,11 @@ Deno.serve(async (req) => {
         rsOverall = Math.round(parts.reduce((s, p) => s + p.v * (p.w / tw), 0) * 100) / 100;
       }
 
+      // RS New High Before Price — derived from existing 6mo OHLC, no extra storage.
+      const stockBars6m = semiAnnualHistory?.ohlc ?? [];
+      const nh20 = computeRsNewHigh(stockBars6m, spyByTs, 20);
+      const nh6m = computeRsNewHigh(stockBars6m, spyByTs, 9999);
+
       updates.push({
         symbol: sym,
         current_price: latestPrice,
@@ -188,6 +193,10 @@ Deno.serve(async (req) => {
         spy_return_1m: spyReturns["1mo"], spy_return_3m: spyReturns["3mo"], spy_return_6m: spyReturns["6mo"],
         rs_1d: rs1d, rs_1w: rs1w, rs_1m: rs1m, rs_3m: rs3m, rs_6m: rs6m,
         rs_overall: rsOverall,
+        rs_nh_20d: nh20.hit,
+        rs_nh_20d_days_ago: nh20.daysAgo,
+        rs_nh_6m: nh6m.hit,
+        rs_nh_6m_days_ago: nh6m.daysAgo,
         rs_calculated_at: new Date().toISOString(),
       });
     }
