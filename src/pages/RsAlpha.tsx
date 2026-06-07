@@ -388,6 +388,16 @@ export default function RsAlpha() {
         case "stockReturn": return mul * ((getReturnField(a, activeTab) ?? -999) - (getReturnField(b, activeTab) ?? -999));
         case "spyReturn": return mul * ((getSpyField(a, activeTab) ?? -999) - (getSpyField(b, activeTab) ?? -999));
         case "price": return mul * ((a.price ?? 0) - (b.price ?? 0));
+        case "rsNh": {
+          // Freshest signal first when ascending: prefer hit, then smallest daysAgo.
+          const score = (s: RsStock) => {
+            const d20 = s.rsNh20d ? (s.rsNh20dDaysAgo ?? 0) : null;
+            const d6 = s.rsNh6m ? (s.rsNh6mDaysAgo ?? 0) + 100 : null;
+            const cands = [d20, d6].filter((x): x is number => x !== null);
+            return cands.length ? Math.min(...cands) : 9999;
+          };
+          return mul * (score(a) - score(b));
+        }
         case "coil": {
           const av = coilScores.get(a.symbol)?.score ?? 999;
           const bv = coilScores.get(b.symbol)?.score ?? 999;
