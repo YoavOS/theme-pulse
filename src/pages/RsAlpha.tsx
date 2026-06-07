@@ -212,6 +212,11 @@ export default function RsAlpha() {
   const [emaDistances, setEmaDistances] = useState<Map<string, EmaDistanceInfo>>(new Map());
   const [emaLoading, setEmaLoading] = useState(false);
   const [qqqPctChange, setQqqPctChange] = useState<number | null>(null);
+  const [rsNhFilter, setRsNhFilter] = useState<RsNhFilter>(() => {
+    if (typeof window === "undefined") return "off";
+    return (localStorage.getItem("rs-nh-filter") as RsNhFilter) || "off";
+  });
+  useEffect(() => { localStorage.setItem("rs-nh-filter", rsNhFilter); }, [rsNhFilter]);
 
   useEffect(() => { setShowAll(false); }, [activeTab]);
   useEffect(() => { localStorage.setItem("rs-hide-otc", String(hideOtc)); }, [hideOtc]);
