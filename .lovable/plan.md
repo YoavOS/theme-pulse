@@ -1,44 +1,79 @@
-## Goal
-Strip the app down to its core momentum tools and reduce DB load by removing tabs, history persistence, and view modes that the user no longer wants.
+## Part 1 — Speed up scans (cache-first + parallel refresh)
 
-## Features to Remove (UI + routes + components + hooks)
+**Pattern:** Every scan-bound hook (Theme Performance, Full Scan / Dashboard, Volume, Theme Intelligence) will:
+1. On mount, **instantly hydrate** from the most recent DB snapshot (`ticker_performance`, `themes`/`theme_tickers`, `ticker_volume_cache`, `yahoo_history_cache`) — no spinner, data on screen in <500ms.
+2. Show a small "Refreshing…" pill in the header.
+3. Kick off a background refresh that fans out **25 concurrent Yahoo requests** (instead of sequential 1100ms-delayed Finnhub loop). Finnhub stays as fallback only.
+4. When refresh resolves, swap the cached snapshot for fresh data and update the "Last updated" timestamp.
 
-1. **Watchlist** — delete `src/pages/Watchlist.tsx`, `src/components/AddThemeModal.tsx`, `src/hooks/useWatchlistContext.tsx`, remove `WatchlistProvider` from `App.tsx`, remove `/watchlist` route, drop the pin/bell UI from `ThemeCard` and `Index.tsx`.
-2. **Alerts** — delete `src/pages/AlertCenter.tsx`, `src/hooks/useAlertHistory.ts`, `src/hooks/useBreadthAlerts.ts`, `src/hooks/useUnreadAlertCount.ts`, remove `/alerts` route and nav entry.
-3. **EOD Scan / EOD Routine / EOD History** — delete `src/pages/EodHistory.tsx`, `src/components/EodRoutineButton.tsx`, `src/hooks/useEodRoutine.ts`, `useEodSave.ts`, `useEodPerformance.ts`, `useEodChartData.ts`, `useSaveEodFromScan.ts`, edge function `save-eod`, remove `/eod-history` route and any EOD buttons in `Index.tsx` / `ThemeIntelligence`.
-4. **Enhanced view toggle** — remove `enhancedView` state + toggle from `Index.tsx` (and any branches it gates).
-5. **Dispersion metric** — remove the top header pill and `useDispersion` hook usage.
-6. **Light Mode** — delete `src/components/ThemeToggle.tsx`, remove it from `App.tsx`, hard-set dark theme in `index.html` / `index.css`.
-7. **Bar chart & card grid views** — remove `BarChartView` and the `"cards"` dashboard view; default to `"heatmap"`. Delete `BarChartView.tsx` and unused `ThemeCard.tsx` if no longer referenced. Keep heatmap, plus list/bubble if still desired — confirming below.
+**Edge function changes:**
+- `full-scan`: replace the sequential ticker loop with `Promise.all` batches of 25, Yahoo-first (already added), Finnhub fallback only on Yahoo failure. Skip tickers whose `ticker_performance.last_scanned` is <15 min old unless `?force=true`.
+- `fetch-themes`: same parallelization — batch theme tickers in groups of 25, Yahoo-first. Add `?maxAgeMinutes=15` short-circuit that returns cached `themes` rows if fresh.
+- `useFullScan`, `useThemeIntelligence`, `useVolumeData`, `useLiveThemeData`: read cached rows immediately, then call edge function with `force=false` by default; a "Force refresh" toggle in the Storage tab can force re-fetch.
 
-## Data Storage Changes
+**Expected result:** Theme/Dashboard scans feel as instant as RS Scores on warm cache, and full cold refresh drops from ~5–10 min to ~30–60s thanks to 25× parallelism.
 
-1. **No prior universes saved** — `process-universe-queue` already does an atomic swap into `qualified_stocks`. Add a step that truncates the prior snapshot table(s) and deletes `rs_scan_progress` rows once a scan completes. Drop any "previous universe" persistence.
-2. **No background theme performance storage** — stop writing to `theme_performance` / `ticker_performance` outside of an explicit user-initiated scan. Remove cron-like calls and EOD writes. Theme RS/volume becomes session-only (in-memory from `useLiveThemeData` / `useFullScan`).
-3. **Drop unused tables** via migration: `eod_snapshots`, `eod_routine_runs`, `alert_history`, `breadth_alerts`, `watchlist_*`, `theme_performance_history`, and any "previous_universe" tables. (Final list will be confirmed against the live schema before the migration runs — destructive, requires approval.)
+## Part 2 — Storage Manager tab
 
-## Files / Routes Summary
+**Route:** new top-level nav entry `/storage` → `src/pages/StorageManager.tsx`, added to `App.tsx` routes and to the nav bar (alongside RS Alpha, Intelligence, etc.).
+
+**Layout:** one accordion section per app area. Each section header shows total row count + total size. Inside, one card per backing table:
 
 ```text
-DELETE pages:        Watchlist, AlertCenter, EodHistory
-DELETE components:   ThemeToggle, EodRoutineButton, AddThemeModal, BarChartView,
-                     (likely) ThemeCard if unused after Index cleanup
-DELETE hooks:        useWatchlistContext, useAlertHistory, useBreadthAlerts,
-                     useUnreadAlertCount, useEodRoutine, useEodSave,
-                     useEodPerformance, useEodChartData, useSaveEodFromScan,
-                     useDispersion
-DELETE edge fns:     save-eod  (keep RS scan + intelligence fns)
-EDIT:                App.tsx, Index.tsx, ThemeIntelligence.tsx, index.html, index.css,
-                     useFullScan.ts, useRsAlpha.ts, process-universe-queue,
-                     seed-universe-queue
-MIGRATION:           DROP TABLE for EOD/alerts/watchlist/history tables
+RS Alpha
+├─ qualified_rs_universe           1,446 rows · Updated 2h ago · Medium
+├─ qualified_rs_universe_staging       0 rows · empty           · Small
+├─ stock_scan_queue                1,446 rows · Updated 2h ago · Medium
+├─ rs_scan_progress                    1 row  · Updated 2h ago · Small
+└─ stock_fundamentals              1,220 rows · Updated 1d ago · Large  ⚠
+   [Clear cache] [Re-scan]
+
+Theme Intelligence
+├─ themes / theme_tickers
+├─ ticker_performance
+├─ ticker_volume_cache
+└─ theme news cache (yahoo_history_cache filtered)
+
+Live Execution / Market Drivers / Morning Brief / Earnings
+└─ fundamentals_cache, stock drivers cache, etc.
 ```
 
-## Confirmations Needed
+**Per-card data shown:**
+- Table label + plain-English description ("Cached theme performance snapshots")
+- Row count (from `count(*)`)
+- Last updated (max `updated_at` / `last_scanned`)
+- Size badge: Small (<100 rows), Medium (<5k), Large (≥5k)
+- Warning icon when row count or staleness crosses a threshold
+- Action buttons with simple confirm dialog:
+  - **Clear cache** (truncates that table; staging tables only — never touches live `qualified_rs_universe` without typed confirm)
+  - **Re-scan** (deep-links to the page where the scan lives)
 
-1. **Bubble + List views** — you said "keep only the current heatmap/grid view". Should I also remove the **Bubble** and **Ranked List** dashboard views, leaving only Heatmap? (I'll remove both unless you say otherwise.)
-2. **ThemeCard** — used by Watchlist and the "cards" view. After removing both, OK to delete it entirely?
-3. **Destructive DB drop** — OK to permanently drop the EOD/alerts/watchlist/historical tables in a migration? Data is unrecoverable after.
-4. **News + AI panels** — keep as-is (they're session-fetched, not historical), correct?
+**Global action bar (top of page):**
+- Clear Old Universes — wipes `qualified_rs_universe_staging` + old `stock_scan_queue` rows
+- Clear News & Temporary Data — wipes news caches
+- Clear All Yahoo Cache — truncates `yahoo_history_cache`
+- **Full Memory Reset** — typed confirmation ("type RESET") that wipes all caches but keeps live universe + fundamentals
 
-Once you confirm, I'll execute in this order: (1) frontend removals, (2) edge function cleanup, (3) destructive migration.
+**Backend:** one new edge function `storage-stats` returning `{ table, rowCount, lastUpdated, sizeBytes }` for the curated table list (uses `pg_total_relation_size` + `count(*)`). One new edge function `storage-clear` that accepts `{ table }` and runs the corresponding `TRUNCATE` via SECURITY DEFINER RPCs (one RPC per allowed table, no dynamic SQL). All clear RPCs require an authenticated user.
+
+## Files touched
+
+**New:**
+- `src/pages/StorageManager.tsx`
+- `src/hooks/useStorageStats.ts`
+- `supabase/functions/storage-stats/index.ts`
+- `supabase/functions/storage-clear/index.ts`
+- Migration: SECURITY DEFINER `truncate_*` RPCs for each clearable table
+
+**Edited:**
+- `src/App.tsx` (route)
+- `src/components/NavLink.tsx` or wherever the top nav lives (add link)
+- `supabase/functions/full-scan/index.ts` (parallel batches + 15-min cache short-circuit)
+- `supabase/functions/fetch-themes/index.ts` (parallel batches + cache short-circuit)
+- `src/hooks/useFullScan.ts`, `useThemeIntelligence.ts`, `useVolumeData.ts`, `useLiveThemeData.ts` (cache-first hydration + background refresh)
+
+## Out of scope
+
+- Re-architecting the EOD pipeline
+- Adding paid Yahoo/Finnhub tiers
+- Per-user storage quotas
