@@ -463,7 +463,7 @@ export default function RsAlpha() {
             {/* Start / Resume / Continue */}
             {!isRebuilding && (
               <button
-                onClick={() => setUniverseSettingsOpen("resume")}
+                onClick={() => setUniverseSettingsOpen("restart")}
                 disabled={isMutatingScan}
                 className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-50"
                 title={isPaused ? "Resume the paused scan" : "Start or continue the qualified universe scan"}
