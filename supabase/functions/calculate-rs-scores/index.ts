@@ -9,17 +9,9 @@ const corsHeaders = {
 const PERIODS: YahooPeriod[] = ["5d", "1mo", "3mo", "6mo"];
 const BATCH_PER_INVOCATION = 15;
 const HISTORY_BATCH_SIZE = 5;
-const LIVE_SCAN_MAX_AGE_MS = 18 * 60 * 60 * 1000;
 
 function toNumberOrNull(value: unknown): number | null {
   return value === null || value === undefined ? null : Number(value);
-}
-
-function isFreshScan(lastScanned: string | null | undefined): boolean {
-  if (!lastScanned) return false;
-  const scannedAt = new Date(lastScanned).getTime();
-  if (!Number.isFinite(scannedAt)) return false;
-  return Date.now() - scannedAt <= LIVE_SCAN_MAX_AGE_MS;
 }
 
 function derive1dReturn(history: HistoricalResult | undefined): number | null {
@@ -68,20 +60,6 @@ Deno.serve(async (req) => {
       .in("symbol", historySymbols)
       .in("period", PERIODS);
 
-    const { data: perfRows } = await supabase
-      .from("ticker_performance")
-      .select("symbol, perf_1d, price, last_scanned")
-      .in("symbol", historySymbols);
-
-    const perfMap = new Map<string, { perf1d: number | null; price: number | null; lastScanned: string | null }>();
-    for (const row of perfRows ?? []) {
-      perfMap.set(row.symbol, {
-        perf1d: toNumberOrNull(row.perf_1d),
-        price: toNumberOrNull(row.price),
-        lastScanned: row.last_scanned,
-      });
-    }
-
     const historyBySymbol = new Map<string, Record<YahooPeriod, HistoricalResult>>();
     for (const sym of historySymbols) {
       historyBySymbol.set(sym, {} as Record<YahooPeriod, HistoricalResult>);
@@ -116,11 +94,7 @@ Deno.serve(async (req) => {
     const history3m = Object.fromEntries(historySymbols.map((sym) => [sym, historyBySymbol.get(sym)?.["3mo"]])) as Record<string, HistoricalResult | undefined>;
     const history6m = Object.fromEntries(historySymbols.map((sym) => [sym, historyBySymbol.get(sym)?.["6mo"]])) as Record<string, HistoricalResult | undefined>;
 
-    const spyPerf = perfMap.get("SPY");
-    const spyFresh1d = isFreshScan(spyPerf?.lastScanned)
-      ? spyPerf?.perf1d ?? null
-      : null;
-    const spy1d = spyFresh1d ?? derive1dReturn(history5d.SPY) ?? 0;
+    const spy1d = derive1dReturn(history5d.SPY) ?? 0;
     const spyReturns: Record<string, number | null> = {
       "5d": history5d.SPY?.returnPct ?? null,
       "1mo": history1m.SPY?.returnPct ?? null,
@@ -131,29 +105,19 @@ Deno.serve(async (req) => {
     const updates: any[] = [];
     for (const u of universe) {
       const sym = u.symbol;
-      const perfRow = perfMap.get(sym);
       const weeklyHistory = history5d[sym];
       const monthlyHistory = history1m[sym];
       const quarterlyHistory = history3m[sym];
       const semiAnnualHistory = history6m[sym];
 
-      const freshPerf1d = isFreshScan(perfRow?.lastScanned)
-        ? perfRow?.perf1d ?? null
-        : null;
-
-      const r1d = freshPerf1d ?? derive1dReturn(weeklyHistory);
+      const r1d = derive1dReturn(weeklyHistory);
       const r1w = weeklyHistory?.returnPct ?? null;
       const r1m = monthlyHistory?.returnPct ?? null;
       const r3m = quarterlyHistory?.returnPct ?? null;
       const r6m = semiAnnualHistory?.returnPct ?? null;
-      const freshPrice = isFreshScan(perfRow?.lastScanned)
-        ? perfRow?.price ?? null
-        : null;
       const latestPrice =
-        freshPrice ??
         toNumberOrNull(weeklyHistory?.endPrice) ??
         toNumberOrNull(monthlyHistory?.endPrice) ??
-        perfRow?.price ??
         toNumberOrNull(u.current_price);
 
       const rs1d = r1d !== null && spy1d !== null ? Math.round((r1d - spy1d) * 100) / 100 : null;
