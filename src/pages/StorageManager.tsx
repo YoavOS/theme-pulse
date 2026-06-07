@@ -68,7 +68,7 @@ const SECTIONS: SectionMeta[] = [
       { table: "theme_tickers", label: "Theme tickers", description: "Symbols mapped to each theme.", protected: true },
       { table: "ticker_performance", label: "Performance snapshot", description: "Latest 1D/1W/1M/3M/YTD per ticker — what the Dashboard scan writes.", rescanRoute: "/" },
       { table: "ticker_volume_cache", label: "Volume cache", description: "Per-ticker volume averages used for Rel Vol / dry-up signals.", rescanRoute: "/intelligence" },
-      { table: "yahoo_history_cache", label: "Yahoo history cache", description: "Cached historical OHLC pulled from Yahoo Finance." },
+      { table: "yahoo_history_cache", label: "Yahoo history cache", description: "Cached historical OHLC pulled from Yahoo Finance. Only the 6-month snapshot is stored; shorter timeframes (5d/1mo/3mo/YTD) are derived on the fly.", trimRpc: "trim_yahoo_cache" },
     ],
   },
   {
