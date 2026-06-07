@@ -207,84 +207,10 @@ export function useVolumeDryUp() {
 }
 
 /**
- * Save weekly volume snapshots to volume_history table.
- * Called after Friday EOD save.
+ * Save weekly volume snapshots — disabled. The `volume_history` table was
+ * dropped in the lightweight cleanup; weekly snapshots are no longer persisted.
  */
 export async function saveWeeklyVolumeHistory() {
-  try {
-    const [themesRes, tickersRes, volCacheRes] = await Promise.all([
-      supabase.from("themes").select("id, name"),
-      supabase.from("theme_tickers").select("theme_id, ticker_symbol"),
-      supabase.from("ticker_volume_cache").select("symbol, today_vol, avg_20d, avg_10d, avg_3m"),
-    ]);
-
-    if (!themesRes.data || !tickersRes.data || !volCacheRes.data) return;
-
-    const volMap = new Map(volCacheRes.data.map(v => [v.symbol, v]));
-
-    const themeSymbols = new Map<string, string[]>();
-    for (const tk of tickersRes.data) {
-      const arr = themeSymbols.get(tk.theme_id) || [];
-      arr.push(tk.ticker_symbol);
-      themeSymbols.set(tk.theme_id, arr);
-    }
-
-    // Get this Friday's date
-    const now = new Date();
-    const etStr = now.toLocaleString("en-US", { timeZone: "America/New_York" });
-    const et = new Date(etStr);
-    // Find most recent Friday
-    const dayOfWeek = et.getDay();
-    const daysToFriday = dayOfWeek === 0 ? 2 : dayOfWeek === 6 ? 1 : dayOfWeek >= 5 ? 0 : 5 - dayOfWeek;
-    // Actually go back to last Friday
-    const fridayOffset = dayOfWeek === 5 ? 0 : dayOfWeek === 6 ? 1 : dayOfWeek === 0 ? 2 : dayOfWeek;
-    et.setDate(et.getDate() - fridayOffset);
-    const weekEnding = `${et.getFullYear()}-${String(et.getMonth() + 1).padStart(2, "0")}-${String(et.getDate()).padStart(2, "0")}`;
-
-    const rows: { theme_name: string; week_ending: string; sustained_vol_pct: number | null; avg_rel_vol: number | null }[] = [];
-
-    for (const theme of themesRes.data) {
-      const symbols = themeSymbols.get(theme.id) || [];
-      if (symbols.length === 0) continue;
-
-      const vols = symbols.map(s => volMap.get(s)).filter((v): v is NonNullable<typeof v> =>
-        !!v && ((v.avg_10d ?? 0) > 0 || (v.avg_3m ?? 0) > 0)
-      );
-
-      if (vols.length === 0) continue;
-
-      const relVols = vols
-        .filter(v => (v.avg_20d ?? 0) > 0 && (v.today_vol ?? 0) > 0)
-        .map(v => Number(v.today_vol!) / Number(v.avg_20d!));
-      const avgRelVol = relVols.length > 0
-        ? Math.round((relVols.reduce((a, b) => a + b, 0) / relVols.length) * 100) / 100
-        : null;
-
-      const susVols = vols
-        .filter(v => (v.avg_3m ?? 0) > 0 && (v.avg_10d ?? 0) > 0)
-        .map(v => ((Number(v.avg_10d!) / Number(v.avg_3m!)) - 1) * 100);
-      const sustainedVol = susVols.length > 0
-        ? Math.round((susVols.reduce((a, b) => a + b, 0) / susVols.length) * 100) / 100
-        : null;
-
-      rows.push({
-        theme_name: theme.name,
-        week_ending: weekEnding,
-        sustained_vol_pct: sustainedVol,
-        avg_rel_vol: avgRelVol,
-      });
-    }
-
-    // Upsert in batches
-    const BATCH = 50;
-    for (let i = 0; i < rows.length; i += BATCH) {
-      await supabase
-        .from("volume_history" as any)
-        .upsert(rows.slice(i, i + BATCH), { onConflict: "theme_name,week_ending" });
-    }
-
-    console.log(`Volume history saved: ${rows.length} themes for week ending ${weekEnding}`);
-  } catch (err) {
-    console.error("Failed to save weekly volume history:", err);
-  }
+  return;
 }
+
