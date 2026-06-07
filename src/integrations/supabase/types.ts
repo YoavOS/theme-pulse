@@ -247,6 +247,10 @@ export type Database = {
           rs_3m: number | null
           rs_6m: number | null
           rs_calculated_at: string | null
+          rs_nh_20d: boolean | null
+          rs_nh_20d_days_ago: number | null
+          rs_nh_6m: boolean | null
+          rs_nh_6m_days_ago: number | null
           rs_overall: number | null
           sector: string | null
           spy_return_1d: number | null
@@ -275,6 +279,10 @@ export type Database = {
           rs_3m?: number | null
           rs_6m?: number | null
           rs_calculated_at?: string | null
+          rs_nh_20d?: boolean | null
+          rs_nh_20d_days_ago?: number | null
+          rs_nh_6m?: boolean | null
+          rs_nh_6m_days_ago?: number | null
           rs_overall?: number | null
           sector?: string | null
           spy_return_1d?: number | null
@@ -303,6 +311,10 @@ export type Database = {
           rs_3m?: number | null
           rs_6m?: number | null
           rs_calculated_at?: string | null
+          rs_nh_20d?: boolean | null
+          rs_nh_20d_days_ago?: number | null
+          rs_nh_6m?: boolean | null
+          rs_nh_6m_days_ago?: number | null
           rs_overall?: number | null
           sector?: string | null
           spy_return_1d?: number | null
@@ -334,6 +346,10 @@ export type Database = {
           rs_3m: number | null
           rs_6m: number | null
           rs_calculated_at: string | null
+          rs_nh_20d: boolean | null
+          rs_nh_20d_days_ago: number | null
+          rs_nh_6m: boolean | null
+          rs_nh_6m_days_ago: number | null
           rs_overall: number | null
           sector: string | null
           spy_return_1d: number | null
@@ -362,6 +378,10 @@ export type Database = {
           rs_3m?: number | null
           rs_6m?: number | null
           rs_calculated_at?: string | null
+          rs_nh_20d?: boolean | null
+          rs_nh_20d_days_ago?: number | null
+          rs_nh_6m?: boolean | null
+          rs_nh_6m_days_ago?: number | null
           rs_overall?: number | null
           sector?: string | null
           spy_return_1d?: number | null
@@ -390,6 +410,10 @@ export type Database = {
           rs_3m?: number | null
           rs_6m?: number | null
           rs_calculated_at?: string | null
+          rs_nh_20d?: boolean | null
+          rs_nh_20d_days_ago?: number | null
+          rs_nh_6m?: boolean | null
+          rs_nh_6m_days_ago?: number | null
           rs_overall?: number | null
           sector?: string | null
           spy_return_1d?: number | null
