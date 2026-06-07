@@ -103,36 +103,11 @@ export function useRsAlpha() {
       }
 
       const symbols = qualifiedRows.map((row) => row.symbol).filter(Boolean);
-      const perfChunks = chunkArray(symbols, PERF_CHUNK_SIZE);
-      const [spyPerfResult, ...perfResults] = await Promise.all([
-        supabase
-          .from("ticker_performance")
-          .select("perf_1d")
-          .eq("symbol", "SPY")
-          .maybeSingle(),
-        ...perfChunks.map((chunk) =>
-          supabase
-            .from("ticker_performance")
-            .select("symbol, perf_1d, price, last_scanned")
-            .in("symbol", chunk)
-        ),
-      ]);
-
-      if (spyPerfResult.error) throw spyPerfResult.error;
-
+      // ticker_performance table removed in lightweight cleanup —
+      // skip the live perf overlay. Values come from qualified_rs_universe only.
       const livePerfMap = new Map<string, { perf1d: number | null; price: number | null; lastScanned: string | null }>();
-      for (const result of perfResults) {
-        if (result.error) throw result.error;
-        for (const row of result.data ?? []) {
-          livePerfMap.set(row.symbol, {
-            perf1d: toNumberOrNull(row.perf_1d),
-            price: toNumberOrNull(row.price),
-            lastScanned: row.last_scanned,
-          });
-        }
-      }
+      const spyReturn1d: number | null = null;
 
-      const spyReturn1d = toNumberOrNull(spyPerfResult.data?.perf_1d);
       const mapped: RsStock[] = qualifiedRows.map((r) => {
         const livePerf = livePerfMap.get(r.symbol);
         const useLive1d = isFreshScan(livePerf?.lastScanned);
