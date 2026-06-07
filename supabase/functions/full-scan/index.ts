@@ -34,6 +34,10 @@ function closeNDaysAgo(ohlc: { ts: number; close: number | null }[], daysAgo: nu
 
 async function fetchYahooQuote(symbol: string): Promise<{ price: number; prevClose: number } | null> {
   try {
+    // range=5d gives us several daily closes so we can derive the true
+    // previous-trading-day close from the chart itself.
+    // meta.chartPreviousClose is the close BEFORE the chart window starts
+    // (i.e. ~5 trading days ago for range=5d) — DO NOT use that for 1D perf.
     const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=5d&interval=1d`;
     const res = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0", "Accept": "application/json" } });
     if (!res.ok) return null;
@@ -42,8 +46,25 @@ async function fetchYahooQuote(symbol: string): Promise<{ price: number; prevClo
     const meta = r?.meta;
     if (!meta) return null;
     const price = Number(meta.regularMarketPrice);
-    const prevClose = Number(meta.chartPreviousClose ?? meta.previousClose);
-    if (!price || !prevClose) return null;
+
+    // Prefer the actual previous trading-day close from the chart bars.
+    const closes: (number | null)[] = r?.indicators?.quote?.[0]?.close ?? [];
+    const ts: number[] = r?.timestamp ?? [];
+    let prevClose = NaN;
+    // Walk from the end, skipping the current/most-recent bar that matches today's price.
+    for (let i = closes.length - 1; i >= 0; i--) {
+      const c = closes[i];
+      if (c == null) continue;
+      // skip the bar representing the current session
+      if (Number.isFinite(price) && Math.abs(c - price) < 0.0001 && i === closes.length - 1) continue;
+      prevClose = Number(c);
+      break;
+    }
+    // Fallbacks: regularMarketPreviousClose / previousClose are the true prior close.
+    if (!Number.isFinite(prevClose) || !prevClose) {
+      prevClose = Number(meta.regularMarketPreviousClose ?? meta.previousClose);
+    }
+    if (!price || !prevClose || !Number.isFinite(prevClose)) return null;
     return { price, prevClose };
   } catch { return null; }
 }
