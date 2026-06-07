@@ -121,23 +121,14 @@ export default function ThemeDrilldownModal({
     if (symbols.length === 0) return;
 
     (async () => {
-      // Fetch ticker_performance, eod sparklines, and volume cache in parallel
-      const [perfResult, eodResult, volResult] = await Promise.all([
-        supabase
-          .from("ticker_performance")
-          .select("symbol, perf_1w, perf_1m, price")
-          .in("symbol", symbols),
-        supabase
-          .from("eod_prices")
-          .select("symbol, date, close_price")
-          .in("symbol", symbols)
-          .gte("date", new Date(Date.now() - 10 * 86400000).toISOString().split("T")[0])
-          .order("date", { ascending: true }),
-        supabase
-          .from("ticker_volume_cache")
-          .select("symbol, today_vol, avg_20d, avg_10d, avg_3m")
-          .in("symbol", symbols),
-      ]);
+      // ticker_performance and eod_prices were removed in the lightweight cleanup.
+      // Only ticker_volume_cache remains; perf/sparklines come from live session data.
+      const perfResult: { data: any[] | null } = { data: null };
+      const eodResult: { data: any[] | null } = { data: null };
+      const volResult = await supabase
+        .from("ticker_volume_cache")
+        .select("symbol, today_vol, avg_20d, avg_10d, avg_3m")
+        .in("symbol", symbols);
 
       const map: Record<string, TickerExtra> = {};
       for (const s of symbols) {
