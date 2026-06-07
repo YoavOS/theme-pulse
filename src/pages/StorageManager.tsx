@@ -219,7 +219,15 @@ export default function StorageManager() {
     // Smart recommendations
     const recs: { id: string; icon: typeof Trash2; text: string; action?: () => void; freeMb: number }[] = [];
     const yahoo = stats["yahoo_history_cache"];
-    if (yahoo && yahoo.size_bytes > 5 * 1024 * 1024) {
+    if (yahoo && yahoo.size_bytes > 8 * 1024 * 1024) {
+      recs.push({
+        id: "yahoo-trim",
+        icon: Layers,
+        text: `Trim Yahoo cache — dedupe per-period rows & drop snapshots older than 14 days (cache is ${(yahoo.size_bytes / 1024 / 1024).toFixed(1)} MB)`,
+        action: () => trimTable("trim_yahoo_cache", "Yahoo history cache"),
+        freeMb: yahoo.size_bytes / 1024 / 1024 * 0.7,
+      });
+    } else if (yahoo && yahoo.size_bytes > 5 * 1024 * 1024) {
       recs.push({
         id: "yahoo",
         icon: Trash2,
