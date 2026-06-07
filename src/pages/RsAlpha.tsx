@@ -364,6 +364,13 @@ export default function RsAlpha() {
           return false;
         }
       }
+      if (rsNhFilter !== "off") {
+        const hit20 = !!s.rsNh20d;
+        const hit6 = !!s.rsNh6m;
+        if (rsNhFilter === "20d" && !hit20) return false;
+        if (rsNhFilter === "6m" && !hit6) return false;
+        if (rsNhFilter === "any" && !hit20 && !hit6) return false;
+      }
       return true;
     });
     const rsValues = filtered.map(s => getRsForTab(s, activeTab));
