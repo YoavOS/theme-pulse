@@ -44,9 +44,28 @@ export default function ThemeIntelligence() {
               </h1>
               <span className="text-xs text-muted-foreground">
                 {themes.length} themes · {isLoading ? "loading…" : "live"}
+                {scanProgress && isScanning && (
+                  <> · {scanProgress.done}/{scanProgress.total}</>
+                )}
               </span>
             </div>
             <div className="flex items-center gap-2">
+              <button
+                onClick={startFullScan}
+                disabled={isScanning || isLoading}
+                className="rounded-md border border-primary/40 bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary transition-colors hover:bg-primary/20 disabled:opacity-50"
+                title={scanStatus || "Run a fresh ticker scan and refresh intelligence"}
+              >
+                {isScanning ? (
+                  <span className="inline-flex items-center gap-1">
+                    <Loader2 size={12} className="animate-spin" /> Scanning…
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1">
+                    <ScanLine size={12} /> Scan
+                  </span>
+                )}
+              </button>
               <ExpandCollapseAll />
               <HelpButton />
             </div>
