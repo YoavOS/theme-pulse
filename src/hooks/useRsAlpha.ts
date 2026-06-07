@@ -58,6 +58,10 @@ export interface RsStock {
   rs6m: number | null;
   rsOverall: number | null;
   rsCalculatedAt: string | null;
+  rsNh20d: boolean | null;
+  rsNh20dDaysAgo: number | null;
+  rsNh6m: boolean | null;
+  rsNh6mDaysAgo: number | null;
 }
 
 export interface RebuildProgress {
