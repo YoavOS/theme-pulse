@@ -202,6 +202,7 @@ export function useRsAlpha() {
 
   // Reload qualified universe whenever the scan transitions to "complete" (atomic swap just published).
   const lastStatusRef = useRef<string | null>(null);
+  const lastCountSyncRef = useRef<string | null>(null);
   useEffect(() => {
     const prev = lastStatusRef.current;
     lastStatusRef.current = progress.status;
@@ -212,6 +213,21 @@ export function useRsAlpha() {
       return () => window.clearTimeout(t);
     }
   }, [progress.status, loadStocks]);
+
+  // If the page was already open when a publish completed, force the live
+  // universe table to become the UI source of truth instead of trusting the
+  // progress counter alone.
+  useEffect(() => {
+    if (progress.status !== "complete" || progress.qualified <= 0 || isLoading) return;
+    if (stocks.length === progress.qualified) {
+      lastCountSyncRef.current = null;
+      return;
+    }
+    const syncKey = `${progress.lastUpdated}:${progress.qualified}:${stocks.length}`;
+    if (lastCountSyncRef.current === syncKey) return;
+    lastCountSyncRef.current = syncKey;
+    loadStocks();
+  }, [progress.status, progress.qualified, progress.lastUpdated, stocks.length, isLoading, loadStocks]);
 
   // ── Start / Resume heavy scan ──
   // mode "resume" (default) continues from last point; "restart" wipes and reseeds.
