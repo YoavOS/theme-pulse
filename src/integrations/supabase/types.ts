@@ -732,6 +732,15 @@ export type Database = {
           symbol: string
         }[]
       }
+      get_storage_stats: {
+        Args: never
+        Returns: {
+          last_updated: string
+          row_count: number
+          size_bytes: number
+          table_name: string
+        }[]
+      }
       recompute_rs_scan_progress: { Args: never; Returns: undefined }
       release_universe_scan_lock: { Args: never; Returns: undefined }
       set_fundamentals_cron_active: {
@@ -744,6 +753,10 @@ export type Database = {
       }
       swap_qualified_rs_universe: { Args: never; Returns: number }
       truncate_qualified_rs_staging: { Args: never; Returns: undefined }
+      truncate_storage_table: {
+        Args: { p_force?: boolean; p_table: string }
+        Returns: number
+      }
       try_universe_scan_lock: { Args: never; Returns: boolean }
     }
     Enums: {
