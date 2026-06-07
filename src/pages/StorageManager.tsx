@@ -491,6 +491,18 @@ export default function StorageManager() {
                             <Link to={t.rescanRoute}><RefreshCw />Re-scan</Link>
                           </Button>
                         )}
+                        {t.trimRpc && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            disabled={busy || !!working}
+                            onClick={() => trimTable(t.trimRpc!, t.label)}
+                            title="Remove duplicate-period rows, stale snapshots, and orphan tickers"
+                          >
+                            {busy ? <Loader2 className="animate-spin" /> : <Layers />}
+                            Trim
+                          </Button>
+                        )}
                         <Button
                           size="sm"
                           variant="outline"
