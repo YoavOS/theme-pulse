@@ -1,5 +1,5 @@
 import { useMemo, useState, useCallback, useRef } from "react";
-import { Target, Loader2, Copy, X, Sparkles, TrendingUp, Newspaper, Calendar, Award, Upload, FileText } from "lucide-react";
+import { Target, Loader2, Copy, X, Sparkles, TrendingUp, Newspaper, Calendar, Award, Upload, FileText, Download } from "lucide-react";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
