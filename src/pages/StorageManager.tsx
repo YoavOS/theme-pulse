@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useMemo } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { supabase as _supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -123,7 +124,14 @@ const TIER_BAR: Record<SizeTier, string> = {
 };
 
 export default function StorageManager() {
+  const { user, isLoading: authLoading } = useAuth();
+  const navigate = useNavigate();
   const { toast } = useToast();
+
+  useEffect(() => {
+    if (!authLoading && !user) navigate("/login");
+  }, [authLoading, user, navigate]);
+
   const [stats, setStats] = useState<Record<string, TableStat>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [working, setWorking] = useState<string | null>(null);
