@@ -312,6 +312,43 @@ export default function SetupAnalyzerModal({ open, onOpenChange, universe }: Pro
     );
   };
 
+  const handleDownload = (format: "txt" | "csv") => {
+    if (!results) return;
+    let body: string;
+    let filename: string;
+    let mime: string;
+    if (format === "txt") {
+      body = results.map((r) => r.symbol).join("\n") + "\n";
+      filename = `Setup_Ranked_${results.length}.txt`;
+      mime = "text/plain;charset=utf-8";
+    } else {
+      const headers = ["Rank", "Symbol", "Tier", "Composite", "Theme", "ThemeScore", "RsScore", "RsNhScore", "RsNhWindow", "RsNhDaysAgo", "CatalystScore", "NewsCount7d", "EarningsInDays", "UpgradeSignal", "Sentiment", "TopHeadline"];
+      const tierOf = (s: number) => (s >= 75 ? "A" : s >= 55 ? "B" : "C");
+      const esc = (v: unknown) => {
+        const s = v === null || v === undefined ? "" : String(v);
+        return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+      };
+      const rows = results.map((r, i) => [
+        i + 1, r.symbol, tierOf(r.composite), r.composite.toFixed(2),
+        r.themeName ?? "", r.themeScore.toFixed(1), r.rsScore.toFixed(1),
+        r.rsNhScore.toFixed(1), r.rsNhWindow ?? "", r.rsNhDaysAgo ?? "",
+        r.catalystScore.toFixed(1), r.catalyst?.newsCount7d ?? "",
+        r.catalyst?.earningsInDays ?? "", r.catalyst?.upgradeSignal?.toFixed(2) ?? "",
+        r.catalyst?.sentiment ?? "", r.catalyst?.topHeadline ?? "",
+      ].map(esc).join(","));
+      body = [headers.join(","), ...rows].join("\n") + "\n";
+      filename = `Setup_Ranked_${results.length}.csv`;
+      mime = "text/csv;charset=utf-8";
+    }
+    const blob = new Blob([body], { type: mime });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    toast.success(`Downloaded ${filename}`);
+  };
+
   const handleReset = () => { setResults(null); setUnqualified([]); };
 
   return (
