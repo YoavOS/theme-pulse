@@ -103,6 +103,35 @@ export default function SetupAnalyzerModal({ open, onOpenChange, universe }: Pro
   const [running, setRunning] = useState(false);
   const [results, setResults] = useState<ScoredRow[] | null>(null);
   const [unqualified, setUnqualified] = useState<string[]>([]);
+  const [dragOver, setDragOver] = useState(false);
+  const [lastFileName, setLastFileName] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const ingestFile = useCallback(async (file: File) => {
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) { toast.error("File too large (max 5MB)."); return; }
+    try {
+      const text = await file.text();
+      const parsed = parseTickers(text);
+      if (parsed.length === 0) { toast.error("No tickers found in file."); return; }
+      setRaw(parsed.join(", "));
+      setLastFileName(file.name);
+      toast.success(`Loaded ${parsed.length} tickers`, { description: file.name });
+    } catch (e) {
+      toast.error("Could not read file.", { description: e instanceof Error ? e.message : String(e) });
+    }
+  }, []);
+
+  const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    if (f) void ingestFile(f);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault(); setDragOver(false);
+    const f = e.dataTransfer.files?.[0];
+    if (f) void ingestFile(f);
+  };
 
   const universeMap = useMemo(() => {
     const m = new Map<string, RsStock>();
