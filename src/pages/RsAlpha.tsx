@@ -11,6 +11,7 @@ import OverallWeightsPanel, { RsWeights, DEFAULT_RS_WEIGHTS, normalizeWeights } 
 import RsRatingBadge, { computeRsRatings } from "@/components/rs/RsRatingBadge";
 import CustomTradingViewListModal from "@/components/rs/CustomTradingViewListModal";
 import CustomListAnalyzerModal from "@/components/rs/CustomListAnalyzerModal";
+import SetupAnalyzerModal from "@/components/rs/SetupAnalyzerModal";
 import SectorDistributionModal from "@/components/rs/SectorDistributionModal";
 import ThemeDistributionModal from "@/components/rs/ThemeDistributionModal";
 import FundamentalsCoverageModal from "@/components/rs/FundamentalsCoverageModal";
@@ -155,6 +156,7 @@ export default function RsAlpha() {
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [customListOpen, setCustomListOpen] = useState(false);
   const [analyzerOpen, setAnalyzerOpen] = useState(false);
+  const [setupAnalyzerOpen, setSetupAnalyzerOpen] = useState(false);
   const [sectorDistOpen, setSectorDistOpen] = useState(false);
   const [themeDistOpen, setThemeDistOpen] = useState(false);
   const [coverageOpen, setCoverageOpen] = useState(false);
@@ -1058,6 +1060,13 @@ export default function RsAlpha() {
                   >
                     <Settings2 size={12} /> Import &amp; Analyze List
                   </button>
+                  <button
+                    onClick={() => setSetupAnalyzerOpen(true)}
+                    className="inline-flex items-center gap-1.5 rounded-md border border-[hsl(140,70%,45%)]/60 bg-[hsl(140,70%,45%)]/15 px-3 py-1.5 text-xs font-semibold text-[hsl(140,70%,65%)] transition-colors hover:bg-[hsl(140,70%,45%)]/25"
+                    title="Paste a setup list — ranks by theme strength, RS, RS new high, and catalysts"
+                  >
+                    🎯 Rank Setup List
+                  </button>
                 </div>
               </div>
             )}
@@ -1232,6 +1241,12 @@ export default function RsAlpha() {
         coilShortDays={coilSettings.shortDays}
         coilLongDays={coilSettings.longDays}
         emaDistances={emaDistances}
+      />
+
+      <SetupAnalyzerModal
+        open={setupAnalyzerOpen}
+        onOpenChange={setSetupAnalyzerOpen}
+        universe={stocks}
       />
 
       <SectorDistributionModal

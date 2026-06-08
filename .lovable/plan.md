@@ -1,59 +1,78 @@
-## Goal
+# Setup Analyzer (RS Alpha)
 
-Add **"RS New High Before Price"** as a leading-indicator filter (no need for a column) in RS Alpha, with zero new cached history (reuse the 6mo bars already in `yahoo_history_cache`).
+A new ad-hoc tool inside the RS Alpha tab. The user pastes a list of tickers they have setups on, and it returns a ranked table — strongest setups at the top — so they focus on names inside leading themes with confirming RS, fresh RS new highs, and active catalysts.
 
-## What gets detected
+**Zero new storage.** Pure on-demand computation, reuses data already cached for other features. No new tables, no new cron, no new rows persisted.
 
-For each qualified stock, build the **RS line** = `stock_close / SPY_close` per trading day from the existing 6mo OHLC cache, then evaluate two windows:
+---
 
-- **Short window — 20 trading days** (always available from 6mo data)
-- **Long window — 6 months** (full cached series, used as the "52-week-style" proxy; true 52w would require doubling cache to 1y and is **not** worth the storage cost — noted as a future opt-in)
+## UI
 
-A row qualifies as **RS NH Before Price** when, in the chosen window:
+New button in RS Alpha header: **"Analyze Setup List"** → opens modal.
 
-- RS line's max occurs on (or within the last few bars of) the most recent bar, **AND**
-- Price's max does **not** occur in that same recent slice.
+**Modal**
+- Textarea: paste tickers (comma / newline / space separated, ~up to 100).
+- "Analyze" button → runs entirely client-side against already-loaded data; AI catalyst step calls one edge function.
+- Results table sorted by composite score desc:
 
-We also store `**rs_nh_days_ago**` = trading days between today's bar and the bar that set the RS-line max.
+| Rank | Ticker | Score | Theme | Theme RS | Stock RS | RS NH | Catalyst | Notes |
+|------|--------|-------|-------|----------|----------|-------|----------|-------|
 
-## Storage-sensitive design (the important part)
+- Each sub-score is a small bar/chip so the user sees *why* it ranked where it did.
+- Tickers not in the qualified universe → shown in a separate "Not qualified" section (with reason: below filter / no data) so nothing is silently dropped.
+- Export button: copy ranked list to clipboard.
 
-- **No new tables, no new cache rows.** All inputs come from `yahoo_history_cache` (6mo) which the universe scan already populates.
-- **4 tiny columns** added to `qualified_rs_universe` (+ staging twin). All `smallint` / `boolean` — well under 10 bytes per row → ~30 KB total for the whole universe.
-  - `rs_nh_20d` boolean
-  - `rs_nh_20d_days_ago` smallint
-  - `rs_nh_6m` boolean
-  - `rs_nh_6m_days_ago` smallint
-- Computed **inline inside `calculate-rs-scores**` (already loads each symbol's 6mo bars + SPY's 6mo bars). Zero extra Yahoo calls, zero extra cache writes.
-- Benchmark is **SPY only** for v1 (matches existing RS pipeline). QQQ toggle deferred — would require caching QQQ history; out of scope to keep storage flat.
+---
 
-## UI changes (RS Alpha tab)
+## Composite Score (0–100)
 
-- New compact column **"RS NH"** in the main RS Alpha table.
-  - If `rs_nh_20d && !price_nh_20d` → green badge `RS NH +Nd` (N = `rs_nh_20d_days_ago`).
-  - If only `rs_nh_6m && !price_nh_6m` → softer outline badge `RS NH 6M +Nd`.
-  - Otherwise blank.
-- New **filter chip** in the existing RS Alpha filter row: *"RS New High Before Price"* with two sub-options (20D / 6M). Multi-selectable, integrates with the current filter state.
-- Sortable: click header sorts by `rs_nh_20d_days_ago` ascending (freshest signals first).
-- Tooltip on the column header explains the meaning in one line.
+Weighted blend of four sub-scores, each normalized 0–100:
+
+| Sub-score | Weight | Source |
+|---|---|---|
+| Theme Strength | 30% | Theme's 1W & 1M return rank vs all themes (from `themes` + `theme_tickers` + qualified RS) |
+| Stock RS | 35% | `rs_overall` percentile within qualified universe + bonus for positive `rs_1w` momentum |
+| RS New High Before Price | 15% | `rs_nh_20d` → +full points, `rs_nh_6m` → +partial, days_ago decay |
+| Catalyst | 20% | News sentiment (last 7d) + analyst upgrades + earnings within 14d |
+
+All inputs already exist in DB — no new fetches except catalyst news for tickers not already cached.
+
+---
+
+## Data sources (all reused, no new caches)
+
+- `qualified_rs_universe` — stock RS, returns, RS NH flags. Already loaded by `useRsAlpha`.
+- `themes` + `theme_tickers` — map each ticker → its themes, compute that theme's avg RS / return.
+- News & catalysts — reuse the existing `fetch-theme-news` / news cache pattern. For tickers without cached news, one batched edge call (`analyze-setup-catalysts`) fetches headlines + runs Groq sentiment, cached 4h in memory only (no DB write).
+- Earnings proximity — reuse `earnings-calendar` data (already fetched on Earnings page) via a lightweight shared cache hook.
+
+---
 
 ## Files touched
 
-1. **Migration** — add 4 columns to `qualified_rs_universe` + `qualified_rs_universe_staging`; update `swap_qualified_rs_universe()` to copy them.
-2. `**supabase/functions/calculate-rs-scores/index.ts**` — after loading 6mo bars (already done), compute the 4 values per symbol from in-memory OHLC + SPY OHLC and include them in the upsert. No extra fetches.
-3. `**src/hooks/useRsAlpha.ts**` — extend `RsStock` with the 4 fields, map from row.
-4. `**src/pages/RsAlpha.tsx**` — new column, badge, filter chip, sort handler.
-5. `**src/integrations/supabase/types.ts**` — auto-regenerates after migration.
+**New**
+1. `src/components/rs/SetupAnalyzerModal.tsx` — paste input, run, results table.
+2. `src/hooks/useSetupAnalyzer.ts` — orchestrates: parse → lookup in `useQualifiedRsMap` + theme map → call catalyst edge function → compute composite.
+3. `supabase/functions/analyze-setup-catalysts/index.ts` — accepts `{ symbols: string[] }`, returns `{ symbol, sentiment, upgradeCount, earningsInDays }[]`. Pure read + AI, **no DB writes**.
 
-## Why this is the cheapest possible version
+**Edited**
+4. `src/pages/RsAlpha.tsx` — add "Analyze Setup List" button + modal mount.
+5. `supabase/config.toml` — register new edge function with `verify_jwt = false`.
 
-- Reuses the cache trim already done in the previous task (6mo-only rows).
-- All math runs during the existing RS recalc loop — no new edge function, no new cron, no new table.
-- 4 numeric/boolean columns on ~2–3k rows ≈ negligible (< 50 KB).
-- If you ever want true 52-week, the only added cost would be switching SPY (one symbol) to a `1y` cached row; individual stocks could keep 6mo because most names that matter won't have 52w highs that 6mo misses for this signal.
+**Not touched**
+- No migration. No new tables. No new columns. No new cron.
 
-## Out of scope (can add later, flagged in code comments)
+---
 
-- QQQ benchmark toggle.
-- True 52-week window (needs 1y SPY cache row).
-- Historical chart of the RS line in the drilldown.
+## Technical notes
+
+- All ranking math runs in the browser — the qualified universe is already loaded.
+- Edge function only does the catalyst lookup (news + upgrades + earnings proximity) since news isn't fully client-cached.
+- Catalyst results held in React state for the session; nothing persisted.
+- Component reuses existing badge / RS rating / theme tooltip components for visual consistency with the rest of RS Alpha.
+
+## Out of scope (future, opt-in)
+
+- Saving named watchlists (would require a `user_watchlists` table).
+- Daily snapshots of how a list's ranking evolved.
+- Chart drilldown per ticker inside the analyzer.
