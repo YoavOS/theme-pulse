@@ -1243,6 +1243,12 @@ export default function RsAlpha() {
         emaDistances={emaDistances}
       />
 
+      <SetupAnalyzerModal
+        open={setupAnalyzerOpen}
+        onOpenChange={setSetupAnalyzerOpen}
+        universe={stocks}
+      />
+
       <SectorDistributionModal
         open={sectorDistOpen}
         onOpenChange={setSectorDistOpen}
