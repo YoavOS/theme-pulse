@@ -455,6 +455,7 @@ export default function SetupAnalyzerModal({ open, onOpenChange, universe }: Pro
                   title="Download full ranking with all sub-scores as .csv"
                 >
                   <Download size={12} /> .csv
+                </button>
                 <button
                   onClick={handleReset}
                   className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-3 py-1.5 text-xs hover:bg-muted"
