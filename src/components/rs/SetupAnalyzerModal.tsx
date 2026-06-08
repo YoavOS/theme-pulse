@@ -1,5 +1,5 @@
-import { useMemo, useState, useCallback } from "react";
-import { Target, Loader2, Copy, X, Sparkles, TrendingUp, Newspaper, Calendar, Award } from "lucide-react";
+import { useMemo, useState, useCallback, useRef } from "react";
+import { Target, Loader2, Copy, X, Sparkles, TrendingUp, Newspaper, Calendar, Award, Upload, FileText } from "lucide-react";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
@@ -103,6 +103,35 @@ export default function SetupAnalyzerModal({ open, onOpenChange, universe }: Pro
   const [running, setRunning] = useState(false);
   const [results, setResults] = useState<ScoredRow[] | null>(null);
   const [unqualified, setUnqualified] = useState<string[]>([]);
+  const [dragOver, setDragOver] = useState(false);
+  const [lastFileName, setLastFileName] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const ingestFile = useCallback(async (file: File) => {
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) { toast.error("File too large (max 5MB)."); return; }
+    try {
+      const text = await file.text();
+      const parsed = parseTickers(text);
+      if (parsed.length === 0) { toast.error("No tickers found in file."); return; }
+      setRaw(parsed.join(", "));
+      setLastFileName(file.name);
+      toast.success(`Loaded ${parsed.length} tickers`, { description: file.name });
+    } catch (e) {
+      toast.error("Could not read file.", { description: e instanceof Error ? e.message : String(e) });
+    }
+  }, []);
+
+  const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    if (f) void ingestFile(f);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault(); setDragOver(false);
+    const f = e.dataTransfer.files?.[0];
+    if (f) void ingestFile(f);
+  };
 
   const universeMap = useMemo(() => {
     const m = new Map<string, RsStock>();
@@ -302,6 +331,48 @@ export default function SetupAnalyzerModal({ open, onOpenChange, universe }: Pro
         <TooltipProvider delayDuration={200}>
         {!results ? (
           <div className="space-y-3">
+            <div
+              onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+              onDragLeave={() => setDragOver(false)}
+              onDrop={handleDrop}
+              className={`flex items-center justify-between gap-3 rounded-md border border-dashed px-3 py-2 text-xs transition-colors ${
+                dragOver ? "border-[hsl(280,70%,60%)] bg-[hsl(280,70%,60%)]/10" : "border-border bg-muted/20"
+              }`}
+            >
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <Upload size={14} />
+                {lastFileName ? (
+                  <span className="flex items-center gap-1"><FileText size={12} /> {lastFileName}</span>
+                ) : (
+                  <span>Drop a .txt / .csv file here, or</span>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".txt,.csv,text/plain,text/csv"
+                  className="hidden"
+                  onChange={handleFileInput}
+                />
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="rounded-md border border-border bg-card px-2 py-1 text-xs hover:bg-muted"
+                >
+                  Choose file
+                </button>
+                {(raw || lastFileName) && (
+                  <button
+                    type="button"
+                    onClick={() => { setRaw(""); setLastFileName(null); }}
+                    className="rounded-md border border-border bg-card px-2 py-1 text-xs hover:bg-muted"
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
+            </div>
             <Textarea
               value={raw}
               onChange={(e) => setRaw(e.target.value)}
