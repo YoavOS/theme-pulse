@@ -11,6 +11,7 @@ import OverallWeightsPanel, { RsWeights, DEFAULT_RS_WEIGHTS, normalizeWeights } 
 import RsRatingBadge, { computeRsRatings } from "@/components/rs/RsRatingBadge";
 import CustomTradingViewListModal from "@/components/rs/CustomTradingViewListModal";
 import CustomListAnalyzerModal from "@/components/rs/CustomListAnalyzerModal";
+import SetupAnalyzerModal from "@/components/rs/SetupAnalyzerModal";
 import SectorDistributionModal from "@/components/rs/SectorDistributionModal";
 import ThemeDistributionModal from "@/components/rs/ThemeDistributionModal";
 import FundamentalsCoverageModal from "@/components/rs/FundamentalsCoverageModal";
