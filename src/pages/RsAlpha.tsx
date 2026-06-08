@@ -1060,6 +1060,13 @@ export default function RsAlpha() {
                   >
                     <Settings2 size={12} /> Import &amp; Analyze List
                   </button>
+                  <button
+                    onClick={() => setSetupAnalyzerOpen(true)}
+                    className="inline-flex items-center gap-1.5 rounded-md border border-[hsl(140,70%,45%)]/60 bg-[hsl(140,70%,45%)]/15 px-3 py-1.5 text-xs font-semibold text-[hsl(140,70%,65%)] transition-colors hover:bg-[hsl(140,70%,45%)]/25"
+                    title="Paste a setup list — ranks by theme strength, RS, RS new high, and catalysts"
+                  >
+                    🎯 Rank Setup List
+                  </button>
                 </div>
               </div>
             )}
