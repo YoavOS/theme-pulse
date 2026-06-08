@@ -331,6 +331,48 @@ export default function SetupAnalyzerModal({ open, onOpenChange, universe }: Pro
         <TooltipProvider delayDuration={200}>
         {!results ? (
           <div className="space-y-3">
+            <div
+              onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+              onDragLeave={() => setDragOver(false)}
+              onDrop={handleDrop}
+              className={`flex items-center justify-between gap-3 rounded-md border border-dashed px-3 py-2 text-xs transition-colors ${
+                dragOver ? "border-[hsl(280,70%,60%)] bg-[hsl(280,70%,60%)]/10" : "border-border bg-muted/20"
+              }`}
+            >
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <Upload size={14} />
+                {lastFileName ? (
+                  <span className="flex items-center gap-1"><FileText size={12} /> {lastFileName}</span>
+                ) : (
+                  <span>Drop a .txt / .csv file here, or</span>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".txt,.csv,text/plain,text/csv"
+                  className="hidden"
+                  onChange={handleFileInput}
+                />
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="rounded-md border border-border bg-card px-2 py-1 text-xs hover:bg-muted"
+                >
+                  Choose file
+                </button>
+                {(raw || lastFileName) && (
+                  <button
+                    type="button"
+                    onClick={() => { setRaw(""); setLastFileName(null); }}
+                    className="rounded-md border border-border bg-card px-2 py-1 text-xs hover:bg-muted"
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
+            </div>
             <Textarea
               value={raw}
               onChange={(e) => setRaw(e.target.value)}
