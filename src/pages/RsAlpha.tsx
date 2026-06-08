@@ -156,6 +156,7 @@ export default function RsAlpha() {
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [customListOpen, setCustomListOpen] = useState(false);
   const [analyzerOpen, setAnalyzerOpen] = useState(false);
+  const [setupAnalyzerOpen, setSetupAnalyzerOpen] = useState(false);
   const [sectorDistOpen, setSectorDistOpen] = useState(false);
   const [themeDistOpen, setThemeDistOpen] = useState(false);
   const [coverageOpen, setCoverageOpen] = useState(false);
