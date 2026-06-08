@@ -154,7 +154,7 @@ export default function StorageManager() {
     }
   }, [toast]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { if (user) load(); }, [load, user]);
 
   const truncate = async (table: string, force: boolean) => {
     setWorking(table);
