@@ -65,3 +65,6 @@ verify_jwt = false
 
 [functions.morning-brief]
 verify_jwt = false
+
+[functions.analyze-setup-catalysts]
+verify_jwt = false
