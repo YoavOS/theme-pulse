@@ -443,6 +443,19 @@ export default function SetupAnalyzerModal({ open, onOpenChange, universe }: Pro
                   <Copy size={12} /> Copy ranked list
                 </button>
                 <button
+                  onClick={() => handleDownload("txt")}
+                  className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-3 py-1.5 text-xs hover:bg-muted"
+                  title="Download ranked symbols as .txt (TradingView-ready)"
+                >
+                  <Download size={12} /> .txt
+                </button>
+                <button
+                  onClick={() => handleDownload("csv")}
+                  className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-3 py-1.5 text-xs hover:bg-muted"
+                  title="Download full ranking with all sub-scores as .csv"
+                >
+                  <Download size={12} /> .csv
+                <button
                   onClick={handleReset}
                   className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-3 py-1.5 text-xs hover:bg-muted"
                 >
