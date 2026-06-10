@@ -765,19 +765,9 @@ export default function LiveExecution() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [benchmark]);
 
-  // Auto-refresh the live snapshot every 7 s while a ticker is active.
-  // IMPORTANT: skipFundamentals = true so the loop only refreshes prices,
-  // RS / benchmark and options — NOT yfinance/FMP fundamentals (which are cached).
-  useEffect(() => {
-    if (!activeSymbol) return;
-    const id = window.setInterval(() => {
-      if (document.visibilityState !== "visible") return;
-      const sector = stockMap.get(activeSymbol)?.sector ?? null;
-      fetchSnapshot(activeSymbol, benchmark, sector, false, { skipFundamentals: true });
-    }, 7_000);
-    return () => window.clearInterval(id);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeSymbol, benchmark]);
+  // Cost-saving: 7s auto-refresh disabled. Snapshot loads once per ticker change;
+  // the user can re-select the ticker to force a refresh.
+  // (Previous behavior: refreshed prices/RS/options every 7s while tab visible.)
 
   // Persist freshly-fetched fundamentals to local cache so re-searching the same
   // ticker (or returning later) does not re-hit yfinance / FMP.
