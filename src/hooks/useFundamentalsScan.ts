@@ -59,11 +59,21 @@ export function useFundamentalsScan() {
     });
   }, []);
 
+  // Initial load only. Adaptive polling: poll only while a scan is active.
   useEffect(() => {
     loadProgress();
-    pollRef.current = window.setInterval(loadProgress, 5000);
-    return () => { if (pollRef.current) window.clearInterval(pollRef.current); };
   }, [loadProgress]);
+
+  useEffect(() => {
+    const active = progress.status === "running" || progress.status === "paused";
+    if (!active) {
+      if (pollRef.current) { window.clearInterval(pollRef.current); pollRef.current = null; }
+      return;
+    }
+    if (pollRef.current) return;
+    pollRef.current = window.setInterval(loadProgress, 10000);
+    return () => { if (pollRef.current) { window.clearInterval(pollRef.current); pollRef.current = null; } };
+  }, [progress.status, loadProgress]);
 
   const startScan = useCallback(async (mode: "resume" | "restart" = "resume") => {
     setError(null); setIsMutating(true);
