@@ -126,12 +126,9 @@ export default function MarketDrivers() {
     }
   }, [indexSel, timeframe]);
 
-  // Initial + on-change load + auto-refresh every 60s when "today"
+  // Cost-saving: load once on mount / on filter change; no auto-refresh.
   useEffect(() => {
     void load(false);
-    if (timeframe !== "today") return;
-    const id = setInterval(() => void load(false), 60_000);
-    return () => clearInterval(id);
   }, [load, timeframe]);
 
   const fetchInsight = async () => {

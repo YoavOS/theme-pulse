@@ -157,11 +157,9 @@ export default function Earnings() {
     }
   }, [fetchUniverse, lookbackDays, minGap, minMcap, enableAi]);
 
-  // Auto-load today on first mount and every 5 min
+  // Cost-saving: load once on mount; no 5-minute auto-refresh.
   useEffect(() => {
     loadToday();
-    const t = setInterval(loadToday, 5 * 60 * 1000);
-    return () => clearInterval(t);
   }, [loadToday]);
 
   // Filtered today rows by reportTime

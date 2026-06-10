@@ -190,15 +190,26 @@ export function useRsAlpha() {
     });
   }, []);
 
-  // ── Initial load + polling ──
+  // ── Initial load (no continuous polling — cost-saving). Polling only runs
+  //    while a scan is actively running/paused; see effect below.
   useEffect(() => {
     loadStocks();
     loadProgress();
-    pollRef.current = window.setInterval(loadProgress, 5000);
-    return () => {
-      if (pollRef.current) window.clearInterval(pollRef.current);
-    };
   }, [loadStocks, loadProgress]);
+
+  // Adaptive polling — only poll progress while a scan is active.
+  useEffect(() => {
+    const active = progress.status === "running" || progress.status === "paused";
+    if (!active) {
+      if (pollRef.current) { window.clearInterval(pollRef.current); pollRef.current = null; }
+      return;
+    }
+    if (pollRef.current) return;
+    pollRef.current = window.setInterval(loadProgress, 10000);
+    return () => {
+      if (pollRef.current) { window.clearInterval(pollRef.current); pollRef.current = null; }
+    };
+  }, [progress.status, loadProgress]);
 
   // Reload stocks whenever qualified count grows
   useEffect(() => {
