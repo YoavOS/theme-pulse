@@ -47,8 +47,7 @@ export default function MarketDriversWidget() {
       } catch { /* ignore */ } finally { setLoading(false); }
     };
     void run();
-    const t = setInterval(run, 60_000);
-    return () => clearInterval(t);
+    // Cost-saving: 60s auto-refresh removed; widget loads once per mount.
   }, []);
 
   return (
