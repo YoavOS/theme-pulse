@@ -12,12 +12,24 @@ interface QuoteResult {
   symbol: string;
   pct: number;
   price: number;
+  pct_today?: number;
+  pct_1w?: number;
+  pct_1m?: number;
   error?: string;
 }
 
 // Map our UI timeframe label → YahooPeriod for the historical helper.
 function timeframeToYahooPeriod(timeframe: string): YahooPeriod | null {
   switch (timeframe) {
+    case "1W": return "5d";
+    case "1M": return "1mo";
+    case "3M": return "3mo";
+    case "6M": return "6mo";
+    case "YTD": return "ytd";
+    default: return null; // "Today" — uses Finnhub /quote
+  }
+}
+
     case "1W": return "5d";
     case "1M": return "1mo";
     case "3M": return "3mo";
