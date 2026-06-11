@@ -65,6 +65,12 @@ interface FilterState {
   emaFilterMode: "AND" | "OR";
   relVsQqqOn: boolean;
   minRelVsQqq: number;
+  priceVs9dOn: boolean;
+  priceVs9dDir: "above" | "below";
+  priceVs21dOn: boolean;
+  priceVs21dDir: "above" | "below";
+  priceVs9wOn: boolean;
+  priceVs9wDir: "above" | "below";
 }
 
 interface ScannerProfile {
