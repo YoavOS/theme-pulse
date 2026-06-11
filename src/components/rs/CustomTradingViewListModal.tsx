@@ -201,6 +201,12 @@ const DEFAULT_FILTERS: FilterState = {
   emaFilterMode: "OR",
   relVsQqqOn: false,
   minRelVsQqq: 0,
+  priceVs9dOn: false,
+  priceVs9dDir: "above",
+  priceVs21dOn: false,
+  priceVs21dDir: "above",
+  priceVs9wOn: false,
+  priceVs9wDir: "above",
 };
 
 function loadUserProfiles(): ScannerProfile[] {
