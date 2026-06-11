@@ -9,6 +9,8 @@ import {
   BarChart3, Zap, Activity, DollarSign, Sun, Database,
 } from "lucide-react";
 import HeatmapGridView from "@/components/dashboard/HeatmapGridView";
+import OverallBestThemesList from "@/components/dashboard/OverallBestThemesList";
+
 import DemoDataConfirmDialog from "@/components/DemoDataConfirmDialog";
 import { getCacheAge } from "@/hooks/useScanCache";
 import { TooltipProvider, Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
