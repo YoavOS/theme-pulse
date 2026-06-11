@@ -503,13 +503,21 @@ export default function Index() {
           </div>
         )}
 
-        <HeatmapGridView
-          themes={themes}
-          onCardClick={setDrilldownTheme}
-          onInfoClick={(t) => { setDrilldownTheme(t); setDrilldownDefaultTab("news"); }}
-          getThemeSignals={getThemeSignals}
-          dimmedThemes={searchMatchSet}
-        />
+        {activeTimeframe === "Overall" ? (
+          <OverallBestThemesList
+            themes={searchMatchSet ? themes.filter(t => searchMatchSet.has(t.theme_name.toLowerCase())) : themes}
+            onThemeClick={setDrilldownTheme}
+          />
+        ) : (
+          <HeatmapGridView
+            themes={themes}
+            onCardClick={setDrilldownTheme}
+            onInfoClick={(t) => { setDrilldownTheme(t); setDrilldownDefaultTab("news"); }}
+            getThemeSignals={getThemeSignals}
+            dimmedThemes={searchMatchSet}
+          />
+        )}
+
       </main>
 
       <footer className="border-t border-border py-6 text-center text-xs text-muted-foreground">
