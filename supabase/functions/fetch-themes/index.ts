@@ -211,10 +211,13 @@ Deno.serve(async (req) => {
     let rateLimited = false;
 
     // Yahoo-first means we can fan out aggressively for both today and historical.
-    const CONCURRENCY = 25;
-    const fetcher = useHistorical
-      ? (s: string) => fetchHistoricalQuote(sb, s, yahooPeriod!)
-      : (s: string) => fetchQuoteDaily(s);
+    const CONCURRENCY = isOverall ? 15 : 25;
+    const fetcher = isOverall
+      ? (s: string) => fetchOverallQuote(sb, s)
+      : useHistorical
+        ? (s: string) => fetchHistoricalQuote(sb, s, yahooPeriod!)
+        : (s: string) => fetchQuoteDaily(s);
+
 
     let cursor = 0;
     const runWorker = async () => {
