@@ -25,7 +25,7 @@ import { useThemeNews } from "@/hooks/useThemeNews";
 import { useFundamentals } from "@/hooks/useFundamentals";
 import NewsPanel from "@/components/NewsPanel";
 
-const TIMEFRAMES = ["Today", "1W", "1M", "3M", "YTD"] as const;
+const TIMEFRAMES = ["Today", "1W", "1M", "3M", "YTD", "Overall"] as const;
 
 function formatDate(d: Date) {
   return d.toLocaleDateString("en-US", { month: "2-digit", day: "2-digit", year: "numeric" });
