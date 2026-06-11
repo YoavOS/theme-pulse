@@ -235,17 +235,31 @@ Deno.serve(async (req) => {
     const themes = themeEntries.map(({ name, description, symbols }) => {
       const tickers = symbols.map(s => {
         const q = quoteMap[s];
-        return { symbol: s, pct: q?.pct ?? 0, price: q?.price ?? 0 };
+        const base: any = { symbol: s, pct: q?.pct ?? 0, price: q?.price ?? 0 };
+        if (isOverall) {
+          base.pct_today = q?.pct_today ?? 0;
+          base.pct_1w = q?.pct_1w ?? 0;
+          base.pct_1m = q?.pct_1m ?? 0;
+        }
+        return base;
       }).sort((a, b) => b.pct - a.pct);
 
       const up_count = tickers.filter(t => t.pct > 0).length;
       const down_count = tickers.filter(t => t.pct <= 0).length;
-      const performance_pct = tickers.length > 0
-        ? Math.round((tickers.reduce((sum, t) => sum + t.pct, 0) / tickers.length) * 100) / 100
+      const avg = (key: string) => tickers.length > 0
+        ? Math.round((tickers.reduce((sum, t: any) => sum + (t[key] ?? 0), 0) / tickers.length) * 100) / 100
         : 0;
+      const performance_pct = avg("pct");
 
-      return { theme_name: name, notes: description, performance_pct, up_count, down_count, tickers };
+      const themeOut: any = { theme_name: name, notes: description, performance_pct, up_count, down_count, tickers };
+      if (isOverall) {
+        themeOut.perf_today = avg("pct_today");
+        themeOut.perf_1w = avg("pct_1w");
+        themeOut.perf_1m = avg("pct_1m");
+      }
+      return themeOut;
     });
+
 
     const allThemeNames = Array.from(themeTickerMap.values()).map(v => v.name);
 
