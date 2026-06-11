@@ -372,7 +372,19 @@ export default function CustomTradingViewListModal({
         if (state.ema9dFilterOn) {
           const d = ema?.dist9d;
           checks.push(d !== null && d !== undefined && Number.isFinite(d) && Math.abs(d) <= state.maxEma9dAbs);
-        }
+      }
+      // Price vs EMA direction filters (uses sign of distance: dist > 0 => price above EMA)
+      const priceVsChecks: Array<{ on: boolean; dist: number | null | undefined; dir: "above" | "below" }> = [
+        { on: state.priceVs9dOn, dist: ema?.dist9d, dir: state.priceVs9dDir },
+        { on: state.priceVs21dOn, dist: ema?.dist21d, dir: state.priceVs21dDir },
+        { on: state.priceVs9wOn, dist: ema?.dist9w, dir: state.priceVs9wDir },
+      ];
+      for (const c of priceVsChecks) {
+        if (!c.on) continue;
+        if (c.dist === null || c.dist === undefined || !Number.isFinite(c.dist)) return false;
+        if (c.dir === "above" && !(c.dist > 0)) return false;
+        if (c.dir === "below" && !(c.dist < 0)) return false;
+      }
         if (state.ema21dFilterOn) {
           const d = ema?.dist21d;
           checks.push(d !== null && d !== undefined && Number.isFinite(d) && Math.abs(d) <= state.maxEma21dAbs);
