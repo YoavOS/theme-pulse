@@ -6,6 +6,10 @@ export interface Ticker {
   name?: string;
   skipped?: boolean;
   skipReason?: string;
+  // Populated only when timeframe="Overall"
+  pct_today?: number;
+  pct_1w?: number;
+  pct_1m?: number;
 }
 
 export interface ThemeData {
@@ -21,7 +25,12 @@ export interface ThemeData {
   notes?: string;
   dataSource?: "real" | "demo";
   lastUpdated?: string;
+  // Populated only when timeframe="Overall"
+  perf_today?: number;
+  perf_1w?: number;
+  perf_1m?: number;
 }
+
 
 // ─── DEMO DATA ────────────────────────────────────────────────
 // 60 themes, ~25 with realistic demo data, rest as placeholders

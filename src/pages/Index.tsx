@@ -9,6 +9,8 @@ import {
   BarChart3, Zap, Activity, DollarSign, Sun, Database,
 } from "lucide-react";
 import HeatmapGridView from "@/components/dashboard/HeatmapGridView";
+import OverallBestThemesList from "@/components/dashboard/OverallBestThemesList";
+
 import DemoDataConfirmDialog from "@/components/DemoDataConfirmDialog";
 import { getCacheAge } from "@/hooks/useScanCache";
 import { TooltipProvider, Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
@@ -23,7 +25,7 @@ import { useThemeNews } from "@/hooks/useThemeNews";
 import { useFundamentals } from "@/hooks/useFundamentals";
 import NewsPanel from "@/components/NewsPanel";
 
-const TIMEFRAMES = ["Today", "1W", "1M", "3M", "YTD"] as const;
+const TIMEFRAMES = ["Today", "1W", "1M", "3M", "YTD", "Overall"] as const;
 
 function formatDate(d: Date) {
   return d.toLocaleDateString("en-US", { month: "2-digit", day: "2-digit", year: "numeric" });
@@ -501,13 +503,21 @@ export default function Index() {
           </div>
         )}
 
-        <HeatmapGridView
-          themes={themes}
-          onCardClick={setDrilldownTheme}
-          onInfoClick={(t) => { setDrilldownTheme(t); setDrilldownDefaultTab("news"); }}
-          getThemeSignals={getThemeSignals}
-          dimmedThemes={searchMatchSet}
-        />
+        {activeTimeframe === "Overall" ? (
+          <OverallBestThemesList
+            themes={searchMatchSet ? themes.filter(t => searchMatchSet.has(t.theme_name.toLowerCase())) : themes}
+            onThemeClick={setDrilldownTheme}
+          />
+        ) : (
+          <HeatmapGridView
+            themes={themes}
+            onCardClick={setDrilldownTheme}
+            onInfoClick={(t) => { setDrilldownTheme(t); setDrilldownDefaultTab("news"); }}
+            getThemeSignals={getThemeSignals}
+            dimmedThemes={searchMatchSet}
+          />
+        )}
+
       </main>
 
       <footer className="border-t border-border py-6 text-center text-xs text-muted-foreground">

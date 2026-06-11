@@ -213,8 +213,12 @@ export function useLiveThemeData(timeframe: string = "Today") {
           notes: t.notes || undefined,
           dataSource: "real" as const,
           lastUpdated: new Date().toISOString(),
+          perf_today: t.perf_today,
+          perf_1w: t.perf_1w,
+          perf_1m: t.perf_1m,
         };
       });
+
 
       const currentThemes = themesRef.current;
       const mergedMap = new Map<string, ThemeData>();
