@@ -643,6 +643,35 @@ export default function CustomTradingViewListModal({
             {!emaAvailable && <p className="text-[10px] italic text-muted-foreground">EMA distances still loading…</p>}
           </div>
 
+          {/* Price vs EMA direction filters */}
+          <div className="space-y-2 rounded-md border border-border bg-muted/20 px-3 py-2.5">
+            <div className="text-xs font-medium text-foreground">Price vs EMA</div>
+            {([
+              { key: "9d", on: state.priceVs9dOn, dir: state.priceVs9dDir, setOn: (v: boolean) => set("priceVs9dOn", v), setDir: (d: "above" | "below") => set("priceVs9dDir", d), label: "9 EMA" },
+              { key: "21d", on: state.priceVs21dOn, dir: state.priceVs21dDir, setOn: (v: boolean) => set("priceVs21dOn", v), setDir: (d: "above" | "below") => set("priceVs21dDir", d), label: "21 EMA" },
+              { key: "9w", on: state.priceVs9wOn, dir: state.priceVs9wDir, setOn: (v: boolean) => set("priceVs9wOn", v), setDir: (d: "above" | "below") => set("priceVs9wDir", d), label: "9 Week EMA" },
+            ] as const).map((row) => (
+              <div key={row.key} className="flex items-center justify-between text-xs">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <Checkbox checked={row.on} disabled={!emaAvailable} onCheckedChange={(v) => row.setOn(!!v)} />
+                  <span className="font-medium text-foreground">Price {row.dir} {row.label}</span>
+                </label>
+                <div className="inline-flex overflow-hidden rounded-md border border-border text-[10px]">
+                  <button type="button" onClick={() => row.setDir("above")} disabled={!row.on || !emaAvailable}
+                    className={`px-2 py-0.5 ${row.dir === "above" ? "bg-primary text-primary-foreground" : "bg-background hover:bg-accent"} disabled:opacity-40`}>
+                    Above
+                  </button>
+                  <button type="button" onClick={() => row.setDir("below")} disabled={!row.on || !emaAvailable}
+                    className={`px-2 py-0.5 ${row.dir === "below" ? "bg-primary text-primary-foreground" : "bg-background hover:bg-accent"} disabled:opacity-40`}>
+                    Below
+                  </button>
+                </div>
+              </div>
+            ))}
+            {!emaAvailable && <p className="text-[10px] italic text-muted-foreground">EMA distances still loading…</p>}
+          </div>
+
+
           {/* Top N */}
           <div className="space-y-2">
             <div className="flex items-center justify-between text-xs">
