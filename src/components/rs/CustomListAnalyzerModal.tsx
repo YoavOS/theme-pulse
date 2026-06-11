@@ -323,6 +323,19 @@ export default function CustomListAnalyzerModal({
         const pass = emaFilterMode === "OR" ? checks.some(Boolean) : checks.every(Boolean);
         if (!pass) return false;
       }
+      // Price vs EMA direction filters (sign of dist: >0 above, <0 below)
+      const e2 = emaMap.get(s.symbol);
+      const priceVsChecks: Array<{ on: boolean; dist: number | null | undefined; dir: "above" | "below" }> = [
+        { on: priceVs9dOn, dist: e2?.dist9d, dir: priceVs9dDir },
+        { on: priceVs21dOn, dist: e2?.dist21d, dir: priceVs21dDir },
+        { on: priceVs9wOn, dist: e2?.dist9w, dir: priceVs9wDir },
+      ];
+      for (const c of priceVsChecks) {
+        if (!c.on) continue;
+        if (c.dist === null || c.dist === undefined || !Number.isFinite(c.dist)) return false;
+        if (c.dir === "above" && !(c.dist > 0)) return false;
+        if (c.dir === "below" && !(c.dist < 0)) return false;
+      }
       return true;
     });
 
