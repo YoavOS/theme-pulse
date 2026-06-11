@@ -373,6 +373,7 @@ export default function CustomListAnalyzerModal({
     fundamentalsMap, coilFilterOn, maxCoil, coilScores,
     activeEmaFilters, ema9dFilterOn, ema21dFilterOn, ema9wFilterOn,
     maxEma9dAbs, maxEma21dAbs, maxEma9wAbs, emaFilterMode, emaMap, sortBy,
+    priceVs9dOn, priceVs9dDir, priceVs21dOn, priceVs21dDir, priceVs9wOn, priceVs9wDir,
   ]);
 
   const visibleMissing = hideMissing ? [] : missing;
