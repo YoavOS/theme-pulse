@@ -200,8 +200,10 @@ Deno.serve(async (req) => {
     }
 
     const uniqueSymbols = [...new Set(themeEntries.flatMap(t => t.symbols))];
-    const yahooPeriod = timeframeToYahooPeriod(timeframe);
+    const isOverall = timeframe === "Overall";
+    const yahooPeriod = isOverall ? null : timeframeToYahooPeriod(timeframe);
     const useHistorical = yahooPeriod !== null;
+
 
     console.log(`Fetching ${uniqueSymbols.length} symbols for ${themeEntries.length} themes, timeframe=${timeframe}, useHistorical=${useHistorical}`);
 
