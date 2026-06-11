@@ -184,6 +184,13 @@ export default function CustomListAnalyzerModal({
   const [emaFilterMode, setEmaFilterMode] = useState<"AND" | "OR">("OR");
   const [emaMap, setEmaMap] = useState<Map<string, EmaInfo>>(new Map());
   const [emaLoading, setEmaLoading] = useState<boolean>(false);
+  // Price-vs-EMA direction filters
+  const [priceVs9dOn, setPriceVs9dOn] = useState<boolean>(false);
+  const [priceVs9dDir, setPriceVs9dDir] = useState<"above" | "below">("above");
+  const [priceVs21dOn, setPriceVs21dOn] = useState<boolean>(false);
+  const [priceVs21dDir, setPriceVs21dDir] = useState<"above" | "below">("above");
+  const [priceVs9wOn, setPriceVs9wOn] = useState<boolean>(false);
+  const [priceVs9wDir, setPriceVs9wDir] = useState<"above" | "below">("above");
   const emaAvailable = emaMap.size > 0;
   const activeEmaFilters =
     (ema9dFilterOn ? 1 : 0) + (ema21dFilterOn ? 1 : 0) + (ema9wFilterOn ? 1 : 0);
@@ -316,6 +323,19 @@ export default function CustomListAnalyzerModal({
         const pass = emaFilterMode === "OR" ? checks.some(Boolean) : checks.every(Boolean);
         if (!pass) return false;
       }
+      // Price vs EMA direction filters (sign of dist: >0 above, <0 below)
+      const e2 = emaMap.get(s.symbol);
+      const priceVsChecks: Array<{ on: boolean; dist: number | null | undefined; dir: "above" | "below" }> = [
+        { on: priceVs9dOn, dist: e2?.dist9d, dir: priceVs9dDir },
+        { on: priceVs21dOn, dist: e2?.dist21d, dir: priceVs21dDir },
+        { on: priceVs9wOn, dist: e2?.dist9w, dir: priceVs9wDir },
+      ];
+      for (const c of priceVsChecks) {
+        if (!c.on) continue;
+        if (c.dist === null || c.dist === undefined || !Number.isFinite(c.dist)) return false;
+        if (c.dir === "above" && !(c.dist > 0)) return false;
+        if (c.dir === "below" && !(c.dist < 0)) return false;
+      }
       return true;
     });
 
@@ -353,6 +373,7 @@ export default function CustomListAnalyzerModal({
     fundamentalsMap, coilFilterOn, maxCoil, coilScores,
     activeEmaFilters, ema9dFilterOn, ema21dFilterOn, ema9wFilterOn,
     maxEma9dAbs, maxEma21dAbs, maxEma9wAbs, emaFilterMode, emaMap, sortBy,
+    priceVs9dOn, priceVs9dDir, priceVs21dOn, priceVs21dDir, priceVs9wOn, priceVs9wDir,
   ]);
 
   const visibleMissing = hideMissing ? [] : missing;
@@ -604,7 +625,35 @@ export default function CustomListAnalyzerModal({
                   </div>
                 ))}
               </div>
+
+              {/* Price vs EMA direction filters */}
+              <div className="md:col-span-3 space-y-2 rounded-md border border-border/60 bg-muted/10 p-2">
+                <span className="text-[11px] font-semibold text-muted-foreground">Price vs EMA</span>
+                {([
+                  { key: "9d", on: priceVs9dOn, dir: priceVs9dDir, setOn: setPriceVs9dOn, setDir: setPriceVs9dDir, label: "9 EMA" },
+                  { key: "21d", on: priceVs21dOn, dir: priceVs21dDir, setOn: setPriceVs21dOn, setDir: setPriceVs21dDir, label: "21 EMA" },
+                  { key: "9w", on: priceVs9wOn, dir: priceVs9wDir, setOn: setPriceVs9wOn, setDir: setPriceVs9wDir, label: "9 Week EMA" },
+                ] as const).map((row) => (
+                  <div key={row.key} className="flex items-center justify-between text-xs">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <Checkbox checked={row.on} onCheckedChange={(v) => row.setOn(!!v)} disabled={!emaAvailable && !emaLoading} />
+                      Price {row.dir} {row.label}
+                    </label>
+                    <div className="inline-flex overflow-hidden rounded-md border border-border text-[10px]">
+                      <button type="button" onClick={() => row.setDir("above")} disabled={!row.on}
+                        className={`px-2 py-0.5 ${row.dir === "above" ? "bg-primary text-primary-foreground" : "bg-background hover:bg-accent"} disabled:opacity-40`}>
+                        Above
+                      </button>
+                      <button type="button" onClick={() => row.setDir("below")} disabled={!row.on}
+                        className={`px-2 py-0.5 ${row.dir === "below" ? "bg-primary text-primary-foreground" : "bg-background hover:bg-accent"} disabled:opacity-40`}>
+                        Below
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
+
 
             {/* Summary + actions */}
             <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border bg-card px-3 py-2 text-xs">

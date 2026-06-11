@@ -65,6 +65,12 @@ interface FilterState {
   emaFilterMode: "AND" | "OR";
   relVsQqqOn: boolean;
   minRelVsQqq: number;
+  priceVs9dOn: boolean;
+  priceVs9dDir: "above" | "below";
+  priceVs21dOn: boolean;
+  priceVs21dDir: "above" | "below";
+  priceVs9wOn: boolean;
+  priceVs9wDir: "above" | "below";
 }
 
 interface ScannerProfile {
@@ -195,6 +201,12 @@ const DEFAULT_FILTERS: FilterState = {
   emaFilterMode: "OR",
   relVsQqqOn: false,
   minRelVsQqq: 0,
+  priceVs9dOn: false,
+  priceVs9dDir: "above",
+  priceVs21dOn: false,
+  priceVs21dDir: "above",
+  priceVs9wOn: false,
+  priceVs9wDir: "above",
 };
 
 function loadUserProfiles(): ScannerProfile[] {
@@ -360,7 +372,19 @@ export default function CustomTradingViewListModal({
         if (state.ema9dFilterOn) {
           const d = ema?.dist9d;
           checks.push(d !== null && d !== undefined && Number.isFinite(d) && Math.abs(d) <= state.maxEma9dAbs);
-        }
+      }
+      // Price vs EMA direction filters (uses sign of distance: dist > 0 => price above EMA)
+      const priceVsChecks: Array<{ on: boolean; dist: number | null | undefined; dir: "above" | "below" }> = [
+        { on: state.priceVs9dOn, dist: ema?.dist9d, dir: state.priceVs9dDir },
+        { on: state.priceVs21dOn, dist: ema?.dist21d, dir: state.priceVs21dDir },
+        { on: state.priceVs9wOn, dist: ema?.dist9w, dir: state.priceVs9wDir },
+      ];
+      for (const c of priceVsChecks) {
+        if (!c.on) continue;
+        if (c.dist === null || c.dist === undefined || !Number.isFinite(c.dist)) return false;
+        if (c.dir === "above" && !(c.dist > 0)) return false;
+        if (c.dir === "below" && !(c.dist < 0)) return false;
+      }
         if (state.ema21dFilterOn) {
           const d = ema?.dist21d;
           checks.push(d !== null && d !== undefined && Number.isFinite(d) && Math.abs(d) <= state.maxEma21dAbs);
@@ -618,6 +642,35 @@ export default function CustomTradingViewListModal({
             ))}
             {!emaAvailable && <p className="text-[10px] italic text-muted-foreground">EMA distances still loading…</p>}
           </div>
+
+          {/* Price vs EMA direction filters */}
+          <div className="space-y-2 rounded-md border border-border bg-muted/20 px-3 py-2.5">
+            <div className="text-xs font-medium text-foreground">Price vs EMA</div>
+            {([
+              { key: "9d", on: state.priceVs9dOn, dir: state.priceVs9dDir, setOn: (v: boolean) => set("priceVs9dOn", v), setDir: (d: "above" | "below") => set("priceVs9dDir", d), label: "9 EMA" },
+              { key: "21d", on: state.priceVs21dOn, dir: state.priceVs21dDir, setOn: (v: boolean) => set("priceVs21dOn", v), setDir: (d: "above" | "below") => set("priceVs21dDir", d), label: "21 EMA" },
+              { key: "9w", on: state.priceVs9wOn, dir: state.priceVs9wDir, setOn: (v: boolean) => set("priceVs9wOn", v), setDir: (d: "above" | "below") => set("priceVs9wDir", d), label: "9 Week EMA" },
+            ] as const).map((row) => (
+              <div key={row.key} className="flex items-center justify-between text-xs">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <Checkbox checked={row.on} disabled={!emaAvailable} onCheckedChange={(v) => row.setOn(!!v)} />
+                  <span className="font-medium text-foreground">Price {row.dir} {row.label}</span>
+                </label>
+                <div className="inline-flex overflow-hidden rounded-md border border-border text-[10px]">
+                  <button type="button" onClick={() => row.setDir("above")} disabled={!row.on || !emaAvailable}
+                    className={`px-2 py-0.5 ${row.dir === "above" ? "bg-primary text-primary-foreground" : "bg-background hover:bg-accent"} disabled:opacity-40`}>
+                    Above
+                  </button>
+                  <button type="button" onClick={() => row.setDir("below")} disabled={!row.on || !emaAvailable}
+                    className={`px-2 py-0.5 ${row.dir === "below" ? "bg-primary text-primary-foreground" : "bg-background hover:bg-accent"} disabled:opacity-40`}>
+                    Below
+                  </button>
+                </div>
+              </div>
+            ))}
+            {!emaAvailable && <p className="text-[10px] italic text-muted-foreground">EMA distances still loading…</p>}
+          </div>
+
 
           {/* Top N */}
           <div className="space-y-2">
