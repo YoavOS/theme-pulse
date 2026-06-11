@@ -184,6 +184,13 @@ export default function CustomListAnalyzerModal({
   const [emaFilterMode, setEmaFilterMode] = useState<"AND" | "OR">("OR");
   const [emaMap, setEmaMap] = useState<Map<string, EmaInfo>>(new Map());
   const [emaLoading, setEmaLoading] = useState<boolean>(false);
+  // Price-vs-EMA direction filters
+  const [priceVs9dOn, setPriceVs9dOn] = useState<boolean>(false);
+  const [priceVs9dDir, setPriceVs9dDir] = useState<"above" | "below">("above");
+  const [priceVs21dOn, setPriceVs21dOn] = useState<boolean>(false);
+  const [priceVs21dDir, setPriceVs21dDir] = useState<"above" | "below">("above");
+  const [priceVs9wOn, setPriceVs9wOn] = useState<boolean>(false);
+  const [priceVs9wDir, setPriceVs9wDir] = useState<"above" | "below">("above");
   const emaAvailable = emaMap.size > 0;
   const activeEmaFilters =
     (ema9dFilterOn ? 1 : 0) + (ema21dFilterOn ? 1 : 0) + (ema9wFilterOn ? 1 : 0);
