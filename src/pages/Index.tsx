@@ -10,6 +10,10 @@ import {
 } from "lucide-react";
 import HeatmapGridView from "@/components/dashboard/HeatmapGridView";
 import OverallBestThemesList from "@/components/dashboard/OverallBestThemesList";
+import DashboardWeightsPanel, {
+  DashboardWeights,
+  DEFAULT_DASHBOARD_WEIGHTS,
+} from "@/components/dashboard/DashboardWeightsPanel";
 
 import DemoDataConfirmDialog from "@/components/DemoDataConfirmDialog";
 import { getCacheAge } from "@/hooks/useScanCache";
@@ -25,7 +29,8 @@ import { useThemeNews } from "@/hooks/useThemeNews";
 import { useFundamentals } from "@/hooks/useFundamentals";
 import NewsPanel from "@/components/NewsPanel";
 
-const TIMEFRAMES = ["Today", "1W", "1M", "3M", "YTD", "Overall"] as const;
+const TIMEFRAMES = ["Today", "1W", "1M", "3M", "Overall"] as const;
+const DASHBOARD_WEIGHTS_KEY = "dashboard_overall_weights_v1";
 
 function formatDate(d: Date) {
   return d.toLocaleDateString("en-US", { month: "2-digit", day: "2-digit", year: "numeric" });
