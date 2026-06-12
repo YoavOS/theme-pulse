@@ -121,11 +121,25 @@ export default function Index() {
   useEffect(() => {
     if (prevTimeframe.current !== activeTimeframe) {
       prevTimeframe.current = activeTimeframe;
-      loadTimeframe(activeTimeframe).then((loaded) => {
-        if (!loaded && !isLive && !isLoading) fetchLiveData();
+      const weightsArg = activeTimeframe === "Overall" ? overallWeights : undefined;
+      loadTimeframe(activeTimeframe, weightsArg).then((loaded) => {
+        // Never trigger a network fetch for Overall — it's computed locally from
+        // the cached Full Scan perf map. If the cache is missing, we show the
+        // empty state asking the user to run a Full Scan.
+        if (!loaded && activeTimeframe !== "Overall" && !isLive && !isLoading) {
+          fetchLiveData();
+        }
       });
     }
-  }, [activeTimeframe, isLive, isLoading, fetchLiveData, loadTimeframe]);
+  }, [activeTimeframe, isLive, isLoading, fetchLiveData, loadTimeframe, overallWeights]);
+
+  // Recompute Overall locally whenever weights change (no network).
+  useEffect(() => {
+    if (activeTimeframe === "Overall") {
+      loadTimeframe("Overall", overallWeights);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [overallWeights]);
 
   const handleNewsBadgeClick = useCallback(async (theme: ThemeData) => {
     setNewsPanelTheme(theme);
