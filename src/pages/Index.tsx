@@ -49,6 +49,24 @@ export default function Index() {
   const [showOptions, setShowOptions] = useState(false);
   const [showDemoConfirm, setShowDemoConfirm] = useState(false);
 
+  const [overallWeights, setOverallWeights] = useState<DashboardWeights>(() => {
+    if (typeof window === "undefined") return { ...DEFAULT_DASHBOARD_WEIGHTS };
+    try {
+      const raw = localStorage.getItem(DASHBOARD_WEIGHTS_KEY);
+      if (!raw) return { ...DEFAULT_DASHBOARD_WEIGHTS };
+      const parsed = JSON.parse(raw);
+      return {
+        w1d: Number(parsed.w1d ?? DEFAULT_DASHBOARD_WEIGHTS.w1d),
+        w1w: Number(parsed.w1w ?? DEFAULT_DASHBOARD_WEIGHTS.w1w),
+        w1m: Number(parsed.w1m ?? DEFAULT_DASHBOARD_WEIGHTS.w1m),
+        w3m: Number(parsed.w3m ?? DEFAULT_DASHBOARD_WEIGHTS.w3m),
+      };
+    } catch { return { ...DEFAULT_DASHBOARD_WEIGHTS }; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem(DASHBOARD_WEIGHTS_KEY, JSON.stringify(overallWeights)); } catch {}
+  }, [overallWeights]);
+
   const { fetchVolume, getThemeSignals } = useVolumeData();
   const {
     fetchThemeNews, prefetchTopThemes, getThemeArticles,
