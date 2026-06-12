@@ -550,6 +550,7 @@ export default function Index() {
         {activeTimeframe === "Overall" ? (
           <OverallBestThemesList
             themes={searchMatchSet ? themes.filter(t => searchMatchSet.has(t.theme_name.toLowerCase())) : themes}
+            weights={overallWeights}
             onThemeClick={setDrilldownTheme}
           />
         ) : (
