@@ -259,8 +259,11 @@ export function useFullScan(onComplete: (themes: ThemeData[], timeframe: string)
     }
   }, [fetchStatus, buildThemesFromPerf, supabaseUrl, anonKey, toast, onComplete]);
 
-  const loadTimeframe = useCallback(async (timeframe: string) => {
-    const themes = await buildThemesFromPerf(timeframe);
+  const loadTimeframe = useCallback(async (
+    timeframe: string,
+    overallWeights?: { w1d: number; w1w: number; w1m: number; w3m: number },
+  ) => {
+    const themes = await buildThemesFromPerf(timeframe, overallWeights);
     if (themes.length > 0) onComplete(themes, timeframe);
     return themes.length > 0;
   }, [buildThemesFromPerf, onComplete]);
