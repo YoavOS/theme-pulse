@@ -59,7 +59,10 @@ export function useFullScan(onComplete: (themes: ThemeData[], timeframe: string)
   // Build theme data from a freshly-completed scan + theme_tickers.
   // No EOD/history reads — historical timeframes use the perf fields
   // returned by the scan itself.
-  const buildThemesFromPerf = useCallback(async (timeframe: string = "Today"): Promise<ThemeData[]> => {
+  const buildThemesFromPerf = useCallback(async (
+    timeframe: string = "Today",
+    overallWeights?: { w1d: number; w1w: number; w1m: number; w3m: number },
+  ): Promise<ThemeData[]> => {
     const { data: dbThemes } = await supabase.from("themes").select("id, name, description");
     const { data: dbTickers } = await supabase.from("theme_tickers").select("theme_id, ticker_symbol");
 
@@ -88,7 +91,29 @@ export function useFullScan(onComplete: (themes: ThemeData[], timeframe: string)
 
     if (Object.keys(perfMap).length === 0) return [];
 
+    const isOverall = timeframe === "Overall";
     const perfField = timeframe === "1W" ? "perf_1w" : timeframe === "1M" ? "perf_1m" : timeframe === "3M" ? "perf_3m" : timeframe === "YTD" ? "perf_ytd" : "perf_1d";
+
+    // Normalize weights for Overall mode.
+    const wRaw = overallWeights ?? { w1d: 0, w1w: 0, w1m: 60, w3m: 40 };
+    const wTotal = wRaw.w1d + wRaw.w1w + wRaw.w1m + wRaw.w3m;
+    const w = wTotal > 0
+      ? { w1d: wRaw.w1d / wTotal, w1w: wRaw.w1w / wTotal, w1m: wRaw.w1m / wTotal, w3m: wRaw.w3m / wTotal }
+      : { w1d: 0, w1w: 0, w1m: 0.6, w3m: 0.4 };
+
+    const blend = (p: { perf_1d: number; perf_1w: number; perf_1m: number; perf_3m: number }) => {
+      let num = 0, den = 0;
+      const add = (val: number, weight: number) => {
+        if (weight > 0 && val !== null && val !== undefined && !Number.isNaN(val)) {
+          num += weight * val; den += weight;
+        }
+      };
+      add(p.perf_1d, w.w1d);
+      add(p.perf_1w, w.w1w);
+      add(p.perf_1m, w.w1m);
+      add(p.perf_3m, w.w3m);
+      return den > 0 ? Math.round((num / den) * 100) / 100 : 0;
+    };
 
     const themeTickerMap = new Map<string, { name: string; description: string | null; symbols: string[] }>();
     for (const t of dbThemes) {
@@ -105,7 +130,17 @@ export function useFullScan(onComplete: (themes: ThemeData[], timeframe: string)
 
       const tickers = entry.symbols.map(s => {
         const perf = perfMap[s];
-        if (!perf) return { symbol: s, pct: 0, skipped: true, skipReason: "no_data" };
+        if (!perf) return { symbol: s, pct: 0, skipped: true, skipReason: "no_data" } as any;
+        if (isOverall) {
+          return {
+            symbol: s,
+            pct: blend(perf),
+            pct_1d: perf.perf_1d ?? 0,
+            pct_1w: perf.perf_1w ?? 0,
+            pct_1m: perf.perf_1m ?? 0,
+            pct_3m: perf.perf_3m ?? 0,
+          };
+        }
         return { symbol: s, pct: perf[perfField] || 0 };
       });
 
@@ -113,11 +148,12 @@ export function useFullScan(onComplete: (themes: ThemeData[], timeframe: string)
       const up_count = validTickers.filter(t => t.pct > 0).length;
       const down_count = validTickers.filter(t => t.pct <= 0).length;
       const na_count = tickers.filter(t => t.skipped).length;
-      const performance_pct = validTickers.length > 0
-        ? Math.round((validTickers.reduce((sum, t) => sum + t.pct, 0) / validTickers.length) * 100) / 100
+      const avg = (key: string) => validTickers.length > 0
+        ? Math.round((validTickers.reduce((sum, t: any) => sum + (t[key] ?? 0), 0) / validTickers.length) * 100) / 100
         : 0;
+      const performance_pct = avg("pct");
 
-      themes.push({
+      const themeOut: ThemeData = {
         theme_name: entry.name,
         performance_pct,
         up_count,
@@ -128,7 +164,14 @@ export function useFullScan(onComplete: (themes: ThemeData[], timeframe: string)
         notes: entry.description || undefined,
         dataSource: "real",
         lastUpdated: new Date().toISOString(),
-      });
+      };
+      if (isOverall) {
+        themeOut.perf_1d = avg("pct_1d");
+        themeOut.perf_1w = avg("pct_1w");
+        themeOut.perf_1m = avg("pct_1m");
+        themeOut.perf_3m = avg("pct_3m");
+      }
+      themes.push(themeOut);
     }
 
     return themes;
@@ -216,8 +259,11 @@ export function useFullScan(onComplete: (themes: ThemeData[], timeframe: string)
     }
   }, [fetchStatus, buildThemesFromPerf, supabaseUrl, anonKey, toast, onComplete]);
 
-  const loadTimeframe = useCallback(async (timeframe: string) => {
-    const themes = await buildThemesFromPerf(timeframe);
+  const loadTimeframe = useCallback(async (
+    timeframe: string,
+    overallWeights?: { w1d: number; w1w: number; w1m: number; w3m: number },
+  ) => {
+    const themes = await buildThemesFromPerf(timeframe, overallWeights);
     if (themes.length > 0) onComplete(themes, timeframe);
     return themes.length > 0;
   }, [buildThemesFromPerf, onComplete]);

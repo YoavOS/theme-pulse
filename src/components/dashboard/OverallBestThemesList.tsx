@@ -1,9 +1,12 @@
 import { useMemo } from "react";
 import { ThemeData } from "@/data/themeData";
 import { Trophy } from "lucide-react";
+import type { DashboardWeights } from "./DashboardWeightsPanel";
+import { normalizeDashboardWeights } from "./DashboardWeightsPanel";
 
 interface Props {
   themes: ThemeData[];
+  weights: DashboardWeights;
   onThemeClick?: (theme: ThemeData) => void;
 }
 
@@ -21,12 +24,15 @@ function fmt(n: number | undefined | null) {
   return `${sign}${n.toFixed(2)}%`;
 }
 
-export default function OverallBestThemesList({ themes, onThemeClick }: Props) {
+export default function OverallBestThemesList({ themes, weights, onThemeClick }: Props) {
   const ranked = useMemo(() => {
     return [...themes]
       .filter((t) => t.tickers.length > 0)
       .sort((a, b) => b.performance_pct - a.performance_pct);
   }, [themes]);
+
+  const norm = normalizeDashboardWeights(weights);
+  const weightLabel = `${norm.w1d}% 1D · ${norm.w1w}% 1W · ${norm.w1m}% 1M · ${norm.w3m}% 3M`;
 
   return (
     <div className="rounded-lg border border-border bg-card overflow-hidden">
@@ -34,7 +40,7 @@ export default function OverallBestThemesList({ themes, onThemeClick }: Props) {
         <Trophy size={14} className="text-[hsl(40,90%,55%)]" />
         <h2 className="text-sm font-bold tracking-tight text-foreground">Overall Best Themes</h2>
         <span className="text-[10px] text-muted-foreground">
-          weighted score · 50% Today + 30% 1W + 20% 1M
+          weighted score · {weightLabel}
         </span>
       </div>
 
@@ -45,9 +51,10 @@ export default function OverallBestThemesList({ themes, onThemeClick }: Props) {
               <th className="px-3 py-2 text-left">#</th>
               <th className="px-3 py-2 text-left">Theme</th>
               <th className="px-3 py-2 text-right">Overall</th>
-              <th className="px-3 py-2 text-right">Today</th>
+              <th className="px-3 py-2 text-right">1D</th>
               <th className="px-3 py-2 text-right">1W</th>
               <th className="px-3 py-2 text-right">1M</th>
+              <th className="px-3 py-2 text-right">3M</th>
               <th className="px-3 py-2 text-right">Stocks</th>
               <th className="px-3 py-2 text-left">Top Performers</th>
             </tr>
@@ -69,14 +76,17 @@ export default function OverallBestThemesList({ themes, onThemeClick }: Props) {
                   <td className={`px-3 py-2 text-right font-mono font-bold ${colorFor(t.performance_pct)}`}>
                     {fmt(t.performance_pct)}
                   </td>
-                  <td className={`px-3 py-2 text-right font-mono ${colorFor(t.perf_today ?? 0)}`}>
-                    {fmt(t.perf_today)}
+                  <td className={`px-3 py-2 text-right font-mono ${colorFor(t.perf_1d ?? 0)}`}>
+                    {fmt(t.perf_1d)}
                   </td>
                   <td className={`px-3 py-2 text-right font-mono ${colorFor(t.perf_1w ?? 0)}`}>
                     {fmt(t.perf_1w)}
                   </td>
                   <td className={`px-3 py-2 text-right font-mono ${colorFor(t.perf_1m ?? 0)}`}>
                     {fmt(t.perf_1m)}
+                  </td>
+                  <td className={`px-3 py-2 text-right font-mono ${colorFor(t.perf_3m ?? 0)}`}>
+                    {fmt(t.perf_3m)}
                   </td>
                   <td className="px-3 py-2 text-right text-muted-foreground font-mono">
                     {t.valid_count ?? t.tickers.length}
@@ -99,8 +109,8 @@ export default function OverallBestThemesList({ themes, onThemeClick }: Props) {
             })}
             {ranked.length === 0 && (
               <tr>
-                <td colSpan={8} className="px-3 py-6 text-center text-muted-foreground">
-                  No themes yet — run a scan to populate Overall Best.
+                <td colSpan={9} className="px-3 py-6 text-center text-muted-foreground">
+                  No themes yet — run a Full Scan to populate Overall Best.
                 </td>
               </tr>
             )}

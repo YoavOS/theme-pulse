@@ -8,8 +8,10 @@ export interface Ticker {
   skipReason?: string;
   // Populated only when timeframe="Overall"
   pct_today?: number;
+  pct_1d?: number;
   pct_1w?: number;
   pct_1m?: number;
+  pct_3m?: number;
 }
 
 export interface ThemeData {
@@ -27,8 +29,10 @@ export interface ThemeData {
   lastUpdated?: string;
   // Populated only when timeframe="Overall"
   perf_today?: number;
+  perf_1d?: number;
   perf_1w?: number;
   perf_1m?: number;
+  perf_3m?: number;
 }
 
 

@@ -10,6 +10,10 @@ import {
 } from "lucide-react";
 import HeatmapGridView from "@/components/dashboard/HeatmapGridView";
 import OverallBestThemesList from "@/components/dashboard/OverallBestThemesList";
+import DashboardWeightsPanel, {
+  DashboardWeights,
+  DEFAULT_DASHBOARD_WEIGHTS,
+} from "@/components/dashboard/DashboardWeightsPanel";
 
 import DemoDataConfirmDialog from "@/components/DemoDataConfirmDialog";
 import { getCacheAge } from "@/hooks/useScanCache";
@@ -25,7 +29,8 @@ import { useThemeNews } from "@/hooks/useThemeNews";
 import { useFundamentals } from "@/hooks/useFundamentals";
 import NewsPanel from "@/components/NewsPanel";
 
-const TIMEFRAMES = ["Today", "1W", "1M", "3M", "YTD", "Overall"] as const;
+const TIMEFRAMES = ["Today", "1W", "1M", "3M", "Overall"] as const;
+const DASHBOARD_WEIGHTS_KEY = "dashboard_overall_weights_v1";
 
 function formatDate(d: Date) {
   return d.toLocaleDateString("en-US", { month: "2-digit", day: "2-digit", year: "numeric" });
@@ -43,6 +48,24 @@ export default function Index() {
   const [drilldownTheme, setDrilldownTheme] = useState<ThemeData | null>(null);
   const [showOptions, setShowOptions] = useState(false);
   const [showDemoConfirm, setShowDemoConfirm] = useState(false);
+
+  const [overallWeights, setOverallWeights] = useState<DashboardWeights>(() => {
+    if (typeof window === "undefined") return { ...DEFAULT_DASHBOARD_WEIGHTS };
+    try {
+      const raw = localStorage.getItem(DASHBOARD_WEIGHTS_KEY);
+      if (!raw) return { ...DEFAULT_DASHBOARD_WEIGHTS };
+      const parsed = JSON.parse(raw);
+      return {
+        w1d: Number(parsed.w1d ?? DEFAULT_DASHBOARD_WEIGHTS.w1d),
+        w1w: Number(parsed.w1w ?? DEFAULT_DASHBOARD_WEIGHTS.w1w),
+        w1m: Number(parsed.w1m ?? DEFAULT_DASHBOARD_WEIGHTS.w1m),
+        w3m: Number(parsed.w3m ?? DEFAULT_DASHBOARD_WEIGHTS.w3m),
+      };
+    } catch { return { ...DEFAULT_DASHBOARD_WEIGHTS }; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem(DASHBOARD_WEIGHTS_KEY, JSON.stringify(overallWeights)); } catch {}
+  }, [overallWeights]);
 
   const { fetchVolume, getThemeSignals } = useVolumeData();
   const {
@@ -98,11 +121,25 @@ export default function Index() {
   useEffect(() => {
     if (prevTimeframe.current !== activeTimeframe) {
       prevTimeframe.current = activeTimeframe;
-      loadTimeframe(activeTimeframe).then((loaded) => {
-        if (!loaded && !isLive && !isLoading) fetchLiveData();
+      const weightsArg = activeTimeframe === "Overall" ? overallWeights : undefined;
+      loadTimeframe(activeTimeframe, weightsArg).then((loaded) => {
+        // Never trigger a network fetch for Overall — it's computed locally from
+        // the cached Full Scan perf map. If the cache is missing, we show the
+        // empty state asking the user to run a Full Scan.
+        if (!loaded && activeTimeframe !== "Overall" && !isLive && !isLoading) {
+          fetchLiveData();
+        }
       });
     }
-  }, [activeTimeframe, isLive, isLoading, fetchLiveData, loadTimeframe]);
+  }, [activeTimeframe, isLive, isLoading, fetchLiveData, loadTimeframe, overallWeights]);
+
+  // Recompute Overall locally whenever weights change (no network).
+  useEffect(() => {
+    if (activeTimeframe === "Overall") {
+      loadTimeframe("Overall", overallWeights);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [overallWeights]);
 
   const handleNewsBadgeClick = useCallback(async (theme: ThemeData) => {
     setNewsPanelTheme(theme);
@@ -296,6 +333,13 @@ export default function Index() {
             </div>
 
             <div className="flex items-center gap-2">
+              {activeTimeframe === "Overall" && (
+                <DashboardWeightsPanel
+                  weights={overallWeights}
+                  onChange={setOverallWeights}
+                  onReset={() => setOverallWeights({ ...DEFAULT_DASHBOARD_WEIGHTS })}
+                />
+              )}
               <button
                 onClick={startFullScan}
                 disabled={isFullScanning || isLoading}
@@ -506,6 +550,7 @@ export default function Index() {
         {activeTimeframe === "Overall" ? (
           <OverallBestThemesList
             themes={searchMatchSet ? themes.filter(t => searchMatchSet.has(t.theme_name.toLowerCase())) : themes}
+            weights={overallWeights}
             onThemeClick={setDrilldownTheme}
           />
         ) : (
