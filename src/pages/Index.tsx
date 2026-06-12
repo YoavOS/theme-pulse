@@ -333,6 +333,13 @@ export default function Index() {
             </div>
 
             <div className="flex items-center gap-2">
+              {activeTimeframe === "Overall" && (
+                <DashboardWeightsPanel
+                  weights={overallWeights}
+                  onChange={setOverallWeights}
+                  onReset={() => setOverallWeights({ ...DEFAULT_DASHBOARD_WEIGHTS })}
+                />
+              )}
               <button
                 onClick={startFullScan}
                 disabled={isFullScanning || isLoading}
