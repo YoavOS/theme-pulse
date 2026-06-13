@@ -153,7 +153,7 @@ export default function MinerviniChecker() {
               />
             </div>
             <Button
-              onClick={runAnalysis}
+              onClick={() => runAnalysis(false)}
               disabled={loading || !symbol.trim()}
               size="lg"
               className="bg-[hsl(280,70%,60%)] text-white hover:bg-[hsl(280,70%,55%)] font-bold"
