@@ -197,6 +197,15 @@ export default function MinerviniChecker() {
                     {report.symbol} <span className="text-base font-medium text-muted-foreground">· {report.companyName}</span>
                   </h2>
                   <p className="mt-2 text-base text-foreground/90">{report.headline}</p>
+                  {fromCache && (
+                    <button
+                      onClick={() => runAnalysis(true)}
+                      className="mt-2 text-xs text-muted-foreground underline hover:text-foreground"
+                      disabled={loading}
+                    >
+                      Showing cached result (24h) — click to force refresh
+                    </button>
+                  )}
                 </div>
                 <VerdictBadge verdict={report.verdict} score={report.overallScore} />
               </div>
