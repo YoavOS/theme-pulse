@@ -36,6 +36,7 @@ import IntradayThemeChart from "@/components/live/IntradayThemeChart";
 import First30MinVolumeCard from "@/components/live/First30MinVolumeCard";
 import MarketDriversWidget from "@/components/live/MarketDriversWidget";
 import StockDriversPanel from "@/components/live/StockDriversPanel";
+import StockBotPanel from "@/components/live/StockBotPanel";
 import { LineChart as LineChartIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -653,6 +654,7 @@ export default function LiveExecution() {
   const [showIntraday, setShowIntraday] = useState(false);
   const [activeSymbol, setActiveSymbol] = useState<string | null>(null);
   const [driversOpen, setDriversOpen] = useState(false);
+  const [stockBotOpen, setStockBotOpen] = useState(false);
   const [benchmark, setBenchmark] = useState<BenchmarkSymbol>("SPY");
   const [whyTopic, setWhyTopic] = useState<WhyTopic | null>(null);
   const debounceRef = useRef<number | null>(null);
@@ -1625,6 +1627,36 @@ export default function LiveExecution() {
                       return1w={activeStock?.return1w ?? null}
                       return1m={activeStock?.return1m ?? null}
                       rsRating={overallRating}
+                    />
+
+                    <button
+                      onClick={() => setStockBotOpen(true)}
+                      className="group relative w-full overflow-hidden rounded-xl border border-emerald-500/30 bg-gradient-to-r from-emerald-500/10 via-emerald-500/5 to-transparent px-5 py-4 text-left transition-all hover:border-emerald-500/50 hover:from-emerald-500/15"
+                    >
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <Sparkles size={15} className="text-emerald-400" />
+                            <span className="font-['Syne',sans-serif] text-sm font-semibold text-foreground">
+                              StockBot Deep Analysis — {activeSymbol}
+                            </span>
+                            <span className="rounded-md border border-emerald-500/30 bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-medium text-emerald-400">GROQ</span>
+                          </div>
+                          <div className="mt-1 text-xs text-muted-foreground">
+                            Llama 3.3 70B with live tool calls: financials, key ratios, news, peer comparison.
+                          </div>
+                        </div>
+                        <span className="rounded-md border border-border bg-background/80 px-2.5 py-1 text-xs font-medium text-foreground group-hover:bg-accent">
+                          Open StockBot →
+                        </span>
+                      </div>
+                    </button>
+                    <StockBotPanel
+                      open={stockBotOpen}
+                      onOpenChange={setStockBotOpen}
+                      symbol={activeSymbol}
+                      companyName={activeStock?.companyName}
+                      sector={activeStock?.sector}
                     />
                   </>
                 )}
