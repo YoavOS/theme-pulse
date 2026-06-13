@@ -57,27 +57,59 @@ function VerdictBadge({ verdict, score }: { verdict: string; score: number }) {
   );
 }
 
+const CACHE_KEY = (sym: string) => `minervini:${sym}`;
+const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+
+function readCache(sym: string): MinerviniReport | null {
+  try {
+    const raw = localStorage.getItem(CACHE_KEY(sym));
+    if (!raw) return null;
+    const { ts, report } = JSON.parse(raw);
+    if (Date.now() - ts > CACHE_TTL_MS) return null;
+    return report as MinerviniReport;
+  } catch { return null; }
+}
+function writeCache(sym: string, report: MinerviniReport) {
+  try { localStorage.setItem(CACHE_KEY(sym), JSON.stringify({ ts: Date.now(), report })); } catch {}
+}
+
 export default function MinerviniChecker() {
   const [symbol, setSymbol] = useState("");
   const [loading, setLoading] = useState(false);
   const [report, setReport] = useState<MinerviniReport | null>(null);
+  const [fromCache, setFromCache] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const runAnalysis = async () => {
+  const runAnalysis = async (force = false) => {
     const sym = symbol.trim().toUpperCase();
     if (!sym) return;
-    setLoading(true);
     setError(null);
+
+    // 1. localStorage cache — 0 network calls
+    if (!force) {
+      const cached = readCache(sym);
+      if (cached) {
+        setReport(cached);
+        setFromCache(true);
+        toast.success(`${sym} loaded from cache`);
+        return;
+      }
+    }
+
+    setLoading(true);
     setReport(null);
+    setFromCache(false);
     try {
       const { data, error: fnErr } = await supabase.functions.invoke("minervini-analysis", {
-        body: { symbol: sym },
+        body: { symbol: sym, force },
       });
       if (fnErr) throw new Error(fnErr.message);
       if (data?.error) throw new Error(data.error);
       if (!data?.report) throw new Error("No report returned");
-      setReport(data.report as MinerviniReport);
-      toast.success(`Analysis complete for ${sym}`);
+      const rep = data.report as MinerviniReport;
+      setReport(rep);
+      writeCache(sym, rep);
+      toast.success(`Analysis complete for ${sym}${data.cached ? " (server cache)" : ""}`);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       setError(msg);
@@ -121,7 +153,7 @@ export default function MinerviniChecker() {
               />
             </div>
             <Button
-              onClick={runAnalysis}
+              onClick={() => runAnalysis(false)}
               disabled={loading || !symbol.trim()}
               size="lg"
               className="bg-[hsl(280,70%,60%)] text-white hover:bg-[hsl(280,70%,55%)] font-bold"
@@ -165,6 +197,15 @@ export default function MinerviniChecker() {
                     {report.symbol} <span className="text-base font-medium text-muted-foreground">· {report.companyName}</span>
                   </h2>
                   <p className="mt-2 text-base text-foreground/90">{report.headline}</p>
+                  {fromCache && (
+                    <button
+                      onClick={() => runAnalysis(true)}
+                      className="mt-2 text-xs text-muted-foreground underline hover:text-foreground"
+                      disabled={loading}
+                    >
+                      Showing cached result (24h) — click to force refresh
+                    </button>
+                  )}
                 </div>
                 <VerdictBadge verdict={report.verdict} score={report.overallScore} />
               </div>
