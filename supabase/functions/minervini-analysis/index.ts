@@ -397,25 +397,29 @@ function makeReport(symbol: string, profile: any, derived: any): MinerviniReport
   const latest = q[0];
   const revTrend = q.slice(0, 5).map(x => x.revenueYoY);
   const epsTrend = q.slice(0, 5).map(x => x.normalizedEpsYoY ?? x.epsYoY);
+  const revQoqTrend = q.slice(0, 5).map(x => x.revenueQoQ);
+  const epsQoqTrend = q.slice(0, 5).map(x => x.epsQoQ);
   const opMarginTrend = q.slice(0, 5).map(x => x.operatingMargin ?? x.normalizedNetMargin ?? x.netMargin);
   const annRev = a.slice(0, 4).map(x => x.revenueYoY);
   const annEps = a.slice(0, 4).map(x => x.normalizedEpsYoY ?? x.epsYoY);
   const revAccel = summarizeTrend(revTrend);
   const epsAccel = summarizeTrend(epsTrend);
+  const revQoqAccel = summarizeTrend(revQoqTrend);
+  const epsQoqAccel = summarizeTrend(epsQoqTrend);
   const marginAccel = summarizeTrend(opMarginTrend);
 
   const criteria: Criterion[] = [
     {
       name: "Quarterly EPS Growth Trend",
-      value: fmtTrend(epsTrend), target: "≥25% YoY, consistent/accelerating",
+      value: `YoY ${fmtTrend(epsTrend)} | QoQ ${fmtTrend(epsQoqTrend)}`, target: "≥25% YoY, consistent/accelerating",
       status: statusFrom(epsTrend[0], (epsTrend[0] ?? -999) >= 25 && epsAccel !== "decelerating", (epsTrend[0] ?? 999) < 0),
-      comment: `Latest ${latest?.date ?? "quarter"}; trend is ${epsAccel}. Uses normalized/non-GAAP EPS where available.`,
+      comment: `Latest ${latest?.date ?? "quarter"}; YoY trend is ${epsAccel}, QoQ trend is ${epsQoqAccel}. Uses normalized/non-GAAP EPS where available.`,
     },
     {
       name: "Quarterly Sales Growth Trend",
-      value: fmtTrend(revTrend), target: "≥20% YoY, consistent/accelerating",
+      value: `YoY ${fmtTrend(revTrend)} | QoQ ${fmtTrend(revQoqTrend)}`, target: "≥20% YoY, consistent/accelerating",
       status: statusFrom(revTrend[0], (revTrend[0] ?? -999) >= 20 || ((revTrend[0] ?? -999) >= 8 && revAccel === "accelerating"), (revTrend[0] ?? 999) < 0),
-      comment: `Latest ${latest?.date ?? "quarter"}; trend is ${revAccel} across available reported quarters.`,
+      comment: `Latest ${latest?.date ?? "quarter"}; YoY trend is ${revAccel}, QoQ trend is ${revQoqAccel} across available reported quarters.`,
     },
     {
       name: "Annual EPS Growth",
