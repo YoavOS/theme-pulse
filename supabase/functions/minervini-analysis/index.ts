@@ -145,11 +145,11 @@ async function fetchYahooBundle(symbol: string) {
 
   const roePct = pct(num(f.returnOnEquity));
 
-  // Institutional ownership — Yahoo returns FRACTION (0.90 = 90%)
+  // Institutional ownership — Yahoo returns FRACTION; cap at 100% (some tickers report >1 due to lending/overlap)
   const rawInst = num(k.heldPercentInstitutions);
-  const instOwnPct = rawInst != null ? +(rawInst * 100).toFixed(2) : null;
+  const instOwnPct = rawInst != null ? Math.min(100, +(rawInst * 100).toFixed(2)) : null;
   const insiderRaw = num(k.heldPercentInsiders);
-  const insiderOwnPct = insiderRaw != null ? +(insiderRaw * 100).toFixed(2) : null;
+  const insiderOwnPct = insiderRaw != null ? Math.min(100, +(insiderRaw * 100).toFixed(2)) : null;
 
   const ocfTrend = cf.slice(0, 3).map((c: any) => c.operatingCashflow);
   const ocfPositive = ocfTrend.length > 0 && ocfTrend.every((v: any) => v != null && v > 0);
