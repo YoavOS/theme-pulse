@@ -6,7 +6,7 @@ import ValidateTickersDialog from "@/components/ValidateTickersDialog";
 import {
   RefreshCw, Download, Wifi, WifiOff, Loader2, Settings, ScanLine, X,
   ShieldCheck, Brain, ChevronDown, LayoutDashboard, AlertTriangle,
-  BarChart3, Zap, Activity, DollarSign, Sun, Database,
+  BarChart3, Zap, Activity, DollarSign, Sun, Database, Trophy,
 } from "lucide-react";
 import HeatmapGridView from "@/components/dashboard/HeatmapGridView";
 import OverallBestThemesList from "@/components/dashboard/OverallBestThemesList";
