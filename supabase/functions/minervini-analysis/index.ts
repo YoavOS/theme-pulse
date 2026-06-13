@@ -69,90 +69,171 @@ async function fetchYahooBundle(symbol: string) {
   const f = root.financialData ?? {};
   const s = root.summaryDetail ?? {};
 
+  // Helpers
+  const pct = (v: any) => (v == null || isNaN(v)) ? null : +(v * 100).toFixed(2);
+  const yoy = (cur: any, prev: any) =>
+    (cur == null || prev == null || prev === 0) ? null : +(((cur - prev) / Math.abs(prev)) * 100).toFixed(2);
+
+  const incQ = (root.incomeStatementHistoryQuarterly?.incomeStatementHistory ?? []).map((x: any) => ({
+    date: x.endDate?.fmt,
+    revenue: num(x.totalRevenue),
+    netIncome: num(x.netIncome),
+    operatingIncome: num(x.operatingIncome),
+    eps: num(x.dilutedEPS),
+  }));
+  const incA = (root.incomeStatementHistory?.incomeStatementHistory ?? []).map((x: any) => ({
+    date: x.endDate?.fmt,
+    revenue: num(x.totalRevenue),
+    netIncome: num(x.netIncome),
+    operatingIncome: num(x.operatingIncome),
+    eps: num(x.dilutedEPS),
+  }));
+  const cf = (root.cashflowStatementHistory?.cashflowStatements ?? []).map((x: any) => ({
+    date: x.endDate?.fmt,
+    operatingCashflow: num(x.totalCashFromOperatingActivities),
+    capex: num(x.capitalExpenditures),
+  }));
+  const bs = (root.balanceSheetHistory?.balanceSheetStatements ?? []).map((x: any) => ({
+    date: x.endDate?.fmt,
+    totalAssets: num(x.totalAssets),
+    totalLiab: num(x.totalLiab),
+    cash: num(x.cash),
+    shortDebt: num(x.shortLongTermDebt),
+    longDebt: num(x.longTermDebt),
+    equity: num(x.totalStockholderEquity),
+  }));
+  const eh = (root.earningsHistory?.history ?? []).map((x: any) => ({
+    quarter: x.quarter?.fmt,
+    epsActual: num(x.epsActual),
+    epsEstimate: num(x.epsEstimate),
+    surprisePct: num(x.surprisePercent),
+  }));
+
+  // ── Pre-computed derived metrics (authoritative — LLM must use these) ──
+  const q0 = incQ[0], q4 = incQ[4];
+  const quarterlySalesYoY = (q0 && q4) ? yoy(q0.revenue, q4.revenue) : null;
+  const quarterlyEpsYoY = (q0 && q4) ? yoy(q0.eps, q4.eps) :
+    (num(k.earningsQuarterlyGrowth) != null ? pct(num(k.earningsQuarterlyGrowth)) : null);
+
+  const annualSalesGrowth: number[] = [];
+  const annualEpsGrowth: number[] = [];
+  for (let i = 0; i + 1 < incA.length && i < 3; i++) {
+    const sg = yoy(incA[i].revenue, incA[i + 1].revenue);
+    const eg = yoy(incA[i].eps, incA[i + 1].eps);
+    if (sg != null) annualSalesGrowth.push(sg);
+    if (eg != null) annualEpsGrowth.push(eg);
+  }
+
+  const qNetMargin = (q0 && q0.revenue) ? +((q0.netIncome / q0.revenue) * 100).toFixed(2) : null;
+  const qOpMargin = (q0 && q0.revenue && q0.operatingIncome != null)
+    ? +((q0.operatingIncome / q0.revenue) * 100).toFixed(2) : null;
+  const ttmNetMargin = pct(num(f.profitMargins));
+  const ttmOpMargin = pct(num(f.operatingMargins));
+  const ttmGrossMargin = pct(num(f.grossMargins));
+
+  // Debt/Equity — Yahoo's financialData.debtToEquity is in PERCENT (90.28 = 0.90x)
+  const rawDE = num(f.debtToEquity);
+  let debtToEquityRatio = rawDE != null ? +(rawDE / 100).toFixed(2) : null;
+  const bs0 = bs[0];
+  if ((debtToEquityRatio == null || debtToEquityRatio > 50) && bs0 && bs0.equity) {
+    const totalDebtBS = (bs0.shortDebt ?? 0) + (bs0.longDebt ?? 0);
+    if (totalDebtBS > 0) debtToEquityRatio = +(totalDebtBS / bs0.equity).toFixed(2);
+  }
+
+  const roePct = pct(num(f.returnOnEquity));
+
+  // Institutional ownership — Yahoo returns FRACTION (0.90 = 90%)
+  const rawInst = num(k.heldPercentInstitutions);
+  const instOwnPct = rawInst != null ? +(rawInst * 100).toFixed(2) : null;
+  const insiderRaw = num(k.heldPercentInsiders);
+  const insiderOwnPct = insiderRaw != null ? +(insiderRaw * 100).toFixed(2) : null;
+
+  const ocfTrend = cf.slice(0, 3).map((c: any) => c.operatingCashflow);
+  const ocfPositive = ocfTrend.length > 0 && ocfTrend.every((v: any) => v != null && v > 0);
+
+  const beats = eh.filter((e: any) => e.epsActual != null && e.epsEstimate != null && e.epsActual >= e.epsEstimate).length;
+  const epsBeatRate = eh.length > 0 ? +((beats / eh.length) * 100).toFixed(0) : null;
+
   const bundle = {
     symbol,
     profile: {
       name: p.longName ?? p.shortName ?? null,
       sector: a.sector ?? null,
       industry: a.industry ?? null,
-      summary: (a.longBusinessSummary ?? "").slice(0, 400),
+      summary: (a.longBusinessSummary ?? "").slice(0, 300),
     },
-    stats: {
+    derived: {
+      mostRecentQuarter: q0?.date ?? null,
+      yearAgoQuarter: q4?.date ?? null,
+      quarterlySalesGrowthYoY_pct: quarterlySalesYoY,
+      quarterlyEpsGrowthYoY_pct: quarterlyEpsYoY,
+      annualSalesGrowthYoY_pct_recent3yrs: annualSalesGrowth,
+      annualEpsGrowthYoY_pct_recent3yrs: annualEpsGrowth,
+      quarterlyNetMargin_pct: qNetMargin,
+      quarterlyOperatingMargin_pct: qOpMargin,
+      ttmNetMargin_pct: ttmNetMargin,
+      ttmOperatingMargin_pct: ttmOpMargin,
+      ttmGrossMargin_pct: ttmGrossMargin,
+      roe_pct: roePct,
+      debtToEquity_ratio: debtToEquityRatio,
+      operatingCashflowLast3yrs: ocfTrend,
+      operatingCashflowAllPositive: ocfPositive,
+      institutionalOwnership_pct: instOwnPct,
+      insiderOwnership_pct: insiderOwnPct,
+      epsBeatRate_pct: epsBeatRate,
+      epsSurprisesRecent: eh.slice(-6).map((e: any) => e.surprisePct),
+    },
+    rawStats: {
       marketCap: num(s.marketCap), trailingPE: num(s.trailingPE), forwardPE: num(s.forwardPE),
-      pegRatio: num(k.pegRatio), priceToBook: num(k.priceToBook),
-      profitMargin: num(f.profitMargins), operatingMargin: num(f.operatingMargins),
-      grossMargin: num(f.grossMargins),
-      roe: num(f.returnOnEquity), roa: num(f.returnOnAssets),
-      revenueGrowth: num(f.revenueGrowth), earningsGrowth: num(f.earningsGrowth),
-      earningsQuarterlyGrowth: num(k.earningsQuarterlyGrowth),
-      debtToEquity: num(f.debtToEquity), currentRatio: num(f.currentRatio),
-      totalCash: num(f.totalCash), totalDebt: num(f.totalDebt),
-      freeCashflow: num(f.freeCashflow), operatingCashflow: num(f.operatingCashflow),
-      heldPercentInstitutions: num(k.heldPercentInstitutions),
-      heldPercentInsiders: num(k.heldPercentInsiders),
-      shortPercentOfFloat: num(k.shortPercentOfFloat),
-      targetMeanPrice: num(f.targetMeanPrice),
-      recommendation: f.recommendationKey ?? null,
+      currentRatio: num(f.currentRatio), totalCash: num(f.totalCash), totalDebt: num(f.totalDebt),
+      freeCashflow: num(f.freeCashflow),
     },
-    incomeAnnual: (root.incomeStatementHistory?.incomeStatementHistory ?? []).slice(0, 4).map((x: any) => ({
-      date: x.endDate?.fmt, revenue: num(x.totalRevenue), netIncome: num(x.netIncome),
-      operatingIncome: num(x.operatingIncome), eps: num(x.dilutedEPS),
-    })),
-    incomeQuarterly: (root.incomeStatementHistoryQuarterly?.incomeStatementHistory ?? []).slice(0, 6).map((x: any) => ({
-      date: x.endDate?.fmt, revenue: num(x.totalRevenue), netIncome: num(x.netIncome),
-      operatingIncome: num(x.operatingIncome), eps: num(x.dilutedEPS),
-    })),
-    cashflow: (root.cashflowStatementHistory?.cashflowStatements ?? []).slice(0, 3).map((x: any) => ({
-      date: x.endDate?.fmt, operatingCashflow: num(x.totalCashFromOperatingActivities),
-      capex: num(x.capitalExpenditures),
-    })),
-    balanceSheet: (root.balanceSheetHistory?.balanceSheetStatements ?? []).slice(0, 2).map((x: any) => ({
-      date: x.endDate?.fmt, totalAssets: num(x.totalAssets), totalLiab: num(x.totalLiab),
-      cash: num(x.cash), totalDebt: (num(x.shortLongTermDebt) ?? 0) + (num(x.longTermDebt) ?? 0),
-    })),
-    earningsHistory: (root.earningsHistory?.history ?? []).slice(-8).map((x: any) => ({
-      quarter: x.quarter?.fmt, epsActual: num(x.epsActual), epsEstimate: num(x.epsEstimate),
-      surprisePct: num(x.surprisePercent),
-    })),
+    incomeQuarterly: incQ.slice(0, 8),
+    incomeAnnual: incA.slice(0, 4),
+    cashflow: cf.slice(0, 3),
+    balanceSheet: bs.slice(0, 2),
+    earningsHistory: eh.slice(-8),
   };
   dataCache.set(symbol, { ts: Date.now(), data: bundle });
   return bundle;
 }
 
-const SYSTEM = `You are an institutional equity analyst applying Mark Minervini's SEPA fundamental criteria. You will receive a JSON bundle of pre-fetched financial data. Return ONLY a JSON object (no prose, no code fences) matching this exact schema:
+const SYSTEM = `You are an institutional equity analyst applying Mark Minervini's SEPA fundamental criteria. You receive a JSON bundle with a "derived" block of PRE-COMPUTED, PRE-NORMALIZED metrics. **Always use bundle.derived values directly — they are authoritative.** Do NOT recompute from raw fields, do NOT reinterpret units.
 
+Unit guide for bundle.derived (CRITICAL — follow exactly):
+- All *_pct fields are ALREADY in percent (e.g. 9.2 means 9.2%, 18.5 means 18.5%). Do NOT multiply by 100 again.
+- debtToEquity_ratio is a RATIO (e.g. 0.91 means 0.91x). Healthy <1.5x, low <0.5x.
+- institutionalOwnership_pct is in percent (e.g. 92.5 means 92.5%). >70% = strong sponsorship.
+- If a derived value is null, write "N/A" and use status "neutral" — do NOT fabricate or guess.
+
+Return ONLY a JSON object (no prose, no code fences):
 {
-  "symbol": string,
-  "companyName": string,
-  "sector": string | null,
-  "overallScore": number,
-  "verdict": "PASS" | "FAIL" | "BORDERLINE",
+  "symbol": string, "companyName": string, "sector": string | null,
+  "overallScore": number, "verdict": "PASS" | "FAIL" | "BORDERLINE",
   "headline": string,
   "criteria": [{ "name": string, "value": string, "target": string, "status": "pass"|"fail"|"neutral", "comment": string }],
-  "bullCase": [string],
-  "bearCase": [string],
-  "finalVerdict": string
+  "bullCase": [string], "bearCase": [string], "finalVerdict": string
 }
 
-Required criteria entries IN THIS ORDER:
-1. "Quarterly EPS Growth" — target ≥25% YoY
-2. "Annual EPS Growth" — target strong and accelerating
-3. "Quarterly Sales Growth" — target ≥20–25% YoY
-4. "Annual Sales Growth" — target consistent multi-year growth
-5. "Return on Equity (ROE)" — target ≥17%
-6. "Profit Margins" — target net margin expanding
-7. "Operating Margin Trend" — target expanding
-8. "Debt / Equity" — target low or declining
-9. "Operating Cash Flow" — target positive and growing
-10. "Institutional Sponsorship" — target healthy institutional ownership
-11. "Earnings Surprises / Stability" — target consistent beats
+Required criteria IN THIS ORDER (cite the derived field used):
+1. "Quarterly EPS Growth" — derived.quarterlyEpsGrowthYoY_pct — target ≥25% YoY
+2. "Annual EPS Growth" — derived.annualEpsGrowthYoY_pct_recent3yrs — target accelerating
+3. "Quarterly Sales Growth" — derived.quarterlySalesGrowthYoY_pct — target ≥20% YoY
+4. "Annual Sales Growth" — derived.annualSalesGrowthYoY_pct_recent3yrs — target consistent
+5. "Return on Equity (ROE)" — derived.roe_pct — target ≥17%
+6. "Profit Margins" — derived.quarterlyNetMargin_pct or ttmNetMargin_pct — target positive & expanding
+7. "Operating Margin Trend" — derived.quarterlyOperatingMargin_pct vs ttmOperatingMargin_pct — target expanding
+8. "Debt / Equity" — derived.debtToEquity_ratio — target <1.5x
+9. "Operating Cash Flow" — derived.operatingCashflowLast3yrs / operatingCashflowAllPositive — target positive & growing
+10. "Institutional Sponsorship" — derived.institutionalOwnership_pct — target >40% (ideal >70%)
+11. "Earnings Surprises / Stability" — derived.epsBeatRate_pct and epsSurprisesRecent — target consistent beats
 12. "Overall Fundamental Quality" — synthesis
 
-Rules:
-- Be HONEST and BALANCED. Cite actual numbers from the bundle. If data missing, use "N/A" and status "neutral".
-- overallScore: weight quarterly EPS + sales growth heavily, then ROE/margins, then debt/cashflow.
-- 80–100 = PASS, 60–79 = BORDERLINE, <60 = FAIL.
-- Output ONLY the JSON object.`;
+Format value with units, e.g. "9.2% YoY", "0.91x", "92.5%".
+
+If quarterlyNetMargin_pct is negative but quarterlyOperatingMargin_pct is strongly positive (>10%), note in comment: "GAAP net margin distorted by non-operating/one-time items; operating margin (non-GAAP proxy) is healthy at X%" and rate status "neutral" not "fail".
+
+Scoring: 80–100=PASS, 60–79=BORDERLINE, <60=FAIL. Weight quarterly EPS+sales heaviest. Output ONLY the JSON object.`;
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
