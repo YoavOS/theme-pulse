@@ -20,6 +20,7 @@ const reportCache = new Map<string, { ts: number; report: MinerviniReport; dataQ
 const quoteCache = new Map<string, { ts: number; data: any }>();
 const timeseriesCache = new Map<string, { ts: number; data: any }>();
 const finnhubCache = new Map<string, { ts: number; data: any }>();
+let cachedYahooAuth: { cookie: string; crumb: string; ts: number } | null = null;
 
 const num = (v: any): number | null => {
   if (v === null || v === undefined) return null;
@@ -212,14 +213,42 @@ async function fetchQuoteSummary(symbol: string, quality: DataQuality) {
     "incomeStatementHistory", "incomeStatementHistoryQuarterly", "balanceSheetHistory", "balanceSheetHistoryQuarterly",
     "cashflowStatementHistory", "cashflowStatementHistoryQuarterly", "earningsHistory", "earningsTrend",
   ].join(",");
-  const url = `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(symbol)}?modules=${modules}`;
-  const r = await fetch(url, { headers: { "User-Agent": UA, Accept: "application/json" } });
+  const auth = await yahooAuth();
+  const crumb = auth?.crumb ? `&crumb=${encodeURIComponent(auth.crumb)}` : "";
+  const url = `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(symbol)}?modules=${modules}${crumb}`;
+  const headers: Record<string, string> = { "User-Agent": UA, Accept: "application/json" };
+  if (auth?.cookie) headers.Cookie = auth.cookie;
+  const r = await fetch(url, { headers });
   quality.yahooCalls++;
+  if (r.status === 401 || r.status === 403) cachedYahooAuth = null;
   if (!r.ok) return null;
   const j = await r.json().catch(() => null);
   const data = j?.quoteSummary?.result?.[0] ?? null;
   if (data) quoteCache.set(symbol, { ts: Date.now(), data });
   return data;
+}
+
+async function yahooAuth(): Promise<{ cookie: string; crumb: string } | null> {
+  if (cachedYahooAuth && Date.now() - cachedYahooAuth.ts < 30 * 60 * 1000) {
+    return { cookie: cachedYahooAuth.cookie, crumb: cachedYahooAuth.crumb };
+  }
+  try {
+    const r = await fetch("https://fc.yahoo.com", { headers: { "User-Agent": UA }, redirect: "manual" });
+    const sc = r.headers.get("set-cookie") ?? "";
+    const a3 = sc.match(/A3=([^;]+)/);
+    if (!a3) return null;
+    const cookie = `A3=${a3[1]}`;
+    const cr = await fetch("https://query2.finance.yahoo.com/v1/test/getcrumb", {
+      headers: { "User-Agent": UA, Cookie: cookie },
+    });
+    if (!cr.ok) return null;
+    const crumb = (await cr.text()).trim();
+    if (!crumb) return null;
+    cachedYahooAuth = { cookie, crumb, ts: Date.now() };
+    return { cookie, crumb };
+  } catch {
+    return null;
+  }
 }
 
 async function fetchTimeseries(symbol: string, quality: DataQuality) {
