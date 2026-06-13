@@ -131,12 +131,20 @@ function mapTimeseries(result: any[]): Record<string, { date: string; value: num
 
 function pointFor(date: string, series: Record<string, { date: string; value: number | null }[]>, prefix: "quarterly" | "annual"): PeriodPoint {
   const get = (field: string) => series[`${prefix}${field}`]?.find(p => p.date === date)?.value ?? null;
+  const eps = get("DilutedEPS");
+  const netIncome = get("NetIncome");
+  const normalizedIncome = get("NormalizedIncome");
+  const normalizedEps = get("NormalizedDilutedEPS") ?? (
+    eps !== null && netIncome !== null && normalizedIncome !== null && netIncome !== 0
+      ? Math.abs(eps / netIncome) * normalizedIncome
+      : null
+  );
   return {
     date,
     revenue: get("TotalRevenue"),
-    eps: get("DilutedEPS"),
-    normalizedEps: get("NormalizedDilutedEPS"),
-    netIncome: get("NetIncome"),
+    eps,
+    normalizedEps: round(normalizedEps),
+    netIncome,
     normalizedIncome: get("NormalizedIncome"),
     operatingIncome: get("OperatingIncome"),
     grossProfit: get("GrossProfit"),
