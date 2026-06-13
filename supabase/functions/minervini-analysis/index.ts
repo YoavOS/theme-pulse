@@ -111,9 +111,12 @@ async function fetchYahooBundle(symbol: string) {
 
   // ── Pre-computed derived metrics (authoritative — LLM must use these) ──
   const q0 = incQ[0], q4 = incQ[4];
-  const quarterlySalesYoY = (q0 && q4) ? yoy(q0.revenue, q4.revenue) : null;
+  // Quarterly YoY — prefer Q[0] vs Q[4]; else use Yahoo's pre-computed f.revenueGrowth (already YoY fraction)
+  const quarterlySalesYoY = (q0 && q4) ? yoy(q0.revenue, q4.revenue) :
+    (num(f.revenueGrowth) != null ? pct(num(f.revenueGrowth)) : null);
   const quarterlyEpsYoY = (q0 && q4) ? yoy(q0.eps, q4.eps) :
-    (num(k.earningsQuarterlyGrowth) != null ? pct(num(k.earningsQuarterlyGrowth)) : null);
+    (num(k.earningsQuarterlyGrowth) != null ? pct(num(k.earningsQuarterlyGrowth)) :
+     (num(f.earningsGrowth) != null ? pct(num(f.earningsGrowth)) : null));
 
   const annualSalesGrowth: number[] = [];
   const annualEpsGrowth: number[] = [];
