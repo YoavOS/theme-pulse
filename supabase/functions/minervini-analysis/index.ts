@@ -1,5 +1,4 @@
-// Minervini Fundamentals Checker — single-shot, ultra-cached.
-// 1 Yahoo call (combined modules) + 1 Groq call. 24h in-memory cache.
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -7,14 +6,239 @@ const corsHeaders = {
 };
 
 const GROQ_KEY = Deno.env.get("GROQ_API_KEY");
-const UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Minervini/2.0";
+const FINNHUB_KEY = Deno.env.get("FINNHUB_API_KEY");
+const SB_URL = Deno.env.get("SUPABASE_URL")!;
+const SB_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-// ── Yahoo auth (warm-container cache, 30 min) ───────────────────────────────
-let cachedAuth: { cookie: string; crumb: string; ts: number } | null = null;
-const AUTH_TTL = 30 * 60 * 1000;
+const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Minervini/3.0";
+const REPORT_TTL = 24 * 60 * 60 * 1000;
+const DB_CACHE_TTL = 24 * 60 * 60 * 1000;
+const QUOTE_TTL = 24 * 60 * 60 * 1000;
+const TIMESERIES_TTL = 24 * 60 * 60 * 1000;
+
+const reportCache = new Map<string, { ts: number; report: MinerviniReport; dataQuality: DataQuality }>();
+const quoteCache = new Map<string, { ts: number; data: any }>();
+const timeseriesCache = new Map<string, { ts: number; data: any }>();
+const finnhubCache = new Map<string, { ts: number; data: any }>();
+let cachedYahooAuth: { cookie: string; crumb: string; ts: number } | null = null;
+
+const num = (v: any): number | null => {
+  if (v === null || v === undefined) return null;
+  const n = typeof v === "object" ? Number(v.raw ?? v.reportedValue?.raw ?? v.fmt ?? NaN) : Number(v);
+  return Number.isFinite(n) ? n : null;
+};
+
+const round = (v: number | null, d = 2): number | null => v === null || !Number.isFinite(v) ? null : Number(v.toFixed(d));
+const pct = (v: number | null) => round(v === null ? null : v * 100);
+const pctGrowth = (now: number | null, prior: number | null): number | null => {
+  if (now === null || prior === null || prior === 0) return null;
+  return round(((now - prior) / Math.abs(prior)) * 100);
+};
+const avg = (values: (number | null)[]) => {
+  const clean = values.filter((v): v is number => v !== null && Number.isFinite(v));
+  return clean.length ? round(clean.reduce((s, v) => s + v, 0) / clean.length) : null;
+};
+
+interface PeriodPoint {
+  date: string;
+  revenue: number | null;
+  eps: number | null;
+  normalizedEps: number | null;
+  netIncome: number | null;
+  normalizedIncome: number | null;
+  operatingIncome: number | null;
+  grossProfit: number | null;
+  totalDebt: number | null;
+  equity: number | null;
+  operatingCashFlow: number | null;
+  freeCashFlow: number | null;
+}
+
+interface QuarterTrend extends PeriodPoint {
+  revenueYoY: number | null;
+  epsYoY: number | null;
+  normalizedEpsYoY: number | null;
+  revenueQoQ: number | null;
+  epsQoQ: number | null;
+  operatingMargin: number | null;
+  netMargin: number | null;
+  normalizedNetMargin: number | null;
+  grossMargin: number | null;
+  debtToEquity: number | null;
+}
+
+interface AnnualTrend extends PeriodPoint {
+  revenueYoY: number | null;
+  epsYoY: number | null;
+  normalizedEpsYoY: number | null;
+  operatingMargin: number | null;
+  netMargin: number | null;
+  normalizedNetMargin: number | null;
+}
+
+interface Criterion {
+  name: string;
+  value: string;
+  target: string;
+  status: "pass" | "fail" | "neutral";
+  comment: string;
+}
+
+interface MinerviniReport {
+  symbol: string;
+  companyName: string;
+  sector: string | null;
+  overallScore: number;
+  verdict: "PASS" | "FAIL" | "BORDERLINE";
+  headline: string;
+  criteria: Criterion[];
+  bullCase: string[];
+  bearCase: string[];
+  finalVerdict: string;
+}
+
+interface DataQuality {
+  sources: string[];
+  warnings: string[];
+  yahooCalls: number;
+  finnhubCalls: number;
+  dbCacheHit: boolean;
+}
+
+function jsonResponse(body: Record<string, unknown>, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}
+
+function valueFromTimeseriesItem(item: any): number | null {
+  return num(item?.reportedValue ?? item);
+}
+
+function mapTimeseries(result: any[]): Record<string, { date: string; value: number | null }[]> {
+  const out: Record<string, { date: string; value: number | null }[]> = {};
+  for (const row of result ?? []) {
+    const type = row?.meta?.type?.[0];
+    if (!type || !Array.isArray(row[type])) continue;
+    out[type] = row[type]
+      .map((p: any) => ({ date: p.asOfDate, value: valueFromTimeseriesItem(p) }))
+      .filter((p: any) => p.date)
+      .sort((a: any, b: any) => b.date.localeCompare(a.date));
+  }
+  return out;
+}
+
+function pointFor(date: string, series: Record<string, { date: string; value: number | null }[]>, prefix: "quarterly" | "annual"): PeriodPoint {
+  const get = (field: string) => series[`${prefix}${field}`]?.find(p => p.date === date)?.value ?? null;
+  const eps = get("DilutedEPS");
+  const netIncome = get("NetIncome");
+  const normalizedIncome = get("NormalizedIncome");
+  const normalizedEps = get("NormalizedDilutedEPS") ?? (
+    eps !== null && netIncome !== null && normalizedIncome !== null && netIncome !== 0
+      ? Math.abs(eps / netIncome) * normalizedIncome
+      : null
+  );
+  return {
+    date,
+    revenue: get("TotalRevenue"),
+    eps,
+    normalizedEps: round(normalizedEps),
+    netIncome,
+    normalizedIncome: get("NormalizedIncome"),
+    operatingIncome: get("OperatingIncome"),
+    grossProfit: get("GrossProfit"),
+    totalDebt: get("TotalDebt"),
+    equity: get("StockholdersEquity"),
+    operatingCashFlow: get("OperatingCashFlow"),
+    freeCashFlow: get("FreeCashFlow"),
+  };
+}
+
+function allDates(series: Record<string, { date: string; value: number | null }[]>, prefix: "quarterly" | "annual") {
+  const dates = new Set<string>();
+  for (const [key, points] of Object.entries(series)) {
+    if (key.startsWith(prefix)) points.forEach(p => dates.add(p.date));
+  }
+  return [...dates].sort((a, b) => b.localeCompare(a));
+}
+
+function enrichQuarters(points: PeriodPoint[], yahooGrowth: { revenueYoY: number | null; epsYoY: number | null }): QuarterTrend[] {
+  return points.map((p, i) => {
+    const yearAgo = points[i + 4];
+    const prev = points[i + 1];
+    const normalizedEpsYoY = pctGrowth(p.normalizedEps ?? p.eps, yearAgo?.normalizedEps ?? yearAgo?.eps ?? null);
+    const epsYoY = normalizedEpsYoY ?? pctGrowth(p.eps, yearAgo?.eps ?? null);
+    return {
+      ...p,
+      revenueYoY: pctGrowth(p.revenue, yearAgo?.revenue ?? null) ?? (i === 0 ? yahooGrowth.revenueYoY : null),
+      epsYoY: epsYoY ?? (i === 0 ? yahooGrowth.epsYoY : null),
+      normalizedEpsYoY,
+      revenueQoQ: pctGrowth(p.revenue, prev?.revenue ?? null),
+      epsQoQ: pctGrowth(p.normalizedEps ?? p.eps, prev?.normalizedEps ?? prev?.eps ?? null),
+      operatingMargin: p.revenue ? pct((p.operatingIncome ?? null) !== null ? p.operatingIncome! / p.revenue : null) : null,
+      netMargin: p.revenue ? pct((p.netIncome ?? null) !== null ? p.netIncome! / p.revenue : null) : null,
+      normalizedNetMargin: p.revenue ? pct((p.normalizedIncome ?? null) !== null ? p.normalizedIncome! / p.revenue : null) : null,
+      grossMargin: p.revenue ? pct((p.grossProfit ?? null) !== null ? p.grossProfit! / p.revenue : null) : null,
+      debtToEquity: p.equity && p.equity > 0 && p.totalDebt !== null ? round(p.totalDebt / p.equity) : null,
+    };
+  });
+}
+
+function enrichAnnual(points: PeriodPoint[]): AnnualTrend[] {
+  return points.map((p, i) => {
+    const prev = points[i + 1];
+    const normalizedEpsYoY = pctGrowth(p.normalizedEps ?? p.eps, prev?.normalizedEps ?? prev?.eps ?? null);
+    return {
+      ...p,
+      revenueYoY: pctGrowth(p.revenue, prev?.revenue ?? null),
+      epsYoY: normalizedEpsYoY ?? pctGrowth(p.eps, prev?.eps ?? null),
+      normalizedEpsYoY,
+      operatingMargin: p.revenue ? pct((p.operatingIncome ?? null) !== null ? p.operatingIncome! / p.revenue : null) : null,
+      netMargin: p.revenue ? pct((p.netIncome ?? null) !== null ? p.netIncome! / p.revenue : null) : null,
+      normalizedNetMargin: p.revenue ? pct((p.normalizedIncome ?? null) !== null ? p.normalizedIncome! / p.revenue : null) : null,
+    };
+  });
+}
+
+function normalizeRatio(value: number | null): number | null {
+  if (value === null) return null;
+  return round(value > 10 ? value / 100 : value);
+}
+
+function normalizeOwnershipPct(value: number | null): number | null {
+  if (value === null) return null;
+  const pctValue = value <= 1.5 ? value * 100 : value;
+  return round(Math.max(0, Math.min(100, pctValue)));
+}
+
+async function fetchQuoteSummary(symbol: string, quality: DataQuality) {
+  const hit = quoteCache.get(symbol);
+  if (hit && Date.now() - hit.ts < QUOTE_TTL) return hit.data;
+
+  const modules = [
+    "assetProfile", "summaryProfile", "price", "defaultKeyStatistics", "financialData", "summaryDetail",
+    "incomeStatementHistory", "incomeStatementHistoryQuarterly", "balanceSheetHistory", "balanceSheetHistoryQuarterly",
+    "cashflowStatementHistory", "cashflowStatementHistoryQuarterly", "earningsHistory", "earningsTrend",
+  ].join(",");
+  const auth = await yahooAuth();
+  const crumb = auth?.crumb ? `&crumb=${encodeURIComponent(auth.crumb)}` : "";
+  const url = `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(symbol)}?modules=${modules}${crumb}`;
+  const headers: Record<string, string> = { "User-Agent": UA, Accept: "application/json" };
+  if (auth?.cookie) headers.Cookie = auth.cookie;
+  const r = await fetch(url, { headers });
+  quality.yahooCalls++;
+  if (r.status === 401 || r.status === 403) cachedYahooAuth = null;
+  if (!r.ok) return null;
+  const j = await r.json().catch(() => null);
+  const data = j?.quoteSummary?.result?.[0] ?? null;
+  if (data) quoteCache.set(symbol, { ts: Date.now(), data });
+  return data;
+}
+
 async function yahooAuth(): Promise<{ cookie: string; crumb: string } | null> {
-  if (cachedAuth && Date.now() - cachedAuth.ts < AUTH_TTL) {
-    return { cookie: cachedAuth.cookie, crumb: cachedAuth.crumb };
+  if (cachedYahooAuth && Date.now() - cachedYahooAuth.ts < 30 * 60 * 1000) {
+    return { cookie: cachedYahooAuth.cookie, crumb: cachedYahooAuth.crumb };
   }
   try {
     const r = await fetch("https://fc.yahoo.com", { headers: { "User-Agent": UA }, redirect: "manual" });
@@ -28,283 +252,421 @@ async function yahooAuth(): Promise<{ cookie: string; crumb: string } | null> {
     if (!cr.ok) return null;
     const crumb = (await cr.text()).trim();
     if (!crumb) return null;
-    cachedAuth = { cookie, crumb, ts: Date.now() };
+    cachedYahooAuth = { cookie, crumb, ts: Date.now() };
     return { cookie, crumb };
-  } catch { return null; }
+  } catch {
+    return null;
+  }
 }
 
-// ── Long warm-container caches (24h) ────────────────────────────────────────
-const REPORT_TTL = 24 * 60 * 60 * 1000;
-const reportCache = new Map<string, { ts: number; report: unknown }>();
-const dataCache = new Map<string, { ts: number; data: unknown }>();
+async function fetchTimeseries(symbol: string, quality: DataQuality) {
+  const hit = timeseriesCache.get(symbol);
+  if (hit && Date.now() - hit.ts < TIMESERIES_TTL) return hit.data;
 
-const num = (v: any) => (v && typeof v === "object" && "raw" in v ? v.raw : v) ?? null;
-
-// One Yahoo call with ALL modules needed for Minervini
-async function fetchYahooBundle(symbol: string) {
-  const hit = dataCache.get(symbol);
-  if (hit && Date.now() - hit.ts < REPORT_TTL) return hit.data as any;
-
-  const auth = await yahooAuth();
-  if (!auth) return { error: "yahoo auth failed" };
-
-  const modules = [
-    "assetProfile", "price",
-    "defaultKeyStatistics", "financialData", "summaryDetail",
-    "incomeStatementHistory", "incomeStatementHistoryQuarterly",
-    "balanceSheetHistory", "cashflowStatementHistory",
-    "earningsHistory", "earningsTrend",
+  const types = [
+    "quarterlyTotalRevenue", "quarterlyDilutedEPS", "quarterlyNormalizedDilutedEPS", "quarterlyNetIncome", "quarterlyNormalizedIncome",
+    "quarterlyOperatingIncome", "quarterlyGrossProfit", "quarterlyTotalDebt", "quarterlyStockholdersEquity",
+    "quarterlyOperatingCashFlow", "quarterlyFreeCashFlow", "annualTotalRevenue", "annualDilutedEPS", "annualNormalizedDilutedEPS",
+    "annualNetIncome", "annualNormalizedIncome", "annualOperatingIncome", "annualGrossProfit", "annualTotalDebt", "annualStockholdersEquity",
+    "annualOperatingCashFlow", "annualFreeCashFlow",
   ].join(",");
-  const url = `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(symbol)}?modules=${modules}&crumb=${encodeURIComponent(auth.crumb)}`;
-  const r = await fetch(url, { headers: { "User-Agent": UA, Cookie: auth.cookie } });
-  if (r.status === 401 || r.status === 403) { cachedAuth = null; return { error: "yahoo auth expired" }; }
-  if (!r.ok) return { error: `yahoo http ${r.status}` };
+  const period2 = Math.floor(Date.now() / 1000) + 86400 * 40;
+  const url = `https://query2.finance.yahoo.com/ws/fundamentals-timeseries/v1/finance/timeseries/${encodeURIComponent(symbol)}?symbol=${encodeURIComponent(symbol)}&type=${types}&period1=493590046&period2=${period2}`;
+  const r = await fetch(url, { headers: { "User-Agent": UA, Accept: "application/json" } });
+  quality.yahooCalls++;
+  if (!r.ok) return null;
   const j = await r.json().catch(() => null);
-  const root = j?.quoteSummary?.result?.[0];
-  if (!root) return { error: "no data" };
+  const data = mapTimeseries(j?.timeseries?.result ?? []);
+  if (Object.keys(data).length) timeseriesCache.set(symbol, { ts: Date.now(), data });
+  return Object.keys(data).length ? data : null;
+}
 
-  const a = root.assetProfile ?? {};
-  const p = root.price ?? {};
-  const k = root.defaultKeyStatistics ?? {};
-  const f = root.financialData ?? {};
-  const s = root.summaryDetail ?? {};
+async function fetchFinnhubMetric(symbol: string, quality: DataQuality) {
+  if (!FINNHUB_KEY) return null;
+  const hit = finnhubCache.get(symbol);
+  if (hit && Date.now() - hit.ts < DB_CACHE_TTL) return hit.data;
+  const r = await fetch(`https://finnhub.io/api/v1/stock/metric?symbol=${encodeURIComponent(symbol)}&metric=all&token=${FINNHUB_KEY}`);
+  quality.finnhubCalls++;
+  if (!r.ok) return null;
+  const data = await r.json().catch(() => null);
+  if (data) finnhubCache.set(symbol, { ts: Date.now(), data });
+  return data;
+}
 
-  // Helpers
-  const pct = (v: any) => (v == null || isNaN(v)) ? null : +(v * 100).toFixed(2);
-  const yoy = (cur: any, prev: any) =>
-    (cur == null || prev == null || prev === 0) ? null : +(((cur - prev) / Math.abs(prev)) * 100).toFixed(2);
+async function readCachedFundamentals(sb: any, symbol: string, quality: DataQuality) {
+  const cutoff = new Date(Date.now() - DB_CACHE_TTL).toISOString();
+  const [{ data: stockFund }, { data: fundCache }] = await Promise.all([
+    sb.from("stock_fundamentals").select("*").eq("symbol", symbol).gte("fetched_at", cutoff).maybeSingle(),
+    sb.from("fundamentals_cache").select("*").eq("symbol", symbol).gte("last_updated", cutoff).maybeSingle(),
+  ]);
+  quality.dbCacheHit = !!(stockFund || fundCache);
+  if (stockFund) quality.sources.push("stock_fundamentals cache");
+  if (fundCache) quality.sources.push("fundamentals_cache");
+  return { stockFund, fundCache };
+}
 
-  const incQ = (root.incomeStatementHistoryQuarterly?.incomeStatementHistory ?? []).map((x: any) => ({
-    date: x.endDate?.fmt,
-    revenue: num(x.totalRevenue),
-    netIncome: num(x.netIncome),
-    operatingIncome: num(x.operatingIncome),
-    eps: num(x.dilutedEPS),
-  }));
-  const incA = (root.incomeStatementHistory?.incomeStatementHistory ?? []).map((x: any) => ({
-    date: x.endDate?.fmt,
-    revenue: num(x.totalRevenue),
-    netIncome: num(x.netIncome),
-    operatingIncome: num(x.operatingIncome),
-    eps: num(x.dilutedEPS),
-  }));
-  const cf = (root.cashflowStatementHistory?.cashflowStatements ?? []).map((x: any) => ({
-    date: x.endDate?.fmt,
-    operatingCashflow: num(x.totalCashFromOperatingActivities),
-    capex: num(x.capitalExpenditures),
-  }));
-  const bs = (root.balanceSheetHistory?.balanceSheetStatements ?? []).map((x: any) => ({
-    date: x.endDate?.fmt,
-    totalAssets: num(x.totalAssets),
-    totalLiab: num(x.totalLiab),
-    cash: num(x.cash),
-    shortDebt: num(x.shortLongTermDebt),
-    longDebt: num(x.longTermDebt),
-    equity: num(x.totalStockholderEquity),
-  }));
-  const eh = (root.earningsHistory?.history ?? []).map((x: any) => ({
-    quarter: x.quarter?.fmt,
-    epsActual: num(x.epsActual),
-    epsEstimate: num(x.epsEstimate),
-    surprisePct: num(x.surprisePercent),
-  }));
-
-  // ── Pre-computed derived metrics (authoritative — LLM must use these) ──
-  const q0 = incQ[0], q4 = incQ[4];
-  // Quarterly YoY — prefer Q[0] vs Q[4]; else use Yahoo's pre-computed f.revenueGrowth (already YoY fraction)
-  const quarterlySalesYoY = (q0 && q4) ? yoy(q0.revenue, q4.revenue) :
-    (num(f.revenueGrowth) != null ? pct(num(f.revenueGrowth)) : null);
-  const quarterlyEpsYoY = (q0 && q4) ? yoy(q0.eps, q4.eps) :
-    (num(k.earningsQuarterlyGrowth) != null ? pct(num(k.earningsQuarterlyGrowth)) :
-     (num(f.earningsGrowth) != null ? pct(num(f.earningsGrowth)) : null));
-
-  const annualSalesGrowth: number[] = [];
-  const annualEpsGrowth: number[] = [];
-  for (let i = 0; i + 1 < incA.length && i < 3; i++) {
-    const sg = yoy(incA[i].revenue, incA[i + 1].revenue);
-    const eg = yoy(incA[i].eps, incA[i + 1].eps);
-    if (sg != null) annualSalesGrowth.push(sg);
-    if (eg != null) annualEpsGrowth.push(eg);
+function fallbackQuartersFromQuote(root: any, yahooGrowth: { revenueYoY: number | null; epsYoY: number | null }) {
+  const incQ = root?.incomeStatementHistoryQuarterly?.incomeStatementHistory ?? [];
+  const bsQ = root?.balanceSheetHistoryQuarterly?.balanceSheetStatements ?? [];
+  const cfQ = root?.cashflowStatementHistoryQuarterly?.cashflowStatements ?? [];
+  const byDate = new Map<string, PeriodPoint>();
+  for (const x of incQ) {
+    const date = x.endDate?.fmt;
+    if (!date) continue;
+    byDate.set(date, {
+      date, revenue: num(x.totalRevenue), eps: num(x.dilutedEPS), normalizedEps: null, netIncome: num(x.netIncome), normalizedIncome: null,
+      operatingIncome: num(x.operatingIncome), grossProfit: num(x.grossProfit), totalDebt: null, equity: null, operatingCashFlow: null, freeCashFlow: null,
+    });
   }
-
-  const qNetMargin = (q0 && q0.revenue) ? +((q0.netIncome / q0.revenue) * 100).toFixed(2) : null;
-  const qOpMargin = (q0 && q0.revenue && q0.operatingIncome != null)
-    ? +((q0.operatingIncome / q0.revenue) * 100).toFixed(2) : null;
-  const ttmNetMargin = pct(num(f.profitMargins));
-  const ttmOpMargin = pct(num(f.operatingMargins));
-  const ttmGrossMargin = pct(num(f.grossMargins));
-
-  // Debt/Equity — Yahoo's financialData.debtToEquity is in PERCENT (90.28 = 0.90x)
-  const rawDE = num(f.debtToEquity);
-  let debtToEquityRatio = rawDE != null ? +(rawDE / 100).toFixed(2) : null;
-  const bs0 = bs[0];
-  if ((debtToEquityRatio == null || debtToEquityRatio > 50) && bs0 && bs0.equity) {
-    const totalDebtBS = (bs0.shortDebt ?? 0) + (bs0.longDebt ?? 0);
-    if (totalDebtBS > 0) debtToEquityRatio = +(totalDebtBS / bs0.equity).toFixed(2);
+  for (const x of bsQ) {
+    const date = x.endDate?.fmt;
+    if (!date) continue;
+    const row = byDate.get(date) ?? { date } as PeriodPoint;
+    row.totalDebt = (num(x.shortLongTermDebt) ?? 0) + (num(x.longTermDebt) ?? 0) || null;
+    row.equity = num(x.totalStockholderEquity);
+    byDate.set(date, row);
   }
+  for (const x of cfQ) {
+    const date = x.endDate?.fmt;
+    if (!date) continue;
+    const row = byDate.get(date) ?? { date } as PeriodPoint;
+    row.operatingCashFlow = num(x.totalCashFromOperatingActivities);
+    row.freeCashFlow = (num(x.totalCashFromOperatingActivities) !== null && num(x.capitalExpenditures) !== null)
+      ? num(x.totalCashFromOperatingActivities)! + num(x.capitalExpenditures)! : null;
+    byDate.set(date, row);
+  }
+  return enrichQuarters([...byDate.values()].sort((a, b) => b.date.localeCompare(a.date)), yahooGrowth);
+}
 
-  const roePct = pct(num(f.returnOnEquity));
+function fallbackAnnualFromQuote(root: any) {
+  const incA = root?.incomeStatementHistory?.incomeStatementHistory ?? [];
+  const bsA = root?.balanceSheetHistory?.balanceSheetStatements ?? [];
+  const cfA = root?.cashflowStatementHistory?.cashflowStatements ?? [];
+  const byDate = new Map<string, PeriodPoint>();
+  for (const x of incA) {
+    const date = x.endDate?.fmt;
+    if (!date) continue;
+    byDate.set(date, {
+      date, revenue: num(x.totalRevenue), eps: num(x.dilutedEPS), normalizedEps: null, netIncome: num(x.netIncome), normalizedIncome: null,
+      operatingIncome: num(x.operatingIncome), grossProfit: num(x.grossProfit), totalDebt: null, equity: null, operatingCashFlow: null, freeCashFlow: null,
+    });
+  }
+  for (const x of bsA) {
+    const date = x.endDate?.fmt;
+    if (!date) continue;
+    const row = byDate.get(date) ?? { date } as PeriodPoint;
+    row.totalDebt = (num(x.shortLongTermDebt) ?? 0) + (num(x.longTermDebt) ?? 0) || null;
+    row.equity = num(x.totalStockholderEquity);
+    byDate.set(date, row);
+  }
+  for (const x of cfA) {
+    const date = x.endDate?.fmt;
+    if (!date) continue;
+    const row = byDate.get(date) ?? { date } as PeriodPoint;
+    row.operatingCashFlow = num(x.totalCashFromOperatingActivities);
+    row.freeCashFlow = (num(x.totalCashFromOperatingActivities) !== null && num(x.capitalExpenditures) !== null)
+      ? num(x.totalCashFromOperatingActivities)! + num(x.capitalExpenditures)! : null;
+    byDate.set(date, row);
+  }
+  return enrichAnnual([...byDate.values()].sort((a, b) => b.date.localeCompare(a.date)));
+}
 
-  // Institutional ownership — Yahoo returns FRACTION; cap at 100% (some tickers report >1 due to lending/overlap)
-  const rawInst = num(k.heldPercentInstitutions);
-  const instOwnPct = rawInst != null ? Math.min(100, +(rawInst * 100).toFixed(2)) : null;
-  const insiderRaw = num(k.heldPercentInsiders);
-  const insiderOwnPct = insiderRaw != null ? Math.min(100, +(insiderRaw * 100).toFixed(2)) : null;
+function summarizeTrend(values: (number | null)[]) {
+  const clean = values.filter((v): v is number => v !== null);
+  if (clean.length < 2) return "insufficient";
+  const recent = clean[0];
+  const priorAvg = avg(clean.slice(1, Math.min(clean.length, 4))) ?? clean[1];
+  if (recent > priorAvg + 5) return "accelerating";
+  if (recent < priorAvg - 5) return "decelerating";
+  return "stable";
+}
 
-  const ocfTrend = cf.slice(0, 3).map((c: any) => c.operatingCashflow);
-  const ocfPositive = ocfTrend.length > 0 && ocfTrend.every((v: any) => v != null && v > 0);
+function fmtPct(v: number | null) { return v === null ? "N/A" : `${v.toFixed(1)}%`; }
+function fmtRatio(v: number | null) { return v === null ? "N/A" : `${v.toFixed(2)}x`; }
+function fmtTrend(values: (number | null)[]) { return values.map(fmtPct).join(" / "); }
+function statusFrom(value: number | null, pass: boolean, fail: boolean): "pass" | "fail" | "neutral" {
+  if (value === null) return "neutral";
+  if (pass) return "pass";
+  if (fail) return "fail";
+  return "neutral";
+}
 
-  const beats = eh.filter((e: any) => e.epsActual != null && e.epsEstimate != null && e.epsActual >= e.epsEstimate).length;
-  const epsBeatRate = eh.length > 0 ? +((beats / eh.length) * 100).toFixed(0) : null;
+function makeReport(symbol: string, profile: any, derived: any): MinerviniReport {
+  const q = derived.quarters as QuarterTrend[];
+  const a = derived.annual as AnnualTrend[];
+  const latest = q[0];
+  const revTrend = q.slice(0, 5).map(x => x.revenueYoY);
+  const epsTrend = q.slice(0, 5).map(x => x.normalizedEpsYoY ?? x.epsYoY);
+  const revQoqTrend = q.slice(0, 5).map(x => x.revenueQoQ);
+  const epsQoqTrend = q.slice(0, 5).map(x => x.epsQoQ);
+  const opMarginTrend = q.slice(0, 5).map(x => x.operatingMargin ?? x.normalizedNetMargin ?? x.netMargin);
+  const annRev = a.slice(0, 4).map(x => x.revenueYoY);
+  const annEps = a.slice(0, 4).map(x => x.normalizedEpsYoY ?? x.epsYoY);
+  const revAccel = summarizeTrend(revTrend);
+  const epsAccel = summarizeTrend(epsTrend);
+  const revQoqAccel = summarizeTrend(revQoqTrend);
+  const epsQoqAccel = summarizeTrend(epsQoqTrend);
+  const marginAccel = summarizeTrend(opMarginTrend);
 
-  const bundle = {
+  const criteria: Criterion[] = [
+    {
+      name: "Quarterly EPS Growth Trend",
+      value: `YoY ${fmtTrend(epsTrend)} | QoQ ${fmtTrend(epsQoqTrend)}`, target: "≥25% YoY, consistent/accelerating",
+      status: statusFrom(epsTrend[0], (epsTrend[0] ?? -999) >= 25 && epsAccel !== "decelerating", (epsTrend[0] ?? 999) < 0),
+      comment: `Latest ${latest?.date ?? "quarter"}; YoY trend is ${epsAccel}, QoQ trend is ${epsQoqAccel}. Uses normalized/non-GAAP EPS where available.`,
+    },
+    {
+      name: "Quarterly Sales Growth Trend",
+      value: `YoY ${fmtTrend(revTrend)} | QoQ ${fmtTrend(revQoqTrend)}`, target: "≥20% YoY, consistent/accelerating",
+      status: statusFrom(revTrend[0], (revTrend[0] ?? -999) >= 20 || ((revTrend[0] ?? -999) >= 8 && revAccel === "accelerating"), (revTrend[0] ?? 999) < 0),
+      comment: `Latest ${latest?.date ?? "quarter"}; YoY trend is ${revAccel}, QoQ trend is ${revQoqAccel} across available reported quarters.`,
+    },
+    {
+      name: "Annual EPS Growth",
+      value: fmtTrend(annEps), target: "Positive multi-year EPS growth",
+      status: statusFrom(annEps[0], (annEps[0] ?? -999) > 0 && annEps.filter(v => (v ?? -1) > 0).length >= 1, (annEps[0] ?? 999) < 0),
+      comment: "Annual trend uses normalized EPS when Yahoo exposes it; GAAP EPS is the fallback.",
+    },
+    {
+      name: "Annual Sales Growth",
+      value: fmtTrend(annRev), target: "Positive and preferably accelerating",
+      status: statusFrom(annRev[0], (annRev[0] ?? -999) > 10 || annRev.filter(v => (v ?? -1) > 0).length >= 2, (annRev[0] ?? 999) < 0),
+      comment: "Annual revenue growth is calculated from reported annual statements.",
+    },
+    {
+      name: "ROE",
+      value: fmtPct(derived.roePct), target: "≥17%",
+      status: statusFrom(derived.roePct, (derived.roePct ?? 0) >= 17, (derived.roePct ?? 100) < 8),
+      comment: "ROE is normalized from Yahoo/Fundamentals cache and treated as a percentage, not a fraction.",
+    },
+    {
+      name: "Profit Margin Trend",
+      value: fmtTrend(opMarginTrend), target: "Positive and expanding",
+      status: statusFrom(opMarginTrend[0], (opMarginTrend[0] ?? -999) > 10 && marginAccel !== "decelerating", (opMarginTrend[0] ?? 999) < 0),
+      comment: `Uses operating margin first as a non-GAAP proxy; trend is ${marginAccel}. Net margin is ${fmtPct(latest?.netMargin ?? null)}.`,
+    },
+    {
+      name: "Debt / Equity",
+      value: fmtRatio(derived.debtToEquity), target: "<1.5x preferred",
+      status: statusFrom(derived.debtToEquity, (derived.debtToEquity ?? 99) < 1.5, (derived.debtToEquity ?? 0) > 3),
+      comment: "Ratio is normalized to x (Yahoo percent values are divided by 100; balance sheet calculation is fallback).",
+    },
+    {
+      name: "Balance Sheet / Cash Flow",
+      value: `${derived.positiveCashFlowCount}/${derived.cashFlowPoints} positive OCF periods`, target: "Mostly positive operating cash flow",
+      status: derived.cashFlowPoints === 0 ? "neutral" : derived.positiveCashFlowCount >= Math.max(1, derived.cashFlowPoints - 1) ? "pass" : "fail",
+      comment: `Current ratio ${fmtRatio(derived.currentRatio)}; free cash flow latest ${derived.latestFreeCashFlow === null ? "N/A" : Intl.NumberFormat("en", { notation: "compact" }).format(derived.latestFreeCashFlow)}.`,
+    },
+    {
+      name: "Institutional Sponsorship",
+      value: fmtPct(derived.institutionalOwnershipPct), target: ">40%, ideal >70%",
+      status: statusFrom(derived.institutionalOwnershipPct, (derived.institutionalOwnershipPct ?? 0) > 70, (derived.institutionalOwnershipPct ?? 100) < 20),
+      comment: "Ownership is normalized from fraction/percent formats and capped at 100% to avoid parser blow-ups.",
+    },
+    {
+      name: "Earnings Stability / Surprises",
+      value: derived.epsBeatRatePct === null ? "N/A" : `${derived.epsBeatRatePct}% beat rate`, target: "Consistent beats / positive surprises",
+      status: statusFrom(derived.epsBeatRatePct, (derived.epsBeatRatePct ?? 0) >= 70, (derived.epsBeatRatePct ?? 100) < 40),
+      comment: `Recent surprises: ${derived.epsSurprisesRecent.length ? derived.epsSurprisesRecent.map(fmtPct).join(" / ") : "N/A"}.`,
+    },
+    {
+      name: "Overall Fundamental Quality",
+      value: derived.qualityLabel, target: "Clear growth, profitability, and balance-sheet support",
+      status: derived.score >= 80 ? "pass" : derived.score < 60 ? "fail" : "neutral",
+      comment: "Score emphasizes multi-quarter EPS/sales growth, acceleration, margins, ROE, debt, cash flow, and sponsorship.",
+    },
+  ];
+
+  const bullCase = [
+    revTrend[0] !== null ? `Latest quarterly sales growth is ${fmtPct(revTrend[0])}, with a ${revAccel} multi-quarter profile.` : "Revenue trend data is limited and should be verified against filings.",
+    epsTrend[0] !== null ? `Latest normalized EPS growth is ${fmtPct(epsTrend[0])}, with ${epsAccel} momentum.` : "EPS trend data is limited or distorted by losses/one-time items.",
+    opMarginTrend[0] !== null ? `Operating/non-GAAP margin proxy is ${fmtPct(opMarginTrend[0])}.` : "Margin data is incomplete.",
+  ];
+  const bearCase = [
+    derived.debtToEquity !== null && derived.debtToEquity > 1.5 ? `Debt/equity is elevated at ${fmtRatio(derived.debtToEquity)}.` : "Debt/equity is not the primary weakness based on available data.",
+    revAccel === "decelerating" || epsAccel === "decelerating" ? "Growth trend is decelerating across recent quarters." : "Main risk is whether current growth consistency can persist.",
+    derived.warnings.length ? `Data caution: ${derived.warnings[0]}` : "No major parser warning triggered, but verify latest filings for final decisions.",
+  ];
+  const verdict = derived.score >= 80 ? "PASS" : derived.score >= 60 ? "BORDERLINE" : "FAIL";
+  return {
     symbol,
-    profile: {
-      name: p.longName ?? p.shortName ?? null,
-      sector: a.sector ?? null,
-      industry: a.industry ?? null,
-      summary: (a.longBusinessSummary ?? "").slice(0, 300),
-    },
-    derived: {
-      mostRecentQuarter: q0?.date ?? null,
-      yearAgoQuarter: q4?.date ?? null,
-      quarterlySalesGrowthYoY_pct: quarterlySalesYoY,
-      quarterlyEpsGrowthYoY_pct: quarterlyEpsYoY,
-      annualSalesGrowthYoY_pct_recent3yrs: annualSalesGrowth,
-      annualEpsGrowthYoY_pct_recent3yrs: annualEpsGrowth,
-      quarterlyNetMargin_pct: qNetMargin,
-      quarterlyOperatingMargin_pct: qOpMargin,
-      ttmNetMargin_pct: ttmNetMargin,
-      ttmOperatingMargin_pct: ttmOpMargin,
-      ttmGrossMargin_pct: ttmGrossMargin,
-      roe_pct: roePct,
-      debtToEquity_ratio: debtToEquityRatio,
-      operatingCashflowLast3yrs: ocfTrend,
-      operatingCashflowAllPositive: ocfPositive,
-      institutionalOwnership_pct: instOwnPct,
-      insiderOwnership_pct: insiderOwnPct,
-      epsBeatRate_pct: epsBeatRate,
-      epsSurprisesRecent: eh.slice(-6).map((e: any) => e.surprisePct),
-    },
-    rawStats: {
-      marketCap: num(s.marketCap), trailingPE: num(s.trailingPE), forwardPE: num(s.forwardPE),
-      currentRatio: num(f.currentRatio), totalCash: num(f.totalCash), totalDebt: num(f.totalDebt),
-      freeCashflow: num(f.freeCashflow),
-    },
-    incomeQuarterly: incQ.slice(0, 8),
-    incomeAnnual: incA.slice(0, 4),
-    cashflow: cf.slice(0, 3),
-    balanceSheet: bs.slice(0, 2),
-    earningsHistory: eh.slice(-8),
+    companyName: profile.name ?? symbol,
+    sector: profile.sector ?? null,
+    overallScore: derived.score,
+    verdict,
+    headline: `${symbol} scores ${derived.score}/100: ${derived.qualityLabel}. Latest quarter ${latest?.date ?? "N/A"} shows sales ${fmtPct(revTrend[0])} and normalized EPS ${fmtPct(epsTrend[0])}.`,
+    criteria,
+    bullCase,
+    bearCase,
+    finalVerdict: verdict === "PASS"
+      ? `This stock passes Minervini fundamentals based on reported multi-quarter growth, profitability, and balance-sheet checks.`
+      : verdict === "BORDERLINE"
+        ? `This stock is borderline: there are constructive traits, but growth consistency, margins, debt, or earnings quality need confirmation.`
+        : `This stock fails Minervini fundamentals due to insufficient growth consistency, profitability, balance-sheet quality, or data support.`,
   };
-  dataCache.set(symbol, { ts: Date.now(), data: bundle });
-  return bundle;
 }
 
-const SYSTEM = `You are an institutional equity analyst applying Mark Minervini's SEPA fundamental criteria. You receive a JSON bundle with a "derived" block of PRE-COMPUTED, PRE-NORMALIZED metrics. **Always use bundle.derived values directly — they are authoritative.** Do NOT recompute from raw fields, do NOT reinterpret units.
+function scoreDerived(derived: any) {
+  const latest = derived.quarters[0] as QuarterTrend | undefined;
+  const epsTrend = derived.quarters.slice(0, 5).map((x: QuarterTrend) => x.normalizedEpsYoY ?? x.epsYoY);
+  const revTrend = derived.quarters.slice(0, 5).map((x: QuarterTrend) => x.revenueYoY);
+  const marginTrend = derived.quarters.slice(0, 5).map((x: QuarterTrend) => x.operatingMargin ?? x.normalizedNetMargin ?? x.netMargin);
+  const epsAccel = summarizeTrend(epsTrend);
+  const revAccel = summarizeTrend(revTrend);
+  const marginAccel = summarizeTrend(marginTrend);
 
-Unit guide for bundle.derived (CRITICAL — follow exactly):
-- All *_pct fields are ALREADY in percent (e.g. 9.2 means 9.2%, 18.5 means 18.5%). Do NOT multiply by 100 again.
-- debtToEquity_ratio is a RATIO (e.g. 0.91 means 0.91x). Healthy <1.5x, low <0.5x.
-- institutionalOwnership_pct is in percent (e.g. 92.5 means 92.5%). >70% = strong sponsorship.
-- If a derived value is null, write "N/A" and use status "neutral" — do NOT fabricate or guess.
-
-Return ONLY a JSON object (no prose, no code fences):
-{
-  "symbol": string, "companyName": string, "sector": string | null,
-  "overallScore": number, "verdict": "PASS" | "FAIL" | "BORDERLINE",
-  "headline": string,
-  "criteria": [{ "name": string, "value": string, "target": string, "status": "pass"|"fail"|"neutral", "comment": string }],
-  "bullCase": [string], "bearCase": [string], "finalVerdict": string
+  let score = 0;
+  if ((epsTrend[0] ?? -999) >= 50) score += 18; else if ((epsTrend[0] ?? -999) >= 25) score += 14; else if ((epsTrend[0] ?? -999) > 0) score += 8;
+  if (epsAccel === "accelerating") score += 7; else if (epsAccel === "stable") score += 4;
+  if ((revTrend[0] ?? -999) >= 20) score += 16; else if ((revTrend[0] ?? -999) >= 8) score += 10; else if ((revTrend[0] ?? -999) > 0) score += 5;
+  if (revAccel === "accelerating") score += 7; else if (revAccel === "stable") score += 4;
+  const annRevPositive = derived.annual.slice(0, 3).filter((x: AnnualTrend) => (x.revenueYoY ?? -1) > 0).length;
+  const annEpsPositive = derived.annual.slice(0, 3).filter((x: AnnualTrend) => ((x.normalizedEpsYoY ?? x.epsYoY) ?? -1) > 0).length;
+  score += Math.min(8, annRevPositive * 3);
+  score += Math.min(8, annEpsPositive * 3);
+  const margin = latest?.operatingMargin ?? latest?.normalizedNetMargin ?? latest?.netMargin ?? null;
+  if ((margin ?? -999) >= 20) score += 10; else if ((margin ?? -999) >= 10) score += 7; else if ((margin ?? -999) > 0) score += 4;
+  if (marginAccel === "accelerating") score += 4;
+  if ((derived.roePct ?? -999) >= 17) score += 8; else if ((derived.roePct ?? -999) > 8) score += 4;
+  if ((derived.debtToEquity ?? 99) < 0.75) score += 7; else if ((derived.debtToEquity ?? 99) < 1.5) score += 5; else if ((derived.debtToEquity ?? 99) < 3) score += 2;
+  if (derived.cashFlowPoints > 0) score += derived.positiveCashFlowCount >= Math.max(1, derived.cashFlowPoints - 1) ? 5 : 1;
+  if ((derived.institutionalOwnershipPct ?? 0) > 70) score += 6; else if ((derived.institutionalOwnershipPct ?? 0) > 40) score += 4;
+  if ((derived.epsBeatRatePct ?? 0) >= 70) score += 4; else if ((derived.epsBeatRatePct ?? 0) >= 50) score += 2;
+  derived.score = Math.max(0, Math.min(100, Math.round(score)));
+  derived.qualityLabel = derived.score >= 80 ? "strong Minervini fundamental profile" : derived.score >= 60 ? "mixed but investable fundamental profile" : "weak/incomplete Minervini fundamental profile";
 }
 
-Required criteria IN THIS ORDER (cite the derived field used):
-1. "Quarterly EPS Growth" — derived.quarterlyEpsGrowthYoY_pct — target ≥25% YoY
-2. "Annual EPS Growth" — derived.annualEpsGrowthYoY_pct_recent3yrs — target accelerating
-3. "Quarterly Sales Growth" — derived.quarterlySalesGrowthYoY_pct — target ≥20% YoY
-4. "Annual Sales Growth" — derived.annualSalesGrowthYoY_pct_recent3yrs — target consistent
-5. "Return on Equity (ROE)" — derived.roe_pct — target ≥17%
-6. "Profit Margins" — derived.quarterlyNetMargin_pct or ttmNetMargin_pct — target positive & expanding
-7. "Operating Margin Trend" — derived.quarterlyOperatingMargin_pct vs ttmOperatingMargin_pct — target expanding
-8. "Debt / Equity" — derived.debtToEquity_ratio — target <1.5x
-9. "Operating Cash Flow" — derived.operatingCashflowLast3yrs / operatingCashflowAllPositive — target positive & growing
-10. "Institutional Sponsorship" — derived.institutionalOwnership_pct — target >40% (ideal >70%)
-11. "Earnings Surprises / Stability" — derived.epsBeatRate_pct and epsSurprisesRecent — target consistent beats
-12. "Overall Fundamental Quality" — synthesis
+async function buildBundle(symbol: string, force: boolean) {
+  const quality: DataQuality = { sources: [], warnings: [], yahooCalls: 0, finnhubCalls: 0, dbCacheHit: false };
+  const sb = createClient(SB_URL, SB_KEY);
+  const { stockFund, fundCache } = force ? { stockFund: null, fundCache: null } : await readCachedFundamentals(sb, symbol, quality);
+  const needNetwork = force || !stockFund || !fundCache;
+  const [quote, timeseries, fh] = needNetwork
+    ? await Promise.all([fetchQuoteSummary(symbol, quality), fetchTimeseries(symbol, quality), fetchFinnhubMetric(symbol, quality)])
+    : [null, null, null];
 
-Format value with units, e.g. "9.2% YoY", "0.91x", "92.5%".
+  if (quote) quality.sources.push("Yahoo quoteSummary");
+  if (timeseries) quality.sources.push("Yahoo fundamentals-timeseries");
+  if (fh?.metric) quality.sources.push("Finnhub metric fallback");
 
-If quarterlyNetMargin_pct is negative but quarterlyOperatingMargin_pct is strongly positive (>10%), note in comment: "GAAP net margin distorted by non-operating/one-time items; operating margin (non-GAAP proxy) is healthy at X%" and rate status "neutral" not "fail".
+  const fd = quote?.financialData ?? {};
+  const ks = quote?.defaultKeyStatistics ?? {};
+  const profile = {
+    name: quote?.price?.longName ?? quote?.price?.shortName ?? stockFund?.company_name ?? symbol,
+    sector: quote?.assetProfile?.sector ?? quote?.summaryProfile?.sector ?? stockFund?.sector ?? fundCache?.sector ?? null,
+  };
+  const yahooGrowth = {
+    revenueYoY: pct(num(fd.revenueGrowth)),
+    epsYoY: pct(num(fd.earningsGrowth) ?? num(ks.earningsQuarterlyGrowth)),
+  };
 
-Scoring: 80–100=PASS, 60–79=BORDERLINE, <60=FAIL. Weight quarterly EPS+sales heaviest. Output ONLY the JSON object.`;
+  let quarters: QuarterTrend[] = [];
+  let annual: AnnualTrend[] = [];
+  if (timeseries) {
+    const qDates = allDates(timeseries, "quarterly");
+    const aDates = allDates(timeseries, "annual");
+    quarters = enrichQuarters(qDates.map(d => pointFor(d, timeseries, "quarterly")), yahooGrowth).slice(0, 9);
+    annual = enrichAnnual(aDates.map(d => pointFor(d, timeseries, "annual"))).slice(0, 5);
+  }
+  if (quarters.length < 4 && quote) quarters = fallbackQuartersFromQuote(quote, yahooGrowth).slice(0, 8);
+  if (annual.length < 2 && quote) annual = fallbackAnnualFromQuote(quote).slice(0, 4);
+
+  const fhMetric = fh?.metric ?? {};
+  const latest = quarters[0];
+  let debtToEquity = latest?.debtToEquity ?? normalizeRatio(num(fd.debtToEquity)) ?? normalizeRatio(stockFund?.debt_to_equity ?? null) ?? normalizeRatio(fundCache?.debt_to_equity ?? null) ?? normalizeRatio(num(fhMetric.totalDebtToEquityQuarterly ?? fhMetric.totalDebtToEquityAnnual ?? fhMetric["totalDebt/totalEquityQuarterly"]));
+  if (debtToEquity !== null && debtToEquity > 20) {
+    quality.warnings.push(`Debt/equity suspicious after normalization (${debtToEquity}x); marked unavailable.`);
+    debtToEquity = null;
+  }
+  const roePct = pct(num(fd.returnOnEquity)) ?? stockFund?.roe ?? fundCache?.roe ?? num(fhMetric.roeTTM ?? fhMetric.roeRfy) ?? null;
+  const institutionalOwnershipPct = normalizeOwnershipPct(num(ks.heldPercentInstitutions) ?? fundCache?.institutional_ownership_pct ?? num(fhMetric.institutionalOwnershipPercentage));
+  const currentRatio = normalizeRatio(num(fd.currentRatio) ?? stockFund?.current_ratio ?? fundCache?.current_ratio ?? num(fhMetric.currentRatioQuarterly ?? fhMetric.currentRatioAnnual));
+  const cashFlowValues = quarters.slice(0, 5).map(q => q.operatingCashFlow).filter((v): v is number => v !== null);
+  const positiveCashFlowCount = cashFlowValues.filter(v => v > 0).length;
+  const earningsHistory = quote?.earningsHistory?.history ?? [];
+  const surprises = earningsHistory.map((e: any) => pct(num(e.surprisePercent))).filter((v: number | null) => v !== null).slice(-8);
+  const beatCount = earningsHistory.filter((e: any) => num(e.epsActual) !== null && num(e.epsEstimate) !== null && num(e.epsActual)! >= num(e.epsEstimate)!).length;
+
+  if (quarters.length < 5) quality.warnings.push(`Only ${quarters.length} recent quarters available; trend confidence reduced.`);
+  if (institutionalOwnershipPct !== null && institutionalOwnershipPct < 5 && (ks.heldPercentInstitutions?.raw ?? null) !== null) quality.warnings.push("Institutional ownership appears unusually low; source may be incomplete for this ticker.");
+  if ((latest?.netMargin ?? 0) < 0 && (latest?.operatingMargin ?? 0) > 10) quality.warnings.push("GAAP net margin is negative while operating margin is healthy; likely one-time/non-operating distortion.");
+
+  const derived = {
+    quarters,
+    annual,
+    latestQuarter: latest?.date ?? null,
+    roePct: round(roePct),
+    debtToEquity,
+    institutionalOwnershipPct,
+    currentRatio,
+    positiveCashFlowCount,
+    cashFlowPoints: cashFlowValues.length,
+    latestFreeCashFlow: latest?.freeCashFlow ?? null,
+    epsBeatRatePct: earningsHistory.length ? Math.round((beatCount / earningsHistory.length) * 100) : null,
+    epsSurprisesRecent: surprises,
+    warnings: quality.warnings,
+  };
+  scoreDerived(derived);
+  return { profile, derived, quality };
+}
+
+const GROQ_SYSTEM = `You are an institutional equity analyst. Rewrite the provided deterministic Minervini report for clarity only.
+Rules:
+- Do not change any numeric values, units, verdict, score, statuses, order, or field names.
+- Do not invent facts. Keep JSON shape identical.
+- Return ONLY valid JSON.`;
+
+async function polishWithGroq(report: MinerviniReport, derived: any): Promise<MinerviniReport> {
+  if (!GROQ_KEY) return report;
+  const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${GROQ_KEY}` },
+    body: JSON.stringify({
+      model: "llama-3.3-70b-versatile",
+      temperature: 0.1,
+      response_format: { type: "json_object" },
+      messages: [
+        { role: "system", content: GROQ_SYSTEM },
+        { role: "user", content: JSON.stringify({ report, sourceMetrics: { latestQuarter: derived.latestQuarter, score: derived.score, qualityLabel: derived.qualityLabel } }).slice(0, 12000) },
+      ],
+    }),
+  });
+  if (!res.ok) return report;
+  const j = await res.json().catch(() => null);
+  const content = j?.choices?.[0]?.message?.content;
+  if (!content) return report;
+  try {
+    const polished = JSON.parse(content);
+    return { ...report, ...polished, overallScore: report.overallScore, verdict: report.verdict, criteria: polished.criteria ?? report.criteria };
+  } catch {
+    return report;
+  }
+}
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   try {
-    if (!GROQ_KEY) throw new Error("GROQ_API_KEY not set");
-    const body = await req.json() as { symbol: string; force?: boolean };
-    const symbol = (body.symbol || "").toUpperCase().trim();
+    const body = await req.json().catch(() => ({})) as { symbol?: string; force?: boolean; skipGroq?: boolean };
+    const symbol = (body.symbol ?? "").toUpperCase().replace(/[^A-Z0-9.-]/g, "").trim();
     const force = !!body.force;
-    if (!symbol) {
-      return new Response(JSON.stringify({ error: "symbol required" }), {
-        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
+    if (!symbol) return jsonResponse({ error: "symbol required" }, 400);
 
-    // 1. Warm-container report cache (24h) — zero work on hit.
     if (!force) {
       const hit = reportCache.get(symbol);
       if (hit && Date.now() - hit.ts < REPORT_TTL) {
-        return new Response(JSON.stringify({ report: hit.report, cached: true }), {
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+        return jsonResponse({ report: hit.report, cached: true, dataQuality: hit.dataQuality });
       }
     }
 
-    // 2. Fetch (or reuse) Yahoo bundle — single API call, 24h cached.
-    const bundle = await fetchYahooBundle(symbol);
-    if ((bundle as any).error) {
-      return new Response(JSON.stringify({ error: `data fetch: ${(bundle as any).error}` }), {
-        status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
+    const { profile, derived, quality } = await buildBundle(symbol, force);
+    if (!derived.quarters.length && !derived.annual.length) return jsonResponse({ error: "No reliable fundamentals found for symbol" }, 502);
 
-    // 3. Single Groq call with full bundle pre-loaded — no tool-calling rounds.
-    const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${GROQ_KEY}` },
-      body: JSON.stringify({
-        model: "llama-3.3-70b-versatile",
-        temperature: 0.2,
-        response_format: { type: "json_object" },
-        messages: [
-          { role: "system", content: SYSTEM },
-          { role: "user", content: `Symbol: ${symbol}\n\nFinancial bundle:\n${JSON.stringify(bundle).slice(0, 14000)}\n\nReturn the Minervini JSON report.` },
-        ],
-      }),
-    });
-    if (!res.ok) {
-      const t = await res.text();
-      return new Response(JSON.stringify({ error: `groq ${res.status}: ${t.slice(0, 300)}` }), {
-        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-    const j = await res.json();
-    const content = j?.choices?.[0]?.message?.content ?? "";
-    let report: any;
-    try { report = JSON.parse(content); } catch {
-      return new Response(JSON.stringify({ error: "invalid JSON from model", raw: content }), {
-        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-    reportCache.set(symbol, { ts: Date.now(), report });
-
-    return new Response(JSON.stringify({ report, cached: false }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    let report = makeReport(symbol, profile, derived);
+    if (!body.skipGroq && !force) report = await polishWithGroq(report, derived);
+    reportCache.set(symbol, { ts: Date.now(), report, dataQuality: quality });
+    return jsonResponse({ report, cached: false, dataQuality: quality, derived: body.skipGroq ? derived : undefined });
   } catch (e) {
-    return new Response(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }), {
-      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    console.error("minervini-analysis error", e);
+    return jsonResponse({ error: e instanceof Error ? e.message : String(e) }, 500);
   }
 });
