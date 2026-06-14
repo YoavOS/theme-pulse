@@ -595,6 +595,8 @@ function makeReport(symbol: string, profile: any, derived: any): MinerviniReport
     symbol,
     companyName: profile.name ?? symbol,
     sector: profile.sector ?? null,
+    profile: "minervini",
+    profileLabel: "Mark Minervini (SEPA Fundamentals)",
     overallScore: derived.score,
     verdict,
     headline: `${symbol} scores ${derived.score}/100: ${derived.qualityLabel}. Latest quarter ${latest?.date ?? "N/A"} shows sales ${fmtPct(revTrend[0])} and normalized EPS ${fmtPct(epsTrend[0])}.`,
@@ -606,6 +608,187 @@ function makeReport(symbol: string, profile: any, derived: any): MinerviniReport
       : verdict === "BORDERLINE"
         ? `This stock is borderline: there are constructive traits, but growth consistency, margins, debt, or earnings quality need confirmation.`
         : `This stock fails Minervini fundamentals due to insufficient growth consistency, profitability, balance-sheet quality, or data support.`,
+  };
+}
+
+// ============================================================================
+// William O'Neil (CAN SLIM Fundamentals)
+// ============================================================================
+function makeOneilReport(symbol: string, profile: any, derived: any): MinerviniReport {
+  const q = derived.quarters as QuarterTrend[];
+  const a = derived.annual as AnnualTrend[];
+  const latest = q[0];
+  const epsTrend = q.slice(0, 5).map(x => x.normalizedEpsYoY ?? x.epsYoY);
+  const revTrend = q.slice(0, 5).map(x => x.revenueYoY);
+  const annEps = a.slice(0, 4).map(x => x.normalizedEpsYoY ?? x.epsYoY);
+  const annRev = a.slice(0, 4).map(x => x.revenueYoY);
+  const opMargin = q.slice(0, 5).map(x => x.operatingMargin ?? x.netMargin);
+  const epsAccel = summarizeTrend(epsTrend);
+  const revAccel = summarizeTrend(revTrend);
+  const marginAccel = summarizeTrend(opMargin);
+  const annEpsConsistent = annEps.filter(v => (v ?? -1) >= 25).length;
+  const annRevConsistent = annRev.filter(v => (v ?? -1) >= 15).length;
+
+  let score = 0;
+  if ((epsTrend[0] ?? -1) >= 25) score += 18; else if ((epsTrend[0] ?? -1) > 0) score += 8;
+  if (epsAccel === "accelerating") score += 8; else if (epsAccel === "stable") score += 4;
+  if ((revTrend[0] ?? -1) >= 20) score += 12; else if ((revTrend[0] ?? -1) >= 8) score += 7;
+  if (revAccel === "accelerating") score += 6; else if (revAccel === "stable") score += 3;
+  score += Math.min(12, annEpsConsistent * 4);
+  score += Math.min(8, annRevConsistent * 3);
+  if ((derived.roePct ?? -1) >= 17) score += 8; else if ((derived.roePct ?? -1) >= 10) score += 4;
+  const m = opMargin[0] ?? -1;
+  if (m >= 15 && marginAccel !== "decelerating") score += 8; else if (m > 0) score += 4;
+  if ((derived.debtToEquity ?? 99) < 1.0) score += 6; else if ((derived.debtToEquity ?? 99) < 2.0) score += 3;
+  if ((derived.institutionalOwnershipPct ?? 0) > 50) score += 7; else if ((derived.institutionalOwnershipPct ?? 0) > 25) score += 4;
+  if ((derived.epsBeatRatePct ?? 0) >= 75) score += 7; else if ((derived.epsBeatRatePct ?? 0) >= 50) score += 3;
+  score = Math.max(0, Math.min(100, Math.round(score)));
+
+  const criteria: Criterion[] = [
+    { name: "Current Quarter EPS Growth", value: fmtPct(epsTrend[0]), target: "≥25% YoY, accelerating",
+      status: statusFrom(epsTrend[0], (epsTrend[0] ?? -1) >= 25, (epsTrend[0] ?? 99) < 10),
+      comment: `EPS trend ${epsAccel}. Series: ${fmtTrend(epsTrend)}.` },
+    { name: "Annual EPS Growth (Consistency)", value: fmtTrend(annEps), target: "≥25% across multiple years",
+      status: statusFrom(annEps[0], annEpsConsistent >= 2, annEpsConsistent === 0 && (annEps[0] ?? 99) < 10),
+      comment: `${annEpsConsistent} of ${annEps.length} reported years cleared 25%.` },
+    { name: "Quarterly Sales Growth", value: fmtPct(revTrend[0]), target: "Strong & accelerating",
+      status: statusFrom(revTrend[0], (revTrend[0] ?? -1) >= 20 && revAccel !== "decelerating", (revTrend[0] ?? 99) < 5),
+      comment: `Sales trend ${revAccel}. Series: ${fmtTrend(revTrend)}.` },
+    { name: "Annual Sales Growth", value: fmtTrend(annRev), target: "Positive & consistent",
+      status: statusFrom(annRev[0], annRevConsistent >= 2, (annRev[0] ?? 99) < 0),
+      comment: `${annRevConsistent} of ${annRev.length} years grew ≥15%.` },
+    { name: "ROE", value: fmtPct(derived.roePct), target: "≥17%",
+      status: statusFrom(derived.roePct, (derived.roePct ?? 0) >= 17, (derived.roePct ?? 99) < 8),
+      comment: "O'Neil emphasizes high return on equity as a sign of capable management." },
+    { name: "Net / Operating Margin Trend", value: fmtTrend(opMargin), target: "Positive & expanding",
+      status: statusFrom(opMargin[0], (opMargin[0] ?? -1) > 10 && marginAccel !== "decelerating", (opMargin[0] ?? 99) < 0),
+      comment: `Operating margin trend is ${marginAccel}.` },
+    { name: "Debt / Equity", value: fmtRatio(derived.debtToEquity), target: "Lower is better (<1.0 ideal)",
+      status: statusFrom(derived.debtToEquity, (derived.debtToEquity ?? 99) < 1.0, (derived.debtToEquity ?? 0) > 2.5),
+      comment: "Lower leverage preferred for leading growth stocks." },
+    { name: "Institutional Sponsorship", value: fmtPct(derived.institutionalOwnershipPct), target: ">50% (rising)",
+      status: statusFrom(derived.institutionalOwnershipPct, (derived.institutionalOwnershipPct ?? 0) > 50, (derived.institutionalOwnershipPct ?? 99) < 20),
+      comment: "Snapshot only; rising sponsorship is the qualitative bonus O'Neil looks for." },
+    { name: "Earnings Surprise History", value: derived.epsBeatRatePct === null ? "N/A" : `${derived.epsBeatRatePct}% beat rate`, target: "Consistent positive surprises",
+      status: statusFrom(derived.epsBeatRatePct, (derived.epsBeatRatePct ?? 0) >= 75, (derived.epsBeatRatePct ?? 99) < 40),
+      comment: `Recent surprises: ${derived.epsSurprisesRecent.length ? derived.epsSurprisesRecent.map(fmtPct).join(" / ") : "N/A"}.` },
+  ];
+
+  const verdict = score >= 80 ? "PASS" : score >= 60 ? "BORDERLINE" : "FAIL";
+  const bullCase = [
+    (epsTrend[0] ?? -1) >= 25 ? `Latest EPS growth ${fmtPct(epsTrend[0])} clears the 25% CAN SLIM bar.` : `EPS growth below the 25% CAN SLIM threshold.`,
+    annEpsConsistent >= 2 ? `${annEpsConsistent} recent years of ≥25% annual EPS growth show durable earnings power.` : `Annual EPS consistency below CAN SLIM ideal.`,
+    (derived.roePct ?? -1) >= 17 ? `ROE of ${fmtPct(derived.roePct)} signals capital-efficient management.` : `ROE under 17% leaves room for improvement.`,
+  ];
+  const bearCase = [
+    epsAccel === "decelerating" ? "Quarterly EPS growth is decelerating — biggest red flag for CAN SLIM." : "EPS acceleration not the primary risk.",
+    (derived.debtToEquity ?? 0) > 1.5 ? `Leverage at ${fmtRatio(derived.debtToEquity)} is high for a CAN SLIM candidate.` : "Balance sheet is acceptable.",
+    (derived.institutionalOwnershipPct ?? 100) < 25 ? "Limited institutional sponsorship reduces O'Neil-style edge." : "Sponsorship is adequate.",
+  ];
+  return {
+    symbol, companyName: profile.name ?? symbol, sector: profile.sector ?? null,
+    profile: "oneil", profileLabel: "William O'Neil (CAN SLIM Fundamentals)",
+    overallScore: score, verdict,
+    headline: `${symbol} scores ${score}/100 on CAN SLIM fundamentals. EPS ${fmtPct(epsTrend[0])} (${epsAccel}), sales ${fmtPct(revTrend[0])} (${revAccel}), ROE ${fmtPct(derived.roePct)}.`,
+    criteria, bullCase, bearCase,
+    finalVerdict: verdict === "PASS"
+      ? "Passes O'Neil CAN SLIM fundamentals with strong growth, profitability, and sponsorship."
+      : verdict === "BORDERLINE"
+        ? "Borderline CAN SLIM candidate: some criteria met but growth consistency or sponsorship needs improvement."
+        : "Fails O'Neil CAN SLIM fundamentals due to weak earnings growth, profitability, or institutional support.",
+  };
+}
+
+// ============================================================================
+// David Ryan (Earnings Momentum & Acceleration)
+// ============================================================================
+function makeRyanReport(symbol: string, profile: any, derived: any): MinerviniReport {
+  const q = derived.quarters as QuarterTrend[];
+  const latest = q[0];
+  const epsTrend = q.slice(0, 6).map(x => x.normalizedEpsYoY ?? x.epsYoY);
+  const revTrend = q.slice(0, 6).map(x => x.revenueYoY);
+  const opMargin = q.slice(0, 5).map(x => x.operatingMargin ?? x.netMargin);
+  const epsAccel = summarizeTrend(epsTrend);
+  const revAccel = summarizeTrend(revTrend);
+  const marginAccel = summarizeTrend(opMargin);
+
+  // Sequential acceleration: count consecutive quarters where EPS YoY > previous quarter's YoY
+  let consecutiveAccelQ = 0;
+  for (let i = 0; i < epsTrend.length - 1; i++) {
+    if (epsTrend[i] !== null && epsTrend[i + 1] !== null && (epsTrend[i] as number) > (epsTrend[i + 1] as number)) consecutiveAccelQ++;
+    else break;
+  }
+  const epsThisVsPrior = (epsTrend[0] ?? null) !== null && (epsTrend[1] ?? null) !== null ? round((epsTrend[0] as number) - (epsTrend[1] as number)) : null;
+  const epsThisVsYearAgo = (epsTrend[0] ?? null) !== null && (epsTrend[4] ?? null) !== null ? round((epsTrend[0] as number) - (epsTrend[4] as number)) : null;
+  const bigSurprises = (derived.epsSurprisesRecent as number[]).filter(v => v >= 10).length;
+  const surprisesCount = (derived.epsSurprisesRecent as number[]).length;
+
+  let score = 0;
+  if ((epsThisVsPrior ?? -999) >= 5) score += 14; else if ((epsThisVsPrior ?? -999) > 0) score += 7;
+  if ((epsThisVsYearAgo ?? -999) >= 5) score += 10; else if ((epsThisVsYearAgo ?? -999) > 0) score += 5;
+  if (consecutiveAccelQ >= 3) score += 14; else if (consecutiveAccelQ >= 2) score += 9; else if (consecutiveAccelQ >= 1) score += 4;
+  if ((epsTrend[0] ?? -1) >= 50) score += 10; else if ((epsTrend[0] ?? -1) >= 25) score += 6;
+  if (revAccel === "accelerating") score += 10; else if (revAccel === "stable" && (revTrend[0] ?? -1) >= 15) score += 6;
+  if ((revTrend[0] ?? -1) >= 25) score += 6; else if ((revTrend[0] ?? -1) >= 10) score += 3;
+  if (surprisesCount && bigSurprises / surprisesCount >= 0.5) score += 10; else if (bigSurprises >= 1) score += 5;
+  if ((derived.roePct ?? -1) >= 20) score += 8; else if ((derived.roePct ?? -1) >= 12) score += 4;
+  const m = opMargin[0] ?? -1;
+  if (m >= 15 && marginAccel === "accelerating") score += 8; else if (m > 5) score += 4;
+  if ((derived.epsBeatRatePct ?? 0) >= 75) score += 5;
+  score = Math.max(0, Math.min(100, Math.round(score)));
+
+  const criteria: Criterion[] = [
+    { name: "EPS vs. Prior Quarter (Acceleration)", value: epsThisVsPrior === null ? "N/A" : `${epsThisVsPrior > 0 ? "+" : ""}${epsThisVsPrior} pp`, target: "Latest > prior quarter YoY",
+      status: statusFrom(epsThisVsPrior, (epsThisVsPrior ?? -999) >= 5, (epsThisVsPrior ?? 999) < -5),
+      comment: `Latest EPS YoY ${fmtPct(epsTrend[0])} vs prior quarter ${fmtPct(epsTrend[1])}.` },
+    { name: "EPS vs. Year-Ago Quarter (Acceleration)", value: epsThisVsYearAgo === null ? "N/A" : `${epsThisVsYearAgo > 0 ? "+" : ""}${epsThisVsYearAgo} pp`, target: "Latest > year-ago quarter YoY",
+      status: statusFrom(epsThisVsYearAgo, (epsThisVsYearAgo ?? -999) >= 5, (epsThisVsYearAgo ?? 999) < -5),
+      comment: `Sequential improvement vs same quarter a year ago.` },
+    { name: "Consecutive Accelerating EPS Quarters", value: `${consecutiveAccelQ}`, target: "≥3 in a row",
+      status: consecutiveAccelQ >= 3 ? "pass" : consecutiveAccelQ >= 1 ? "neutral" : "fail",
+      comment: `EPS YoY series: ${fmtTrend(epsTrend)}.` },
+    { name: "Latest EPS Growth Magnitude", value: fmtPct(epsTrend[0]), target: "Strong (≥25%, ideal ≥50%)",
+      status: statusFrom(epsTrend[0], (epsTrend[0] ?? -1) >= 25, (epsTrend[0] ?? 99) < 10),
+      comment: `Trend label: ${epsAccel}.` },
+    { name: "Sales Acceleration", value: `${fmtPct(revTrend[0])} (${revAccel})`, target: "Clear acceleration in recent quarters",
+      status: statusFrom(revTrend[0], revAccel === "accelerating" && (revTrend[0] ?? -1) >= 10, revAccel === "decelerating"),
+      comment: `Series: ${fmtTrend(revTrend)}.` },
+    { name: "Big Earnings Surprises", value: surprisesCount ? `${bigSurprises}/${surprisesCount} ≥10%` : "N/A", target: "Consistent ≥10% positive surprises",
+      status: !surprisesCount ? "neutral" : bigSurprises / surprisesCount >= 0.5 ? "pass" : bigSurprises === 0 ? "fail" : "neutral",
+      comment: `Recent surprises: ${surprisesCount ? (derived.epsSurprisesRecent as number[]).map(fmtPct).join(" / ") : "N/A"}.` },
+    { name: "ROE", value: fmtPct(derived.roePct), target: "High and/or improving (≥20%)",
+      status: statusFrom(derived.roePct, (derived.roePct ?? 0) >= 20, (derived.roePct ?? 99) < 10),
+      comment: "Ryan favors high earnings power on equity." },
+    { name: "Operating Margin Expansion", value: fmtTrend(opMargin), target: "Expanding margins",
+      status: statusFrom(opMargin[0], (opMargin[0] ?? -1) > 10 && marginAccel === "accelerating", marginAccel === "decelerating"),
+      comment: `Margin trend is ${marginAccel}.` },
+    { name: "Earnings Power Consistency", value: derived.epsBeatRatePct === null ? "N/A" : `${derived.epsBeatRatePct}% beat rate`, target: "Reliable EPS delivery",
+      status: statusFrom(derived.epsBeatRatePct, (derived.epsBeatRatePct ?? 0) >= 75, (derived.epsBeatRatePct ?? 99) < 50),
+      comment: "Consistent ability to beat expectations is core to Ryan's edge." },
+  ];
+
+  const verdict = score >= 80 ? "PASS" : score >= 60 ? "BORDERLINE" : "FAIL";
+  const bullCase = [
+    consecutiveAccelQ >= 2 ? `${consecutiveAccelQ} consecutive quarters of accelerating EPS growth — Ryan's primary signal.` : `EPS acceleration sequence is short (${consecutiveAccelQ}).`,
+    revAccel === "accelerating" ? `Revenue is also accelerating (${fmtPct(revTrend[0])}), confirming organic momentum.` : `Revenue growth not yet accelerating.`,
+    bigSurprises >= 2 ? `${bigSurprises} large earnings beats (≥10%) show under-the-radar earnings power.` : `Earnings surprises are modest.`,
+  ];
+  const bearCase = [
+    epsAccel === "decelerating" ? "EPS growth is decelerating — Ryan would avoid this setup." : "EPS deceleration is not the leading concern.",
+    (epsThisVsPrior ?? 0) < 0 ? "Latest EPS growth is below the prior quarter, breaking the acceleration thesis." : "Sequential EPS pattern is intact.",
+    marginAccel === "decelerating" ? "Margins are compressing, suggesting earnings power may be peaking." : "Margins are not a red flag.",
+  ];
+  return {
+    symbol, companyName: profile.name ?? symbol, sector: profile.sector ?? null,
+    profile: "ryan", profileLabel: "David Ryan (Earnings Momentum & Acceleration)",
+    overallScore: score, verdict,
+    headline: `${symbol} scores ${score}/100 on Ryan momentum: ${consecutiveAccelQ} consecutive accelerating EPS quarters, latest EPS ${fmtPct(epsTrend[0])}, sales ${revAccel}.`,
+    criteria, bullCase, bearCase,
+    finalVerdict: verdict === "PASS"
+      ? "Passes David Ryan momentum criteria with clear earnings acceleration, big surprises, and improving fundamentals."
+      : verdict === "BORDERLINE"
+        ? "Borderline Ryan candidate: some acceleration is present but the pattern is not yet conclusive."
+        : "Fails Ryan momentum: insufficient or decelerating earnings growth and weak surprise/margin support.",
   };
 }
 
