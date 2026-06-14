@@ -57,7 +57,7 @@ function VerdictBadge({ verdict, score }: { verdict: string; score: number }) {
   );
 }
 
-const CACHE_KEY = (sym: string) => `minervini:v3:${sym}`;
+const CACHE_KEY = (sym: string) => `minervini:v4:${sym}`;
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 
 function readCache(sym: string): MinerviniReport | null {

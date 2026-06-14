@@ -7,19 +7,22 @@ const corsHeaders = {
 
 const GROQ_KEY = Deno.env.get("GROQ_API_KEY");
 const FINNHUB_KEY = Deno.env.get("FINNHUB_API_KEY");
+const FMP_KEY = Deno.env.get("FMP_API_KEY");
 const SB_URL = Deno.env.get("SUPABASE_URL")!;
 const SB_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Minervini/3.0";
+const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Minervini/4.0";
 const REPORT_TTL = 24 * 60 * 60 * 1000;
 const DB_CACHE_TTL = 24 * 60 * 60 * 1000;
 const QUOTE_TTL = 24 * 60 * 60 * 1000;
 const TIMESERIES_TTL = 24 * 60 * 60 * 1000;
+const FMP_TTL = 24 * 60 * 60 * 1000;
 
 const reportCache = new Map<string, { ts: number; report: MinerviniReport; dataQuality: DataQuality }>();
 const quoteCache = new Map<string, { ts: number; data: any }>();
 const timeseriesCache = new Map<string, { ts: number; data: any }>();
 const finnhubCache = new Map<string, { ts: number; data: any }>();
+const fmpCache = new Map<string, { ts: number; data: any }>();
 let cachedYahooAuth: { cookie: string; crumb: string; ts: number } | null = null;
 
 const num = (v: any): number | null => {
@@ -102,8 +105,10 @@ interface DataQuality {
   warnings: string[];
   yahooCalls: number;
   finnhubCalls: number;
+  fmpCalls: number;
   dbCacheHit: boolean;
 }
+
 
 function jsonResponse(body: Record<string, unknown>, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -292,6 +297,102 @@ async function fetchFinnhubMetric(symbol: string, quality: DataQuality) {
   if (data) finnhubCache.set(symbol, { ts: Date.now(), data });
   return data;
 }
+
+async function fmpGet(path: string, quality: DataQuality, version: "v3" | "v4" = "v3") {
+  if (!FMP_KEY) return null;
+  const key = `${version}:${path}`;
+  const hit = fmpCache.get(key);
+  if (hit && Date.now() - hit.ts < FMP_TTL) return hit.data;
+  const sep = path.includes("?") ? "&" : "?";
+  const url = `https://financialmodelingprep.com/api/${version}/${path}${sep}apikey=${FMP_KEY}`;
+  try {
+    const r = await fetch(url);
+    quality.fmpCalls++;
+    if (!r.ok) return null;
+    const j = await r.json().catch(() => null);
+    if (j && !(j as any).Error && !(j as any)["Error Message"]) {
+      fmpCache.set(key, { ts: Date.now(), data: j });
+      return j;
+    }
+  } catch { /* ignore */ }
+  return null;
+}
+
+async function fetchFmpBundle(symbol: string, quality: DataQuality) {
+  if (!FMP_KEY) return null;
+  const [incQ, incA, bsQ, bsA, cfQ, cfA, kmQ, ratiosTTM, surp, profile, instOwn] = await Promise.all([
+    fmpGet(`income-statement/${symbol}?period=quarter&limit=8`, quality),
+    fmpGet(`income-statement/${symbol}?period=annual&limit=5`, quality),
+    fmpGet(`balance-sheet-statement/${symbol}?period=quarter&limit=8`, quality),
+    fmpGet(`balance-sheet-statement/${symbol}?period=annual&limit=5`, quality),
+    fmpGet(`cash-flow-statement/${symbol}?period=quarter&limit=8`, quality),
+    fmpGet(`cash-flow-statement/${symbol}?period=annual&limit=5`, quality),
+    fmpGet(`key-metrics/${symbol}?period=quarter&limit=8`, quality),
+    fmpGet(`ratios-ttm/${symbol}`, quality),
+    fmpGet(`earnings-surprises/${symbol}`, quality),
+    fmpGet(`profile/${symbol}`, quality),
+    fmpGet(`institutional-ownership/symbol-ownership-percent?symbol=${symbol}&date=&page=0`, quality, "v4"),
+  ]);
+  const a = (x: any) => Array.isArray(x) ? x : [];
+  const first = (x: any) => Array.isArray(x) ? x[0] : x;
+  return {
+    incQ: a(incQ), incA: a(incA), bsQ: a(bsQ), bsA: a(bsA), cfQ: a(cfQ), cfA: a(cfA),
+    kmQ: a(kmQ), ratiosTTM: first(ratiosTTM), surp: a(surp),
+    profile: first(profile), instOwn: a(instOwn)[0] ?? null,
+  };
+}
+
+function fmpToPoints(inc: any[], bs: any[], cf: any[]): PeriodPoint[] {
+  const byDate = new Map<string, PeriodPoint>();
+  for (const x of inc) {
+    const date = x?.date; if (!date) continue;
+    byDate.set(date, {
+      date,
+      revenue: num(x.revenue),
+      eps: num(x.epsdiluted ?? x.eps),
+      normalizedEps: null,
+      netIncome: num(x.netIncome),
+      normalizedIncome: null,
+      operatingIncome: num(x.operatingIncome),
+      grossProfit: num(x.grossProfit),
+      totalDebt: null, equity: null, operatingCashFlow: null, freeCashFlow: null,
+    });
+  }
+  for (const x of bs) {
+    const date = x?.date; if (!date) continue;
+    const row = byDate.get(date) ?? { date } as PeriodPoint;
+    const td = num(x.totalDebt);
+    row.totalDebt = td !== null ? td : ((num(x.shortTermDebt) ?? 0) + (num(x.longTermDebt) ?? 0) || null);
+    row.equity = num(x.totalStockholdersEquity ?? x.totalEquity);
+    byDate.set(date, row);
+  }
+  for (const x of cf) {
+    const date = x?.date; if (!date) continue;
+    const row = byDate.get(date) ?? { date } as PeriodPoint;
+    row.operatingCashFlow = num(x.operatingCashFlow ?? x.netCashProvidedByOperatingActivities);
+    const fcf = num(x.freeCashFlow);
+    row.freeCashFlow = fcf !== null ? fcf : (row.operatingCashFlow !== null && num(x.capitalExpenditure) !== null ? row.operatingCashFlow + num(x.capitalExpenditure)! : null);
+    byDate.set(date, row);
+  }
+  return [...byDate.values()].sort((a, b) => b.date.localeCompare(a.date));
+}
+
+function mergePoints(primary: PeriodPoint[], fallback: PeriodPoint[]): PeriodPoint[] {
+  if (!fallback.length) return primary;
+  const byDate = new Map<string, PeriodPoint>();
+  for (const p of fallback) byDate.set(p.date, { ...p });
+  for (const p of primary) {
+    const existing = byDate.get(p.date);
+    if (!existing) { byDate.set(p.date, { ...p }); continue; }
+    const merged: any = { ...existing };
+    for (const k of Object.keys(p) as (keyof PeriodPoint)[]) {
+      if ((p as any)[k] !== null && (p as any)[k] !== undefined) merged[k] = (p as any)[k];
+    }
+    byDate.set(p.date, merged);
+  }
+  return [...byDate.values()].sort((a, b) => b.date.localeCompare(a.date));
+}
+
 
 async function readCachedFundamentals(sb: any, symbol: string, quality: DataQuality) {
   const cutoff = new Date(Date.now() - DB_CACHE_TTL).toISOString();
@@ -537,13 +638,29 @@ function scoreDerived(derived: any) {
 }
 
 async function buildBundle(symbol: string, force: boolean) {
-  const quality: DataQuality = { sources: [], warnings: [], yahooCalls: 0, finnhubCalls: 0, dbCacheHit: false };
+  const quality: DataQuality = { sources: [], warnings: [], yahooCalls: 0, finnhubCalls: 0, fmpCalls: 0, dbCacheHit: false };
   const sb = createClient(SB_URL, SB_KEY);
   const { stockFund, fundCache } = force ? { stockFund: null, fundCache: null } : await readCachedFundamentals(sb, symbol, quality);
-  const needNetwork = force || !stockFund || !fundCache;
-  const [quote, timeseries, fh] = needNetwork
-    ? await Promise.all([fetchQuoteSummary(symbol, quality), fetchTimeseries(symbol, quality), fetchFinnhubMetric(symbol, quality)])
-    : [null, null, null];
+
+  // ----- Primary source: FMP (in parallel with DB cache read above) -----
+  const fmp = await fetchFmpBundle(symbol, quality);
+  if (fmp) quality.sources.push("FMP statements & ratios");
+
+  const fmpQuartersRaw = fmp ? fmpToPoints(fmp.incQ, fmp.bsQ, fmp.cfQ) : [];
+  const fmpAnnualRaw = fmp ? fmpToPoints(fmp.incA, fmp.bsA, fmp.cfA) : [];
+  const fmpHasQuarters = fmpQuartersRaw.length >= 5;
+  const fmpHasAnnual = fmpAnnualRaw.length >= 2;
+
+  // ----- Fallback / supplement: Yahoo + Finnhub only when FMP is short -----
+  const needYahooStatements = !fmpHasQuarters || !fmpHasAnnual;
+  const needAnyYahoo = force || needYahooStatements || !fmp;
+  const needFinnhub = !fmp && (force || !stockFund);
+
+  const [quote, timeseries, fh] = await Promise.all([
+    needAnyYahoo ? fetchQuoteSummary(symbol, quality) : Promise.resolve(null),
+    needYahooStatements ? fetchTimeseries(symbol, quality) : Promise.resolve(null),
+    needFinnhub ? fetchFinnhubMetric(symbol, quality) : Promise.resolve(null),
+  ]);
 
   if (quote) quality.sources.push("Yahoo quoteSummary");
   if (timeseries) quality.sources.push("Yahoo fundamentals-timeseries");
@@ -552,43 +669,98 @@ async function buildBundle(symbol: string, force: boolean) {
   const fd = quote?.financialData ?? {};
   const ks = quote?.defaultKeyStatistics ?? {};
   const profile = {
-    name: quote?.price?.longName ?? quote?.price?.shortName ?? stockFund?.company_name ?? symbol,
-    sector: quote?.assetProfile?.sector ?? quote?.summaryProfile?.sector ?? stockFund?.sector ?? fundCache?.sector ?? null,
+    name: fmp?.profile?.companyName ?? quote?.price?.longName ?? quote?.price?.shortName ?? stockFund?.company_name ?? symbol,
+    sector: fmp?.profile?.sector ?? quote?.assetProfile?.sector ?? quote?.summaryProfile?.sector ?? stockFund?.sector ?? fundCache?.sector ?? null,
   };
   const yahooGrowth = {
     revenueYoY: pct(num(fd.revenueGrowth)),
     epsYoY: pct(num(fd.earningsGrowth) ?? num(ks.earningsQuarterlyGrowth)),
   };
 
-  let quarters: QuarterTrend[] = [];
-  let annual: AnnualTrend[] = [];
+  // Yahoo statements (only if needed)
+  let yQuarters: PeriodPoint[] = [];
+  let yAnnual: PeriodPoint[] = [];
   if (timeseries) {
     const qDates = allDates(timeseries, "quarterly");
     const aDates = allDates(timeseries, "annual");
-    quarters = enrichQuarters(qDates.map(d => pointFor(d, timeseries, "quarterly")), yahooGrowth).slice(0, 9);
-    annual = enrichAnnual(aDates.map(d => pointFor(d, timeseries, "annual"))).slice(0, 5);
+    yQuarters = qDates.map(d => pointFor(d, timeseries, "quarterly"));
+    yAnnual = aDates.map(d => pointFor(d, timeseries, "annual"));
   }
-  if (quarters.length < 4 && quote) quarters = fallbackQuartersFromQuote(quote, yahooGrowth).slice(0, 8);
-  if (annual.length < 2 && quote) annual = fallbackAnnualFromQuote(quote).slice(0, 4);
+  if (yQuarters.length < 4 && quote) {
+    const fb = fallbackQuartersFromQuote(quote, yahooGrowth);
+    yQuarters = mergePoints(yQuarters, fb);
+  }
+  if (yAnnual.length < 2 && quote) {
+    yAnnual = mergePoints(yAnnual, fallbackAnnualFromQuote(quote));
+  }
+
+  // FMP primary, Yahoo fills gaps per-date and per-field
+  const quarters = enrichQuarters(mergePoints(fmpQuartersRaw, yQuarters), yahooGrowth).slice(0, 9);
+  const annual = enrichAnnual(mergePoints(fmpAnnualRaw, yAnnual)).slice(0, 5);
 
   const fhMetric = fh?.metric ?? {};
   const latest = quarters[0];
-  let debtToEquity = latest?.debtToEquity ?? normalizeRatio(num(fd.debtToEquity)) ?? normalizeRatio(stockFund?.debt_to_equity ?? null) ?? normalizeRatio(fundCache?.debt_to_equity ?? null) ?? normalizeRatio(num(fhMetric.totalDebtToEquityQuarterly ?? fhMetric.totalDebtToEquityAnnual ?? fhMetric["totalDebt/totalEquityQuarterly"]));
+
+  // FMP key-metrics latest quarter (richer than ratios-ttm)
+  const kmLatest = fmp?.kmQ?.[0] ?? null;
+  const ratiosTTM = fmp?.ratiosTTM ?? null;
+
+  let debtToEquity = latest?.debtToEquity
+    ?? normalizeRatio(num(kmLatest?.debtToEquity))
+    ?? normalizeRatio(num(ratiosTTM?.debtEquityRatioTTM))
+    ?? normalizeRatio(num(fd.debtToEquity))
+    ?? normalizeRatio(stockFund?.debt_to_equity ?? null)
+    ?? normalizeRatio(fundCache?.debt_to_equity ?? null)
+    ?? normalizeRatio(num(fhMetric.totalDebtToEquityQuarterly ?? fhMetric.totalDebtToEquityAnnual ?? fhMetric["totalDebt/totalEquityQuarterly"]));
   if (debtToEquity !== null && debtToEquity > 20) {
     quality.warnings.push(`Debt/equity suspicious after normalization (${debtToEquity}x); marked unavailable.`);
     debtToEquity = null;
   }
-  const roePct = pct(num(fd.returnOnEquity)) ?? stockFund?.roe ?? fundCache?.roe ?? num(fhMetric.roeTTM ?? fhMetric.roeRfy) ?? null;
-  const institutionalOwnershipPct = normalizeOwnershipPct(num(ks.heldPercentInstitutions) ?? fundCache?.institutional_ownership_pct ?? num(fhMetric.institutionalOwnershipPercentage));
-  const currentRatio = normalizeRatio(num(fd.currentRatio) ?? stockFund?.current_ratio ?? fundCache?.current_ratio ?? num(fhMetric.currentRatioQuarterly ?? fhMetric.currentRatioAnnual));
+
+  const roePct = pct(num(kmLatest?.roe))
+    ?? pct(num(ratiosTTM?.returnOnEquityTTM))
+    ?? pct(num(fd.returnOnEquity))
+    ?? stockFund?.roe
+    ?? fundCache?.roe
+    ?? num(fhMetric.roeTTM ?? fhMetric.roeRfy)
+    ?? null;
+
+  // FMP institutional ownership (v4) returns ownershipPercent already as percent
+  const fmpInstPct = num(fmp?.instOwn?.ownershipPercent);
+  const institutionalOwnershipPct = normalizeOwnershipPct(
+    fmpInstPct ?? num(ks.heldPercentInstitutions) ?? fundCache?.institutional_ownership_pct ?? num(fhMetric.institutionalOwnershipPercentage)
+  );
+
+  const currentRatio = normalizeRatio(
+    num(kmLatest?.currentRatio) ?? num(ratiosTTM?.currentRatioTTM) ?? num(fd.currentRatio)
+    ?? stockFund?.current_ratio ?? fundCache?.current_ratio
+    ?? num(fhMetric.currentRatioQuarterly ?? fhMetric.currentRatioAnnual)
+  );
+
   const cashFlowValues = quarters.slice(0, 5).map(q => q.operatingCashFlow).filter((v): v is number => v !== null);
   const positiveCashFlowCount = cashFlowValues.filter(v => v > 0).length;
-  const earningsHistory = quote?.earningsHistory?.history ?? [];
-  const surprises = earningsHistory.map((e: any) => pct(num(e.surprisePercent))).filter((v: number | null) => v !== null).slice(-8);
-  const beatCount = earningsHistory.filter((e: any) => num(e.epsActual) !== null && num(e.epsEstimate) !== null && num(e.epsActual)! >= num(e.epsEstimate)!).length;
+
+  // Earnings surprises — prefer FMP (clean & wide)
+  let surprises: (number | null)[] = [];
+  let beatRate: number | null = null;
+  if (fmp?.surp?.length) {
+    const rows = fmp.surp.slice(0, 8);
+    surprises = rows.map((e: any) => {
+      const act = num(e.actualEarningResult); const est = num(e.estimatedEarning);
+      if (act === null || est === null || est === 0) return null;
+      return round(((act - est) / Math.abs(est)) * 100);
+    }).filter((v: number | null) => v !== null);
+    const beats = rows.filter((e: any) => num(e.actualEarningResult) !== null && num(e.estimatedEarning) !== null && num(e.actualEarningResult)! >= num(e.estimatedEarning)!).length;
+    beatRate = rows.length ? Math.round((beats / rows.length) * 100) : null;
+  } else {
+    const earningsHistory = quote?.earningsHistory?.history ?? [];
+    surprises = earningsHistory.map((e: any) => pct(num(e.surprisePercent))).filter((v: number | null) => v !== null).slice(-8);
+    const beatCount = earningsHistory.filter((e: any) => num(e.epsActual) !== null && num(e.epsEstimate) !== null && num(e.epsActual)! >= num(e.epsEstimate)!).length;
+    beatRate = earningsHistory.length ? Math.round((beatCount / earningsHistory.length) * 100) : null;
+  }
 
   if (quarters.length < 5) quality.warnings.push(`Only ${quarters.length} recent quarters available; trend confidence reduced.`);
-  if (institutionalOwnershipPct !== null && institutionalOwnershipPct < 5 && (ks.heldPercentInstitutions?.raw ?? null) !== null) quality.warnings.push("Institutional ownership appears unusually low; source may be incomplete for this ticker.");
+  if (institutionalOwnershipPct !== null && institutionalOwnershipPct < 5 && fmpInstPct === null && (ks.heldPercentInstitutions?.raw ?? null) !== null) quality.warnings.push("Institutional ownership appears unusually low; source may be incomplete for this ticker.");
   if ((latest?.netMargin ?? 0) < 0 && (latest?.operatingMargin ?? 0) > 10) quality.warnings.push("GAAP net margin is negative while operating margin is healthy; likely one-time/non-operating distortion.");
 
   const derived = {
@@ -602,7 +774,7 @@ async function buildBundle(symbol: string, force: boolean) {
     positiveCashFlowCount,
     cashFlowPoints: cashFlowValues.length,
     latestFreeCashFlow: latest?.freeCashFlow ?? null,
-    epsBeatRatePct: earningsHistory.length ? Math.round((beatCount / earningsHistory.length) * 100) : null,
+    epsBeatRatePct: beatRate,
     epsSurprisesRecent: surprises,
     warnings: quality.warnings,
   };
