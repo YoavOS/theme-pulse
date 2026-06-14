@@ -1000,28 +1000,45 @@ async function polishWithGroq(report: MinerviniReport, derived: any): Promise<Mi
   }
 }
 
+interface BundleResponse {
+  reports: { minervini: MinerviniReport; oneil: MinerviniReport; ryan: MinerviniReport };
+  cumulative: { averageScore: number; verdict: "PASS" | "FAIL" | "BORDERLINE"; passCount: number; profileCount: number };
+}
+
+const multiReportCache = new Map<string, { ts: number; data: BundleResponse; dataQuality: DataQuality }>();
+
+function buildAll(symbol: string, profileMeta: any, derived: any): BundleResponse {
+  const minervini = makeReport(symbol, profileMeta, derived);
+  const oneil = makeOneilReport(symbol, profileMeta, derived);
+  const ryan = makeRyanReport(symbol, profileMeta, derived);
+  const all = [minervini, oneil, ryan];
+  const averageScore = Math.round(all.reduce((s, r) => s + r.overallScore, 0) / all.length);
+  const passCount = all.filter(r => r.verdict === "PASS").length;
+  const verdict: "PASS" | "FAIL" | "BORDERLINE" = averageScore >= 80 ? "PASS" : averageScore >= 60 ? "BORDERLINE" : "FAIL";
+  return { reports: { minervini, oneil, ryan }, cumulative: { averageScore, verdict, passCount, profileCount: all.length } };
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   try {
-    const body = await req.json().catch(() => ({})) as { symbol?: string; force?: boolean; skipGroq?: boolean };
+    const body = await req.json().catch(() => ({})) as { symbol?: string; force?: boolean };
     const symbol = (body.symbol ?? "").toUpperCase().replace(/[^A-Z0-9.-]/g, "").trim();
     const force = !!body.force;
     if (!symbol) return jsonResponse({ error: "symbol required" }, 400);
 
     if (!force) {
-      const hit = reportCache.get(symbol);
+      const hit = multiReportCache.get(symbol);
       if (hit && Date.now() - hit.ts < REPORT_TTL) {
-        return jsonResponse({ report: hit.report, cached: true, dataQuality: hit.dataQuality });
+        return jsonResponse({ ...hit.data, cached: true, dataQuality: hit.dataQuality });
       }
     }
 
     const { profile, derived, quality } = await buildBundle(symbol, force);
     if (!derived.quarters.length && !derived.annual.length) return jsonResponse({ error: "No reliable fundamentals found for symbol" }, 502);
 
-    let report = makeReport(symbol, profile, derived);
-    if (!body.skipGroq && !force) report = await polishWithGroq(report, derived);
-    reportCache.set(symbol, { ts: Date.now(), report, dataQuality: quality });
-    return jsonResponse({ report, cached: false, dataQuality: quality, derived: body.skipGroq ? derived : undefined });
+    const data = buildAll(symbol, profile, derived);
+    multiReportCache.set(symbol, { ts: Date.now(), data, dataQuality: quality });
+    return jsonResponse({ ...data, cached: false, dataQuality: quality });
   } catch (e) {
     console.error("minervini-analysis error", e);
     return jsonResponse({ error: e instanceof Error ? e.message : String(e) }, 500);
