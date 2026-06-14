@@ -91,6 +91,8 @@ interface MinerviniReport {
   symbol: string;
   companyName: string;
   sector: string | null;
+  profile: "minervini" | "oneil" | "ryan";
+  profileLabel: string;
   overallScore: number;
   verdict: "PASS" | "FAIL" | "BORDERLINE";
   headline: string;
