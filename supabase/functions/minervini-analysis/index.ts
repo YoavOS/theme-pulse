@@ -7,19 +7,22 @@ const corsHeaders = {
 
 const GROQ_KEY = Deno.env.get("GROQ_API_KEY");
 const FINNHUB_KEY = Deno.env.get("FINNHUB_API_KEY");
+const FMP_KEY = Deno.env.get("FMP_API_KEY");
 const SB_URL = Deno.env.get("SUPABASE_URL")!;
 const SB_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Minervini/3.0";
+const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Minervini/4.0";
 const REPORT_TTL = 24 * 60 * 60 * 1000;
 const DB_CACHE_TTL = 24 * 60 * 60 * 1000;
 const QUOTE_TTL = 24 * 60 * 60 * 1000;
 const TIMESERIES_TTL = 24 * 60 * 60 * 1000;
+const FMP_TTL = 24 * 60 * 60 * 1000;
 
 const reportCache = new Map<string, { ts: number; report: MinerviniReport; dataQuality: DataQuality }>();
 const quoteCache = new Map<string, { ts: number; data: any }>();
 const timeseriesCache = new Map<string, { ts: number; data: any }>();
 const finnhubCache = new Map<string, { ts: number; data: any }>();
+const fmpCache = new Map<string, { ts: number; data: any }>();
 let cachedYahooAuth: { cookie: string; crumb: string; ts: number } | null = null;
 
 const num = (v: any): number | null => {
