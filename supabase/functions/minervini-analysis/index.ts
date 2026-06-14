@@ -298,6 +298,102 @@ async function fetchFinnhubMetric(symbol: string, quality: DataQuality) {
   return data;
 }
 
+async function fmpGet(path: string, quality: DataQuality, version: "v3" | "v4" = "v3") {
+  if (!FMP_KEY) return null;
+  const key = `${version}:${path}`;
+  const hit = fmpCache.get(key);
+  if (hit && Date.now() - hit.ts < FMP_TTL) return hit.data;
+  const sep = path.includes("?") ? "&" : "?";
+  const url = `https://financialmodelingprep.com/api/${version}/${path}${sep}apikey=${FMP_KEY}`;
+  try {
+    const r = await fetch(url);
+    quality.fmpCalls++;
+    if (!r.ok) return null;
+    const j = await r.json().catch(() => null);
+    if (j && !(j as any).Error && !(j as any)["Error Message"]) {
+      fmpCache.set(key, { ts: Date.now(), data: j });
+      return j;
+    }
+  } catch { /* ignore */ }
+  return null;
+}
+
+async function fetchFmpBundle(symbol: string, quality: DataQuality) {
+  if (!FMP_KEY) return null;
+  const [incQ, incA, bsQ, bsA, cfQ, cfA, kmQ, ratiosTTM, surp, profile, instOwn] = await Promise.all([
+    fmpGet(`income-statement/${symbol}?period=quarter&limit=8`, quality),
+    fmpGet(`income-statement/${symbol}?period=annual&limit=5`, quality),
+    fmpGet(`balance-sheet-statement/${symbol}?period=quarter&limit=8`, quality),
+    fmpGet(`balance-sheet-statement/${symbol}?period=annual&limit=5`, quality),
+    fmpGet(`cash-flow-statement/${symbol}?period=quarter&limit=8`, quality),
+    fmpGet(`cash-flow-statement/${symbol}?period=annual&limit=5`, quality),
+    fmpGet(`key-metrics/${symbol}?period=quarter&limit=8`, quality),
+    fmpGet(`ratios-ttm/${symbol}`, quality),
+    fmpGet(`earnings-surprises/${symbol}`, quality),
+    fmpGet(`profile/${symbol}`, quality),
+    fmpGet(`institutional-ownership/symbol-ownership-percent?symbol=${symbol}&date=&page=0`, quality, "v4"),
+  ]);
+  const a = (x: any) => Array.isArray(x) ? x : [];
+  const first = (x: any) => Array.isArray(x) ? x[0] : x;
+  return {
+    incQ: a(incQ), incA: a(incA), bsQ: a(bsQ), bsA: a(bsA), cfQ: a(cfQ), cfA: a(cfA),
+    kmQ: a(kmQ), ratiosTTM: first(ratiosTTM), surp: a(surp),
+    profile: first(profile), instOwn: a(instOwn)[0] ?? null,
+  };
+}
+
+function fmpToPoints(inc: any[], bs: any[], cf: any[]): PeriodPoint[] {
+  const byDate = new Map<string, PeriodPoint>();
+  for (const x of inc) {
+    const date = x?.date; if (!date) continue;
+    byDate.set(date, {
+      date,
+      revenue: num(x.revenue),
+      eps: num(x.epsdiluted ?? x.eps),
+      normalizedEps: null,
+      netIncome: num(x.netIncome),
+      normalizedIncome: null,
+      operatingIncome: num(x.operatingIncome),
+      grossProfit: num(x.grossProfit),
+      totalDebt: null, equity: null, operatingCashFlow: null, freeCashFlow: null,
+    });
+  }
+  for (const x of bs) {
+    const date = x?.date; if (!date) continue;
+    const row = byDate.get(date) ?? { date } as PeriodPoint;
+    const td = num(x.totalDebt);
+    row.totalDebt = td !== null ? td : ((num(x.shortTermDebt) ?? 0) + (num(x.longTermDebt) ?? 0) || null);
+    row.equity = num(x.totalStockholdersEquity ?? x.totalEquity);
+    byDate.set(date, row);
+  }
+  for (const x of cf) {
+    const date = x?.date; if (!date) continue;
+    const row = byDate.get(date) ?? { date } as PeriodPoint;
+    row.operatingCashFlow = num(x.operatingCashFlow ?? x.netCashProvidedByOperatingActivities);
+    const fcf = num(x.freeCashFlow);
+    row.freeCashFlow = fcf !== null ? fcf : (row.operatingCashFlow !== null && num(x.capitalExpenditure) !== null ? row.operatingCashFlow + num(x.capitalExpenditure)! : null);
+    byDate.set(date, row);
+  }
+  return [...byDate.values()].sort((a, b) => b.date.localeCompare(a.date));
+}
+
+function mergePoints(primary: PeriodPoint[], fallback: PeriodPoint[]): PeriodPoint[] {
+  if (!fallback.length) return primary;
+  const byDate = new Map<string, PeriodPoint>();
+  for (const p of fallback) byDate.set(p.date, { ...p });
+  for (const p of primary) {
+    const existing = byDate.get(p.date);
+    if (!existing) { byDate.set(p.date, { ...p }); continue; }
+    const merged: any = { ...existing };
+    for (const k of Object.keys(p) as (keyof PeriodPoint)[]) {
+      if ((p as any)[k] !== null && (p as any)[k] !== undefined) merged[k] = (p as any)[k];
+    }
+    byDate.set(p.date, merged);
+  }
+  return [...byDate.values()].sort((a, b) => b.date.localeCompare(a.date));
+}
+
+
 async function readCachedFundamentals(sb: any, symbol: string, quality: DataQuality) {
   const cutoff = new Date(Date.now() - DB_CACHE_TTL).toISOString();
   const [{ data: stockFund }, { data: fundCache }] = await Promise.all([
