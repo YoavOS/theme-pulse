@@ -105,8 +105,10 @@ interface DataQuality {
   warnings: string[];
   yahooCalls: number;
   finnhubCalls: number;
+  fmpCalls: number;
   dbCacheHit: boolean;
 }
+
 
 function jsonResponse(body: Record<string, unknown>, status = 200) {
   return new Response(JSON.stringify(body), {
