@@ -181,6 +181,12 @@ function pointFor(date: string, series: Record<string, { date: string; value: nu
     equity: get("StockholdersEquity"),
     operatingCashFlow: get("OperatingCashFlow"),
     freeCashFlow: get("FreeCashFlow"),
+    operatingMarginPct: null,
+    netMarginPct: null,
+    grossMarginPct: null,
+    roePct: null,
+    currentRatio: null,
+    debtToEquityRatio: null,
   };
 }
 
