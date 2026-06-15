@@ -960,10 +960,10 @@ async function buildBundle(symbol: string, force: boolean) {
   const fmp = await fetchFmpBundle(symbol, quality);
   if (fmp) quality.sources.push("FMP statements & ratios");
 
-  const fmpQuartersRaw = fmp ? fmpToPoints(fmp.incQ, fmp.bsQ, fmp.cfQ, fmp.ratiosQ, fmp.kmQ) : [];
-  const fmpAnnualRaw = fmp ? fmpToPoints(fmp.incA, fmp.bsA, fmp.cfA, fmp.ratiosA, fmp.kmA) : [];
-  const fmpQuarterProbe = enrichQuarters(fmpQuartersRaw, { revenueYoY: null, epsYoY: null });
-  const fmpAnnualProbe = enrichAnnual(fmpAnnualRaw);
+  const fmpQuartersRaw = fmp ? mergeGrowthRows(fmpToPoints(fmp.incQ, fmp.bsQ, fmp.cfQ, [], fmp.kmQ), fmp.growthQ) : [];
+  const fmpAnnualRaw = fmp ? mergeGrowthRows(fmpToPoints(fmp.incA, fmp.bsA, fmp.cfA, [], fmp.kmA), fmp.growthA) : [];
+  const fmpQuarterProbe = applyGrowthFallback(enrichQuarters(fmpQuartersRaw, { revenueYoY: null, epsYoY: null }), fmp?.growthQ ?? []);
+  const fmpAnnualProbe = applyGrowthFallback(enrichAnnual(fmpAnnualRaw), fmp?.growthA ?? []);
   const fmpQuarterCoverage = computeCoverage(fmpQuarterProbe, fmpAnnualProbe);
   const fmpHasQuarters = fmpQuartersRaw.length >= RAW_QUARTERS_FOR_YOY
     && fmpQuarterCoverage.quarterlyRevenueYoY >= MIN_QUARTER_TREND_COUNT
@@ -1016,8 +1016,8 @@ async function buildBundle(symbol: string, force: boolean) {
   }
 
   // FMP primary, Yahoo fills gaps per-date and per-field
-  const quarters = enrichQuarters(mergePoints(fmpQuartersRaw, yQuarters), yahooGrowth).slice(0, RAW_QUARTERS_FOR_YOY);
-  const annual = enrichAnnual(mergePoints(fmpAnnualRaw, yAnnual)).slice(0, 5);
+  const quarters = applyGrowthFallback(enrichQuarters(mergePoints(fmpQuartersRaw, yQuarters), yahooGrowth), fmp?.growthQ ?? []).slice(0, RAW_QUARTERS_FOR_YOY);
+  const annual = applyGrowthFallback(enrichAnnual(mergePoints(fmpAnnualRaw, yAnnual)), fmp?.growthA ?? []).slice(0, 5);
   quality.coverage = computeCoverage(quarters, annual);
 
   const fhMetric = fh?.metric ?? {};
