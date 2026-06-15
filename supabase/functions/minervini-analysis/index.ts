@@ -559,6 +559,7 @@ function summarizeTrend(values: (number | null)[]) {
 function fmtPct(v: number | null) { return v === null ? "N/A" : `${v.toFixed(1)}%`; }
 function fmtRatio(v: number | null) { return v === null ? "N/A" : `${v.toFixed(2)}x`; }
 function fmtTrend(values: (number | null)[]) { return values.map(fmtPct).join(" / "); }
+function countPresent(values: (number | null | undefined)[]) { return values.filter((v): v is number => v !== null && v !== undefined && Number.isFinite(v)).length; }
 function statusFrom(value: number | null, pass: boolean, fail: boolean): "pass" | "fail" | "neutral" {
   if (value === null) return "neutral";
   if (pass) return "pass";
@@ -566,15 +567,32 @@ function statusFrom(value: number | null, pass: boolean, fail: boolean): "pass" 
   return "neutral";
 }
 
+function computeCoverage(quarters: QuarterTrend[], annual: AnnualTrend[]): DataQuality["coverage"] {
+  const qTrend = quarters.slice(0, TARGET_QUARTER_TREND_COUNT);
+  const aTrend = annual.slice(0, TARGET_ANNUAL_TREND_COUNT);
+  return {
+    quartersAvailable: qTrend.length,
+    quarterTarget: TARGET_QUARTER_TREND_COUNT,
+    quarterlyRevenueYoY: countPresent(qTrend.map(q => q.revenueYoY)),
+    quarterlyEpsYoY: countPresent(qTrend.map(q => q.normalizedEpsYoY ?? q.epsYoY)),
+    quarterlyMargins: countPresent(qTrend.map(q => q.operatingMargin ?? q.normalizedNetMargin ?? q.netMargin)),
+    quarterlyCashFlow: countPresent(qTrend.map(q => q.operatingCashFlow)),
+    annualAvailable: aTrend.length,
+    annualTarget: 3,
+    annualRevenueYoY: countPresent(aTrend.slice(0, 3).map(a => a.revenueYoY)),
+    annualEpsYoY: countPresent(aTrend.slice(0, 3).map(a => a.normalizedEpsYoY ?? a.epsYoY)),
+  };
+}
+
 function makeReport(symbol: string, profile: any, derived: any): MinerviniReport {
   const q = derived.quarters as QuarterTrend[];
   const a = derived.annual as AnnualTrend[];
   const latest = q[0];
-  const revTrend = q.slice(0, 5).map(x => x.revenueYoY);
-  const epsTrend = q.slice(0, 5).map(x => x.normalizedEpsYoY ?? x.epsYoY);
-  const revQoqTrend = q.slice(0, 5).map(x => x.revenueQoQ);
-  const epsQoqTrend = q.slice(0, 5).map(x => x.epsQoQ);
-  const opMarginTrend = q.slice(0, 5).map(x => x.operatingMargin ?? x.normalizedNetMargin ?? x.netMargin);
+  const revTrend = q.slice(0, TARGET_QUARTER_TREND_COUNT).map(x => x.revenueYoY);
+  const epsTrend = q.slice(0, TARGET_QUARTER_TREND_COUNT).map(x => x.normalizedEpsYoY ?? x.epsYoY);
+  const revQoqTrend = q.slice(0, TARGET_QUARTER_TREND_COUNT).map(x => x.revenueQoQ);
+  const epsQoqTrend = q.slice(0, TARGET_QUARTER_TREND_COUNT).map(x => x.epsQoQ);
+  const opMarginTrend = q.slice(0, TARGET_QUARTER_TREND_COUNT).map(x => x.operatingMargin ?? x.normalizedNetMargin ?? x.netMargin);
   const annRev = a.slice(0, 4).map(x => x.revenueYoY);
   const annEps = a.slice(0, 4).map(x => x.normalizedEpsYoY ?? x.epsYoY);
   const revAccel = summarizeTrend(revTrend);
