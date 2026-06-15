@@ -489,7 +489,7 @@ function applyGrowthFallback<T extends QuarterTrend | AnnualTrend>(rows: T[], gr
     const g = byDate.get(row.date);
     if (!g) return row;
     const rev = growthPctValue(num(g.growthRevenue ?? g.revenueGrowth));
-    const eps = growthPctValue(num(g.growthEPSDiluted ?? g.growthEPS ?? g.epsGrowth));
+    const eps = growthPctValue(num(g.growthEPSDiluted ?? g.epsdilutedGrowth ?? g.epsgrowth ?? g.growthEPS ?? g.epsGrowth));
     return {
       ...row,
       revenueYoY: row.revenueYoY ?? rev,
