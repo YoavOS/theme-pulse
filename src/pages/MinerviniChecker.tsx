@@ -33,9 +33,23 @@ interface ProfileReport {
   finalVerdict: string;
 }
 
+interface DataCoverage {
+  quartersAvailable: number;
+  quarterTarget: number;
+  quarterlyRevenueYoY: number;
+  quarterlyEpsYoY: number;
+  quarterlyMargins: number;
+  quarterlyCashFlow: number;
+  annualAvailable: number;
+  annualTarget: number;
+  annualRevenueYoY: number;
+  annualEpsYoY: number;
+}
+
 interface MultiReport {
   reports: Record<ProfileId, ProfileReport>;
   cumulative: { averageScore: number; verdict: "PASS" | "FAIL" | "BORDERLINE"; passCount: number; profileCount: number };
+  dataQuality?: { sources?: string[]; warnings?: string[]; fmpCalls?: number; yahooCalls?: number; finnhubCalls?: number; dbCacheHit?: boolean; coverage?: DataCoverage };
 }
 
 const PROFILES: { id: ProfileId; label: string; short: string }[] = [
@@ -71,7 +85,7 @@ function VerdictBadge({ verdict, score, label }: { verdict: string; score: numbe
   );
 }
 
-const CACHE_KEY = (sym: string) => `minervini:v5-multi:${sym}`;
+const CACHE_KEY = (sym: string) => `minervini:v6-coverage:${sym}`;
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 
 function readCache(sym: string): MultiReport | null {
@@ -180,7 +194,7 @@ export default function MinerviniChecker() {
       if (fnErr) throw new Error(fnErr.message);
       if (data?.error) throw new Error(data.error);
       if (!data?.reports) throw new Error("No reports returned");
-      const result: MultiReport = { reports: data.reports, cumulative: data.cumulative };
+      const result: MultiReport = { reports: data.reports, cumulative: data.cumulative, dataQuality: data.dataQuality };
       setMulti(result);
       writeCache(sym, result);
       toast.success(`Analysis complete for ${sym}${data.cached ? " (server cache)" : ""}`);
