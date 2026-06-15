@@ -373,14 +373,17 @@ async function fmpGet(path: string, quality: DataQuality, version: "v3" | "v4" =
 
 async function fetchFmpBundle(symbol: string, quality: DataQuality) {
   if (!FMP_KEY) return null;
-  const [incQ, incA, bsQ, bsA, cfQ, cfA, kmQ, ratiosTTM, surp, profile, instOwn] = await Promise.all([
-    fmpGet(`income-statement/${symbol}?period=quarter&limit=8`, quality),
+  const [incQ, incA, bsQ, bsA, cfQ, cfA, kmQ, kmA, ratiosQ, ratiosA, ratiosTTM, surp, profile, instOwn] = await Promise.all([
+    fmpGet(`income-statement/${symbol}?period=quarter&limit=${RAW_QUARTERS_FOR_YOY}`, quality),
     fmpGet(`income-statement/${symbol}?period=annual&limit=5`, quality),
-    fmpGet(`balance-sheet-statement/${symbol}?period=quarter&limit=8`, quality),
+    fmpGet(`balance-sheet-statement/${symbol}?period=quarter&limit=${RAW_QUARTERS_FOR_YOY}`, quality),
     fmpGet(`balance-sheet-statement/${symbol}?period=annual&limit=5`, quality),
-    fmpGet(`cash-flow-statement/${symbol}?period=quarter&limit=8`, quality),
+    fmpGet(`cash-flow-statement/${symbol}?period=quarter&limit=${RAW_QUARTERS_FOR_YOY}`, quality),
     fmpGet(`cash-flow-statement/${symbol}?period=annual&limit=5`, quality),
-    fmpGet(`key-metrics/${symbol}?period=quarter&limit=8`, quality),
+    fmpGet(`key-metrics/${symbol}?period=quarter&limit=${RAW_QUARTERS_FOR_YOY}`, quality),
+    fmpGet(`key-metrics/${symbol}?period=annual&limit=5`, quality),
+    fmpGet(`ratios/${symbol}?period=quarter&limit=${RAW_QUARTERS_FOR_YOY}`, quality),
+    fmpGet(`ratios/${symbol}?period=annual&limit=5`, quality),
     fmpGet(`ratios-ttm/${symbol}`, quality),
     fmpGet(`earnings-surprises/${symbol}`, quality),
     fmpGet(`profile/${symbol}`, quality),
@@ -390,12 +393,12 @@ async function fetchFmpBundle(symbol: string, quality: DataQuality) {
   const first = (x: any) => Array.isArray(x) ? x[0] : x;
   return {
     incQ: a(incQ), incA: a(incA), bsQ: a(bsQ), bsA: a(bsA), cfQ: a(cfQ), cfA: a(cfA),
-    kmQ: a(kmQ), ratiosTTM: first(ratiosTTM), surp: a(surp),
+    kmQ: a(kmQ), kmA: a(kmA), ratiosQ: a(ratiosQ), ratiosA: a(ratiosA), ratiosTTM: first(ratiosTTM), surp: a(surp),
     profile: first(profile), instOwn: a(instOwn)[0] ?? null,
   };
 }
 
-function fmpToPoints(inc: any[], bs: any[], cf: any[]): PeriodPoint[] {
+function fmpToPoints(inc: any[], bs: any[], cf: any[], ratios: any[] = [], metrics: any[] = []): PeriodPoint[] {
   const byDate = new Map<string, PeriodPoint>();
   for (const x of inc) {
     const date = x?.date; if (!date) continue;
