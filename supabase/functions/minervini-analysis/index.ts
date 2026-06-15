@@ -467,6 +467,38 @@ function mergePoints(primary: PeriodPoint[], fallback: PeriodPoint[]): PeriodPoi
   return [...byDate.values()].sort((a, b) => b.date.localeCompare(a.date));
 }
 
+function growthPctValue(value: number | null): number | null {
+  if (value === null) return null;
+  return round(Math.abs(value) <= 20 ? value * 100 : value);
+}
+
+function mergeGrowthRows(points: PeriodPoint[], growthRows: any[]): PeriodPoint[] {
+  if (!growthRows?.length) return points;
+  const byDate = new Map(points.map(p => [p.date, { ...p }]));
+  for (const g of growthRows) {
+    const date = g?.date;
+    if (!date) continue;
+    byDate.set(date, byDate.get(date) ?? emptyPoint(date));
+  }
+  return [...byDate.values()].sort((a, b) => b.date.localeCompare(a.date));
+}
+
+function applyGrowthFallback<T extends QuarterTrend | AnnualTrend>(rows: T[], growthRows: any[]): T[] {
+  const byDate = new Map((growthRows ?? []).map(g => [g?.date, g]));
+  return rows.map(row => {
+    const g = byDate.get(row.date);
+    if (!g) return row;
+    const rev = growthPctValue(num(g.growthRevenue ?? g.revenueGrowth));
+    const eps = growthPctValue(num(g.growthEPSDiluted ?? g.growthEPS ?? g.epsGrowth));
+    return {
+      ...row,
+      revenueYoY: row.revenueYoY ?? rev,
+      epsYoY: row.epsYoY ?? eps,
+      normalizedEpsYoY: row.normalizedEpsYoY ?? eps,
+    };
+  });
+}
+
 
 async function readCachedFundamentals(sb: any, symbol: string, quality: DataQuality) {
   const cutoff = new Date(Date.now() - DB_CACHE_TTL).toISOString();
