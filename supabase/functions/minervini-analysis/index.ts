@@ -17,6 +17,10 @@ const DB_CACHE_TTL = 24 * 60 * 60 * 1000;
 const QUOTE_TTL = 24 * 60 * 60 * 1000;
 const TIMESERIES_TTL = 24 * 60 * 60 * 1000;
 const FMP_TTL = 24 * 60 * 60 * 1000;
+const TARGET_QUARTER_TREND_COUNT = 8;
+const MIN_QUARTER_TREND_COUNT = 6;
+const RAW_QUARTERS_FOR_YOY = TARGET_QUARTER_TREND_COUNT + 4;
+const TARGET_ANNUAL_TREND_COUNT = 4;
 
 const reportCache = new Map<string, { ts: number; report: MinerviniReport; dataQuality: DataQuality }>();
 const quoteCache = new Map<string, { ts: number; data: any }>();
@@ -55,6 +59,12 @@ interface PeriodPoint {
   equity: number | null;
   operatingCashFlow: number | null;
   freeCashFlow: number | null;
+  operatingMarginPct: number | null;
+  netMarginPct: number | null;
+  grossMarginPct: number | null;
+  roePct: number | null;
+  currentRatio: number | null;
+  debtToEquityRatio: number | null;
 }
 
 interface QuarterTrend extends PeriodPoint {
@@ -109,6 +119,18 @@ interface DataQuality {
   finnhubCalls: number;
   fmpCalls: number;
   dbCacheHit: boolean;
+  coverage?: {
+    quartersAvailable: number;
+    quarterTarget: number;
+    quarterlyRevenueYoY: number;
+    quarterlyEpsYoY: number;
+    quarterlyMargins: number;
+    quarterlyCashFlow: number;
+    annualAvailable: number;
+    annualTarget: number;
+    annualRevenueYoY: number;
+    annualEpsYoY: number;
+  };
 }
 
 
@@ -121,6 +143,29 @@ function jsonResponse(body: Record<string, unknown>, status = 200) {
 
 function valueFromTimeseriesItem(item: any): number | null {
   return num(item?.reportedValue ?? item);
+}
+
+function emptyPoint(date: string): PeriodPoint {
+  return {
+    date,
+    revenue: null,
+    eps: null,
+    normalizedEps: null,
+    netIncome: null,
+    normalizedIncome: null,
+    operatingIncome: null,
+    grossProfit: null,
+    totalDebt: null,
+    equity: null,
+    operatingCashFlow: null,
+    freeCashFlow: null,
+    operatingMarginPct: null,
+    netMarginPct: null,
+    grossMarginPct: null,
+    roePct: null,
+    currentRatio: null,
+    debtToEquityRatio: null,
+  };
 }
 
 function mapTimeseries(result: any[]): Record<string, { date: string; value: number | null }[]> {
@@ -159,6 +204,12 @@ function pointFor(date: string, series: Record<string, { date: string; value: nu
     equity: get("StockholdersEquity"),
     operatingCashFlow: get("OperatingCashFlow"),
     freeCashFlow: get("FreeCashFlow"),
+    operatingMarginPct: null,
+    netMarginPct: null,
+    grossMarginPct: null,
+    roePct: null,
+    currentRatio: null,
+    debtToEquityRatio: null,
   };
 }
 
@@ -183,11 +234,11 @@ function enrichQuarters(points: PeriodPoint[], yahooGrowth: { revenueYoY: number
       normalizedEpsYoY,
       revenueQoQ: pctGrowth(p.revenue, prev?.revenue ?? null),
       epsQoQ: pctGrowth(p.normalizedEps ?? p.eps, prev?.normalizedEps ?? prev?.eps ?? null),
-      operatingMargin: p.revenue ? pct((p.operatingIncome ?? null) !== null ? p.operatingIncome! / p.revenue : null) : null,
-      netMargin: p.revenue ? pct((p.netIncome ?? null) !== null ? p.netIncome! / p.revenue : null) : null,
+      operatingMargin: p.operatingMarginPct ?? (p.revenue ? pct((p.operatingIncome ?? null) !== null ? p.operatingIncome! / p.revenue : null) : null),
+      netMargin: p.netMarginPct ?? (p.revenue ? pct((p.netIncome ?? null) !== null ? p.netIncome! / p.revenue : null) : null),
       normalizedNetMargin: p.revenue ? pct((p.normalizedIncome ?? null) !== null ? p.normalizedIncome! / p.revenue : null) : null,
-      grossMargin: p.revenue ? pct((p.grossProfit ?? null) !== null ? p.grossProfit! / p.revenue : null) : null,
-      debtToEquity: p.equity && p.equity > 0 && p.totalDebt !== null ? round(p.totalDebt / p.equity) : null,
+      grossMargin: p.grossMarginPct ?? (p.revenue ? pct((p.grossProfit ?? null) !== null ? p.grossProfit! / p.revenue : null) : null),
+      debtToEquity: p.debtToEquityRatio ?? (p.equity && p.equity > 0 && p.totalDebt !== null ? round(p.totalDebt / p.equity) : null),
     };
   });
 }
@@ -201,8 +252,8 @@ function enrichAnnual(points: PeriodPoint[]): AnnualTrend[] {
       revenueYoY: pctGrowth(p.revenue, prev?.revenue ?? null),
       epsYoY: normalizedEpsYoY ?? pctGrowth(p.eps, prev?.eps ?? null),
       normalizedEpsYoY,
-      operatingMargin: p.revenue ? pct((p.operatingIncome ?? null) !== null ? p.operatingIncome! / p.revenue : null) : null,
-      netMargin: p.revenue ? pct((p.netIncome ?? null) !== null ? p.netIncome! / p.revenue : null) : null,
+      operatingMargin: p.operatingMarginPct ?? (p.revenue ? pct((p.operatingIncome ?? null) !== null ? p.operatingIncome! / p.revenue : null) : null),
+      netMargin: p.netMarginPct ?? (p.revenue ? pct((p.netIncome ?? null) !== null ? p.netIncome! / p.revenue : null) : null),
       normalizedNetMargin: p.revenue ? pct((p.normalizedIncome ?? null) !== null ? p.normalizedIncome! / p.revenue : null) : null,
     };
   });
@@ -322,14 +373,17 @@ async function fmpGet(path: string, quality: DataQuality, version: "v3" | "v4" =
 
 async function fetchFmpBundle(symbol: string, quality: DataQuality) {
   if (!FMP_KEY) return null;
-  const [incQ, incA, bsQ, bsA, cfQ, cfA, kmQ, ratiosTTM, surp, profile, instOwn] = await Promise.all([
-    fmpGet(`income-statement/${symbol}?period=quarter&limit=8`, quality),
-    fmpGet(`income-statement/${symbol}?period=annual&limit=5`, quality),
-    fmpGet(`balance-sheet-statement/${symbol}?period=quarter&limit=8`, quality),
-    fmpGet(`balance-sheet-statement/${symbol}?period=annual&limit=5`, quality),
-    fmpGet(`cash-flow-statement/${symbol}?period=quarter&limit=8`, quality),
-    fmpGet(`cash-flow-statement/${symbol}?period=annual&limit=5`, quality),
-    fmpGet(`key-metrics/${symbol}?period=quarter&limit=8`, quality),
+  const [incQ, incA, bsQ, bsA, cfQ, cfA, kmQ, kmA, growthQ, growthA, ratiosTTM, surp, profile, instOwn] = await Promise.all([
+    fmpGet(`income-statement/${symbol}?period=quarter&limit=${RAW_QUARTERS_FOR_YOY}`, quality),
+    fmpGet(`income-statement/${symbol}?period=annual&limit=10`, quality),
+    fmpGet(`balance-sheet-statement/${symbol}?period=quarter&limit=${RAW_QUARTERS_FOR_YOY}`, quality),
+    fmpGet(`balance-sheet-statement/${symbol}?period=annual&limit=10`, quality),
+    fmpGet(`cash-flow-statement/${symbol}?period=quarter&limit=${RAW_QUARTERS_FOR_YOY}`, quality),
+    fmpGet(`cash-flow-statement/${symbol}?period=annual&limit=10`, quality),
+    fmpGet(`key-metrics/${symbol}?period=quarter&limit=${RAW_QUARTERS_FOR_YOY}`, quality),
+    fmpGet(`key-metrics/${symbol}?period=annual&limit=5`, quality),
+    fmpGet(`financial-growth/${symbol}?period=quarter&limit=${TARGET_QUARTER_TREND_COUNT}`, quality),
+    fmpGet(`financial-growth/${symbol}?period=annual&limit=5`, quality),
     fmpGet(`ratios-ttm/${symbol}`, quality),
     fmpGet(`earnings-surprises/${symbol}`, quality),
     fmpGet(`profile/${symbol}`, quality),
@@ -339,17 +393,17 @@ async function fetchFmpBundle(symbol: string, quality: DataQuality) {
   const first = (x: any) => Array.isArray(x) ? x[0] : x;
   return {
     incQ: a(incQ), incA: a(incA), bsQ: a(bsQ), bsA: a(bsA), cfQ: a(cfQ), cfA: a(cfA),
-    kmQ: a(kmQ), ratiosTTM: first(ratiosTTM), surp: a(surp),
+    kmQ: a(kmQ), kmA: a(kmA), growthQ: a(growthQ), growthA: a(growthA), ratiosTTM: first(ratiosTTM), surp: a(surp),
     profile: first(profile), instOwn: a(instOwn)[0] ?? null,
   };
 }
 
-function fmpToPoints(inc: any[], bs: any[], cf: any[]): PeriodPoint[] {
+function fmpToPoints(inc: any[], bs: any[], cf: any[], ratios: any[] = [], metrics: any[] = []): PeriodPoint[] {
   const byDate = new Map<string, PeriodPoint>();
   for (const x of inc) {
     const date = x?.date; if (!date) continue;
     byDate.set(date, {
-      date,
+      ...emptyPoint(date),
       revenue: num(x.revenue),
       eps: num(x.epsdiluted ?? x.eps),
       normalizedEps: null,
@@ -357,12 +411,11 @@ function fmpToPoints(inc: any[], bs: any[], cf: any[]): PeriodPoint[] {
       normalizedIncome: null,
       operatingIncome: num(x.operatingIncome),
       grossProfit: num(x.grossProfit),
-      totalDebt: null, equity: null, operatingCashFlow: null, freeCashFlow: null,
     });
   }
   for (const x of bs) {
     const date = x?.date; if (!date) continue;
-    const row = byDate.get(date) ?? { date } as PeriodPoint;
+    const row = byDate.get(date) ?? emptyPoint(date);
     const td = num(x.totalDebt);
     row.totalDebt = td !== null ? td : ((num(x.shortTermDebt) ?? 0) + (num(x.longTermDebt) ?? 0) || null);
     row.equity = num(x.totalStockholdersEquity ?? x.totalEquity);
@@ -370,10 +423,29 @@ function fmpToPoints(inc: any[], bs: any[], cf: any[]): PeriodPoint[] {
   }
   for (const x of cf) {
     const date = x?.date; if (!date) continue;
-    const row = byDate.get(date) ?? { date } as PeriodPoint;
+    const row = byDate.get(date) ?? emptyPoint(date);
     row.operatingCashFlow = num(x.operatingCashFlow ?? x.netCashProvidedByOperatingActivities);
     const fcf = num(x.freeCashFlow);
     row.freeCashFlow = fcf !== null ? fcf : (row.operatingCashFlow !== null && num(x.capitalExpenditure) !== null ? row.operatingCashFlow + num(x.capitalExpenditure)! : null);
+    byDate.set(date, row);
+  }
+  for (const x of ratios) {
+    const date = x?.date; if (!date) continue;
+    const row = byDate.get(date) ?? emptyPoint(date);
+    row.operatingMarginPct = pct(num(x.operatingProfitMargin ?? x.operatingMargin));
+    row.netMarginPct = pct(num(x.netProfitMargin ?? x.netMargin));
+    row.grossMarginPct = pct(num(x.grossProfitMargin ?? x.grossMargin));
+    row.roePct = pct(num(x.returnOnEquity ?? x.roe));
+    row.currentRatio = normalizeRatio(num(x.currentRatio));
+    row.debtToEquityRatio = normalizeRatio(num(x.debtEquityRatio ?? x.debtToEquity));
+    byDate.set(date, row);
+  }
+  for (const x of metrics) {
+    const date = x?.date; if (!date) continue;
+    const row = byDate.get(date) ?? emptyPoint(date);
+    row.roePct = row.roePct ?? pct(num(x.roe));
+    row.currentRatio = row.currentRatio ?? normalizeRatio(num(x.currentRatio));
+    row.debtToEquityRatio = row.debtToEquityRatio ?? normalizeRatio(num(x.debtToEquity));
     byDate.set(date, row);
   }
   return [...byDate.values()].sort((a, b) => b.date.localeCompare(a.date));
@@ -384,15 +456,49 @@ function mergePoints(primary: PeriodPoint[], fallback: PeriodPoint[]): PeriodPoi
   const byDate = new Map<string, PeriodPoint>();
   for (const p of fallback) byDate.set(p.date, { ...p });
   for (const p of primary) {
-    const existing = byDate.get(p.date);
-    if (!existing) { byDate.set(p.date, { ...p }); continue; }
+    const closeKey = [...byDate.keys()].find(d => Math.abs(new Date(d).getTime() - new Date(p.date).getTime()) <= 3 * 86400_000);
+    const key = closeKey ?? p.date;
+    const existing = byDate.get(key);
+    if (!existing) { byDate.set(key, { ...p }); continue; }
     const merged: any = { ...existing };
     for (const k of Object.keys(p) as (keyof PeriodPoint)[]) {
       if ((p as any)[k] !== null && (p as any)[k] !== undefined) merged[k] = (p as any)[k];
     }
-    byDate.set(p.date, merged);
+    byDate.set(key, merged);
   }
   return [...byDate.values()].sort((a, b) => b.date.localeCompare(a.date));
+}
+
+function growthPctValue(value: number | null): number | null {
+  if (value === null) return null;
+  return round(Math.abs(value) <= 20 ? value * 100 : value);
+}
+
+function mergeGrowthRows(points: PeriodPoint[], growthRows: any[]): PeriodPoint[] {
+  if (!growthRows?.length) return points;
+  const byDate = new Map(points.map(p => [p.date, { ...p }]));
+  for (const g of growthRows) {
+    const date = g?.date;
+    if (!date) continue;
+    byDate.set(date, byDate.get(date) ?? emptyPoint(date));
+  }
+  return [...byDate.values()].sort((a, b) => b.date.localeCompare(a.date));
+}
+
+function applyGrowthFallback<T extends QuarterTrend | AnnualTrend>(rows: T[], growthRows: any[]): T[] {
+  const byDate = new Map((growthRows ?? []).map(g => [g?.date, g]));
+  return rows.map(row => {
+    const g = byDate.get(row.date);
+    if (!g) return row;
+    const rev = growthPctValue(num(g.growthRevenue ?? g.revenueGrowth));
+    const eps = growthPctValue(num(g.growthEPSDiluted ?? g.epsdilutedGrowth ?? g.epsgrowth ?? g.growthEPS ?? g.epsGrowth));
+    return {
+      ...row,
+      revenueYoY: row.revenueYoY ?? rev,
+      epsYoY: row.epsYoY ?? eps,
+      normalizedEpsYoY: row.normalizedEpsYoY ?? eps,
+    };
+  });
 }
 
 
@@ -417,14 +523,14 @@ function fallbackQuartersFromQuote(root: any, yahooGrowth: { revenueYoY: number 
     const date = x.endDate?.fmt;
     if (!date) continue;
     byDate.set(date, {
-      date, revenue: num(x.totalRevenue), eps: num(x.dilutedEPS), normalizedEps: null, netIncome: num(x.netIncome), normalizedIncome: null,
-      operatingIncome: num(x.operatingIncome), grossProfit: num(x.grossProfit), totalDebt: null, equity: null, operatingCashFlow: null, freeCashFlow: null,
+      ...emptyPoint(date), revenue: num(x.totalRevenue), eps: num(x.dilutedEPS), normalizedEps: null, netIncome: num(x.netIncome), normalizedIncome: null,
+      operatingIncome: num(x.operatingIncome), grossProfit: num(x.grossProfit),
     });
   }
   for (const x of bsQ) {
     const date = x.endDate?.fmt;
     if (!date) continue;
-    const row = byDate.get(date) ?? { date } as PeriodPoint;
+    const row = byDate.get(date) ?? emptyPoint(date);
     row.totalDebt = (num(x.shortLongTermDebt) ?? 0) + (num(x.longTermDebt) ?? 0) || null;
     row.equity = num(x.totalStockholderEquity);
     byDate.set(date, row);
@@ -432,7 +538,7 @@ function fallbackQuartersFromQuote(root: any, yahooGrowth: { revenueYoY: number 
   for (const x of cfQ) {
     const date = x.endDate?.fmt;
     if (!date) continue;
-    const row = byDate.get(date) ?? { date } as PeriodPoint;
+    const row = byDate.get(date) ?? emptyPoint(date);
     row.operatingCashFlow = num(x.totalCashFromOperatingActivities);
     row.freeCashFlow = (num(x.totalCashFromOperatingActivities) !== null && num(x.capitalExpenditures) !== null)
       ? num(x.totalCashFromOperatingActivities)! + num(x.capitalExpenditures)! : null;
@@ -450,14 +556,14 @@ function fallbackAnnualFromQuote(root: any) {
     const date = x.endDate?.fmt;
     if (!date) continue;
     byDate.set(date, {
-      date, revenue: num(x.totalRevenue), eps: num(x.dilutedEPS), normalizedEps: null, netIncome: num(x.netIncome), normalizedIncome: null,
-      operatingIncome: num(x.operatingIncome), grossProfit: num(x.grossProfit), totalDebt: null, equity: null, operatingCashFlow: null, freeCashFlow: null,
+      ...emptyPoint(date), revenue: num(x.totalRevenue), eps: num(x.dilutedEPS), normalizedEps: null, netIncome: num(x.netIncome), normalizedIncome: null,
+      operatingIncome: num(x.operatingIncome), grossProfit: num(x.grossProfit),
     });
   }
   for (const x of bsA) {
     const date = x.endDate?.fmt;
     if (!date) continue;
-    const row = byDate.get(date) ?? { date } as PeriodPoint;
+    const row = byDate.get(date) ?? emptyPoint(date);
     row.totalDebt = (num(x.shortLongTermDebt) ?? 0) + (num(x.longTermDebt) ?? 0) || null;
     row.equity = num(x.totalStockholderEquity);
     byDate.set(date, row);
@@ -465,7 +571,7 @@ function fallbackAnnualFromQuote(root: any) {
   for (const x of cfA) {
     const date = x.endDate?.fmt;
     if (!date) continue;
-    const row = byDate.get(date) ?? { date } as PeriodPoint;
+    const row = byDate.get(date) ?? emptyPoint(date);
     row.operatingCashFlow = num(x.totalCashFromOperatingActivities);
     row.freeCashFlow = (num(x.totalCashFromOperatingActivities) !== null && num(x.capitalExpenditures) !== null)
       ? num(x.totalCashFromOperatingActivities)! + num(x.capitalExpenditures)! : null;
@@ -487,6 +593,7 @@ function summarizeTrend(values: (number | null)[]) {
 function fmtPct(v: number | null) { return v === null ? "N/A" : `${v.toFixed(1)}%`; }
 function fmtRatio(v: number | null) { return v === null ? "N/A" : `${v.toFixed(2)}x`; }
 function fmtTrend(values: (number | null)[]) { return values.map(fmtPct).join(" / "); }
+function countPresent(values: (number | null | undefined)[]) { return values.filter((v): v is number => v !== null && v !== undefined && Number.isFinite(v)).length; }
 function statusFrom(value: number | null, pass: boolean, fail: boolean): "pass" | "fail" | "neutral" {
   if (value === null) return "neutral";
   if (pass) return "pass";
@@ -494,15 +601,32 @@ function statusFrom(value: number | null, pass: boolean, fail: boolean): "pass" 
   return "neutral";
 }
 
+function computeCoverage(quarters: QuarterTrend[], annual: AnnualTrend[]): DataQuality["coverage"] {
+  const qTrend = quarters.slice(0, TARGET_QUARTER_TREND_COUNT);
+  const aTrend = annual.slice(0, TARGET_ANNUAL_TREND_COUNT);
+  return {
+    quartersAvailable: qTrend.length,
+    quarterTarget: TARGET_QUARTER_TREND_COUNT,
+    quarterlyRevenueYoY: countPresent(qTrend.map(q => q.revenueYoY)),
+    quarterlyEpsYoY: countPresent(qTrend.map(q => q.normalizedEpsYoY ?? q.epsYoY)),
+    quarterlyMargins: countPresent(qTrend.map(q => q.operatingMargin ?? q.normalizedNetMargin ?? q.netMargin)),
+    quarterlyCashFlow: countPresent(qTrend.map(q => q.operatingCashFlow)),
+    annualAvailable: aTrend.length,
+    annualTarget: 3,
+    annualRevenueYoY: countPresent(aTrend.slice(0, 3).map(a => a.revenueYoY)),
+    annualEpsYoY: countPresent(aTrend.slice(0, 3).map(a => a.normalizedEpsYoY ?? a.epsYoY)),
+  };
+}
+
 function makeReport(symbol: string, profile: any, derived: any): MinerviniReport {
   const q = derived.quarters as QuarterTrend[];
   const a = derived.annual as AnnualTrend[];
   const latest = q[0];
-  const revTrend = q.slice(0, 5).map(x => x.revenueYoY);
-  const epsTrend = q.slice(0, 5).map(x => x.normalizedEpsYoY ?? x.epsYoY);
-  const revQoqTrend = q.slice(0, 5).map(x => x.revenueQoQ);
-  const epsQoqTrend = q.slice(0, 5).map(x => x.epsQoQ);
-  const opMarginTrend = q.slice(0, 5).map(x => x.operatingMargin ?? x.normalizedNetMargin ?? x.netMargin);
+  const revTrend = q.slice(0, TARGET_QUARTER_TREND_COUNT).map(x => x.revenueYoY);
+  const epsTrend = q.slice(0, TARGET_QUARTER_TREND_COUNT).map(x => x.normalizedEpsYoY ?? x.epsYoY);
+  const revQoqTrend = q.slice(0, TARGET_QUARTER_TREND_COUNT).map(x => x.revenueQoQ);
+  const epsQoqTrend = q.slice(0, TARGET_QUARTER_TREND_COUNT).map(x => x.epsQoQ);
+  const opMarginTrend = q.slice(0, TARGET_QUARTER_TREND_COUNT).map(x => x.operatingMargin ?? x.normalizedNetMargin ?? x.netMargin);
   const annRev = a.slice(0, 4).map(x => x.revenueYoY);
   const annEps = a.slice(0, 4).map(x => x.normalizedEpsYoY ?? x.epsYoY);
   const revAccel = summarizeTrend(revTrend);
@@ -523,6 +647,13 @@ function makeReport(symbol: string, profile: any, derived: any): MinerviniReport
       value: `YoY ${fmtTrend(revTrend)} | QoQ ${fmtTrend(revQoqTrend)}`, target: "≥20% YoY, consistent/accelerating",
       status: statusFrom(revTrend[0], (revTrend[0] ?? -999) >= 20 || ((revTrend[0] ?? -999) >= 8 && revAccel === "accelerating"), (revTrend[0] ?? 999) < 0),
       comment: `Latest ${latest?.date ?? "quarter"}; YoY trend is ${revAccel}, QoQ trend is ${revQoqAccel} across available reported quarters.`,
+    },
+    {
+      name: "Historical Coverage",
+      value: `${derived.coverage.quarterlyRevenueYoY}/${derived.coverage.quarterTarget} revenue YoY · ${derived.coverage.quarterlyEpsYoY}/${derived.coverage.quarterTarget} EPS YoY · ${derived.coverage.annualRevenueYoY}/${derived.coverage.annualTarget} annual rev`,
+      target: "6–8 quarters + 2–3 annual trends",
+      status: derived.coverage.quarterlyRevenueYoY >= MIN_QUARTER_TREND_COUNT && derived.coverage.quarterlyEpsYoY >= MIN_QUARTER_TREND_COUNT ? "pass" : derived.coverage.quarterlyRevenueYoY < 4 || derived.coverage.quarterlyEpsYoY < 4 ? "fail" : "neutral",
+      comment: `Raw statements target ${RAW_QUARTERS_FOR_YOY} quarters to compute full 8-quarter YoY trends; FMP is primary, Yahoo fills missing fields only when needed.`,
     },
     {
       name: "Annual EPS Growth",
@@ -618,11 +749,11 @@ function makeOneilReport(symbol: string, profile: any, derived: any): MinerviniR
   const q = derived.quarters as QuarterTrend[];
   const a = derived.annual as AnnualTrend[];
   const latest = q[0];
-  const epsTrend = q.slice(0, 5).map(x => x.normalizedEpsYoY ?? x.epsYoY);
-  const revTrend = q.slice(0, 5).map(x => x.revenueYoY);
+  const epsTrend = q.slice(0, TARGET_QUARTER_TREND_COUNT).map(x => x.normalizedEpsYoY ?? x.epsYoY);
+  const revTrend = q.slice(0, TARGET_QUARTER_TREND_COUNT).map(x => x.revenueYoY);
   const annEps = a.slice(0, 4).map(x => x.normalizedEpsYoY ?? x.epsYoY);
   const annRev = a.slice(0, 4).map(x => x.revenueYoY);
-  const opMargin = q.slice(0, 5).map(x => x.operatingMargin ?? x.netMargin);
+  const opMargin = q.slice(0, TARGET_QUARTER_TREND_COUNT).map(x => x.operatingMargin ?? x.netMargin);
   const epsAccel = summarizeTrend(epsTrend);
   const revAccel = summarizeTrend(revTrend);
   const marginAccel = summarizeTrend(opMargin);
@@ -705,9 +836,9 @@ function makeOneilReport(symbol: string, profile: any, derived: any): MinerviniR
 function makeRyanReport(symbol: string, profile: any, derived: any): MinerviniReport {
   const q = derived.quarters as QuarterTrend[];
   const latest = q[0];
-  const epsTrend = q.slice(0, 6).map(x => x.normalizedEpsYoY ?? x.epsYoY);
-  const revTrend = q.slice(0, 6).map(x => x.revenueYoY);
-  const opMargin = q.slice(0, 5).map(x => x.operatingMargin ?? x.netMargin);
+  const epsTrend = q.slice(0, TARGET_QUARTER_TREND_COUNT).map(x => x.normalizedEpsYoY ?? x.epsYoY);
+  const revTrend = q.slice(0, TARGET_QUARTER_TREND_COUNT).map(x => x.revenueYoY);
+  const opMargin = q.slice(0, TARGET_QUARTER_TREND_COUNT).map(x => x.operatingMargin ?? x.netMargin);
   const epsAccel = summarizeTrend(epsTrend);
   const revAccel = summarizeTrend(revTrend);
   const marginAccel = summarizeTrend(opMargin);
@@ -794,9 +925,9 @@ function makeRyanReport(symbol: string, profile: any, derived: any): MinerviniRe
 
 function scoreDerived(derived: any) {
   const latest = derived.quarters[0] as QuarterTrend | undefined;
-  const epsTrend = derived.quarters.slice(0, 5).map((x: QuarterTrend) => x.normalizedEpsYoY ?? x.epsYoY);
-  const revTrend = derived.quarters.slice(0, 5).map((x: QuarterTrend) => x.revenueYoY);
-  const marginTrend = derived.quarters.slice(0, 5).map((x: QuarterTrend) => x.operatingMargin ?? x.normalizedNetMargin ?? x.netMargin);
+  const epsTrend = derived.quarters.slice(0, TARGET_QUARTER_TREND_COUNT).map((x: QuarterTrend) => x.normalizedEpsYoY ?? x.epsYoY);
+  const revTrend = derived.quarters.slice(0, TARGET_QUARTER_TREND_COUNT).map((x: QuarterTrend) => x.revenueYoY);
+  const marginTrend = derived.quarters.slice(0, TARGET_QUARTER_TREND_COUNT).map((x: QuarterTrend) => x.operatingMargin ?? x.normalizedNetMargin ?? x.netMargin);
   const epsAccel = summarizeTrend(epsTrend);
   const revAccel = summarizeTrend(revTrend);
   const marginAccel = summarizeTrend(marginTrend);
@@ -831,10 +962,17 @@ async function buildBundle(symbol: string, force: boolean) {
   const fmp = await fetchFmpBundle(symbol, quality);
   if (fmp) quality.sources.push("FMP statements & ratios");
 
-  const fmpQuartersRaw = fmp ? fmpToPoints(fmp.incQ, fmp.bsQ, fmp.cfQ) : [];
-  const fmpAnnualRaw = fmp ? fmpToPoints(fmp.incA, fmp.bsA, fmp.cfA) : [];
-  const fmpHasQuarters = fmpQuartersRaw.length >= 5;
-  const fmpHasAnnual = fmpAnnualRaw.length >= 2;
+  const fmpQuartersRaw = fmp ? mergeGrowthRows(fmpToPoints(fmp.incQ, fmp.bsQ, fmp.cfQ, [], fmp.kmQ), fmp.growthQ) : [];
+  const fmpAnnualRaw = fmp ? mergeGrowthRows(fmpToPoints(fmp.incA, fmp.bsA, fmp.cfA, [], fmp.kmA), fmp.growthA) : [];
+  const fmpQuarterProbe = applyGrowthFallback(enrichQuarters(fmpQuartersRaw, { revenueYoY: null, epsYoY: null }), fmp?.growthQ ?? []);
+  const fmpAnnualProbe = applyGrowthFallback(enrichAnnual(fmpAnnualRaw), fmp?.growthA ?? []);
+  const fmpQuarterCoverage = computeCoverage(fmpQuarterProbe, fmpAnnualProbe);
+  const fmpHasQuarters = fmpQuartersRaw.length >= RAW_QUARTERS_FOR_YOY
+    && fmpQuarterCoverage.quarterlyRevenueYoY >= MIN_QUARTER_TREND_COUNT
+    && fmpQuarterCoverage.quarterlyEpsYoY >= MIN_QUARTER_TREND_COUNT;
+  const fmpHasAnnual = fmpAnnualRaw.length >= 4
+    && fmpQuarterCoverage.annualRevenueYoY >= 2
+    && fmpQuarterCoverage.annualEpsYoY >= 2;
 
   // ----- Fallback / supplement: Yahoo + Finnhub only when FMP is short -----
   const needYahooStatements = !fmpHasQuarters || !fmpHasAnnual;
@@ -880,8 +1018,9 @@ async function buildBundle(symbol: string, force: boolean) {
   }
 
   // FMP primary, Yahoo fills gaps per-date and per-field
-  const quarters = enrichQuarters(mergePoints(fmpQuartersRaw, yQuarters), yahooGrowth).slice(0, 9);
-  const annual = enrichAnnual(mergePoints(fmpAnnualRaw, yAnnual)).slice(0, 5);
+  const quarters = applyGrowthFallback(enrichQuarters(mergePoints(fmpQuartersRaw, yQuarters), yahooGrowth), fmp?.growthQ ?? []).slice(0, RAW_QUARTERS_FOR_YOY);
+  const annual = applyGrowthFallback(enrichAnnual(mergePoints(fmpAnnualRaw, yAnnual)), fmp?.growthA ?? []).slice(0, 5);
+  quality.coverage = computeCoverage(quarters, annual);
 
   const fhMetric = fh?.metric ?? {};
   const latest = quarters[0];
@@ -922,7 +1061,7 @@ async function buildBundle(symbol: string, force: boolean) {
     ?? num(fhMetric.currentRatioQuarterly ?? fhMetric.currentRatioAnnual)
   );
 
-  const cashFlowValues = quarters.slice(0, 5).map(q => q.operatingCashFlow).filter((v): v is number => v !== null);
+  const cashFlowValues = quarters.slice(0, TARGET_QUARTER_TREND_COUNT).map(q => q.operatingCashFlow).filter((v): v is number => v !== null);
   const positiveCashFlowCount = cashFlowValues.filter(v => v > 0).length;
 
   // Earnings surprises — prefer FMP (clean & wide)
@@ -944,7 +1083,9 @@ async function buildBundle(symbol: string, force: boolean) {
     beatRate = earningsHistory.length ? Math.round((beatCount / earningsHistory.length) * 100) : null;
   }
 
-  if (quarters.length < 5) quality.warnings.push(`Only ${quarters.length} recent quarters available; trend confidence reduced.`);
+  if ((quality.coverage?.quarterlyRevenueYoY ?? 0) < MIN_QUARTER_TREND_COUNT || (quality.coverage?.quarterlyEpsYoY ?? 0) < MIN_QUARTER_TREND_COUNT) {
+    quality.warnings.push(`Historical coverage below target: revenue YoY ${quality.coverage?.quarterlyRevenueYoY ?? 0}/${TARGET_QUARTER_TREND_COUNT}, EPS YoY ${quality.coverage?.quarterlyEpsYoY ?? 0}/${TARGET_QUARTER_TREND_COUNT}.`);
+  }
   if (institutionalOwnershipPct !== null && institutionalOwnershipPct < 5 && fmpInstPct === null && (ks.heldPercentInstitutions?.raw ?? null) !== null) quality.warnings.push("Institutional ownership appears unusually low; source may be incomplete for this ticker.");
   if ((latest?.netMargin ?? 0) < 0 && (latest?.operatingMargin ?? 0) > 10) quality.warnings.push("GAAP net margin is negative while operating margin is healthy; likely one-time/non-operating distortion.");
 
@@ -962,6 +1103,7 @@ async function buildBundle(symbol: string, force: boolean) {
     epsBeatRatePct: beatRate,
     epsSurprisesRecent: surprises,
     warnings: quality.warnings,
+    coverage: quality.coverage,
   };
   scoreDerived(derived);
   return { profile, derived, quality };

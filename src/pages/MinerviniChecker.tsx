@@ -33,9 +33,23 @@ interface ProfileReport {
   finalVerdict: string;
 }
 
+interface DataCoverage {
+  quartersAvailable: number;
+  quarterTarget: number;
+  quarterlyRevenueYoY: number;
+  quarterlyEpsYoY: number;
+  quarterlyMargins: number;
+  quarterlyCashFlow: number;
+  annualAvailable: number;
+  annualTarget: number;
+  annualRevenueYoY: number;
+  annualEpsYoY: number;
+}
+
 interface MultiReport {
   reports: Record<ProfileId, ProfileReport>;
   cumulative: { averageScore: number; verdict: "PASS" | "FAIL" | "BORDERLINE"; passCount: number; profileCount: number };
+  dataQuality?: { sources?: string[]; warnings?: string[]; fmpCalls?: number; yahooCalls?: number; finnhubCalls?: number; dbCacheHit?: boolean; coverage?: DataCoverage };
 }
 
 const PROFILES: { id: ProfileId; label: string; short: string }[] = [
@@ -71,7 +85,7 @@ function VerdictBadge({ verdict, score, label }: { verdict: string; score: numbe
   );
 }
 
-const CACHE_KEY = (sym: string) => `minervini:v5-multi:${sym}`;
+const CACHE_KEY = (sym: string) => `minervini:v6-coverage:${sym}`;
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 
 function readCache(sym: string): MultiReport | null {
@@ -180,7 +194,7 @@ export default function MinerviniChecker() {
       if (fnErr) throw new Error(fnErr.message);
       if (data?.error) throw new Error(data.error);
       if (!data?.reports) throw new Error("No reports returned");
-      const result: MultiReport = { reports: data.reports, cumulative: data.cumulative };
+      const result: MultiReport = { reports: data.reports, cumulative: data.cumulative, dataQuality: data.dataQuality };
       setMulti(result);
       writeCache(sym, result);
       toast.success(`Analysis complete for ${sym}${data.cached ? " (server cache)" : ""}`);
@@ -314,6 +328,23 @@ export default function MinerviniChecker() {
                 </div>
               </div>
             </Card>
+
+            {multi.dataQuality?.coverage && (
+              <Card className="p-4">
+                <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                  <div>
+                    <div className="text-xs uppercase tracking-widest text-muted-foreground">Historical Coverage</div>
+                    <div className="mt-1 font-mono text-sm font-bold">
+                      {multi.dataQuality.coverage.quarterlyRevenueYoY}/{multi.dataQuality.coverage.quarterTarget} quarterly revenue YoY · {multi.dataQuality.coverage.quarterlyEpsYoY}/{multi.dataQuality.coverage.quarterTarget} quarterly EPS YoY · {multi.dataQuality.coverage.annualRevenueYoY}/{multi.dataQuality.coverage.annualTarget} annual revenue
+                    </div>
+                  </div>
+                  <div className="text-xs text-muted-foreground md:text-right">
+                    Sources: {(multi.dataQuality.sources ?? []).join(" + ") || "cache"}<br />
+                    Calls: FMP {multi.dataQuality.fmpCalls ?? 0} · Yahoo {multi.dataQuality.yahooCalls ?? 0} · Finnhub {multi.dataQuality.finnhubCalls ?? 0}
+                  </div>
+                </div>
+              </Card>
+            )}
 
             {activeProfiles.map(p => (
               <ProfileReportCard key={p} report={multi.reports[p]} />
