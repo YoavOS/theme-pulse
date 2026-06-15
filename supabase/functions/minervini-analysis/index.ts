@@ -17,6 +17,10 @@ const DB_CACHE_TTL = 24 * 60 * 60 * 1000;
 const QUOTE_TTL = 24 * 60 * 60 * 1000;
 const TIMESERIES_TTL = 24 * 60 * 60 * 1000;
 const FMP_TTL = 24 * 60 * 60 * 1000;
+const TARGET_QUARTER_TREND_COUNT = 8;
+const MIN_QUARTER_TREND_COUNT = 6;
+const RAW_QUARTERS_FOR_YOY = TARGET_QUARTER_TREND_COUNT + 4;
+const TARGET_ANNUAL_TREND_COUNT = 4;
 
 const reportCache = new Map<string, { ts: number; report: MinerviniReport; dataQuality: DataQuality }>();
 const quoteCache = new Map<string, { ts: number; data: any }>();
@@ -55,6 +59,12 @@ interface PeriodPoint {
   equity: number | null;
   operatingCashFlow: number | null;
   freeCashFlow: number | null;
+  operatingMarginPct: number | null;
+  netMarginPct: number | null;
+  grossMarginPct: number | null;
+  roePct: number | null;
+  currentRatio: number | null;
+  debtToEquityRatio: number | null;
 }
 
 interface QuarterTrend extends PeriodPoint {
@@ -109,6 +119,18 @@ interface DataQuality {
   finnhubCalls: number;
   fmpCalls: number;
   dbCacheHit: boolean;
+  coverage?: {
+    quartersAvailable: number;
+    quarterTarget: number;
+    quarterlyRevenueYoY: number;
+    quarterlyEpsYoY: number;
+    quarterlyMargins: number;
+    quarterlyCashFlow: number;
+    annualAvailable: number;
+    annualTarget: number;
+    annualRevenueYoY: number;
+    annualEpsYoY: number;
+  };
 }
 
 
