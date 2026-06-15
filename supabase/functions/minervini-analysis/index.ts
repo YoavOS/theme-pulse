@@ -145,6 +145,29 @@ function valueFromTimeseriesItem(item: any): number | null {
   return num(item?.reportedValue ?? item);
 }
 
+function emptyPoint(date: string): PeriodPoint {
+  return {
+    date,
+    revenue: null,
+    eps: null,
+    normalizedEps: null,
+    netIncome: null,
+    normalizedIncome: null,
+    operatingIncome: null,
+    grossProfit: null,
+    totalDebt: null,
+    equity: null,
+    operatingCashFlow: null,
+    freeCashFlow: null,
+    operatingMarginPct: null,
+    netMarginPct: null,
+    grossMarginPct: null,
+    roePct: null,
+    currentRatio: null,
+    debtToEquityRatio: null,
+  };
+}
+
 function mapTimeseries(result: any[]): Record<string, { date: string; value: number | null }[]> {
   const out: Record<string, { date: string; value: number | null }[]> = {};
   for (const row of result ?? []) {
@@ -212,10 +235,10 @@ function enrichQuarters(points: PeriodPoint[], yahooGrowth: { revenueYoY: number
       revenueQoQ: pctGrowth(p.revenue, prev?.revenue ?? null),
       epsQoQ: pctGrowth(p.normalizedEps ?? p.eps, prev?.normalizedEps ?? prev?.eps ?? null),
       operatingMargin: p.revenue ? pct((p.operatingIncome ?? null) !== null ? p.operatingIncome! / p.revenue : null) : null,
-      netMargin: p.revenue ? pct((p.netIncome ?? null) !== null ? p.netIncome! / p.revenue : null) : null,
+      netMargin: p.netMarginPct ?? (p.revenue ? pct((p.netIncome ?? null) !== null ? p.netIncome! / p.revenue : null) : null),
       normalizedNetMargin: p.revenue ? pct((p.normalizedIncome ?? null) !== null ? p.normalizedIncome! / p.revenue : null) : null,
-      grossMargin: p.revenue ? pct((p.grossProfit ?? null) !== null ? p.grossProfit! / p.revenue : null) : null,
-      debtToEquity: p.equity && p.equity > 0 && p.totalDebt !== null ? round(p.totalDebt / p.equity) : null,
+      grossMargin: p.grossMarginPct ?? (p.revenue ? pct((p.grossProfit ?? null) !== null ? p.grossProfit! / p.revenue : null) : null),
+      debtToEquity: p.debtToEquityRatio ?? (p.equity && p.equity > 0 && p.totalDebt !== null ? round(p.totalDebt / p.equity) : null),
     };
   });
 }
