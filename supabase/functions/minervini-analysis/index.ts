@@ -234,7 +234,7 @@ function enrichQuarters(points: PeriodPoint[], yahooGrowth: { revenueYoY: number
       normalizedEpsYoY,
       revenueQoQ: pctGrowth(p.revenue, prev?.revenue ?? null),
       epsQoQ: pctGrowth(p.normalizedEps ?? p.eps, prev?.normalizedEps ?? prev?.eps ?? null),
-      operatingMargin: p.revenue ? pct((p.operatingIncome ?? null) !== null ? p.operatingIncome! / p.revenue : null) : null,
+      operatingMargin: p.operatingMarginPct ?? (p.revenue ? pct((p.operatingIncome ?? null) !== null ? p.operatingIncome! / p.revenue : null) : null),
       netMargin: p.netMarginPct ?? (p.revenue ? pct((p.netIncome ?? null) !== null ? p.netIncome! / p.revenue : null) : null),
       normalizedNetMargin: p.revenue ? pct((p.normalizedIncome ?? null) !== null ? p.normalizedIncome! / p.revenue : null) : null,
       grossMargin: p.grossMarginPct ?? (p.revenue ? pct((p.grossProfit ?? null) !== null ? p.grossProfit! / p.revenue : null) : null),
@@ -252,8 +252,8 @@ function enrichAnnual(points: PeriodPoint[]): AnnualTrend[] {
       revenueYoY: pctGrowth(p.revenue, prev?.revenue ?? null),
       epsYoY: normalizedEpsYoY ?? pctGrowth(p.eps, prev?.eps ?? null),
       normalizedEpsYoY,
-      operatingMargin: p.revenue ? pct((p.operatingIncome ?? null) !== null ? p.operatingIncome! / p.revenue : null) : null,
-      netMargin: p.revenue ? pct((p.netIncome ?? null) !== null ? p.netIncome! / p.revenue : null) : null,
+      operatingMargin: p.operatingMarginPct ?? (p.revenue ? pct((p.operatingIncome ?? null) !== null ? p.operatingIncome! / p.revenue : null) : null),
+      netMargin: p.netMarginPct ?? (p.revenue ? pct((p.netIncome ?? null) !== null ? p.netIncome! / p.revenue : null) : null),
       normalizedNetMargin: p.revenue ? pct((p.normalizedIncome ?? null) !== null ? p.normalizedIncome! / p.revenue : null) : null,
     };
   });
