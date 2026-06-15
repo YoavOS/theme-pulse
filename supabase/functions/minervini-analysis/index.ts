@@ -615,6 +615,13 @@ function makeReport(symbol: string, profile: any, derived: any): MinerviniReport
       comment: `Latest ${latest?.date ?? "quarter"}; YoY trend is ${revAccel}, QoQ trend is ${revQoqAccel} across available reported quarters.`,
     },
     {
+      name: "Historical Coverage",
+      value: `${derived.coverage.quarterlyRevenueYoY}/${derived.coverage.quarterTarget} revenue YoY · ${derived.coverage.quarterlyEpsYoY}/${derived.coverage.quarterTarget} EPS YoY · ${derived.coverage.annualRevenueYoY}/${derived.coverage.annualTarget} annual rev`,
+      target: "6–8 quarters + 2–3 annual trends",
+      status: derived.coverage.quarterlyRevenueYoY >= MIN_QUARTER_TREND_COUNT && derived.coverage.quarterlyEpsYoY >= MIN_QUARTER_TREND_COUNT ? "pass" : derived.coverage.quarterlyRevenueYoY < 4 || derived.coverage.quarterlyEpsYoY < 4 ? "fail" : "neutral",
+      comment: `Raw statements target ${RAW_QUARTERS_FOR_YOY} quarters to compute full 8-quarter YoY trends; FMP is primary, Yahoo fills missing fields only when needed.`,
+    },
+    {
       name: "Annual EPS Growth",
       value: fmtTrend(annEps), target: "Positive multi-year EPS growth",
       status: statusFrom(annEps[0], (annEps[0] ?? -999) > 0 && annEps.filter(v => (v ?? -1) > 0).length >= 1, (annEps[0] ?? 999) < 0),
@@ -708,11 +715,11 @@ function makeOneilReport(symbol: string, profile: any, derived: any): MinerviniR
   const q = derived.quarters as QuarterTrend[];
   const a = derived.annual as AnnualTrend[];
   const latest = q[0];
-  const epsTrend = q.slice(0, 5).map(x => x.normalizedEpsYoY ?? x.epsYoY);
-  const revTrend = q.slice(0, 5).map(x => x.revenueYoY);
+  const epsTrend = q.slice(0, TARGET_QUARTER_TREND_COUNT).map(x => x.normalizedEpsYoY ?? x.epsYoY);
+  const revTrend = q.slice(0, TARGET_QUARTER_TREND_COUNT).map(x => x.revenueYoY);
   const annEps = a.slice(0, 4).map(x => x.normalizedEpsYoY ?? x.epsYoY);
   const annRev = a.slice(0, 4).map(x => x.revenueYoY);
-  const opMargin = q.slice(0, 5).map(x => x.operatingMargin ?? x.netMargin);
+  const opMargin = q.slice(0, TARGET_QUARTER_TREND_COUNT).map(x => x.operatingMargin ?? x.netMargin);
   const epsAccel = summarizeTrend(epsTrend);
   const revAccel = summarizeTrend(revTrend);
   const marginAccel = summarizeTrend(opMargin);
