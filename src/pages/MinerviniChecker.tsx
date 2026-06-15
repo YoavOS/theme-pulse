@@ -329,6 +329,23 @@ export default function MinerviniChecker() {
               </div>
             </Card>
 
+            {multi.dataQuality?.coverage && (
+              <Card className="p-4">
+                <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                  <div>
+                    <div className="text-xs uppercase tracking-widest text-muted-foreground">Historical Coverage</div>
+                    <div className="mt-1 font-mono text-sm font-bold">
+                      {multi.dataQuality.coverage.quarterlyRevenueYoY}/{multi.dataQuality.coverage.quarterTarget} quarterly revenue YoY · {multi.dataQuality.coverage.quarterlyEpsYoY}/{multi.dataQuality.coverage.quarterTarget} quarterly EPS YoY · {multi.dataQuality.coverage.annualRevenueYoY}/{multi.dataQuality.coverage.annualTarget} annual revenue
+                    </div>
+                  </div>
+                  <div className="text-xs text-muted-foreground md:text-right">
+                    Sources: {(multi.dataQuality.sources ?? []).join(" + ") || "cache"}<br />
+                    Calls: FMP {multi.dataQuality.fmpCalls ?? 0} · Yahoo {multi.dataQuality.yahooCalls ?? 0} · Finnhub {multi.dataQuality.finnhubCalls ?? 0}
+                  </div>
+                </div>
+              </Card>
+            )}
+
             {activeProfiles.map(p => (
               <ProfileReportCard key={p} report={multi.reports[p]} />
             ))}
