@@ -802,9 +802,9 @@ function makeOneilReport(symbol: string, profile: any, derived: any): MinerviniR
 function makeRyanReport(symbol: string, profile: any, derived: any): MinerviniReport {
   const q = derived.quarters as QuarterTrend[];
   const latest = q[0];
-  const epsTrend = q.slice(0, 6).map(x => x.normalizedEpsYoY ?? x.epsYoY);
-  const revTrend = q.slice(0, 6).map(x => x.revenueYoY);
-  const opMargin = q.slice(0, 5).map(x => x.operatingMargin ?? x.netMargin);
+  const epsTrend = q.slice(0, TARGET_QUARTER_TREND_COUNT).map(x => x.normalizedEpsYoY ?? x.epsYoY);
+  const revTrend = q.slice(0, TARGET_QUARTER_TREND_COUNT).map(x => x.revenueYoY);
+  const opMargin = q.slice(0, TARGET_QUARTER_TREND_COUNT).map(x => x.operatingMargin ?? x.netMargin);
   const epsAccel = summarizeTrend(epsTrend);
   const revAccel = summarizeTrend(revTrend);
   const marginAccel = summarizeTrend(opMargin);
@@ -891,9 +891,9 @@ function makeRyanReport(symbol: string, profile: any, derived: any): MinerviniRe
 
 function scoreDerived(derived: any) {
   const latest = derived.quarters[0] as QuarterTrend | undefined;
-  const epsTrend = derived.quarters.slice(0, 5).map((x: QuarterTrend) => x.normalizedEpsYoY ?? x.epsYoY);
-  const revTrend = derived.quarters.slice(0, 5).map((x: QuarterTrend) => x.revenueYoY);
-  const marginTrend = derived.quarters.slice(0, 5).map((x: QuarterTrend) => x.operatingMargin ?? x.normalizedNetMargin ?? x.netMargin);
+  const epsTrend = derived.quarters.slice(0, TARGET_QUARTER_TREND_COUNT).map((x: QuarterTrend) => x.normalizedEpsYoY ?? x.epsYoY);
+  const revTrend = derived.quarters.slice(0, TARGET_QUARTER_TREND_COUNT).map((x: QuarterTrend) => x.revenueYoY);
+  const marginTrend = derived.quarters.slice(0, TARGET_QUARTER_TREND_COUNT).map((x: QuarterTrend) => x.operatingMargin ?? x.normalizedNetMargin ?? x.netMargin);
   const epsAccel = summarizeTrend(epsTrend);
   const revAccel = summarizeTrend(revTrend);
   const marginAccel = summarizeTrend(marginTrend);
