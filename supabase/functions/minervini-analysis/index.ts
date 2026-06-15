@@ -403,7 +403,7 @@ function fmpToPoints(inc: any[], bs: any[], cf: any[], ratios: any[] = [], metri
   for (const x of inc) {
     const date = x?.date; if (!date) continue;
     byDate.set(date, {
-      date,
+      ...emptyPoint(date),
       revenue: num(x.revenue),
       eps: num(x.epsdiluted ?? x.eps),
       normalizedEps: null,
@@ -411,12 +411,11 @@ function fmpToPoints(inc: any[], bs: any[], cf: any[], ratios: any[] = [], metri
       normalizedIncome: null,
       operatingIncome: num(x.operatingIncome),
       grossProfit: num(x.grossProfit),
-      totalDebt: null, equity: null, operatingCashFlow: null, freeCashFlow: null,
     });
   }
   for (const x of bs) {
     const date = x?.date; if (!date) continue;
-    const row = byDate.get(date) ?? { date } as PeriodPoint;
+    const row = byDate.get(date) ?? emptyPoint(date);
     const td = num(x.totalDebt);
     row.totalDebt = td !== null ? td : ((num(x.shortTermDebt) ?? 0) + (num(x.longTermDebt) ?? 0) || null);
     row.equity = num(x.totalStockholdersEquity ?? x.totalEquity);
@@ -424,10 +423,29 @@ function fmpToPoints(inc: any[], bs: any[], cf: any[], ratios: any[] = [], metri
   }
   for (const x of cf) {
     const date = x?.date; if (!date) continue;
-    const row = byDate.get(date) ?? { date } as PeriodPoint;
+    const row = byDate.get(date) ?? emptyPoint(date);
     row.operatingCashFlow = num(x.operatingCashFlow ?? x.netCashProvidedByOperatingActivities);
     const fcf = num(x.freeCashFlow);
     row.freeCashFlow = fcf !== null ? fcf : (row.operatingCashFlow !== null && num(x.capitalExpenditure) !== null ? row.operatingCashFlow + num(x.capitalExpenditure)! : null);
+    byDate.set(date, row);
+  }
+  for (const x of ratios) {
+    const date = x?.date; if (!date) continue;
+    const row = byDate.get(date) ?? emptyPoint(date);
+    row.operatingMarginPct = pct(num(x.operatingProfitMargin ?? x.operatingMargin));
+    row.netMarginPct = pct(num(x.netProfitMargin ?? x.netMargin));
+    row.grossMarginPct = pct(num(x.grossProfitMargin ?? x.grossMargin));
+    row.roePct = pct(num(x.returnOnEquity ?? x.roe));
+    row.currentRatio = normalizeRatio(num(x.currentRatio));
+    row.debtToEquityRatio = normalizeRatio(num(x.debtEquityRatio ?? x.debtToEquity));
+    byDate.set(date, row);
+  }
+  for (const x of metrics) {
+    const date = x?.date; if (!date) continue;
+    const row = byDate.get(date) ?? emptyPoint(date);
+    row.roePct = row.roePct ?? pct(num(x.roe));
+    row.currentRatio = row.currentRatio ?? normalizeRatio(num(x.currentRatio));
+    row.debtToEquityRatio = row.debtToEquityRatio ?? normalizeRatio(num(x.debtToEquity));
     byDate.set(date, row);
   }
   return [...byDate.values()].sort((a, b) => b.date.localeCompare(a.date));
