@@ -456,13 +456,15 @@ function mergePoints(primary: PeriodPoint[], fallback: PeriodPoint[]): PeriodPoi
   const byDate = new Map<string, PeriodPoint>();
   for (const p of fallback) byDate.set(p.date, { ...p });
   for (const p of primary) {
-    const existing = byDate.get(p.date);
-    if (!existing) { byDate.set(p.date, { ...p }); continue; }
+    const closeKey = [...byDate.keys()].find(d => Math.abs(new Date(d).getTime() - new Date(p.date).getTime()) <= 3 * 86400_000);
+    const key = closeKey ?? p.date;
+    const existing = byDate.get(key);
+    if (!existing) { byDate.set(key, { ...p }); continue; }
     const merged: any = { ...existing };
     for (const k of Object.keys(p) as (keyof PeriodPoint)[]) {
       if ((p as any)[k] !== null && (p as any)[k] !== undefined) merged[k] = (p as any)[k];
     }
-    byDate.set(p.date, merged);
+    byDate.set(key, merged);
   }
   return [...byDate.values()].sort((a, b) => b.date.localeCompare(a.date));
 }
