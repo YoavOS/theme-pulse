@@ -489,14 +489,14 @@ function fallbackQuartersFromQuote(root: any, yahooGrowth: { revenueYoY: number 
     const date = x.endDate?.fmt;
     if (!date) continue;
     byDate.set(date, {
-      date, revenue: num(x.totalRevenue), eps: num(x.dilutedEPS), normalizedEps: null, netIncome: num(x.netIncome), normalizedIncome: null,
-      operatingIncome: num(x.operatingIncome), grossProfit: num(x.grossProfit), totalDebt: null, equity: null, operatingCashFlow: null, freeCashFlow: null,
+      ...emptyPoint(date), revenue: num(x.totalRevenue), eps: num(x.dilutedEPS), normalizedEps: null, netIncome: num(x.netIncome), normalizedIncome: null,
+      operatingIncome: num(x.operatingIncome), grossProfit: num(x.grossProfit),
     });
   }
   for (const x of bsQ) {
     const date = x.endDate?.fmt;
     if (!date) continue;
-    const row = byDate.get(date) ?? { date } as PeriodPoint;
+    const row = byDate.get(date) ?? emptyPoint(date);
     row.totalDebt = (num(x.shortLongTermDebt) ?? 0) + (num(x.longTermDebt) ?? 0) || null;
     row.equity = num(x.totalStockholderEquity);
     byDate.set(date, row);
@@ -504,7 +504,7 @@ function fallbackQuartersFromQuote(root: any, yahooGrowth: { revenueYoY: number 
   for (const x of cfQ) {
     const date = x.endDate?.fmt;
     if (!date) continue;
-    const row = byDate.get(date) ?? { date } as PeriodPoint;
+    const row = byDate.get(date) ?? emptyPoint(date);
     row.operatingCashFlow = num(x.totalCashFromOperatingActivities);
     row.freeCashFlow = (num(x.totalCashFromOperatingActivities) !== null && num(x.capitalExpenditures) !== null)
       ? num(x.totalCashFromOperatingActivities)! + num(x.capitalExpenditures)! : null;
