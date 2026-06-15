@@ -928,10 +928,17 @@ async function buildBundle(symbol: string, force: boolean) {
   const fmp = await fetchFmpBundle(symbol, quality);
   if (fmp) quality.sources.push("FMP statements & ratios");
 
-  const fmpQuartersRaw = fmp ? fmpToPoints(fmp.incQ, fmp.bsQ, fmp.cfQ) : [];
-  const fmpAnnualRaw = fmp ? fmpToPoints(fmp.incA, fmp.bsA, fmp.cfA) : [];
-  const fmpHasQuarters = fmpQuartersRaw.length >= 5;
-  const fmpHasAnnual = fmpAnnualRaw.length >= 2;
+  const fmpQuartersRaw = fmp ? fmpToPoints(fmp.incQ, fmp.bsQ, fmp.cfQ, fmp.ratiosQ, fmp.kmQ) : [];
+  const fmpAnnualRaw = fmp ? fmpToPoints(fmp.incA, fmp.bsA, fmp.cfA, fmp.ratiosA, fmp.kmA) : [];
+  const fmpQuarterProbe = enrichQuarters(fmpQuartersRaw, { revenueYoY: null, epsYoY: null });
+  const fmpAnnualProbe = enrichAnnual(fmpAnnualRaw);
+  const fmpQuarterCoverage = computeCoverage(fmpQuarterProbe, fmpAnnualProbe);
+  const fmpHasQuarters = fmpQuartersRaw.length >= RAW_QUARTERS_FOR_YOY
+    && fmpQuarterCoverage.quarterlyRevenueYoY >= MIN_QUARTER_TREND_COUNT
+    && fmpQuarterCoverage.quarterlyEpsYoY >= MIN_QUARTER_TREND_COUNT;
+  const fmpHasAnnual = fmpAnnualRaw.length >= 4
+    && fmpQuarterCoverage.annualRevenueYoY >= 2
+    && fmpQuarterCoverage.annualEpsYoY >= 2;
 
   // ----- Fallback / supplement: Yahoo + Finnhub only when FMP is short -----
   const needYahooStatements = !fmpHasQuarters || !fmpHasAnnual;
@@ -977,8 +984,9 @@ async function buildBundle(symbol: string, force: boolean) {
   }
 
   // FMP primary, Yahoo fills gaps per-date and per-field
-  const quarters = enrichQuarters(mergePoints(fmpQuartersRaw, yQuarters), yahooGrowth).slice(0, 9);
+  const quarters = enrichQuarters(mergePoints(fmpQuartersRaw, yQuarters), yahooGrowth).slice(0, RAW_QUARTERS_FOR_YOY);
   const annual = enrichAnnual(mergePoints(fmpAnnualRaw, yAnnual)).slice(0, 5);
+  quality.coverage = computeCoverage(quarters, annual);
 
   const fhMetric = fh?.metric ?? {};
   const latest = quarters[0];
@@ -1019,7 +1027,7 @@ async function buildBundle(symbol: string, force: boolean) {
     ?? num(fhMetric.currentRatioQuarterly ?? fhMetric.currentRatioAnnual)
   );
 
-  const cashFlowValues = quarters.slice(0, 5).map(q => q.operatingCashFlow).filter((v): v is number => v !== null);
+  const cashFlowValues = quarters.slice(0, TARGET_QUARTER_TREND_COUNT).map(q => q.operatingCashFlow).filter((v): v is number => v !== null);
   const positiveCashFlowCount = cashFlowValues.filter(v => v > 0).length;
 
   // Earnings surprises — prefer FMP (clean & wide)
@@ -1041,7 +1049,9 @@ async function buildBundle(symbol: string, force: boolean) {
     beatRate = earningsHistory.length ? Math.round((beatCount / earningsHistory.length) * 100) : null;
   }
 
-  if (quarters.length < 5) quality.warnings.push(`Only ${quarters.length} recent quarters available; trend confidence reduced.`);
+  if ((quality.coverage?.quarterlyRevenueYoY ?? 0) < MIN_QUARTER_TREND_COUNT || (quality.coverage?.quarterlyEpsYoY ?? 0) < MIN_QUARTER_TREND_COUNT) {
+    quality.warnings.push(`Historical coverage below target: revenue YoY ${quality.coverage?.quarterlyRevenueYoY ?? 0}/${TARGET_QUARTER_TREND_COUNT}, EPS YoY ${quality.coverage?.quarterlyEpsYoY ?? 0}/${TARGET_QUARTER_TREND_COUNT}.`);
+  }
   if (institutionalOwnershipPct !== null && institutionalOwnershipPct < 5 && fmpInstPct === null && (ks.heldPercentInstitutions?.raw ?? null) !== null) quality.warnings.push("Institutional ownership appears unusually low; source may be incomplete for this ticker.");
   if ((latest?.netMargin ?? 0) < 0 && (latest?.operatingMargin ?? 0) > 10) quality.warnings.push("GAAP net margin is negative while operating margin is healthy; likely one-time/non-operating distortion.");
 
@@ -1059,6 +1069,7 @@ async function buildBundle(symbol: string, force: boolean) {
     epsBeatRatePct: beatRate,
     epsSurprisesRecent: surprises,
     warnings: quality.warnings,
+    coverage: quality.coverage,
   };
   scoreDerived(derived);
   return { profile, derived, quality };
