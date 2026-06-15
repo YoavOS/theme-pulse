@@ -310,15 +310,31 @@ export default function MinerviniChecker() {
                   <h2 className="mt-1 text-3xl font-extrabold tracking-tight">
                     {header.symbol} <span className="text-base font-medium text-muted-foreground">· {header.companyName}</span>
                   </h2>
-                  {fromCache && (
-                    <button
-                      onClick={() => runAnalysis(true)}
-                      className="mt-2 text-xs text-muted-foreground underline hover:text-foreground"
-                      disabled={loading}
-                    >
-                      Showing cached result (24h) — click to force refresh
-                    </button>
-                  )}
+                  <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs text-muted-foreground">
+                    {fromCache ? (
+                      <button
+                        onClick={() => runAnalysis(true)}
+                        className="underline hover:text-foreground mr-1"
+                        disabled={loading}
+                      >
+                        Cached (24h) — Force refresh
+                      </button>
+                    ) : (
+                      <span className="text-gain-medium mr-1 font-semibold">Live Analysis</span>
+                    )}
+                    {multi.dataQuality?.coverage && (
+                      <>
+                        <span>•</span>
+                        <span>
+                          Coverage: <span className="font-mono font-bold text-foreground">{multi.dataQuality.coverage.quarterlyRevenueYoY}/{multi.dataQuality.coverage.quarterTarget}Q Rev</span> · <span className="font-mono font-bold text-foreground">{multi.dataQuality.coverage.quarterlyEpsYoY}/{multi.dataQuality.coverage.quarterTarget}Q EPS</span> · <span className="font-mono font-bold text-foreground">{multi.dataQuality.coverage.annualRevenueYoY}/{multi.dataQuality.coverage.annualTarget}A Rev</span>
+                        </span>
+                        <span>•</span>
+                        <span>
+                          Sources: <span className="font-semibold text-foreground">{(multi.dataQuality.sources ?? []).join(" + ") || "cache"}</span>
+                        </span>
+                      </>
+                    )}
+                  </div>
                 </div>
                 <div className="flex flex-wrap gap-3">
                   {activeProfiles.map(p => {
@@ -328,23 +344,6 @@ export default function MinerviniChecker() {
                 </div>
               </div>
             </Card>
-
-            {multi.dataQuality?.coverage && (
-              <Card className="p-4">
-                <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                  <div>
-                    <div className="text-xs uppercase tracking-widest text-muted-foreground">Historical Coverage</div>
-                    <div className="mt-1 font-mono text-sm font-bold">
-                      {multi.dataQuality.coverage.quarterlyRevenueYoY}/{multi.dataQuality.coverage.quarterTarget} quarterly revenue YoY · {multi.dataQuality.coverage.quarterlyEpsYoY}/{multi.dataQuality.coverage.quarterTarget} quarterly EPS YoY · {multi.dataQuality.coverage.annualRevenueYoY}/{multi.dataQuality.coverage.annualTarget} annual revenue
-                    </div>
-                  </div>
-                  <div className="text-xs text-muted-foreground md:text-right">
-                    Sources: {(multi.dataQuality.sources ?? []).join(" + ") || "cache"}<br />
-                    Calls: FMP {multi.dataQuality.fmpCalls ?? 0} · Yahoo {multi.dataQuality.yahooCalls ?? 0} · Finnhub {multi.dataQuality.finnhubCalls ?? 0}
-                  </div>
-                </div>
-              </Card>
-            )}
 
             {activeProfiles.map(p => (
               <ProfileReportCard key={p} report={multi.reports[p]} />
