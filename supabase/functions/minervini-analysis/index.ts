@@ -373,7 +373,7 @@ async function fmpGet(path: string, quality: DataQuality, version: "v3" | "v4" =
 
 async function fetchFmpBundle(symbol: string, quality: DataQuality) {
   if (!FMP_KEY) return null;
-  const [incQ, incA, bsQ, bsA, cfQ, cfA, kmQ, kmA, ratiosTTM, surp, profile, instOwn] = await Promise.all([
+  const [incQ, incA, bsQ, bsA, cfQ, cfA, kmQ, kmA, growthQ, growthA, ratiosTTM, surp, profile, instOwn] = await Promise.all([
     fmpGet(`income-statement/${symbol}?period=quarter&limit=${RAW_QUARTERS_FOR_YOY}`, quality),
     fmpGet(`income-statement/${symbol}?period=annual&limit=5`, quality),
     fmpGet(`balance-sheet-statement/${symbol}?period=quarter&limit=${RAW_QUARTERS_FOR_YOY}`, quality),
@@ -382,6 +382,8 @@ async function fetchFmpBundle(symbol: string, quality: DataQuality) {
     fmpGet(`cash-flow-statement/${symbol}?period=annual&limit=5`, quality),
     fmpGet(`key-metrics/${symbol}?period=quarter&limit=${RAW_QUARTERS_FOR_YOY}`, quality),
     fmpGet(`key-metrics/${symbol}?period=annual&limit=5`, quality),
+    fmpGet(`financial-growth/${symbol}?period=quarter&limit=${TARGET_QUARTER_TREND_COUNT}`, quality),
+    fmpGet(`financial-growth/${symbol}?period=annual&limit=5`, quality),
     fmpGet(`ratios-ttm/${symbol}`, quality),
     fmpGet(`earnings-surprises/${symbol}`, quality),
     fmpGet(`profile/${symbol}`, quality),
@@ -391,7 +393,7 @@ async function fetchFmpBundle(symbol: string, quality: DataQuality) {
   const first = (x: any) => Array.isArray(x) ? x[0] : x;
   return {
     incQ: a(incQ), incA: a(incA), bsQ: a(bsQ), bsA: a(bsA), cfQ: a(cfQ), cfA: a(cfA),
-    kmQ: a(kmQ), kmA: a(kmA), ratiosTTM: first(ratiosTTM), surp: a(surp),
+    kmQ: a(kmQ), kmA: a(kmA), growthQ: a(growthQ), growthA: a(growthA), ratiosTTM: first(ratiosTTM), surp: a(surp),
     profile: first(profile), instOwn: a(instOwn)[0] ?? null,
   };
 }
