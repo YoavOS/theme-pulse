@@ -15,6 +15,8 @@ import {
   passesAllActiveFilters,
   anyActive,
 } from "@/lib/growthFilters";
+import { useDailyCandles } from "@/hooks/useDailyCandles";
+import CandleSummaryBar from "@/components/rs/CandleSummaryBar";
 
 export type CustomListTab = "overall" | "1d" | "1w" | "1m" | "3m" | "6m";
 type SortBy =
