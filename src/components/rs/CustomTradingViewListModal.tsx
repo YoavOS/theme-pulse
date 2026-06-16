@@ -348,8 +348,8 @@ export default function CustomTradingViewListModal({
 
   const expandedExclusions = useMemo(() => expandSelectedToIndustries(excludedSectorsSet), [excludedSectorsSet]);
 
-  const filtered = useMemo(() => {
-    let list = stocks.filter((s) => {
+  const prefiltered = useMemo(() => {
+    return stocks.filter((s) => {
       if (state.excludeOtc && isOtcSymbol(s.symbol)) return false;
       const rating = ratingMap.get(s.symbol);
       if (rating === null || rating === undefined || rating < state.minRating) return false;
@@ -376,6 +376,17 @@ export default function CustomTradingViewListModal({
         if (state.ema9dFilterOn) {
           const d = ema?.dist9d;
           checks.push(d !== null && d !== undefined && Number.isFinite(d) && Math.abs(d) <= state.maxEma9dAbs);
+        }
+        if (state.ema21dFilterOn) {
+          const d = ema?.dist21d;
+          checks.push(d !== null && d !== undefined && Number.isFinite(d) && Math.abs(d) <= state.maxEma21dAbs);
+        }
+        if (state.ema9wFilterOn) {
+          const d = ema?.dist9w;
+          checks.push(d !== null && d !== undefined && Number.isFinite(d) && Math.abs(d) <= state.maxEma9wAbs);
+        }
+        const pass = state.emaFilterMode === "OR" ? checks.some(Boolean) : checks.every(Boolean);
+        if (!pass) return false;
       }
       // Price vs EMA direction filters (uses sign of distance: dist > 0 => price above EMA)
       const priceVsChecks: Array<{ on: boolean; dist: number | null | undefined; dir: "above" | "below" }> = [
@@ -389,17 +400,6 @@ export default function CustomTradingViewListModal({
         if (c.dir === "above" && !(c.dist > 0)) return false;
         if (c.dir === "below" && !(c.dist < 0)) return false;
       }
-        if (state.ema21dFilterOn) {
-          const d = ema?.dist21d;
-          checks.push(d !== null && d !== undefined && Number.isFinite(d) && Math.abs(d) <= state.maxEma21dAbs);
-        }
-        if (state.ema9wFilterOn) {
-          const d = ema?.dist9w;
-          checks.push(d !== null && d !== undefined && Number.isFinite(d) && Math.abs(d) <= state.maxEma9wAbs);
-        }
-        const pass = state.emaFilterMode === "OR" ? checks.some(Boolean) : checks.every(Boolean);
-        if (!pass) return false;
-      }
       if (state.relVsQqqOn && qqqAvailable) {
         // s.return1d typically holds today's % change for the stock.
         const todayPct = s.return1d;
@@ -409,8 +409,28 @@ export default function CustomTradingViewListModal({
       }
       return true;
     });
+  }, [stocks, ratingMap, state, excludedSectorsSet, expandedExclusions, growthActive, fundamentalsMap, coilScores, emaDistances, qqqPctChange, qqqAvailable, isOtcSymbol]);
 
-    list = [...list].sort((a, b) => {
+  // Fetch today's candles for the filtered set (cap to keep it cloud-efficient).
+  const candleSymbols = useMemo(
+    () => prefiltered.slice(0, Math.min(prefiltered.length, 500)).map((s) => s.symbol),
+    [prefiltered],
+  );
+  const {
+    candleMap,
+    green: greenCount,
+    red: redCount,
+    known: candleKnown,
+    loading: candleLoading,
+  } = useDailyCandles(candleSymbols, open);
+
+  const filtered = useMemo(() => {
+    const candlePct = (sym: string): number | null => {
+      const c = candleMap.get(sym);
+      if (!c || !c.open) return null;
+      return ((c.close - c.open) / c.open) * 100;
+    };
+    const list = [...prefiltered].sort((a, b) => {
       switch (state.sortBy) {
         case "rs":      return (getRsForTab(b, tabId) ?? -999) - (getRsForTab(a, tabId) ?? -999);
         case "rating":  return (ratingMap.get(b.symbol) ?? -1) - (ratingMap.get(a.symbol) ?? -1);
@@ -435,12 +455,13 @@ export default function CustomTradingViewListModal({
           const bPct = (b.return1d ?? -999) - (qqqPctChange ?? 0);
           return bPct - aPct;
         }
+        case "greenFirst": return (candlePct(b.symbol) ?? -9999) - (candlePct(a.symbol) ?? -9999);
+        case "redFirst":   return (candlePct(a.symbol) ?? 9999) - (candlePct(b.symbol) ?? 9999);
       }
     });
 
-    if (state.topN < TOPN_MAX) list = list.slice(0, state.topN);
-    return list;
-  }, [stocks, ratingMap, state, excludedSectorsSet, expandedExclusions, growthActive, fundamentalsMap, coilScores, emaDistances, qqqPctChange, qqqAvailable, tabId, getRsForTab, getReturnField, isOtcSymbol]);
+    return state.topN < TOPN_MAX ? list.slice(0, state.topN) : list;
+  }, [prefiltered, state.sortBy, state.topN, ratingMap, coilScores, emaDistances, qqqPctChange, tabId, getRsForTab, getReturnField, candleMap]);
 
   const symbols = filtered.map((s) => s.symbol);
 
