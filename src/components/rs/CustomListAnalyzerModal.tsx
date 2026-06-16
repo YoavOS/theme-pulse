@@ -61,6 +61,8 @@ type SortBy =
   | "marketCap"
   | "dollarVol"
   | "growth"
+  | "greenFirst"
+  | "redFirst"
   | "input";
 
 const RS_TABS: { id: AnalyzerTab; label: string }[] = [
