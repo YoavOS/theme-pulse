@@ -27,7 +27,9 @@ type SortBy =
   | "ema9d"
   | "ema21d"
   | "ema9w"
-  | "relVsQqq";
+  | "relVsQqq"
+  | "greenFirst"
+  | "redFirst";
 const TOPN_MIN = 10;
 const TOPN_MAX = 500; // values >= MAX mean "All"
 
