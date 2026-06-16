@@ -676,6 +676,15 @@ export default function CustomListAnalyzerModal({
             </div>
 
 
+            {/* Today's candle summary */}
+            <CandleSummaryBar
+              green={greenCount}
+              red={redCount}
+              known={candleKnown}
+              total={matchedSymbolsForCandles.length}
+              loading={candleLoading}
+            />
+
             {/* Summary + actions */}
             <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border bg-card px-3 py-2 text-xs">
               <div className="flex flex-wrap items-center gap-3">
