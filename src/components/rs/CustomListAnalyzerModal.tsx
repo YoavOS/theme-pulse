@@ -131,6 +131,8 @@ function growthScore(f?: StockFundamentals): { score: number; emoji: string | nu
 const SORT_OPTIONS: { id: SortBy; label: string }[] = [
   { id: "rs", label: "RS Score (highest)" },
   { id: "rating", label: "RS Rating (highest)" },
+  { id: "greenFirst", label: "Today's Candle: Most Green → Most Red" },
+  { id: "redFirst", label: "Today's Candle: Most Red → Most Green" },
   { id: "ema9d", label: "Closest to 9D EMA (smallest |distance|)" },
   { id: "ema21d", label: "Closest to 21D EMA (smallest |distance|)" },
   { id: "ema9w", label: "Closest to 9W EMA (smallest |distance|)" },
