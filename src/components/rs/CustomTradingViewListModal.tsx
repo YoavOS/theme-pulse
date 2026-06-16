@@ -418,9 +418,6 @@ export default function CustomTradingViewListModal({
   );
   const {
     candleMap,
-    green: greenCount,
-    red: redCount,
-    known: candleKnown,
     loading: candleLoading,
   } = useDailyCandles(candleSymbols, open);
 
