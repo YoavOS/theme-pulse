@@ -353,6 +353,11 @@ export default function CustomListAnalyzerModal({
     });
 
     const absDist = (v: number | null | undefined) => (v === null || v === undefined ? Infinity : Math.abs(v));
+    const candlePct = (sym: string): number | null => {
+      const c = candleMap.get(sym);
+      if (!c || !c.open) return null;
+      return ((c.close - c.open) / c.open) * 100;
+    };
 
     const sorted = [...filtered].sort((a, b) => {
       switch (sortBy) {
@@ -375,6 +380,8 @@ export default function CustomListAnalyzerModal({
           if (bg !== ag) return bg - ag;
           return (getRsForTab(b, filterRsTab) ?? -999) - (getRsForTab(a, filterRsTab) ?? -999);
         }
+        case "greenFirst": return (candlePct(b.symbol) ?? -9999) - (candlePct(a.symbol) ?? -9999);
+        case "redFirst": return (candlePct(a.symbol) ?? 9999) - (candlePct(b.symbol) ?? 9999);
         case "input": return (inputOrder.get(a.symbol) ?? 0) - (inputOrder.get(b.symbol) ?? 0);
       }
     });
@@ -387,6 +394,7 @@ export default function CustomListAnalyzerModal({
     activeEmaFilters, ema9dFilterOn, ema21dFilterOn, ema9wFilterOn,
     maxEma9dAbs, maxEma21dAbs, maxEma9wAbs, emaFilterMode, emaMap, sortBy,
     priceVs9dOn, priceVs9dDir, priceVs21dOn, priceVs21dDir, priceVs9wOn, priceVs9wDir,
+    candleMap,
   ]);
 
   const visibleMissing = hideMissing ? [] : missing;
