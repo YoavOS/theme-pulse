@@ -21,6 +21,7 @@ import {
 import { computeRsRatings } from "@/components/rs/RsRatingBadge";
 import RsRatingBadge from "@/components/rs/RsRatingBadge";
 import { useDailyCandles } from "@/hooks/useDailyCandles";
+import CandleSummaryBar from "@/components/rs/CandleSummaryBar";
 
 export type AnalyzerTab = "overall" | "1d" | "1w" | "1m" | "3m" | "6m";
 
