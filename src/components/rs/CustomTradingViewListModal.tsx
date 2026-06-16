@@ -729,6 +729,8 @@ export default function CustomTradingViewListModal({
                 { v: "rs" as SortBy, label: "RS Score" },
                 { v: "rating" as SortBy, label: "RS Rating" },
                 { v: "return" as SortBy, label: "Stock Return %" },
+                { v: "greenFirst" as SortBy, label: "🟢 Most Green → Most Red" },
+                { v: "redFirst" as SortBy, label: "🔴 Most Red → Most Green" },
                 { v: "coil" as SortBy, label: "Tightest First", disabled: !coilAvailable },
                 { v: "ema9d" as SortBy, label: "Closest to 9D EMA", disabled: !emaAvailable },
                 { v: "ema21d" as SortBy, label: "Closest to 21D EMA", disabled: !emaAvailable },
