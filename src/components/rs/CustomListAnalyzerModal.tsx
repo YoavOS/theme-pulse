@@ -20,6 +20,8 @@ import {
 } from "@/lib/growthFilters";
 import { computeRsRatings } from "@/components/rs/RsRatingBadge";
 import RsRatingBadge from "@/components/rs/RsRatingBadge";
+import { useDailyCandles } from "@/hooks/useDailyCandles";
+import CandleSummaryBar from "@/components/rs/CandleSummaryBar";
 
 export type AnalyzerTab = "overall" | "1d" | "1w" | "1m" | "3m" | "6m";
 
@@ -60,6 +62,8 @@ type SortBy =
   | "marketCap"
   | "dollarVol"
   | "growth"
+  | "greenFirst"
+  | "redFirst"
   | "input";
 
 const RS_TABS: { id: AnalyzerTab; label: string }[] = [
@@ -128,6 +132,8 @@ function growthScore(f?: StockFundamentals): { score: number; emoji: string | nu
 const SORT_OPTIONS: { id: SortBy; label: string }[] = [
   { id: "rs", label: "RS Score (highest)" },
   { id: "rating", label: "RS Rating (highest)" },
+  { id: "greenFirst", label: "Today's Candle: Most Green → Most Red" },
+  { id: "redFirst", label: "Today's Candle: Most Red → Most Green" },
   { id: "ema9d", label: "Closest to 9D EMA (smallest |distance|)" },
   { id: "ema21d", label: "Closest to 21D EMA (smallest |distance|)" },
   { id: "ema9w", label: "Closest to 9W EMA (smallest |distance|)" },
@@ -202,6 +208,14 @@ export default function CustomListAnalyzerModal({
   }, [universe]);
 
   const inputTickers = useMemo(() => parseTickers(raw), [raw]);
+
+  // Symbols we'll request today's candle for (only after Analyze, only matched & in universe).
+  const matchedSymbolsForCandles = useMemo(() => {
+    if (!analyzed) return [];
+    return inputTickers.filter((t) => universeMap.has(t));
+  }, [analyzed, inputTickers, universeMap]);
+  const { candleMap, green: greenCount, red: redCount, known: candleKnown, loading: candleLoading } =
+    useDailyCandles(matchedSymbolsForCandles, analyzed);
 
   const fundamentalsAvailable = (fundamentalsMap?.size ?? 0) > 0;
   const coilAvailable = (coilScores?.size ?? 0) > 0;
@@ -340,6 +354,11 @@ export default function CustomListAnalyzerModal({
     });
 
     const absDist = (v: number | null | undefined) => (v === null || v === undefined ? Infinity : Math.abs(v));
+    const candlePct = (sym: string): number | null => {
+      const c = candleMap.get(sym);
+      if (!c || !c.open) return null;
+      return ((c.close - c.open) / c.open) * 100;
+    };
 
     const sorted = [...filtered].sort((a, b) => {
       switch (sortBy) {
@@ -362,6 +381,8 @@ export default function CustomListAnalyzerModal({
           if (bg !== ag) return bg - ag;
           return (getRsForTab(b, filterRsTab) ?? -999) - (getRsForTab(a, filterRsTab) ?? -999);
         }
+        case "greenFirst": return (candlePct(b.symbol) ?? -9999) - (candlePct(a.symbol) ?? -9999);
+        case "redFirst": return (candlePct(a.symbol) ?? 9999) - (candlePct(b.symbol) ?? 9999);
         case "input": return (inputOrder.get(a.symbol) ?? 0) - (inputOrder.get(b.symbol) ?? 0);
       }
     });
@@ -374,6 +395,7 @@ export default function CustomListAnalyzerModal({
     activeEmaFilters, ema9dFilterOn, ema21dFilterOn, ema9wFilterOn,
     maxEma9dAbs, maxEma21dAbs, maxEma9wAbs, emaFilterMode, emaMap, sortBy,
     priceVs9dOn, priceVs9dDir, priceVs21dOn, priceVs21dDir, priceVs9wOn, priceVs9wDir,
+    candleMap,
   ]);
 
   const visibleMissing = hideMissing ? [] : missing;
@@ -654,6 +676,15 @@ export default function CustomListAnalyzerModal({
               </div>
             </div>
 
+
+            {/* Today's candle summary */}
+            <CandleSummaryBar
+              green={greenCount}
+              red={redCount}
+              known={candleKnown}
+              total={matchedSymbolsForCandles.length}
+              loading={candleLoading}
+            />
 
             {/* Summary + actions */}
             <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border bg-card px-3 py-2 text-xs">
