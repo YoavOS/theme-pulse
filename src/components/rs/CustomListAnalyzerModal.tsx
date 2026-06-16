@@ -208,6 +208,14 @@ export default function CustomListAnalyzerModal({
 
   const inputTickers = useMemo(() => parseTickers(raw), [raw]);
 
+  // Symbols we'll request today's candle for (only after Analyze, only matched & in universe).
+  const matchedSymbolsForCandles = useMemo(() => {
+    if (!analyzed) return [];
+    return inputTickers.filter((t) => universeMap.has(t));
+  }, [analyzed, inputTickers, universeMap]);
+  const { candleMap, green: greenCount, red: redCount, known: candleKnown, loading: candleLoading } =
+    useDailyCandles(matchedSymbolsForCandles, analyzed);
+
   const fundamentalsAvailable = (fundamentalsMap?.size ?? 0) > 0;
   const coilAvailable = (coilScores?.size ?? 0) > 0;
   const growthActive = anyActive(growthFilters);
