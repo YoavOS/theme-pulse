@@ -869,6 +869,27 @@ export default function CustomTradingViewListModal({
             )}
           </div>
 
+          {/* Today's candle summary (over the visible/exported list) */}
+          {(() => {
+            let g = 0, r = 0, k = 0;
+            for (const sym of symbols) {
+              const c = candleMap.get(sym);
+              if (!c) continue;
+              k++;
+              if (c.close > c.open) g++;
+              else if (c.close < c.open) r++;
+            }
+            return (
+              <CandleSummaryBar
+                green={g}
+                red={r}
+                known={k}
+                total={symbols.length}
+                loading={candleLoading}
+              />
+            );
+          })()}
+
           {/* Live preview */}
           <div className="rounded-md border border-primary/30 bg-primary/5 px-3 py-2.5 text-xs">
             <div className="flex items-center justify-between">
