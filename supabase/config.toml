@@ -71,3 +71,9 @@ verify_jwt = false
 
 [functions.daily-candles]
 verify_jwt = false
+
+[functions.economic-calendar]
+verify_jwt = false
+
+[functions.news-digest]
+verify_jwt = false
