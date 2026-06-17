@@ -93,30 +93,40 @@ async function fromFinnhub(from: string, to: string): Promise<EconEvent[]> {
   }
 }
 
-// ----------- FMP fallback -----------
+// ----------- FMP fallback (tries both legacy v3 and new "stable" endpoint) -----------
 async function fromFMP(from: string, to: string): Promise<EconEvent[]> {
   if (!FMP_KEY) return [];
-  const url = `https://financialmodelingprep.com/api/v3/economic_calendar?from=${from}&to=${to}&apikey=${FMP_KEY}`;
-  try {
-    const res = await fetch(url);
-    if (!res.ok) return [];
-    const raw = await res.json();
-    if (!Array.isArray(raw)) return [];
-    return raw.map((e: any): EconEvent => ({
-      date: e.date,
-      country: String(e.country || ""),
-      event: String(e.event || ""),
-      impact: normalizeImpact(e.impact),
-      actual: e.actual ?? null,
-      estimate: e.estimate ?? null,
-      previous: e.previous ?? null,
-      unit: e.unit || null,
-      currency: e.currency || null,
-    }));
-  } catch {
-    return [];
+  const urls = [
+    `https://financialmodelingprep.com/stable/economic-calendar?from=${from}&to=${to}&apikey=${FMP_KEY}`,
+    `https://financialmodelingprep.com/api/v3/economic_calendar?from=${from}&to=${to}&apikey=${FMP_KEY}`,
+  ];
+  for (const url of urls) {
+    try {
+      const res = await fetch(url);
+      if (!res.ok) {
+        console.log("FMP econ endpoint failed", res.status, url.split("?")[0]);
+        continue;
+      }
+      const raw = await res.json();
+      if (!Array.isArray(raw) || raw.length === 0) continue;
+      return raw.map((e: any): EconEvent => ({
+        date: e.date,
+        country: String(e.country || ""),
+        event: String(e.event || ""),
+        impact: normalizeImpact(e.impact),
+        actual: e.actual ?? null,
+        estimate: e.estimate ?? null,
+        previous: e.previous ?? null,
+        unit: e.unit || null,
+        currency: e.currency || null,
+      }));
+    } catch (err) {
+      console.log("FMP econ fetch error", err);
+    }
   }
+  return [];
 }
+
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
