@@ -1,5 +1,5 @@
 // Economic calendar — high-impact macro events for today (and optionally tomorrow).
-// Primary: Finnhub /calendar/economic (US events). Fallback: FMP economic_calendar.
+// Primary: Forex Factory weekly XML (free, reliable). Fallback: Finnhub / FMP.
 // Lightweight; no DB writes. The frontend caches results for 6h.
 
 import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
@@ -8,7 +8,7 @@ const FINNHUB_KEY = Deno.env.get("FINNHUB_API_KEY") || "";
 const FMP_KEY = Deno.env.get("FMP_API_KEY") || "";
 
 interface EconEvent {
-  date: string;
+  date: string;          // ISO datetime
   country: string;
   event: string;
   impact: "High" | "Medium" | "Low" | "None";
@@ -34,18 +34,22 @@ function todayISO(offsetDays = 0): string {
 
 function normalizeImpact(raw: any): EconEvent["impact"] {
   const s = String(raw || "").toLowerCase();
-  if (s === "high" || s === "3" || s.includes("high")) return "High";
-  if (s === "medium" || s === "2" || s.includes("medium") || s.includes("moderate")) return "Medium";
-  if (s === "low" || s === "1" || s.includes("low")) return "Low";
+  if (s.includes("high")) return "High";
+  if (s.includes("medium") || s.includes("moderate")) return "Medium";
+  if (s.includes("low")) return "Low";
   return "None";
 }
+
+// Currency → country code map (Forex Factory uses currency codes)
+const CCY_TO_COUNTRY: Record<string, string> = {
+  USD: "US", EUR: "EU", GBP: "GB", JPY: "JP", CNY: "CN",
+  AUD: "AU", CAD: "CA", NZD: "NZ", CHF: "CH",
+};
 
 const HIGH_IMPACT_KEYWORDS = [
   "fomc", "fed ", "federal reserve", "interest rate", "rate decision",
   "powell", "cpi", "ppi", "pce", "non-farm", "nonfarm", "unemployment",
   "jobs report", "payrolls", "gdp", "retail sales", "ism", "pmi",
-  "consumer confidence", "michigan", "fed chair", "jackson hole",
-  "initial jobless", "continuing claims", "housing starts", "durable goods",
 ];
 
 function bumpImpact(ev: EconEvent): EconEvent {
@@ -57,43 +61,108 @@ function bumpImpact(ev: EconEvent): EconEvent {
   return ev;
 }
 
-// ----------- Finnhub -----------
-async function fromFinnhub(from: string, to: string): Promise<EconEvent[]> {
-  if (!FINNHUB_KEY) return [];
-  const url = `https://finnhub.io/api/v1/calendar/economic?from=${from}&to=${to}&token=${FINNHUB_KEY}`;
+// ----------- Forex Factory free XML -----------
+function extractCdata(s: string): string {
+  const m = s.match(/<!\[CDATA\[(.*?)\]\]>/s);
+  return (m ? m[1] : s).trim();
+}
+
+function tagValue(block: string, tag: string): string {
+  const re = new RegExp(`<${tag}>([\\s\\S]*?)<\\/${tag}>`, "i");
+  const m = block.match(re);
+  if (!m) return "";
+  return extractCdata(m[1]).trim();
+}
+
+// Parse FF time "8:30am" + date "06-17-2026" → ISO (assumes US Eastern, the FF default)
+function parseFFDateTime(dateStr: string, timeStr: string): string | null {
+  if (!dateStr) return null;
+  const [mm, dd, yyyy] = dateStr.split("-");
+  if (!mm || !dd || !yyyy) return null;
+  // Default to noon ET if time is "All Day" / missing
+  let hh = 12, mi = 0;
+  const tm = timeStr.match(/(\d{1,2}):(\d{2})\s*(am|pm)/i);
+  if (tm) {
+    hh = parseInt(tm[1], 10);
+    mi = parseInt(tm[2], 10);
+    if (/pm/i.test(tm[3]) && hh !== 12) hh += 12;
+    if (/am/i.test(tm[3]) && hh === 12) hh = 0;
+  }
+  // FF times are US Eastern. Approx ET→UTC: ET is UTC-5 (EST) or UTC-4 (EDT).
+  // Use a rough offset: between mid-March and early Nov use -4, else -5.
+  const month = parseInt(mm, 10);
+  const offset = (month >= 3 && month <= 11) ? 4 : 5;
+  const utcHour = hh + offset;
+  // Build ISO; handle day rollover via Date math
+  const base = new Date(Date.UTC(parseInt(yyyy, 10), month - 1, parseInt(dd, 10), utcHour, mi));
+  return base.toISOString();
+}
+
+async function fromForexFactory(): Promise<EconEvent[]> {
   try {
-    const res = await fetch(url);
+    const res = await fetch("https://nfs.faireconomy.media/ff_calendar_thisweek.xml", {
+      headers: { "User-Agent": "Mozilla/5.0 LovableMarketBrief/1.0" },
+    });
     if (!res.ok) {
-      console.error("Finnhub economic error", res.status);
+      console.log("ForexFactory XML failed", res.status);
       return [];
     }
-    const data = await res.json();
-    const list: any[] = data?.economicCalendar || data?.calendar || [];
-    if (!Array.isArray(list)) return [];
-    return list.map((e: any): EconEvent => {
-      // Finnhub provides "time" as "YYYY-MM-DD HH:MM:SS" UTC
-      const iso = e.time
-        ? new Date(e.time.replace(" ", "T") + "Z").toISOString()
-        : (e.date ? new Date(e.date + "T13:30:00Z").toISOString() : new Date().toISOString());
-      return {
+    const xml = await res.text();
+    const blocks = xml.match(/<event>[\s\S]*?<\/event>/g) || [];
+    const out: EconEvent[] = [];
+    for (const b of blocks) {
+      const title = tagValue(b, "title");
+      const ccy = tagValue(b, "country");
+      const date = tagValue(b, "date");
+      const time = tagValue(b, "time");
+      const impact = tagValue(b, "impact");
+      const forecast = tagValue(b, "forecast");
+      const previous = tagValue(b, "previous");
+      const iso = parseFFDateTime(date, time);
+      if (!iso || !title) continue;
+      out.push({
         date: iso,
-        country: String(e.country || "US"),
-        event: String(e.event || ""),
-        impact: normalizeImpact(e.impact),
-        actual: e.actual ?? null,
-        estimate: e.estimate ?? null,
-        previous: e.prev ?? e.previous ?? null,
-        unit: e.unit || null,
-        currency: null,
-      };
-    });
+        country: CCY_TO_COUNTRY[ccy] || ccy || "",
+        event: title,
+        impact: normalizeImpact(impact),
+        actual: null,
+        estimate: forecast || null,
+        previous: previous || null,
+        unit: null,
+        currency: ccy || null,
+      });
+    }
+    return out;
   } catch (e) {
-    console.error("Finnhub economic fetch failed:", e);
+    console.error("ForexFactory parse failed:", e);
     return [];
   }
 }
 
-// ----------- FMP fallback (tries both legacy v3 and new "stable" endpoint) -----------
+// ----------- Finnhub fallback -----------
+async function fromFinnhub(from: string, to: string): Promise<EconEvent[]> {
+  if (!FINNHUB_KEY) return [];
+  try {
+    const res = await fetch(`https://finnhub.io/api/v1/calendar/economic?from=${from}&to=${to}&token=${FINNHUB_KEY}`);
+    if (!res.ok) return [];
+    const data = await res.json();
+    const list: any[] = data?.economicCalendar || [];
+    if (!Array.isArray(list)) return [];
+    return list.map((e: any): EconEvent => ({
+      date: e.time ? new Date(e.time.replace(" ", "T") + "Z").toISOString() : new Date().toISOString(),
+      country: String(e.country || "US"),
+      event: String(e.event || ""),
+      impact: normalizeImpact(e.impact),
+      actual: e.actual ?? null,
+      estimate: e.estimate ?? null,
+      previous: e.prev ?? null,
+      unit: e.unit || null,
+      currency: null,
+    }));
+  } catch { return []; }
+}
+
+// ----------- FMP fallback -----------
 async function fromFMP(from: string, to: string): Promise<EconEvent[]> {
   if (!FMP_KEY) return [];
   const urls = [
@@ -103,10 +172,7 @@ async function fromFMP(from: string, to: string): Promise<EconEvent[]> {
   for (const url of urls) {
     try {
       const res = await fetch(url);
-      if (!res.ok) {
-        console.log("FMP econ endpoint failed", res.status, url.split("?")[0]);
-        continue;
-      }
+      if (!res.ok) continue;
       const raw = await res.json();
       if (!Array.isArray(raw) || raw.length === 0) continue;
       return raw.map((e: any): EconEvent => ({
@@ -120,13 +186,10 @@ async function fromFMP(from: string, to: string): Promise<EconEvent[]> {
         unit: e.unit || null,
         currency: e.currency || null,
       }));
-    } catch (err) {
-      console.log("FMP econ fetch error", err);
-    }
+    } catch {}
   }
   return [];
 }
-
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
@@ -139,21 +202,37 @@ Deno.serve(async (req) => {
     const from = todayISO(0);
     const to = todayISO(includeTomorrow ? 1 : 0);
 
-    let events = await fromFinnhub(from, to);
-    let source = "finnhub";
+    // Primary: Forex Factory (free, full week of events)
+    let events = await fromForexFactory();
+    let source = "forexfactory";
+
+    if (events.length === 0) {
+      events = await fromFinnhub(from, to);
+      source = "finnhub";
+    }
     if (events.length === 0) {
       events = await fromFMP(from, to);
       source = "fmp";
     }
 
+    // Filter to today (and tomorrow if requested), in UTC date string
+    const targetDates = new Set<string>([from]);
+    if (includeTomorrow) targetDates.add(to);
+
     const RELEVANT = new Set(["US", "EU", "GB", "CN", "JP", "DE"]);
+    const impactRank = { High: 0, Medium: 1, Low: 2, None: 3 } as const;
 
     events = events
       .map(bumpImpact)
-      .filter((e) => e.event && (RELEVANT.has(e.country) || e.impact === "High"))
-      .filter((e) => e.impact === "High" || e.impact === "Medium");
+      .filter((e) => {
+        const dStr = e.date.slice(0, 10);
+        if (!targetDates.has(dStr)) return false;
+        if (!e.event) return false;
+        if (e.impact !== "High" && e.impact !== "Medium") return false;
+        return RELEVANT.has(e.country) || e.impact === "High";
+      });
 
-    // Dedupe by event + country
+    // Dedupe
     const seen = new Set<string>();
     events = events.filter((e) => {
       const k = `${e.country}|${e.event}|${e.date.slice(0, 13)}`;
@@ -162,7 +241,6 @@ Deno.serve(async (req) => {
       return true;
     });
 
-    const impactRank = { High: 0, Medium: 1, Low: 2, None: 3 } as const;
     events.sort((a, b) => {
       const r = impactRank[a.impact] - impactRank[b.impact];
       if (r !== 0) return r;
