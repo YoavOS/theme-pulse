@@ -1,13 +1,14 @@
-// Economic calendar — fetches today's (and optionally tomorrow's) high-impact
-// macro events from Financial Modeling Prep. Filtered to market-moving items
-// and ranked by impact. Lightweight; no DB writes.
+// Economic calendar — high-impact macro events for today (and optionally tomorrow).
+// Primary: Finnhub /calendar/economic (US events). Fallback: FMP economic_calendar.
+// Lightweight; no DB writes. The frontend caches results for 6h.
 
 import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
 
+const FINNHUB_KEY = Deno.env.get("FINNHUB_API_KEY") || "";
 const FMP_KEY = Deno.env.get("FMP_API_KEY") || "";
 
 interface EconEvent {
-  date: string;          // ISO datetime
+  date: string;
   country: string;
   event: string;
   impact: "High" | "Medium" | "Low" | "None";
@@ -33,34 +34,94 @@ function todayISO(offsetDays = 0): string {
 
 function normalizeImpact(raw: any): EconEvent["impact"] {
   const s = String(raw || "").toLowerCase();
-  if (s.includes("high")) return "High";
-  if (s.includes("medium") || s.includes("moderate")) return "Medium";
-  if (s.includes("low")) return "Low";
+  if (s === "high" || s === "3" || s.includes("high")) return "High";
+  if (s === "medium" || s === "2" || s.includes("medium") || s.includes("moderate")) return "Medium";
+  if (s === "low" || s === "1" || s.includes("low")) return "Low";
   return "None";
 }
 
-// Keywords that bump an event's importance regardless of FMP's tag.
 const HIGH_IMPACT_KEYWORDS = [
   "fomc", "fed ", "federal reserve", "interest rate", "rate decision",
   "powell", "cpi", "ppi", "pce", "non-farm", "nonfarm", "unemployment",
   "jobs report", "payrolls", "gdp", "retail sales", "ism", "pmi",
   "consumer confidence", "michigan", "fed chair", "jackson hole",
+  "initial jobless", "continuing claims", "housing starts", "durable goods",
 ];
 
-function isImportant(ev: EconEvent): boolean {
-  if (ev.impact === "High") return true;
+function bumpImpact(ev: EconEvent): EconEvent {
+  if (ev.impact === "High") return ev;
   const text = ev.event.toLowerCase();
-  return HIGH_IMPACT_KEYWORDS.some((k) => text.includes(k));
+  if (HIGH_IMPACT_KEYWORDS.some((k) => text.includes(k))) {
+    return { ...ev, impact: "High" };
+  }
+  return ev;
+}
+
+// ----------- Finnhub -----------
+async function fromFinnhub(from: string, to: string): Promise<EconEvent[]> {
+  if (!FINNHUB_KEY) return [];
+  const url = `https://finnhub.io/api/v1/calendar/economic?from=${from}&to=${to}&token=${FINNHUB_KEY}`;
+  try {
+    const res = await fetch(url);
+    if (!res.ok) {
+      console.error("Finnhub economic error", res.status);
+      return [];
+    }
+    const data = await res.json();
+    const list: any[] = data?.economicCalendar || data?.calendar || [];
+    if (!Array.isArray(list)) return [];
+    return list.map((e: any): EconEvent => {
+      // Finnhub provides "time" as "YYYY-MM-DD HH:MM:SS" UTC
+      const iso = e.time
+        ? new Date(e.time.replace(" ", "T") + "Z").toISOString()
+        : (e.date ? new Date(e.date + "T13:30:00Z").toISOString() : new Date().toISOString());
+      return {
+        date: iso,
+        country: String(e.country || "US"),
+        event: String(e.event || ""),
+        impact: normalizeImpact(e.impact),
+        actual: e.actual ?? null,
+        estimate: e.estimate ?? null,
+        previous: e.prev ?? e.previous ?? null,
+        unit: e.unit || null,
+        currency: null,
+      };
+    });
+  } catch (e) {
+    console.error("Finnhub economic fetch failed:", e);
+    return [];
+  }
+}
+
+// ----------- FMP fallback -----------
+async function fromFMP(from: string, to: string): Promise<EconEvent[]> {
+  if (!FMP_KEY) return [];
+  const url = `https://financialmodelingprep.com/api/v3/economic_calendar?from=${from}&to=${to}&apikey=${FMP_KEY}`;
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return [];
+    const raw = await res.json();
+    if (!Array.isArray(raw)) return [];
+    return raw.map((e: any): EconEvent => ({
+      date: e.date,
+      country: String(e.country || ""),
+      event: String(e.event || ""),
+      impact: normalizeImpact(e.impact),
+      actual: e.actual ?? null,
+      estimate: e.estimate ?? null,
+      previous: e.previous ?? null,
+      unit: e.unit || null,
+      currency: e.currency || null,
+    }));
+  } catch {
+    return [];
+  }
 }
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
   try {
-    if (!FMP_KEY) {
-      return jsonResponse({ events: [], error: "FMP_API_KEY not configured" });
-    }
-
     let body: any = {};
     try { body = await req.json(); } catch {}
     const includeTomorrow = !!body.includeTomorrow;
@@ -68,38 +129,29 @@ Deno.serve(async (req) => {
     const from = todayISO(0);
     const to = todayISO(includeTomorrow ? 1 : 0);
 
-    const url = `https://financialmodelingprep.com/api/v3/economic_calendar?from=${from}&to=${to}&apikey=${FMP_KEY}`;
-    const res = await fetch(url);
-    if (!res.ok) {
-      const txt = await res.text().catch(() => "");
-      console.error("FMP economic_calendar error", res.status, txt.slice(0, 200));
-      return jsonResponse({ events: [], error: `FMP ${res.status}` });
+    let events = await fromFinnhub(from, to);
+    let source = "finnhub";
+    if (events.length === 0) {
+      events = await fromFMP(from, to);
+      source = "fmp";
     }
 
-    const raw = await res.json();
-    if (!Array.isArray(raw)) {
-      return jsonResponse({ events: [] });
-    }
+    const RELEVANT = new Set(["US", "EU", "GB", "CN", "JP", "DE"]);
 
-    // Focus on US + global market-moving regions.
-    const RELEVANT_COUNTRIES = new Set(["US", "EU", "GB", "CN", "JP", "DE"]);
+    events = events
+      .map(bumpImpact)
+      .filter((e) => e.event && (RELEVANT.has(e.country) || e.impact === "High"))
+      .filter((e) => e.impact === "High" || e.impact === "Medium");
 
-    const events: EconEvent[] = raw
-      .map((e: any): EconEvent => ({
-        date: e.date,
-        country: String(e.country || ""),
-        event: String(e.event || ""),
-        impact: normalizeImpact(e.impact),
-        actual: e.actual ?? null,
-        estimate: e.estimate ?? null,
-        previous: e.previous ?? null,
-        unit: e.unit || null,
-        currency: e.currency || null,
-      }))
-      .filter((e) => e.event && (RELEVANT_COUNTRIES.has(e.country) || isImportant(e)))
-      .filter((e) => isImportant(e) || e.impact === "Medium");
+    // Dedupe by event + country
+    const seen = new Set<string>();
+    events = events.filter((e) => {
+      const k = `${e.country}|${e.event}|${e.date.slice(0, 13)}`;
+      if (seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    });
 
-    // Sort by impact, then by time
     const impactRank = { High: 0, Medium: 1, Low: 2, None: 3 } as const;
     events.sort((a, b) => {
       const r = impactRank[a.impact] - impactRank[b.impact];
@@ -111,6 +163,7 @@ Deno.serve(async (req) => {
       events: events.slice(0, 25),
       fetchedAt: new Date().toISOString(),
       window: { from, to },
+      source,
     });
   } catch (e) {
     console.error("economic-calendar error:", e);
