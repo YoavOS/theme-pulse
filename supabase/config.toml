@@ -68,3 +68,6 @@ verify_jwt = false
 
 [functions.analyze-setup-catalysts]
 verify_jwt = false
+
+[functions.daily-candles]
+verify_jwt = false
