@@ -198,9 +198,12 @@ Deno.serve(async (req) => {
     let body: any = {};
     try { body = await req.json(); } catch {}
     const includeTomorrow = !!body.includeTomorrow;
+    const daysAhead = Math.max(0, Math.min(14, Number(body.daysAhead) || 0));
+    const usOnly = body.usOnly !== false; // default true
 
     const from = todayISO(0);
-    const to = todayISO(includeTomorrow ? 1 : 0);
+    const spanDays = daysAhead > 0 ? daysAhead : (includeTomorrow ? 1 : 0);
+    const to = todayISO(spanDays);
 
     // Primary: Forex Factory (free, full week of events)
     let events = await fromForexFactory();
@@ -215,11 +218,10 @@ Deno.serve(async (req) => {
       source = "fmp";
     }
 
-    // Filter to today (and tomorrow if requested), in UTC date string
-    const targetDates = new Set<string>([from]);
-    if (includeTomorrow) targetDates.add(to);
+    // Filter date range
+    const targetDates = new Set<string>();
+    for (let i = 0; i <= spanDays; i++) targetDates.add(todayISO(i));
 
-    const RELEVANT = new Set(["US", "EU", "GB", "CN", "JP", "DE"]);
     const impactRank = { High: 0, Medium: 1, Low: 2, None: 3 } as const;
 
     events = events
@@ -229,7 +231,8 @@ Deno.serve(async (req) => {
         if (!targetDates.has(dStr)) return false;
         if (!e.event) return false;
         if (e.impact !== "High" && e.impact !== "Medium") return false;
-        return RELEVANT.has(e.country) || e.impact === "High";
+        if (usOnly) return e.country === "US";
+        return true;
       });
 
     // Dedupe
@@ -242,13 +245,13 @@ Deno.serve(async (req) => {
     });
 
     events.sort((a, b) => {
-      const r = impactRank[a.impact] - impactRank[b.impact];
-      if (r !== 0) return r;
-      return a.date.localeCompare(b.date);
+      const dc = a.date.localeCompare(b.date);
+      if (dc !== 0) return dc;
+      return impactRank[a.impact] - impactRank[b.impact];
     });
 
     return jsonResponse({
-      events: events.slice(0, 25),
+      events: events.slice(0, 80),
       fetchedAt: new Date().toISOString(),
       window: { from, to },
       source,
