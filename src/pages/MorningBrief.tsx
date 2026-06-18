@@ -1,17 +1,22 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useMemo } from "react";
 import { Link } from "react-router-dom";
-import { ArrowLeft, RefreshCw, Sun, Loader2, Calendar, Newspaper, TrendingUp, TrendingDown, Minus } from "lucide-react";
+import {
+  ArrowLeft, RefreshCw, Sun, Loader2, Calendar, Newspaper,
+  TrendingUp, TrendingDown, Minus, Sparkles, X, ChevronDown, ExternalLink,
+} from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { supabase } from "@/integrations/supabase/client";
 import { useThemeIntelligence } from "@/hooks/useThemeIntelligence";
 import { useSpyBenchmark } from "@/hooks/useSpyBenchmark";
-import { useThemeNews } from "@/hooks/useThemeNews";
+import { useThemeNews, NewsArticle } from "@/hooks/useThemeNews";
 import { toast } from "sonner";
 
 const DM_MONO = "'DM Mono', monospace";
 const CACHE_KEY = "morning_brief_cache_v2";
-const EVENTS_CACHE_KEY = "morning_brief_events_v1";
+const EVENTS_CACHE_KEY = "morning_brief_events_v2";
+const EVENTS_UPCOMING_KEY = "morning_brief_events_upcoming_v1";
 const DIGEST_CACHE_KEY = "morning_brief_digest_v1";
+const EXPLAIN_CACHE_KEY = "morning_brief_explain_v1"; // map of hash → ExplainResult
 
 interface BriefCache { brief: string; generatedAt: string; }
 
@@ -30,25 +35,45 @@ interface EconEvent {
 interface DigestBullet { text: string; impact: "Bullish" | "Bearish" | "Neutral"; }
 interface DigestGroup { theme: string; impact: "High" | "Medium" | "Low"; bullets: DigestBullet[]; }
 
+interface ExplainResult {
+  what: string;
+  expected: string;
+  impact_level: "High" | "Medium" | "Low";
+  impact_text: string;
+  generatedAt: string;
+}
+
+type ExplainTarget =
+  | { kind: "event"; title: string; payload: any }
+  | { kind: "news"; title: string; payload: any };
+
+// ---------- helpers ----------
 function fmtTime(iso: string): string {
   const d = new Date(iso);
   if (isNaN(d.getTime())) return iso;
   return d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", timeZoneName: "short" });
 }
-
+function fmtDate(iso: string): string {
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return "";
+  return d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+}
+function isToday(iso: string): boolean {
+  const d = new Date(iso);
+  const n = new Date();
+  return d.getFullYear() === n.getFullYear() && d.getMonth() === n.getMonth() && d.getDate() === n.getDate();
+}
 function impactColor(impact: string): string {
   if (impact === "High") return "text-[hsl(0,75%,60%)] border-[hsl(0,75%,60%)]/40 bg-[hsl(0,75%,60%)]/10";
   if (impact === "Medium") return "text-[hsl(40,90%,55%)] border-[hsl(40,90%,55%)]/40 bg-[hsl(40,90%,55%)]/10";
+  if (impact === "Low") return "text-[hsl(140,60%,55%)] border-[hsl(140,60%,55%)]/40 bg-[hsl(140,60%,55%)]/10";
   return "text-muted-foreground border-border bg-secondary/40";
 }
-
 function directionPill(impact: string) {
   if (impact === "Bullish") return { cls: "text-[hsl(140,60%,55%)]", icon: <TrendingUp size={11} /> };
   if (impact === "Bearish") return { cls: "text-[hsl(0,75%,60%)]", icon: <TrendingDown size={11} /> };
   return { cls: "text-muted-foreground", icon: <Minus size={11} /> };
 }
-
-// Light markdown for **bold** inside news bullets
 function renderInline(text: string) {
   const parts = text.split(/(\*\*[^*]+\*\*)/g);
   return parts.map((p, i) =>
@@ -57,45 +82,80 @@ function renderInline(text: string) {
       : <span key={i}>{p}</span>
   );
 }
+function hashKey(s: string): string {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) { h = ((h << 5) - h) + s.charCodeAt(i); h |= 0; }
+  return `k${Math.abs(h)}`;
+}
+function readExplainCache(): Record<string, ExplainResult> {
+  try { return JSON.parse(localStorage.getItem(EXPLAIN_CACHE_KEY) || "{}"); } catch { return {}; }
+}
+function writeExplainCache(map: Record<string, ExplainResult>) {
+  // Trim to 200 most recent
+  const entries = Object.entries(map);
+  if (entries.length > 200) {
+    entries.sort((a, b) => new Date(b[1].generatedAt).getTime() - new Date(a[1].generatedAt).getTime());
+    map = Object.fromEntries(entries.slice(0, 200));
+  }
+  try { localStorage.setItem(EXPLAIN_CACHE_KEY, JSON.stringify(map)); } catch {}
+}
 
+// ============ component ============
 export default function MorningBrief() {
   const [brief, setBrief] = useState<string | null>(null);
   const [generatedAt, setGeneratedAt] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [progress, setProgress] = useState<string>("");
+
   const [events, setEvents] = useState<EconEvent[]>([]);
   const [eventsFetchedAt, setEventsFetchedAt] = useState<string | null>(null);
+  const [upcomingEvents, setUpcomingEvents] = useState<EconEvent[]>([]);
+  const [upcomingFetchedAt, setUpcomingFetchedAt] = useState<string | null>(null);
+  const [showUpcoming, setShowUpcoming] = useState(false);
+  const [loadingUpcoming, setLoadingUpcoming] = useState(false);
+
   const [digest, setDigest] = useState<DigestGroup[]>([]);
   const [digestFetchedAt, setDigestFetchedAt] = useState<string | null>(null);
+  const [showMoreNews, setShowMoreNews] = useState(false);
+
+  // Explain modal
+  const [explainTarget, setExplainTarget] = useState<ExplainTarget | null>(null);
+  const [explainResult, setExplainResult] = useState<ExplainResult | null>(null);
+  const [explainLoading, setExplainLoading] = useState(false);
+
   const { themes } = useThemeIntelligence();
   const { spy } = useSpyBenchmark();
   const { marketNews, fetchMarketNews } = useThemeNews();
 
-  // Load cached brief
+  // Load caches
   useEffect(() => {
     try {
       const raw = localStorage.getItem(CACHE_KEY);
       if (raw) {
         const c: BriefCache = JSON.parse(raw);
         if ((Date.now() - new Date(c.generatedAt).getTime()) / 3600000 < 12) {
-          setBrief(c.brief);
-          setGeneratedAt(c.generatedAt);
+          setBrief(c.brief); setGeneratedAt(c.generatedAt);
         }
       }
       const evRaw = localStorage.getItem(EVENTS_CACHE_KEY);
       if (evRaw) {
         const e = JSON.parse(evRaw);
         if ((Date.now() - new Date(e.fetchedAt).getTime()) / 3600000 < 6) {
-          setEvents(e.events || []);
-          setEventsFetchedAt(e.fetchedAt);
+          setEvents(e.events || []); setEventsFetchedAt(e.fetchedAt);
+        }
+      }
+      const upRaw = localStorage.getItem(EVENTS_UPCOMING_KEY);
+      if (upRaw) {
+        const u = JSON.parse(upRaw);
+        if ((Date.now() - new Date(u.fetchedAt).getTime()) / 3600000 < 12) {
+          setUpcomingEvents(u.events || []); setUpcomingFetchedAt(u.fetchedAt);
         }
       }
       const dgRaw = localStorage.getItem(DIGEST_CACHE_KEY);
       if (dgRaw) {
         const d = JSON.parse(dgRaw);
         if ((Date.now() - new Date(d.fetchedAt).getTime()) / 3600000 < 2) {
-          setDigest(d.groups || []);
-          setDigestFetchedAt(d.fetchedAt);
+          setDigest(d.groups || []); setDigestFetchedAt(d.fetchedAt);
         }
       }
     } catch {}
@@ -105,14 +165,31 @@ export default function MorningBrief() {
   const loadEvents = useCallback(async (force = false) => {
     if (!force && eventsFetchedAt && (Date.now() - new Date(eventsFetchedAt).getTime()) / 3600000 < 6) return;
     try {
-      const { data } = await supabase.functions.invoke("economic-calendar", { body: { includeTomorrow: false } });
+      const { data } = await supabase.functions.invoke("economic-calendar", {
+        body: { includeTomorrow: false, usOnly: true },
+      });
       const list: EconEvent[] = data?.events || [];
       const fetchedAt = data?.fetchedAt || new Date().toISOString();
-      setEvents(list);
-      setEventsFetchedAt(fetchedAt);
+      setEvents(list); setEventsFetchedAt(fetchedAt);
       localStorage.setItem(EVENTS_CACHE_KEY, JSON.stringify({ events: list, fetchedAt }));
     } catch (e) { console.warn("events failed", e); }
   }, [eventsFetchedAt]);
+
+  const loadUpcomingEvents = useCallback(async (force = false) => {
+    if (!force && upcomingFetchedAt && (Date.now() - new Date(upcomingFetchedAt).getTime()) / 3600000 < 12) return;
+    setLoadingUpcoming(true);
+    try {
+      const { data } = await supabase.functions.invoke("economic-calendar", {
+        body: { daysAhead: 7, usOnly: true },
+      });
+      const list: EconEvent[] = data?.events || [];
+      const fetchedAt = data?.fetchedAt || new Date().toISOString();
+      setUpcomingEvents(list); setUpcomingFetchedAt(fetchedAt);
+      localStorage.setItem(EVENTS_UPCOMING_KEY, JSON.stringify({ events: list, fetchedAt }));
+    } catch (e) {
+      console.warn("upcoming events failed", e);
+    } finally { setLoadingUpcoming(false); }
+  }, [upcomingFetchedAt]);
 
   const loadDigest = useCallback(async (articles: any[], force = false) => {
     if (!force && digestFetchedAt && (Date.now() - new Date(digestFetchedAt).getTime()) / 3600000 < 2) return;
@@ -121,13 +198,11 @@ export default function MorningBrief() {
       const { data } = await supabase.functions.invoke("news-digest", { body: { articles } });
       const groups: DigestGroup[] = data?.groups || [];
       const fetchedAt = data?.generatedAt || new Date().toISOString();
-      setDigest(groups);
-      setDigestFetchedAt(fetchedAt);
+      setDigest(groups); setDigestFetchedAt(fetchedAt);
       localStorage.setItem(DIGEST_CACHE_KEY, JSON.stringify({ groups, fetchedAt }));
     } catch (e) { console.warn("digest failed", e); }
   }, [digestFetchedAt]);
 
-  // Auto-load events + digest in background
   useEffect(() => { loadEvents(false); }, [loadEvents]);
   useEffect(() => {
     if (marketNews && marketNews.length > 0 && digest.length === 0) {
@@ -135,12 +210,44 @@ export default function MorningBrief() {
     }
   }, [marketNews, digest.length, loadDigest]);
 
+  // -------- Explain handler with caching --------
+  const openExplain = useCallback(async (target: ExplainTarget) => {
+    setExplainTarget(target);
+    setExplainResult(null);
+    const key = hashKey(target.kind + "|" + target.title);
+    const cache = readExplainCache();
+    if (cache[key]) {
+      setExplainResult(cache[key]);
+      return;
+    }
+    setExplainLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("explain-item", {
+        body: { kind: target.kind, payload: target.payload },
+      });
+      if (error) throw error;
+      const result: ExplainResult = {
+        what: data?.what || "",
+        expected: data?.expected || "",
+        impact_level: data?.impact_level || "Medium",
+        impact_text: data?.impact_text || "",
+        generatedAt: data?.generatedAt || new Date().toISOString(),
+      };
+      setExplainResult(result);
+      cache[key] = result;
+      writeExplainCache(cache);
+    } catch (e) {
+      console.error("explain failed", e);
+      toast.error("Failed to generate explanation");
+      setExplainTarget(null);
+    } finally { setExplainLoading(false); }
+  }, []);
+
+  // ----- Generate AI brief -----
   const generate = useCallback(async () => {
     setIsLoading(true);
     setProgress("Gathering market data…");
-
     try {
-      // Refresh events + digest in parallel with main brief
       const eventsPromise = loadEvents(true);
       const digestPromise = (marketNews && marketNews.length > 0) ? loadDigest(marketNews as any[], true) : Promise.resolve();
 
@@ -226,9 +333,7 @@ export default function MorningBrief() {
           concentration: marketDrivers?.spy?.concentration,
         },
       });
-
       if (error || !data?.brief) throw new Error(error?.message || "No brief returned");
-
       setBrief(data.brief);
       setGeneratedAt(data.generatedAt);
       localStorage.setItem(CACHE_KEY, JSON.stringify({ brief: data.brief, generatedAt: data.generatedAt }));
@@ -238,12 +343,24 @@ export default function MorningBrief() {
       console.error(err);
       toast.error(err instanceof Error ? err.message : "Failed to generate brief");
     } finally {
-      setIsLoading(false);
-      setProgress("");
+      setIsLoading(false); setProgress("");
     }
   }, [themes, spy, marketNews, loadEvents, loadDigest]);
 
-  const hasAnyContent = brief || events.length > 0 || digest.length > 0;
+  // Group upcoming events by date for the More Events drawer
+  const upcomingByDate = useMemo(() => {
+    const map = new Map<string, EconEvent[]>();
+    upcomingEvents.forEach(ev => {
+      const key = ev.date.slice(0, 10);
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(ev);
+    });
+    return Array.from(map.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+  }, [upcomingEvents]);
+
+  const visibleNews = useMemo<NewsArticle[]>(() => {
+    return (marketNews || []).slice(0, showMoreNews ? 30 : 0);
+  }, [marketNews, showMoreNews]);
 
   return (
     <div className="min-h-screen bg-background">
@@ -257,7 +374,7 @@ export default function MorningBrief() {
             <div>
               <h1 className="font-['Syne',sans-serif] text-xl font-semibold">Morning Brief</h1>
               <p className="text-xs text-muted-foreground" style={{ fontFamily: DM_MONO }}>
-                Events · News digest · AI insight
+                US events · News digest · AI insight
               </p>
             </div>
           </div>
@@ -283,64 +400,52 @@ export default function MorningBrief() {
           </div>
         )}
 
-        {/* 1. MARKET EVENTS TODAY */}
+        {/* 1. MARKET EVENTS TODAY (US) */}
         <section className="rounded-lg border border-border bg-card">
           <header className="flex items-center justify-between px-5 py-3 border-b border-border">
             <div className="flex items-center gap-2">
               <Calendar size={16} className="text-[hsl(40,90%,55%)]" />
-              <h2 className="font-['Syne',sans-serif] text-base font-semibold">Market Events Today</h2>
+              <h2 className="font-['Syne',sans-serif] text-base font-semibold">US Market Events Today</h2>
               <span className="text-[10px] text-muted-foreground" style={{ fontFamily: DM_MONO }}>
                 {events.length} events
               </span>
             </div>
-            <button
-              onClick={() => loadEvents(true)}
-              className="text-[11px] text-muted-foreground hover:text-foreground inline-flex items-center gap-1"
-              style={{ fontFamily: DM_MONO }}
-            >
-              <RefreshCw size={11} /> refresh
-            </button>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => { setShowUpcoming(true); loadUpcomingEvents(false); }}
+                className="text-[11px] text-primary hover:underline inline-flex items-center gap-1"
+                style={{ fontFamily: DM_MONO }}
+              >
+                <ChevronDown size={11} /> More events
+              </button>
+              <button
+                onClick={() => loadEvents(true)}
+                className="text-[11px] text-muted-foreground hover:text-foreground inline-flex items-center gap-1"
+                style={{ fontFamily: DM_MONO }}
+              >
+                <RefreshCw size={11} /> refresh
+              </button>
+            </div>
           </header>
           <div className="p-3">
             {events.length === 0 ? (
               <div className="px-2 py-6 text-center text-sm text-muted-foreground">
-                No high-impact events flagged for today.
+                No high-impact US events flagged for today.
               </div>
             ) : (
               <ul className="divide-y divide-border/60">
                 {events.map((ev, i) => (
-                  <li key={i} className="flex items-center gap-3 px-2 py-2.5 hover:bg-secondary/20 rounded">
-                    <span className="text-[11px] text-muted-foreground w-24 shrink-0" style={{ fontFamily: DM_MONO }}>
-                      {fmtTime(ev.date)}
-                    </span>
-                    <span className={`text-[10px] px-1.5 py-0.5 rounded border w-16 text-center shrink-0 font-semibold ${impactColor(ev.impact)}`}>
-                      {ev.impact}
-                    </span>
-                    <span className="text-[10px] text-muted-foreground w-8 shrink-0" style={{ fontFamily: DM_MONO }}>
-                      {ev.country}
-                    </span>
-                    <span className="text-sm text-foreground flex-1 truncate" title={ev.event}>
-                      {ev.event}
-                    </span>
-                    <div className="flex items-center gap-3 text-[11px] shrink-0" style={{ fontFamily: DM_MONO }}>
-                      {ev.previous != null && (
-                        <span className="text-muted-foreground">prev <span className="text-foreground">{String(ev.previous)}{ev.unit || ""}</span></span>
-                      )}
-                      {ev.estimate != null && (
-                        <span className="text-muted-foreground">est <span className="text-foreground">{String(ev.estimate)}{ev.unit || ""}</span></span>
-                      )}
-                      {ev.actual != null && (
-                        <span className="text-muted-foreground">act <span className="text-[hsl(140,60%,55%)] font-semibold">{String(ev.actual)}{ev.unit || ""}</span></span>
-                      )}
-                    </div>
-                  </li>
+                  <EventRow key={i} ev={ev} onExplain={() => openExplain({
+                    kind: "event", title: ev.event + "|" + ev.date.slice(0, 10),
+                    payload: ev,
+                  })} />
                 ))}
               </ul>
             )}
           </div>
         </section>
 
-        {/* 2. KEY NEWS SUMMARY */}
+        {/* 2. NEWS DIGEST */}
         <section className="rounded-lg border border-border bg-card">
           <header className="flex items-center justify-between px-5 py-3 border-b border-border">
             <div className="flex items-center gap-2">
@@ -352,21 +457,29 @@ export default function MorningBrief() {
                 </span>
               )}
             </div>
-            <button
-              onClick={() => loadDigest(marketNews as any[], true)}
-              disabled={!marketNews || marketNews.length === 0}
-              className="text-[11px] text-muted-foreground hover:text-foreground inline-flex items-center gap-1 disabled:opacity-40"
-              style={{ fontFamily: DM_MONO }}
-            >
-              <RefreshCw size={11} /> refresh
-            </button>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => setShowMoreNews((v) => !v)}
+                disabled={!marketNews || marketNews.length === 0}
+                className="text-[11px] text-primary hover:underline inline-flex items-center gap-1 disabled:opacity-40"
+                style={{ fontFamily: DM_MONO }}
+              >
+                <ChevronDown size={11} /> {showMoreNews ? "Hide headlines" : "More news"}
+              </button>
+              <button
+                onClick={() => loadDigest(marketNews as any[], true)}
+                disabled={!marketNews || marketNews.length === 0}
+                className="text-[11px] text-muted-foreground hover:text-foreground inline-flex items-center gap-1 disabled:opacity-40"
+                style={{ fontFamily: DM_MONO }}
+              >
+                <RefreshCw size={11} /> refresh
+              </button>
+            </div>
           </header>
           <div className="p-4">
             {digest.length === 0 ? (
               <div className="px-2 py-6 text-center text-sm text-muted-foreground">
-                {marketNews && marketNews.length > 0
-                  ? "Generating news digest…"
-                  : "Loading market news…"}
+                {marketNews && marketNews.length > 0 ? "Generating news digest…" : "Loading market news…"}
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -382,9 +495,21 @@ export default function MorningBrief() {
                       {g.bullets.map((b, bi) => {
                         const d = directionPill(b.impact);
                         return (
-                          <li key={bi} className="flex gap-2 text-[13px] leading-snug">
+                          <li key={bi} className="flex gap-2 text-[13px] leading-snug group">
                             <span className={`shrink-0 mt-0.5 ${d.cls}`}>{d.icon}</span>
                             <span className="flex-1 text-foreground/90">{renderInline(b.text)}</span>
+                            <button
+                              onClick={() => openExplain({
+                                kind: "news",
+                                title: g.theme + "|" + b.text,
+                                payload: { headline: b.text.replace(/\*\*/g, ""), summary: g.theme },
+                              })}
+                              className="opacity-0 group-hover:opacity-100 transition-opacity shrink-0 text-[10px] text-primary inline-flex items-center gap-0.5 hover:underline"
+                              style={{ fontFamily: DM_MONO }}
+                              title="Explain"
+                            >
+                              <Sparkles size={10} /> explain
+                            </button>
                           </li>
                         );
                       })}
@@ -393,10 +518,50 @@ export default function MorningBrief() {
                 ))}
               </div>
             )}
+
+            {/* More news headlines list */}
+            {showMoreNews && visibleNews.length > 0 && (
+              <div className="mt-4 pt-4 border-t border-border/40">
+                <h3 className="text-xs uppercase tracking-wider text-muted-foreground mb-2" style={{ fontFamily: DM_MONO }}>
+                  Latest headlines ({visibleNews.length})
+                </h3>
+                <ul className="divide-y divide-border/40">
+                  {visibleNews.map((n, i) => (
+                    <li key={i} className="py-2 flex items-start gap-3 group">
+                      <span className="text-[10px] text-muted-foreground w-12 shrink-0 mt-0.5" style={{ fontFamily: DM_MONO }}>
+                        {n.published_at ? new Date(n.published_at).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" }) : "—"}
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-[13px] text-foreground leading-snug">
+                          {n.url ? (
+                            <a href={n.url} target="_blank" rel="noopener noreferrer" className="hover:text-primary inline-flex items-start gap-1">
+                              {n.headline} <ExternalLink size={10} className="mt-1 opacity-50 shrink-0" />
+                            </a>
+                          ) : n.headline}
+                        </div>
+                        {n.source && (
+                          <div className="text-[10px] text-muted-foreground" style={{ fontFamily: DM_MONO }}>{n.source}</div>
+                        )}
+                      </div>
+                      <button
+                        onClick={() => openExplain({
+                          kind: "news", title: "headline|" + n.headline,
+                          payload: { headline: n.headline, summary: n.summary, source: n.source, symbol: n.symbol },
+                        })}
+                        className="shrink-0 text-[10px] text-primary inline-flex items-center gap-0.5 hover:underline opacity-70 hover:opacity-100"
+                        style={{ fontFamily: DM_MONO }}
+                      >
+                        <Sparkles size={10} /> explain
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </div>
         </section>
 
-        {/* 3. AI BRIEF (performance overview, themes, setups) */}
+        {/* 3. AI BRIEF */}
         {!brief && !isLoading && (
           <div className="rounded-lg border border-dashed border-border bg-card/50 p-10 text-center">
             <Sun size={36} className="mx-auto text-[hsl(40,90%,55%)] mb-3 opacity-60" />
@@ -453,6 +618,151 @@ export default function MorningBrief() {
           </div>
         )}
       </div>
+
+      {/* ---------- Upcoming Events Drawer ---------- */}
+      {showUpcoming && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={() => setShowUpcoming(false)}>
+          <div className="bg-card border border-border rounded-lg w-full max-w-2xl max-h-[80vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+            <header className="flex items-center justify-between px-5 py-3 border-b border-border">
+              <div className="flex items-center gap-2">
+                <Calendar size={16} className="text-[hsl(40,90%,55%)]" />
+                <h3 className="font-['Syne',sans-serif] text-base font-semibold">Upcoming US Events · Next 7 days</h3>
+              </div>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => loadUpcomingEvents(true)}
+                  className="text-[11px] text-muted-foreground hover:text-foreground inline-flex items-center gap-1"
+                  style={{ fontFamily: DM_MONO }}
+                >
+                  <RefreshCw size={11} /> refresh
+                </button>
+                <button onClick={() => setShowUpcoming(false)} className="text-muted-foreground hover:text-foreground"><X size={18} /></button>
+              </div>
+            </header>
+            <div className="overflow-y-auto p-4 flex-1">
+              {loadingUpcoming && upcomingEvents.length === 0 ? (
+                <div className="py-8 text-center text-sm text-muted-foreground inline-flex items-center justify-center gap-2 w-full">
+                  <Loader2 size={14} className="animate-spin" /> Loading upcoming events…
+                </div>
+              ) : upcomingByDate.length === 0 ? (
+                <div className="py-8 text-center text-sm text-muted-foreground">No upcoming high-impact US events.</div>
+              ) : (
+                <div className="space-y-4">
+                  {upcomingByDate.map(([dateKey, list]) => (
+                    <div key={dateKey}>
+                      <h4 className="text-xs uppercase tracking-wider text-muted-foreground mb-2" style={{ fontFamily: DM_MONO }}>
+                        {fmtDate(dateKey + "T12:00:00Z")} {isToday(dateKey + "T12:00:00Z") && <span className="ml-1 text-primary">· today</span>}
+                      </h4>
+                      <ul className="divide-y divide-border/60 border border-border/40 rounded-md">
+                        {list.map((ev, i) => (
+                          <EventRow key={i} ev={ev} showDate={false} onExplain={() => openExplain({
+                            kind: "event", title: ev.event + "|" + ev.date.slice(0, 10), payload: ev,
+                          })} />
+                        ))}
+                      </ul>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ---------- Explain Modal ---------- */}
+      {explainTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={() => setExplainTarget(null)}>
+          <div className="bg-card border border-border rounded-lg w-full max-w-lg max-h-[80vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+            <header className="flex items-start justify-between px-5 py-3 border-b border-border gap-3">
+              <div className="flex items-start gap-2 min-w-0">
+                <Sparkles size={16} className="text-primary mt-0.5 shrink-0" />
+                <div className="min-w-0">
+                  <h3 className="font-['Syne',sans-serif] text-base font-semibold truncate">
+                    {explainTarget.kind === "event" ? "Event Brief" : "News Brief"}
+                  </h3>
+                  <p className="text-[11px] text-muted-foreground truncate" style={{ fontFamily: DM_MONO }}>
+                    {explainTarget.payload?.event || explainTarget.payload?.headline || ""}
+                  </p>
+                </div>
+              </div>
+              <button onClick={() => setExplainTarget(null)} className="text-muted-foreground hover:text-foreground shrink-0"><X size={18} /></button>
+            </header>
+            <div className="overflow-y-auto p-5 flex-1 space-y-4">
+              {explainLoading || !explainResult ? (
+                <div className="py-8 text-center text-sm text-muted-foreground inline-flex items-center justify-center gap-2 w-full">
+                  <Loader2 size={14} className="animate-spin" /> Asking AI…
+                </div>
+              ) : (
+                <>
+                  <div>
+                    <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1" style={{ fontFamily: DM_MONO }}>What it is</div>
+                    <p className="text-sm text-foreground leading-relaxed">{explainResult.what}</p>
+                  </div>
+                  {explainResult.expected && explainResult.expected !== "N/A" && (
+                    <div>
+                      <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1" style={{ fontFamily: DM_MONO }}>Expected</div>
+                      <p className="text-sm text-foreground leading-relaxed">{explainResult.expected}</p>
+                    </div>
+                  )}
+                  <div>
+                    <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1 flex items-center gap-2" style={{ fontFamily: DM_MONO }}>
+                      US Market Impact
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded border font-semibold ${impactColor(explainResult.impact_level)}`}>
+                        {explainResult.impact_level}
+                      </span>
+                    </div>
+                    <p className="text-sm text-foreground leading-relaxed">{explainResult.impact_text}</p>
+                  </div>
+                  <div className="text-[10px] text-muted-foreground pt-2 border-t border-border/40" style={{ fontFamily: DM_MONO }}>
+                    Cached · Groq Llama 3.3
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
+  );
+}
+
+// ============ Sub-components ============
+
+function EventRow({ ev, onExplain, showDate = true }: { ev: EconEvent; onExplain: () => void; showDate?: boolean }) {
+  return (
+    <li className="flex items-center gap-3 px-3 py-2.5 hover:bg-secondary/20 group">
+      {showDate && (
+        <span className="text-[10px] text-muted-foreground w-16 shrink-0" style={{ fontFamily: DM_MONO }}>
+          {fmtDate(ev.date).replace(/,/g, "")}
+        </span>
+      )}
+      <span className="text-[11px] text-muted-foreground w-20 shrink-0" style={{ fontFamily: DM_MONO }}>
+        {fmtTime(ev.date)}
+      </span>
+      <span className={`text-[10px] px-1.5 py-0.5 rounded border w-16 text-center shrink-0 font-semibold ${impactColor(ev.impact)}`}>
+        {ev.impact}
+      </span>
+      <span className="text-sm text-foreground flex-1 truncate" title={ev.event}>
+        {ev.event}
+      </span>
+      <div className="flex items-center gap-3 text-[11px] shrink-0" style={{ fontFamily: DM_MONO }}>
+        {ev.previous != null && (
+          <span className="text-muted-foreground hidden sm:inline">prev <span className="text-foreground">{String(ev.previous)}{ev.unit || ""}</span></span>
+        )}
+        {ev.estimate != null && (
+          <span className="text-muted-foreground hidden sm:inline">est <span className="text-foreground">{String(ev.estimate)}{ev.unit || ""}</span></span>
+        )}
+        {ev.actual != null && (
+          <span className="text-muted-foreground">act <span className="text-[hsl(140,60%,55%)] font-semibold">{String(ev.actual)}{ev.unit || ""}</span></span>
+        )}
+      </div>
+      <button
+        onClick={onExplain}
+        className="shrink-0 text-[10px] text-primary inline-flex items-center gap-0.5 hover:underline opacity-70 hover:opacity-100"
+        style={{ fontFamily: DM_MONO }}
+      >
+        <Sparkles size={10} /> explain
+      </button>
+    </li>
   );
 }
