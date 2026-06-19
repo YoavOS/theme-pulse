@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect, useMemo } from "react";
 import { Link } from "react-router-dom";
 import {
   ArrowLeft, RefreshCw, Sun, Loader2, Calendar, Newspaper,
-  TrendingUp, TrendingDown, Minus, Sparkles, X, ChevronDown, ExternalLink,
+  TrendingUp, TrendingDown, Minus, Sparkles, X, ChevronDown, ChevronUp, ExternalLink,
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { supabase } from "@/integrations/supabase/client";
@@ -117,6 +117,8 @@ export default function MorningBrief() {
   const [digest, setDigest] = useState<DigestGroup[]>([]);
   const [digestFetchedAt, setDigestFetchedAt] = useState<string | null>(null);
   const [showMoreNews, setShowMoreNews] = useState(false);
+  const [expandedDigest, setExpandedDigest] = useState<Record<number, boolean>>({});
+  const DIGEST_PREVIEW = 3;
 
   // Explain modal
   const [explainTarget, setExplainTarget] = useState<ExplainTarget | null>(null);
@@ -410,22 +412,13 @@ export default function MorningBrief() {
                 {events.length} events
               </span>
             </div>
-            <div className="flex items-center gap-3">
-              <button
-                onClick={() => { setShowUpcoming(true); loadUpcomingEvents(false); }}
-                className="text-[11px] text-primary hover:underline inline-flex items-center gap-1"
-                style={{ fontFamily: DM_MONO }}
-              >
-                <ChevronDown size={11} /> More events
-              </button>
-              <button
-                onClick={() => loadEvents(true)}
-                className="text-[11px] text-muted-foreground hover:text-foreground inline-flex items-center gap-1"
-                style={{ fontFamily: DM_MONO }}
-              >
-                <RefreshCw size={11} /> refresh
-              </button>
-            </div>
+            <button
+              onClick={() => loadEvents(true)}
+              className="text-[11px] text-muted-foreground hover:text-foreground inline-flex items-center gap-1"
+              style={{ fontFamily: DM_MONO }}
+            >
+              <RefreshCw size={11} /> refresh
+            </button>
           </header>
           <div className="p-3">
             {events.length === 0 ? (
@@ -442,8 +435,56 @@ export default function MorningBrief() {
                 ))}
               </ul>
             )}
+
+            {/* Expandable upcoming-events area */}
+            {showUpcoming && (
+              <div className="mt-4 pt-4 border-t border-border/40 max-h-[420px] overflow-y-auto">
+                <h3 className="text-xs uppercase tracking-wider text-muted-foreground mb-3" style={{ fontFamily: DM_MONO }}>
+                  Upcoming US Events · Next 7 days
+                </h3>
+                {loadingUpcoming && upcomingEvents.length === 0 ? (
+                  <div className="py-6 text-center text-sm text-muted-foreground inline-flex items-center justify-center gap-2 w-full">
+                    <Loader2 size={14} className="animate-spin" /> Loading…
+                  </div>
+                ) : upcomingByDate.length === 0 ? (
+                  <div className="py-4 text-center text-sm text-muted-foreground">No upcoming high-impact US events.</div>
+                ) : (
+                  <div className="space-y-3">
+                    {upcomingByDate.map(([dateKey, list]) => (
+                      <div key={dateKey}>
+                        <h4 className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1.5" style={{ fontFamily: DM_MONO }}>
+                          {fmtDate(dateKey + "T12:00:00Z")} {isToday(dateKey + "T12:00:00Z") && <span className="ml-1 text-primary">· today</span>}
+                        </h4>
+                        <ul className="divide-y divide-border/60 border border-border/40 rounded-md">
+                          {list.map((ev, i) => (
+                            <EventRow key={i} ev={ev} showDate={false} onExplain={() => openExplain({
+                              kind: "event", title: ev.event + "|" + ev.date.slice(0, 10), payload: ev,
+                            })} />
+                          ))}
+                        </ul>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Bottom Show More toggle */}
+            <div className="flex justify-center mt-3 pt-3 border-t border-border/40">
+              <button
+                onClick={() => {
+                  if (!showUpcoming) loadUpcomingEvents(false);
+                  setShowUpcoming(v => !v);
+                }}
+                className="inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-[11px] font-medium text-primary hover:bg-primary/10 transition-colors"
+                style={{ fontFamily: DM_MONO }}
+              >
+                {showUpcoming ? <>Show Less <ChevronUp size={12} /></> : <>Show More <ChevronDown size={12} /></>}
+              </button>
+            </div>
           </div>
         </section>
+
 
         {/* 2. NEWS DIGEST */}
         <section className="rounded-lg border border-border bg-card">
@@ -457,24 +498,14 @@ export default function MorningBrief() {
                 </span>
               )}
             </div>
-            <div className="flex items-center gap-3">
-              <button
-                onClick={() => setShowMoreNews((v) => !v)}
-                disabled={!marketNews || marketNews.length === 0}
-                className="text-[11px] text-primary hover:underline inline-flex items-center gap-1 disabled:opacity-40"
-                style={{ fontFamily: DM_MONO }}
-              >
-                <ChevronDown size={11} /> {showMoreNews ? "Hide headlines" : "More news"}
-              </button>
-              <button
-                onClick={() => loadDigest(marketNews as any[], true)}
-                disabled={!marketNews || marketNews.length === 0}
-                className="text-[11px] text-muted-foreground hover:text-foreground inline-flex items-center gap-1 disabled:opacity-40"
-                style={{ fontFamily: DM_MONO }}
-              >
-                <RefreshCw size={11} /> refresh
-              </button>
-            </div>
+            <button
+              onClick={() => loadDigest(marketNews as any[], true)}
+              disabled={!marketNews || marketNews.length === 0}
+              className="text-[11px] text-muted-foreground hover:text-foreground inline-flex items-center gap-1 disabled:opacity-40"
+              style={{ fontFamily: DM_MONO }}
+            >
+              <RefreshCw size={11} /> refresh
+            </button>
           </header>
           <div className="p-4">
             {digest.length === 0 ? (
@@ -483,45 +514,63 @@ export default function MorningBrief() {
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {digest.map((g, gi) => (
-                  <div key={gi} className="rounded-md border border-border/60 bg-secondary/20 p-3">
-                    <div className="flex items-center justify-between mb-2 pb-2 border-b border-border/40">
-                      <h3 className="text-sm font-semibold text-foreground">{g.theme}</h3>
-                      <span className={`text-[10px] px-1.5 py-0.5 rounded border font-semibold ${impactColor(g.impact)}`}>
-                        {g.impact}
-                      </span>
+                {digest.map((g, gi) => {
+                  const isExpanded = !!expandedDigest[gi];
+                  const hasMore = g.bullets.length > DIGEST_PREVIEW;
+                  const shown = isExpanded ? g.bullets : g.bullets.slice(0, DIGEST_PREVIEW);
+                  return (
+                    <div key={gi} className="rounded-md border border-border/60 bg-secondary/20 p-3 flex flex-col">
+                      <div className="flex items-center justify-between mb-2 pb-2 border-b border-border/40">
+                        <h3 className="text-sm font-semibold text-foreground">{g.theme}</h3>
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded border font-semibold ${impactColor(g.impact)}`}>
+                          {g.impact}
+                        </span>
+                      </div>
+                      <ul className={`space-y-1.5 ${isExpanded && g.bullets.length > 6 ? "max-h-[320px] overflow-y-auto pr-1" : ""}`}>
+                        {shown.map((b, bi) => {
+                          const d = directionPill(b.impact);
+                          return (
+                            <li key={bi} className="flex gap-2 text-[13px] leading-snug group">
+                              <span className={`shrink-0 mt-0.5 ${d.cls}`}>{d.icon}</span>
+                              <span className="flex-1 text-foreground/90">{renderInline(b.text)}</span>
+                              <button
+                                onClick={() => openExplain({
+                                  kind: "news",
+                                  title: g.theme + "|" + b.text,
+                                  payload: { headline: b.text.replace(/\*\*/g, ""), summary: g.theme },
+                                })}
+                                className="opacity-0 group-hover:opacity-100 transition-opacity shrink-0 text-[10px] text-primary inline-flex items-center gap-0.5 hover:underline"
+                                style={{ fontFamily: DM_MONO }}
+                                title="Explain"
+                              >
+                                <Sparkles size={10} /> explain
+                              </button>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                      {hasMore && (
+                        <div className="flex justify-center mt-2 pt-2 border-t border-border/40">
+                          <button
+                            onClick={() => setExpandedDigest(prev => ({ ...prev, [gi]: !prev[gi] }))}
+                            className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[10px] font-medium text-primary hover:bg-primary/10 transition-colors"
+                            style={{ fontFamily: DM_MONO }}
+                          >
+                            {isExpanded
+                              ? <>Show Less <ChevronUp size={11} /></>
+                              : <>Show More <ChevronDown size={11} /> <span className="opacity-60">({g.bullets.length - DIGEST_PREVIEW})</span></>}
+                          </button>
+                        </div>
+                      )}
                     </div>
-                    <ul className="space-y-1.5">
-                      {g.bullets.map((b, bi) => {
-                        const d = directionPill(b.impact);
-                        return (
-                          <li key={bi} className="flex gap-2 text-[13px] leading-snug group">
-                            <span className={`shrink-0 mt-0.5 ${d.cls}`}>{d.icon}</span>
-                            <span className="flex-1 text-foreground/90">{renderInline(b.text)}</span>
-                            <button
-                              onClick={() => openExplain({
-                                kind: "news",
-                                title: g.theme + "|" + b.text,
-                                payload: { headline: b.text.replace(/\*\*/g, ""), summary: g.theme },
-                              })}
-                              className="opacity-0 group-hover:opacity-100 transition-opacity shrink-0 text-[10px] text-primary inline-flex items-center gap-0.5 hover:underline"
-                              style={{ fontFamily: DM_MONO }}
-                              title="Explain"
-                            >
-                              <Sparkles size={10} /> explain
-                            </button>
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
 
-            {/* More news headlines list */}
+            {/* Latest headlines (expandable at bottom) */}
             {showMoreNews && visibleNews.length > 0 && (
-              <div className="mt-4 pt-4 border-t border-border/40">
+              <div className="mt-4 pt-4 border-t border-border/40 max-h-[420px] overflow-y-auto">
                 <h3 className="text-xs uppercase tracking-wider text-muted-foreground mb-2" style={{ fontFamily: DM_MONO }}>
                   Latest headlines ({visibleNews.length})
                 </h3>
@@ -558,8 +607,24 @@ export default function MorningBrief() {
                 </ul>
               </div>
             )}
+
+            {/* Bottom Show More toggle for latest headlines */}
+            {marketNews && marketNews.length > 0 && (
+              <div className="flex justify-center mt-3 pt-3 border-t border-border/40">
+                <button
+                  onClick={() => setShowMoreNews(v => !v)}
+                  className="inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-[11px] font-medium text-primary hover:bg-primary/10 transition-colors"
+                  style={{ fontFamily: DM_MONO }}
+                >
+                  {showMoreNews
+                    ? <>Show Less <ChevronUp size={12} /></>
+                    : <>Show More Headlines <ChevronDown size={12} /></>}
+                </button>
+              </div>
+            )}
           </div>
         </section>
+
 
         {/* 3. AI BRIEF */}
         {!brief && !isLoading && (
@@ -619,55 +684,6 @@ export default function MorningBrief() {
         )}
       </div>
 
-      {/* ---------- Upcoming Events Drawer ---------- */}
-      {showUpcoming && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={() => setShowUpcoming(false)}>
-          <div className="bg-card border border-border rounded-lg w-full max-w-2xl max-h-[80vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
-            <header className="flex items-center justify-between px-5 py-3 border-b border-border">
-              <div className="flex items-center gap-2">
-                <Calendar size={16} className="text-[hsl(40,90%,55%)]" />
-                <h3 className="font-['Syne',sans-serif] text-base font-semibold">Upcoming US Events · Next 7 days</h3>
-              </div>
-              <div className="flex items-center gap-3">
-                <button
-                  onClick={() => loadUpcomingEvents(true)}
-                  className="text-[11px] text-muted-foreground hover:text-foreground inline-flex items-center gap-1"
-                  style={{ fontFamily: DM_MONO }}
-                >
-                  <RefreshCw size={11} /> refresh
-                </button>
-                <button onClick={() => setShowUpcoming(false)} className="text-muted-foreground hover:text-foreground"><X size={18} /></button>
-              </div>
-            </header>
-            <div className="overflow-y-auto p-4 flex-1">
-              {loadingUpcoming && upcomingEvents.length === 0 ? (
-                <div className="py-8 text-center text-sm text-muted-foreground inline-flex items-center justify-center gap-2 w-full">
-                  <Loader2 size={14} className="animate-spin" /> Loading upcoming events…
-                </div>
-              ) : upcomingByDate.length === 0 ? (
-                <div className="py-8 text-center text-sm text-muted-foreground">No upcoming high-impact US events.</div>
-              ) : (
-                <div className="space-y-4">
-                  {upcomingByDate.map(([dateKey, list]) => (
-                    <div key={dateKey}>
-                      <h4 className="text-xs uppercase tracking-wider text-muted-foreground mb-2" style={{ fontFamily: DM_MONO }}>
-                        {fmtDate(dateKey + "T12:00:00Z")} {isToday(dateKey + "T12:00:00Z") && <span className="ml-1 text-primary">· today</span>}
-                      </h4>
-                      <ul className="divide-y divide-border/60 border border-border/40 rounded-md">
-                        {list.map((ev, i) => (
-                          <EventRow key={i} ev={ev} showDate={false} onExplain={() => openExplain({
-                            kind: "event", title: ev.event + "|" + ev.date.slice(0, 10), payload: ev,
-                          })} />
-                        ))}
-                      </ul>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* ---------- Explain Modal ---------- */}
       {explainTarget && (
