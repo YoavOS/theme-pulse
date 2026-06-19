@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect, useMemo } from "react";
 import { Link } from "react-router-dom";
 import {
   ArrowLeft, RefreshCw, Sun, Loader2, Calendar, Newspaper,
-  TrendingUp, TrendingDown, Minus, Sparkles, X, ChevronDown, ExternalLink,
+  TrendingUp, TrendingDown, Minus, Sparkles, X, ChevronDown, ChevronUp, ExternalLink,
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { supabase } from "@/integrations/supabase/client";
