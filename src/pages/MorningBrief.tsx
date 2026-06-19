@@ -87,6 +87,36 @@ function hashKey(s: string): string {
   for (let i = 0; i < s.length; i++) { h = ((h << 5) - h) + s.charCodeAt(i); h |= 0; }
   return `k${Math.abs(h)}`;
 }
+
+// Map theme name → keywords used to filter raw market news for that section
+const THEME_KEYWORDS: Record<string, string[]> = {
+  "Fed & Macro Policy": ["fed", "fomc", "powell", "rate", "rates", "central bank", "treasury", "yield", "dollar", "dxy"],
+  "Inflation & Economic Data": ["cpi", "ppi", "inflation", "jobs", "payroll", "unemployment", "gdp", "retail sales", "pmi", "ism", "consumer"],
+  "Geopolitics": ["iran", "israel", "ukraine", "russia", "china", "tariff", "sanction", "war", "conflict", "trump", "pentagon", "nato", "geneva", "hormuz"],
+  "AI & Tech": ["ai ", "artificial intelligence", "chip", "semiconductor", "nvidia", "nvda", "amd", "microsoft", "msft", "google", "googl", "meta", "apple", "aapl", "openai", "data center"],
+  "Energy & Commodities": ["oil", "crude", "gas", "energy", "opec", "gold", "silver", "copper", "barrel", "lng", "pipeline"],
+  "Earnings & Corporate": ["earnings", "revenue", "guidance", "beats", "misses", "quarterly", "results", "profit", "merger", "acquisition", "buyback", "dividend"],
+  "Crypto & Risk Sentiment": ["bitcoin", "btc", "ethereum", "eth", "crypto", "coinbase", "risk-off", "risk on", "vix"],
+};
+
+function matchHeadlinesForTheme(themeName: string, articles: NewsArticle[] | null | undefined, excludeBulletTexts: string[]): NewsArticle[] {
+  if (!articles || articles.length === 0) return [];
+  const kws = THEME_KEYWORDS[themeName] || [];
+  const excludeSet = new Set(excludeBulletTexts.map(t => t.toLowerCase().replace(/\*\*/g, "").slice(0, 50)));
+  const out: NewsArticle[] = [];
+  const seen = new Set<string>();
+  for (const a of articles) {
+    if (!a.headline) continue;
+    const key = a.url || a.headline;
+    if (seen.has(key)) continue;
+    const lower = a.headline.toLowerCase();
+    if (excludeSet.has(lower.slice(0, 50))) continue;
+    const match = kws.length === 0 ? true : kws.some(k => lower.includes(k));
+    if (match) { out.push(a); seen.add(key); }
+    if (out.length >= 15) break;
+  }
+  return out;
+}
 function readExplainCache(): Record<string, ExplainResult> {
   try { return JSON.parse(localStorage.getItem(EXPLAIN_CACHE_KEY) || "{}"); } catch { return {}; }
 }
