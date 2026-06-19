@@ -412,22 +412,13 @@ export default function MorningBrief() {
                 {events.length} events
               </span>
             </div>
-            <div className="flex items-center gap-3">
-              <button
-                onClick={() => { setShowUpcoming(true); loadUpcomingEvents(false); }}
-                className="text-[11px] text-primary hover:underline inline-flex items-center gap-1"
-                style={{ fontFamily: DM_MONO }}
-              >
-                <ChevronDown size={11} /> More events
-              </button>
-              <button
-                onClick={() => loadEvents(true)}
-                className="text-[11px] text-muted-foreground hover:text-foreground inline-flex items-center gap-1"
-                style={{ fontFamily: DM_MONO }}
-              >
-                <RefreshCw size={11} /> refresh
-              </button>
-            </div>
+            <button
+              onClick={() => loadEvents(true)}
+              className="text-[11px] text-muted-foreground hover:text-foreground inline-flex items-center gap-1"
+              style={{ fontFamily: DM_MONO }}
+            >
+              <RefreshCw size={11} /> refresh
+            </button>
           </header>
           <div className="p-3">
             {events.length === 0 ? (
@@ -444,8 +435,56 @@ export default function MorningBrief() {
                 ))}
               </ul>
             )}
+
+            {/* Expandable upcoming-events area */}
+            {showUpcoming && (
+              <div className="mt-4 pt-4 border-t border-border/40 max-h-[420px] overflow-y-auto">
+                <h3 className="text-xs uppercase tracking-wider text-muted-foreground mb-3" style={{ fontFamily: DM_MONO }}>
+                  Upcoming US Events · Next 7 days
+                </h3>
+                {loadingUpcoming && upcomingEvents.length === 0 ? (
+                  <div className="py-6 text-center text-sm text-muted-foreground inline-flex items-center justify-center gap-2 w-full">
+                    <Loader2 size={14} className="animate-spin" /> Loading…
+                  </div>
+                ) : upcomingByDate.length === 0 ? (
+                  <div className="py-4 text-center text-sm text-muted-foreground">No upcoming high-impact US events.</div>
+                ) : (
+                  <div className="space-y-3">
+                    {upcomingByDate.map(([dateKey, list]) => (
+                      <div key={dateKey}>
+                        <h4 className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1.5" style={{ fontFamily: DM_MONO }}>
+                          {fmtDate(dateKey + "T12:00:00Z")} {isToday(dateKey + "T12:00:00Z") && <span className="ml-1 text-primary">· today</span>}
+                        </h4>
+                        <ul className="divide-y divide-border/60 border border-border/40 rounded-md">
+                          {list.map((ev, i) => (
+                            <EventRow key={i} ev={ev} showDate={false} onExplain={() => openExplain({
+                              kind: "event", title: ev.event + "|" + ev.date.slice(0, 10), payload: ev,
+                            })} />
+                          ))}
+                        </ul>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Bottom Show More toggle */}
+            <div className="flex justify-center mt-3 pt-3 border-t border-border/40">
+              <button
+                onClick={() => {
+                  if (!showUpcoming) loadUpcomingEvents(false);
+                  setShowUpcoming(v => !v);
+                }}
+                className="inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-[11px] font-medium text-primary hover:bg-primary/10 transition-colors"
+                style={{ fontFamily: DM_MONO }}
+              >
+                {showUpcoming ? <>Show Less <ChevronUp size={12} /></> : <>Show More <ChevronDown size={12} /></>}
+              </button>
+            </div>
           </div>
         </section>
+
 
         {/* 2. NEWS DIGEST */}
         <section className="rounded-lg border border-border bg-card">
