@@ -546,8 +546,10 @@ export default function MorningBrief() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 {digest.map((g, gi) => {
                   const isExpanded = !!expandedDigest[gi];
-                  const hasMore = g.bullets.length > DIGEST_PREVIEW;
-                  const shown = isExpanded ? g.bullets : g.bullets.slice(0, DIGEST_PREVIEW);
+                  const extras = isExpanded ? matchHeadlinesForTheme(g.theme, marketNews, g.bullets.map(b => b.text)) : [];
+                  const hasMore = g.bullets.length > DIGEST_PREVIEW
+                    || matchHeadlinesForTheme(g.theme, marketNews, g.bullets.map(b => b.text)).length > 0;
+                  const shownBullets = isExpanded ? g.bullets : g.bullets.slice(0, DIGEST_PREVIEW);
                   return (
                     <div key={gi} className="rounded-md border border-border/60 bg-secondary/20 p-3 flex flex-col">
                       <div className="flex items-center justify-between mb-2 pb-2 border-b border-border/40">
@@ -556,8 +558,8 @@ export default function MorningBrief() {
                           {g.impact}
                         </span>
                       </div>
-                      <ul className={`space-y-1.5 ${isExpanded && g.bullets.length > 6 ? "max-h-[320px] overflow-y-auto pr-1" : ""}`}>
-                        {shown.map((b, bi) => {
+                      <ul className={`space-y-1.5 ${isExpanded ? "max-h-[360px] overflow-y-auto pr-1" : ""}`}>
+                        {shownBullets.map((b, bi) => {
                           const d = directionPill(b.impact);
                           return (
                             <li key={bi} className="flex gap-2 text-[13px] leading-snug group">
@@ -578,6 +580,39 @@ export default function MorningBrief() {
                             </li>
                           );
                         })}
+                        {isExpanded && extras.length > 0 && (
+                          <>
+                            <li className="pt-2 mt-1 border-t border-border/40 text-[10px] uppercase tracking-wider text-muted-foreground" style={{ fontFamily: DM_MONO }}>
+                              Related headlines ({extras.length})
+                            </li>
+                            {extras.map((a, ai) => (
+                              <li key={`x${ai}`} className="flex gap-2 text-[12px] leading-snug group">
+                                <span className="shrink-0 mt-0.5 text-muted-foreground">•</span>
+                                <a
+                                  href={a.url}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="flex-1 text-foreground/80 hover:text-primary hover:underline"
+                                >
+                                  {a.headline}
+                                  {a.source && <span className="ml-1 text-[10px] text-muted-foreground">— {a.source}</span>}
+                                </a>
+                                <button
+                                  onClick={() => openExplain({
+                                    kind: "news",
+                                    title: g.theme + "|" + a.headline,
+                                    payload: { headline: a.headline, summary: a.summary || "", source: a.source, symbol: a.symbol },
+                                  })}
+                                  className="opacity-0 group-hover:opacity-100 transition-opacity shrink-0 text-[10px] text-primary inline-flex items-center gap-0.5 hover:underline"
+                                  style={{ fontFamily: DM_MONO }}
+                                  title="Explain"
+                                >
+                                  <Sparkles size={10} /> explain
+                                </button>
+                              </li>
+                            ))}
+                          </>
+                        )}
                       </ul>
                       {hasMore && (
                         <div className="flex justify-center mt-2 pt-2 border-t border-border/40">
@@ -588,7 +623,7 @@ export default function MorningBrief() {
                           >
                             {isExpanded
                               ? <>Show Less <ChevronUp size={11} /></>
-                              : <>Show More <ChevronDown size={11} /> <span className="opacity-60">({g.bullets.length - DIGEST_PREVIEW})</span></>}
+                              : <>Show More <ChevronDown size={11} /></>}
                           </button>
                         </div>
                       )}
