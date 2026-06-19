@@ -498,24 +498,14 @@ export default function MorningBrief() {
                 </span>
               )}
             </div>
-            <div className="flex items-center gap-3">
-              <button
-                onClick={() => setShowMoreNews((v) => !v)}
-                disabled={!marketNews || marketNews.length === 0}
-                className="text-[11px] text-primary hover:underline inline-flex items-center gap-1 disabled:opacity-40"
-                style={{ fontFamily: DM_MONO }}
-              >
-                <ChevronDown size={11} /> {showMoreNews ? "Hide headlines" : "More news"}
-              </button>
-              <button
-                onClick={() => loadDigest(marketNews as any[], true)}
-                disabled={!marketNews || marketNews.length === 0}
-                className="text-[11px] text-muted-foreground hover:text-foreground inline-flex items-center gap-1 disabled:opacity-40"
-                style={{ fontFamily: DM_MONO }}
-              >
-                <RefreshCw size={11} /> refresh
-              </button>
-            </div>
+            <button
+              onClick={() => loadDigest(marketNews as any[], true)}
+              disabled={!marketNews || marketNews.length === 0}
+              className="text-[11px] text-muted-foreground hover:text-foreground inline-flex items-center gap-1 disabled:opacity-40"
+              style={{ fontFamily: DM_MONO }}
+            >
+              <RefreshCw size={11} /> refresh
+            </button>
           </header>
           <div className="p-4">
             {digest.length === 0 ? (
@@ -524,45 +514,63 @@ export default function MorningBrief() {
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {digest.map((g, gi) => (
-                  <div key={gi} className="rounded-md border border-border/60 bg-secondary/20 p-3">
-                    <div className="flex items-center justify-between mb-2 pb-2 border-b border-border/40">
-                      <h3 className="text-sm font-semibold text-foreground">{g.theme}</h3>
-                      <span className={`text-[10px] px-1.5 py-0.5 rounded border font-semibold ${impactColor(g.impact)}`}>
-                        {g.impact}
-                      </span>
+                {digest.map((g, gi) => {
+                  const isExpanded = !!expandedDigest[gi];
+                  const hasMore = g.bullets.length > DIGEST_PREVIEW;
+                  const shown = isExpanded ? g.bullets : g.bullets.slice(0, DIGEST_PREVIEW);
+                  return (
+                    <div key={gi} className="rounded-md border border-border/60 bg-secondary/20 p-3 flex flex-col">
+                      <div className="flex items-center justify-between mb-2 pb-2 border-b border-border/40">
+                        <h3 className="text-sm font-semibold text-foreground">{g.theme}</h3>
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded border font-semibold ${impactColor(g.impact)}`}>
+                          {g.impact}
+                        </span>
+                      </div>
+                      <ul className={`space-y-1.5 ${isExpanded && g.bullets.length > 6 ? "max-h-[320px] overflow-y-auto pr-1" : ""}`}>
+                        {shown.map((b, bi) => {
+                          const d = directionPill(b.impact);
+                          return (
+                            <li key={bi} className="flex gap-2 text-[13px] leading-snug group">
+                              <span className={`shrink-0 mt-0.5 ${d.cls}`}>{d.icon}</span>
+                              <span className="flex-1 text-foreground/90">{renderInline(b.text)}</span>
+                              <button
+                                onClick={() => openExplain({
+                                  kind: "news",
+                                  title: g.theme + "|" + b.text,
+                                  payload: { headline: b.text.replace(/\*\*/g, ""), summary: g.theme },
+                                })}
+                                className="opacity-0 group-hover:opacity-100 transition-opacity shrink-0 text-[10px] text-primary inline-flex items-center gap-0.5 hover:underline"
+                                style={{ fontFamily: DM_MONO }}
+                                title="Explain"
+                              >
+                                <Sparkles size={10} /> explain
+                              </button>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                      {hasMore && (
+                        <div className="flex justify-center mt-2 pt-2 border-t border-border/40">
+                          <button
+                            onClick={() => setExpandedDigest(prev => ({ ...prev, [gi]: !prev[gi] }))}
+                            className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[10px] font-medium text-primary hover:bg-primary/10 transition-colors"
+                            style={{ fontFamily: DM_MONO }}
+                          >
+                            {isExpanded
+                              ? <>Show Less <ChevronUp size={11} /></>
+                              : <>Show More <ChevronDown size={11} /> <span className="opacity-60">({g.bullets.length - DIGEST_PREVIEW})</span></>}
+                          </button>
+                        </div>
+                      )}
                     </div>
-                    <ul className="space-y-1.5">
-                      {g.bullets.map((b, bi) => {
-                        const d = directionPill(b.impact);
-                        return (
-                          <li key={bi} className="flex gap-2 text-[13px] leading-snug group">
-                            <span className={`shrink-0 mt-0.5 ${d.cls}`}>{d.icon}</span>
-                            <span className="flex-1 text-foreground/90">{renderInline(b.text)}</span>
-                            <button
-                              onClick={() => openExplain({
-                                kind: "news",
-                                title: g.theme + "|" + b.text,
-                                payload: { headline: b.text.replace(/\*\*/g, ""), summary: g.theme },
-                              })}
-                              className="opacity-0 group-hover:opacity-100 transition-opacity shrink-0 text-[10px] text-primary inline-flex items-center gap-0.5 hover:underline"
-                              style={{ fontFamily: DM_MONO }}
-                              title="Explain"
-                            >
-                              <Sparkles size={10} /> explain
-                            </button>
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
 
-            {/* More news headlines list */}
+            {/* Latest headlines (expandable at bottom) */}
             {showMoreNews && visibleNews.length > 0 && (
-              <div className="mt-4 pt-4 border-t border-border/40">
+              <div className="mt-4 pt-4 border-t border-border/40 max-h-[420px] overflow-y-auto">
                 <h3 className="text-xs uppercase tracking-wider text-muted-foreground mb-2" style={{ fontFamily: DM_MONO }}>
                   Latest headlines ({visibleNews.length})
                 </h3>
@@ -599,8 +607,24 @@ export default function MorningBrief() {
                 </ul>
               </div>
             )}
+
+            {/* Bottom Show More toggle for latest headlines */}
+            {marketNews && marketNews.length > 0 && (
+              <div className="flex justify-center mt-3 pt-3 border-t border-border/40">
+                <button
+                  onClick={() => setShowMoreNews(v => !v)}
+                  className="inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-[11px] font-medium text-primary hover:bg-primary/10 transition-colors"
+                  style={{ fontFamily: DM_MONO }}
+                >
+                  {showMoreNews
+                    ? <>Show Less <ChevronUp size={12} /></>
+                    : <>Show More Headlines <ChevronDown size={12} /></>}
+                </button>
+              </div>
+            )}
           </div>
         </section>
+
 
         {/* 3. AI BRIEF */}
         {!brief && !isLoading && (
