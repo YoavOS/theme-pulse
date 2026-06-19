@@ -117,6 +117,8 @@ export default function MorningBrief() {
   const [digest, setDigest] = useState<DigestGroup[]>([]);
   const [digestFetchedAt, setDigestFetchedAt] = useState<string | null>(null);
   const [showMoreNews, setShowMoreNews] = useState(false);
+  const [expandedDigest, setExpandedDigest] = useState<Record<number, boolean>>({});
+  const DIGEST_PREVIEW = 3;
 
   // Explain modal
   const [explainTarget, setExplainTarget] = useState<ExplainTarget | null>(null);
