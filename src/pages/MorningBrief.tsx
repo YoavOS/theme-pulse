@@ -684,55 +684,6 @@ export default function MorningBrief() {
         )}
       </div>
 
-      {/* ---------- Upcoming Events Drawer ---------- */}
-      {showUpcoming && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={() => setShowUpcoming(false)}>
-          <div className="bg-card border border-border rounded-lg w-full max-w-2xl max-h-[80vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
-            <header className="flex items-center justify-between px-5 py-3 border-b border-border">
-              <div className="flex items-center gap-2">
-                <Calendar size={16} className="text-[hsl(40,90%,55%)]" />
-                <h3 className="font-['Syne',sans-serif] text-base font-semibold">Upcoming US Events · Next 7 days</h3>
-              </div>
-              <div className="flex items-center gap-3">
-                <button
-                  onClick={() => loadUpcomingEvents(true)}
-                  className="text-[11px] text-muted-foreground hover:text-foreground inline-flex items-center gap-1"
-                  style={{ fontFamily: DM_MONO }}
-                >
-                  <RefreshCw size={11} /> refresh
-                </button>
-                <button onClick={() => setShowUpcoming(false)} className="text-muted-foreground hover:text-foreground"><X size={18} /></button>
-              </div>
-            </header>
-            <div className="overflow-y-auto p-4 flex-1">
-              {loadingUpcoming && upcomingEvents.length === 0 ? (
-                <div className="py-8 text-center text-sm text-muted-foreground inline-flex items-center justify-center gap-2 w-full">
-                  <Loader2 size={14} className="animate-spin" /> Loading upcoming events…
-                </div>
-              ) : upcomingByDate.length === 0 ? (
-                <div className="py-8 text-center text-sm text-muted-foreground">No upcoming high-impact US events.</div>
-              ) : (
-                <div className="space-y-4">
-                  {upcomingByDate.map(([dateKey, list]) => (
-                    <div key={dateKey}>
-                      <h4 className="text-xs uppercase tracking-wider text-muted-foreground mb-2" style={{ fontFamily: DM_MONO }}>
-                        {fmtDate(dateKey + "T12:00:00Z")} {isToday(dateKey + "T12:00:00Z") && <span className="ml-1 text-primary">· today</span>}
-                      </h4>
-                      <ul className="divide-y divide-border/60 border border-border/40 rounded-md">
-                        {list.map((ev, i) => (
-                          <EventRow key={i} ev={ev} showDate={false} onExplain={() => openExplain({
-                            kind: "event", title: ev.event + "|" + ev.date.slice(0, 10), payload: ev,
-                          })} />
-                        ))}
-                      </ul>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* ---------- Explain Modal ---------- */}
       {explainTarget && (
