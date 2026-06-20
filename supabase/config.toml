@@ -80,3 +80,6 @@ verify_jwt = false
 
 [functions.explain-item]
 verify_jwt = false
+
+[functions.volume-catalyst]
+verify_jwt = false
