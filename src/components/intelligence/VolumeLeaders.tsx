@@ -10,6 +10,7 @@ import {
   VolumeSparkline, StrengthBar, SustainedGauge, VolumeHeatBadge, classifyVolumeHeat,
 } from "./volume/VolumeVisuals";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
 import ThemeVolumeDashboard from "./volume/ThemeVolumeDashboard";
 
 function HeaderCell({ label, tip, className, align = "center" }: { label: string; tip: string; className?: string; align?: "left" | "center" | "right" }) {
