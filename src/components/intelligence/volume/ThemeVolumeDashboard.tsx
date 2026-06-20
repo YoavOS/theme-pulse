@@ -10,8 +10,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { ThemeIntelData } from "@/hooks/useThemeIntelligence";
 import { useSmartVolumeMetrics, type SmartVolumeMetrics } from "@/hooks/useSmartVolumeMetrics";
 import type { Timeframe } from "@/hooks/useTimeframeAvailability";
-import { Activity, BarChart3, Layers, TrendingUp, Users } from "lucide-react";
+import { Activity, BarChart3, Layers, TrendingUp, Users, Sparkles, RefreshCw } from "lucide-react";
 import { VolumeHeatBadge, classifyVolumeHeat } from "./VolumeVisuals";
+import { useVolumeCatalyst } from "@/hooks/useVolumeCatalyst";
 
 const DM_MONO = "'DM Mono', monospace";
 const SYNE = "'Syne', sans-serif";
@@ -237,6 +238,17 @@ export default function ThemeVolumeDashboard({ open, onOpenChange, theme, smartV
     ? classifyVolumeHeat(aggregate.relVol, aggregate.trendPct, aggregate.sustained)
     : "neutral";
 
+  const catalyst = useVolumeCatalyst({
+    enabled: open && !!theme && !!aggregate,
+    themeId: theme?.themeId ?? null,
+    themeName: theme?.themeName ?? null,
+    symbols: theme?.symbols ?? [],
+    avgPerf1d: theme?.perf_1d ?? null,
+    avgRelVol: aggregate?.relVol ?? null,
+    sustained: aggregate?.sustained ?? null,
+    trendPct: aggregate?.trendPct ?? null,
+  });
+
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
@@ -261,6 +273,39 @@ export default function ThemeVolumeDashboard({ open, onOpenChange, theme, smartV
                 </div>
                 <VolumeHeatBadge heat={heat} />
               </div>
+              {/* Volume Catalyst */}
+              <div className="mt-2 flex items-start gap-2">
+                <div
+                  className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[10.5px] font-semibold uppercase tracking-wider"
+                  style={{
+                    fontFamily: DM_MONO,
+                    background: "rgba(0,245,196,0.08)",
+                    border: "1px solid rgba(0,245,196,0.25)",
+                    color: "#00f5c4",
+                  }}
+                >
+                  <Sparkles size={11} />
+                  <span>Volume Catalyst:</span>
+                  <span className="text-foreground normal-case tracking-normal">
+                    {catalyst.loading && !catalyst.data ? "analyzing…" : catalyst.data?.catalyst || (catalyst.error ? "unavailable" : "—")}
+                  </span>
+                </div>
+                {catalyst.data && (
+                  <button
+                    onClick={() => catalyst.refresh(true)}
+                    className="text-muted-foreground hover:text-foreground transition-colors mt-0.5"
+                    title="Refresh catalyst"
+                    aria-label="Refresh catalyst"
+                  >
+                    <RefreshCw size={11} className={catalyst.loading ? "animate-spin" : ""} />
+                  </button>
+                )}
+              </div>
+              {catalyst.data?.reason && (
+                <div className="text-[11px] text-muted-foreground leading-snug mt-1" style={{ fontFamily: DM_MONO }}>
+                  {catalyst.data.reason}
+                </div>
+              )}
             </SheetHeader>
 
             <div className="flex-1 overflow-y-auto px-5 py-4 space-y-5">

@@ -10,6 +10,7 @@ import {
   VolumeSparkline, StrengthBar, SustainedGauge, VolumeHeatBadge, classifyVolumeHeat,
 } from "./volume/VolumeVisuals";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
 import ThemeVolumeDashboard from "./volume/ThemeVolumeDashboard";
 
 function HeaderCell({ label, tip, className, align = "center" }: { label: string; tip: string; className?: string; align?: "left" | "center" | "right" }) {
@@ -177,6 +178,33 @@ function SmartVolumeRow({
   const heat = classifyVolumeHeat(metrics.relVol, metrics.volTrendPct, metrics.sustainedScore);
   const isLoading = metrics.loading && metrics.relVol === null;
 
+  // Hover preview: top 5 tickers by rel vol (fallback perf_1d), surge score, participation rate.
+  // All derived from existing cached smart-volume data — no new network calls.
+  const preview = useMemo(() => {
+    const RV_ELEVATED = 1.2;
+    const enriched = t.tickers
+      .filter(tk => tk.status === "done")
+      .map(tk => {
+        const v = smart.data[tk.symbol];
+        return { symbol: tk.symbol, perf_1d: tk.perf_1d, relVol: v?.rel_vol ?? null };
+      });
+    const ranked = [...enriched].sort((a, b) => {
+      const ar = a.relVol ?? -Infinity;
+      const br = b.relVol ?? -Infinity;
+      if (ar !== br) return br - ar;
+      return (b.perf_1d ?? 0) - (a.perf_1d ?? 0);
+    }).slice(0, 5);
+    const withVol = enriched.filter(e => e.relVol != null);
+    const elevated = withVol.filter(e => (e.relVol as number) >= RV_ELEVATED).length;
+    const participation = withVol.length > 0 ? (elevated / withVol.length) * 100 : null;
+    // Surge score: bounded composite (rel vol + trend + sustained), 0-100.
+    const rvN = metrics.relVol == null ? 0 : Math.max(0, Math.min(1, (metrics.relVol - 0.5) / 2.0));
+    const trN = metrics.volTrendPct == null ? 0 : Math.max(0, Math.min(1, (metrics.volTrendPct + 20) / 70));
+    const suN = metrics.sustainedScore == null ? 0 : Math.max(0, Math.min(1, (metrics.sustainedScore - 0.7) / 0.8));
+    const surge = Math.round((rvN * 0.5 + trN * 0.2 + suN * 0.3) * 100);
+    return { top: ranked, participation, surge };
+  }, [t.tickers, smart.data, metrics.relVol, metrics.volTrendPct, metrics.sustainedScore]);
+
   return (
     <div className="border-b border-[rgba(255,255,255,0.04)]">
       <div className="relative flex w-full items-center gap-4 px-4 py-3 text-left transition-all duration-150 hover:bg-[rgba(255,255,255,0.04)]">
@@ -189,16 +217,58 @@ function SmartVolumeRow({
         >
           <ChevronRight size={12} className="transition-transform duration-200" style={{ transform: open ? "rotate(90deg)" : "rotate(0deg)" }} />
         </button>
-        <button
-          type="button"
-          onClick={(e) => { e.stopPropagation(); onOpenDashboard(t); }}
-          className="font-semibold text-[13.5px] leading-tight truncate min-w-0 flex-1 text-left text-foreground hover:text-[#00f5c4]"
-          style={{ fontFamily: "'Syne', sans-serif", maxWidth: "240px" }}
-          aria-label={`Open ${t.themeName} volume dashboard`}
-          title={`Open ${t.themeName} volume dashboard`}
-        >
-          {t.themeName}
-        </button>
+        <HoverCard openDelay={180} closeDelay={80}>
+          <HoverCardTrigger asChild>
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); onOpenDashboard(t); }}
+              className="font-semibold text-[13.5px] leading-tight truncate min-w-0 flex-1 text-left text-foreground hover:text-[#00f5c4]"
+              style={{ fontFamily: "'Syne', sans-serif", maxWidth: "240px" }}
+              aria-label={`Open ${t.themeName} volume dashboard`}
+              title={`Open ${t.themeName} volume dashboard`}
+            >
+              {t.themeName}
+            </button>
+          </HoverCardTrigger>
+          <HoverCardContent side="right" align="start" className="w-[300px] p-3 z-[70]" style={{ background: "rgba(11,14,18,0.98)", border: "1px solid rgba(255,255,255,0.1)" }}>
+            <div className="text-[12px] font-bold text-foreground mb-2 truncate" style={{ fontFamily: "'Syne', sans-serif" }}>{t.themeName}</div>
+            <div className="grid grid-cols-2 gap-2 mb-2.5">
+              <div className="rounded-md px-2 py-1.5" style={{ background: "rgba(0,245,196,0.06)", border: "1px solid rgba(0,245,196,0.2)" }}>
+                <div className="text-[9.5px] uppercase tracking-widest text-muted-foreground" style={{ fontFamily: DM_MONO }}>Surge</div>
+                <div className="text-[15px] font-bold tabular-nums" style={{ color: "#00f5c4", fontFamily: DM_MONO }}>{preview.surge}</div>
+              </div>
+              <div className="rounded-md px-2 py-1.5" style={{ background: "rgba(74,222,128,0.06)", border: "1px solid rgba(74,222,128,0.2)" }}>
+                <div className="text-[9.5px] uppercase tracking-widest text-muted-foreground" style={{ fontFamily: DM_MONO }}>Participation</div>
+                <div className="text-[15px] font-bold tabular-nums" style={{ color: "#4ade80", fontFamily: DM_MONO }}>
+                  {preview.participation != null ? `${preview.participation.toFixed(0)}%` : "—"}
+                </div>
+              </div>
+            </div>
+            <div className="text-[10px] uppercase tracking-widest text-muted-foreground mb-1" style={{ fontFamily: DM_MONO }}>Top 5 by Rel Vol</div>
+            <div className="rounded-md overflow-hidden" style={{ background: "rgba(0,0,0,0.25)", border: "1px solid rgba(255,255,255,0.06)" }}>
+              <table className="w-full text-[11.5px]" style={{ fontFamily: DM_MONO }}>
+                <tbody>
+                  {preview.top.length === 0 ? (
+                    <tr><td className="px-2 py-2 text-muted-foreground text-center" colSpan={3}>No data</td></tr>
+                  ) : preview.top.map(row => (
+                    <tr key={row.symbol} className="border-b border-[rgba(255,255,255,0.04)] last:border-0">
+                      <td className="px-2 py-1.5 font-bold text-foreground">{row.symbol}</td>
+                      <td className="px-2 py-1.5 text-right tabular-nums" style={{ color: row.perf_1d > 0 ? "#4ade80" : row.perf_1d < 0 ? "#f87171" : "hsl(var(--muted-foreground))" }}>
+                        {fmtPct(row.perf_1d, 2)}
+                      </td>
+                      <td className="px-2 py-1.5 text-right tabular-nums text-foreground/80">
+                        {row.relVol != null ? `${row.relVol.toFixed(2)}×` : "—"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="text-[9.5px] text-muted-foreground mt-2" style={{ fontFamily: DM_MONO }}>
+              Click theme to open full dashboard
+            </div>
+          </HoverCardContent>
+        </HoverCard>
 
         {/* Sparkline */}
         <Tooltip delayDuration={150}>
