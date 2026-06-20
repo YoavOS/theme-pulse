@@ -10,8 +10,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { ThemeIntelData } from "@/hooks/useThemeIntelligence";
 import { useSmartVolumeMetrics, type SmartVolumeMetrics } from "@/hooks/useSmartVolumeMetrics";
 import type { Timeframe } from "@/hooks/useTimeframeAvailability";
-import { Activity, BarChart3, Layers, TrendingUp, Users } from "lucide-react";
+import { Activity, BarChart3, Layers, TrendingUp, Users, Sparkles, RefreshCw } from "lucide-react";
 import { VolumeHeatBadge, classifyVolumeHeat } from "./VolumeVisuals";
+import { useVolumeCatalyst } from "@/hooks/useVolumeCatalyst";
 
 const DM_MONO = "'DM Mono', monospace";
 const SYNE = "'Syne', sans-serif";
