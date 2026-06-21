@@ -112,9 +112,26 @@ function ProfileReportCard({ report }: { report: ProfileReport }) {
         <div className="min-w-0 flex-1">
           <div className="text-xs uppercase tracking-widest text-muted-foreground">{report.profileLabel}</div>
           <p className="mt-2 text-sm text-foreground/90">{report.headline}</p>
+          {report.subScores && report.subScores.length > 0 && (
+            <div className="mt-3 flex flex-wrap gap-2">
+              {report.subScores.map((s, i) => {
+                const pct = Math.round((s.score / s.max) * 100);
+                const color = pct >= 75 ? "text-gain-medium border-gain-medium/40 bg-gain-medium/10"
+                  : pct >= 50 ? "text-[hsl(40,90%,55%)] border-[hsl(40,90%,55%)]/40 bg-[hsl(40,90%,55%)]/10"
+                  : "text-loss-medium border-loss-medium/40 bg-loss-medium/10";
+                return (
+                  <div key={i} className={`inline-flex items-center gap-2 rounded-md border px-2 py-1 text-[11px] ${color}`}>
+                    <span className="uppercase tracking-wider opacity-80">{s.label}</span>
+                    <span className="font-mono font-bold tabular-nums">{s.score}/{s.max}</span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
         <VerdictBadge verdict={report.verdict} score={report.overallScore} />
       </div>
+
 
       <div className="grid gap-2 md:grid-cols-2">
         {report.criteria.map((c, i) => (
