@@ -88,7 +88,7 @@ function VerdictBadge({ verdict, score, label }: { verdict: string; score: numbe
   );
 }
 
-const CACHE_KEY = (sym: string) => `minervini:v7-current:${sym}`;
+const CACHE_KEY = (sym: string) => `minervini:v8-current-adaptive:${sym}`;
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 
 
@@ -344,6 +344,7 @@ export default function MinerviniChecker() {
                 <div className="flex flex-wrap gap-3">
                   {activeProfiles.map(p => {
                     const r = multi.reports[p];
+                    if (!r) return null;
                     return <VerdictBadge key={p} verdict={r.verdict} score={r.overallScore} label={PROFILES.find(x => x.id === p)?.short} />;
                   })}
                 </div>
@@ -367,9 +368,12 @@ export default function MinerviniChecker() {
               </Card>
             )}
 
-            {activeProfiles.map(p => (
-              <ProfileReportCard key={p} report={multi.reports[p]} />
-            ))}
+            {activeProfiles.map(p => {
+              const r = multi.reports[p];
+              if (!r) return null;
+              return <ProfileReportCard key={p} report={r} />;
+            })}
+
 
             {cumulativeActive && (
               <Card className={`border-2 p-6 ${verdictClasses(cumulativeActive.verdict)}`}>
