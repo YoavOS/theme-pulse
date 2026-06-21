@@ -16,7 +16,7 @@ interface Criterion {
   comment: string;
 }
 
-type ProfileId = "minervini" | "oneil" | "ryan";
+type ProfileId = "minervini" | "oneil" | "ryan" | "current";
 
 interface ProfileReport {
   symbol: string;
@@ -31,6 +31,7 @@ interface ProfileReport {
   bullCase: string[];
   bearCase: string[];
   finalVerdict: string;
+  subScores?: { label: string; score: number; max: number }[];
 }
 
 interface DataCoverage {
@@ -53,10 +54,12 @@ interface MultiReport {
 }
 
 const PROFILES: { id: ProfileId; label: string; short: string }[] = [
+  { id: "current", label: "Current Fundamentals Strength", short: "Current" },
   { id: "minervini", label: "Mark Minervini (SEPA)", short: "Minervini" },
   { id: "oneil", label: "William O'Neil (CAN SLIM)", short: "O'Neil" },
   { id: "ryan", label: "David Ryan (Momentum)", short: "Ryan" },
 ];
+
 
 const STATUS_ICON = {
   pass: <CheckCircle2 className="text-gain-medium" size={18} />,
