@@ -16,7 +16,7 @@ interface Criterion {
   comment: string;
 }
 
-type ProfileId = "minervini" | "oneil" | "ryan";
+type ProfileId = "minervini" | "oneil" | "ryan" | "current";
 
 interface ProfileReport {
   symbol: string;
@@ -31,6 +31,7 @@ interface ProfileReport {
   bullCase: string[];
   bearCase: string[];
   finalVerdict: string;
+  subScores?: { label: string; score: number; max: number }[];
 }
 
 interface DataCoverage {
@@ -53,10 +54,12 @@ interface MultiReport {
 }
 
 const PROFILES: { id: ProfileId; label: string; short: string }[] = [
+  { id: "current", label: "Current Fundamentals Strength", short: "Current" },
   { id: "minervini", label: "Mark Minervini (SEPA)", short: "Minervini" },
   { id: "oneil", label: "William O'Neil (CAN SLIM)", short: "O'Neil" },
   { id: "ryan", label: "David Ryan (Momentum)", short: "Ryan" },
 ];
+
 
 const STATUS_ICON = {
   pass: <CheckCircle2 className="text-gain-medium" size={18} />,
@@ -85,8 +88,9 @@ function VerdictBadge({ verdict, score, label }: { verdict: string; score: numbe
   );
 }
 
-const CACHE_KEY = (sym: string) => `minervini:v6-coverage:${sym}`;
+const CACHE_KEY = (sym: string) => `minervini:v7-current:${sym}`;
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+
 
 function readCache(sym: string): MultiReport | null {
   try {
@@ -108,9 +112,26 @@ function ProfileReportCard({ report }: { report: ProfileReport }) {
         <div className="min-w-0 flex-1">
           <div className="text-xs uppercase tracking-widest text-muted-foreground">{report.profileLabel}</div>
           <p className="mt-2 text-sm text-foreground/90">{report.headline}</p>
+          {report.subScores && report.subScores.length > 0 && (
+            <div className="mt-3 flex flex-wrap gap-2">
+              {report.subScores.map((s, i) => {
+                const pct = Math.round((s.score / s.max) * 100);
+                const color = pct >= 75 ? "text-gain-medium border-gain-medium/40 bg-gain-medium/10"
+                  : pct >= 50 ? "text-[hsl(40,90%,55%)] border-[hsl(40,90%,55%)]/40 bg-[hsl(40,90%,55%)]/10"
+                  : "text-loss-medium border-loss-medium/40 bg-loss-medium/10";
+                return (
+                  <div key={i} className={`inline-flex items-center gap-2 rounded-md border px-2 py-1 text-[11px] ${color}`}>
+                    <span className="uppercase tracking-wider opacity-80">{s.label}</span>
+                    <span className="font-mono font-bold tabular-nums">{s.score}/{s.max}</span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
         <VerdictBadge verdict={report.verdict} score={report.overallScore} />
       </div>
+
 
       <div className="grid gap-2 md:grid-cols-2">
         {report.criteria.map((c, i) => (
@@ -167,7 +188,7 @@ export default function MinerviniChecker() {
   const [multi, setMulti] = useState<MultiReport | null>(null);
   const [fromCache, setFromCache] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [activeProfiles, setActiveProfiles] = useState<ProfileId[]>(["minervini", "oneil", "ryan"]);
+  const [activeProfiles, setActiveProfiles] = useState<ProfileId[]>(["current", "minervini", "oneil", "ryan"]);
 
   const runAnalysis = async (force = false) => {
     const sym = symbol.trim().toUpperCase();
