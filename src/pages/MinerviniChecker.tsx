@@ -88,7 +88,7 @@ function VerdictBadge({ verdict, score, label }: { verdict: string; score: numbe
   );
 }
 
-const CACHE_KEY = (sym: string) => `minervini:v7-current:${sym}`;
+const CACHE_KEY = (sym: string) => `minervini:v8-current-adaptive:${sym}`;
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 
 
