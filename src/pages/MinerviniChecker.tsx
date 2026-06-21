@@ -188,7 +188,7 @@ export default function MinerviniChecker() {
   const [multi, setMulti] = useState<MultiReport | null>(null);
   const [fromCache, setFromCache] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [activeProfiles, setActiveProfiles] = useState<ProfileId[]>(["minervini", "oneil", "ryan"]);
+  const [activeProfiles, setActiveProfiles] = useState<ProfileId[]>(["current", "minervini", "oneil", "ryan"]);
 
   const runAnalysis = async (force = false) => {
     const sym = symbol.trim().toUpperCase();
