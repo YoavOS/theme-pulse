@@ -926,20 +926,36 @@ function makeRyanReport(symbol: string, profile: any, derived: any): MinerviniRe
 }
 
 // ============================================================================
-// Current Fundamentals Strength (limited-data friendly: 1-2 recent quarters + annual)
-// 55% Short-Term Momentum | 35% Long-Term Quality | 10% Data Consistency
+// Current Fundamentals Strength — ADAPTIVE to available data
+// 2+ usable quarters: weight on acceleration & trend (Recent 65 / Core 25 / Reliability 10)
+// 1 usable quarter:   focus on latest strength + annual (Recent 55 / Core 35 / Reliability 10)
+// 0 usable quarters:  fall back to annual+ratios only (Recent 30 / Core 60 / Reliability 10)
 // ============================================================================
 function makeCurrentReport(symbol: string, profile: any, derived: any): MinerviniReport {
   const q = derived.quarters as QuarterTrend[];
   const a = derived.annual as AnnualTrend[];
-  const latest = q[0];
 
-  // Short-term: recent 1-2 quarters
-  const qEps = q.slice(0, 4).map(x => x.normalizedEpsYoY ?? x.epsYoY);
-  const qRev = q.slice(0, 4).map(x => x.revenueYoY);
+  // Recent quarterly series (up to 4)
+  const qEpsAll = q.slice(0, 4).map(x => x.normalizedEpsYoY ?? x.epsYoY);
+  const qRevAll = q.slice(0, 4).map(x => x.revenueYoY);
   const qMargin = q.slice(0, 4).map(x => x.operatingMargin ?? x.netMargin);
-  const epsAccel = summarizeTrend(qEps);
-  const revAccel = summarizeTrend(qRev);
+
+  const usableQuarters = Math.max(
+    qEpsAll.filter(v => v !== null).length,
+    qRevAll.filter(v => v !== null).length,
+  );
+
+  // Adaptive weights
+  let recentMax: number, coreMax: number;
+  const reliabilityMax = 10;
+  if (usableQuarters >= 2) { recentMax = 65; coreMax = 25; }
+  else if (usableQuarters === 1) { recentMax = 55; coreMax = 35; }
+  else { recentMax = 30; coreMax = 60; }
+
+  const qEps0 = qEpsAll[0];
+  const qRev0 = qRevAll[0];
+  const epsAccel = summarizeTrend(qEpsAll);
+  const revAccel = summarizeTrend(qRevAll);
   const marginAccel = summarizeTrend(qMargin);
 
   // Annual averages
@@ -948,163 +964,181 @@ function makeCurrentReport(symbol: string, profile: any, derived: any): Minervin
   const annEpsAvg = avg(annEps);
   const annRevAvg = avg(annRev);
 
-  // OCF positive & growing
+  // Cash flow
   const ocfSeries = q.slice(0, 4).map(x => x.operatingCashFlow).filter((v): v is number => v !== null);
   const ocfPositive = ocfSeries.length > 0 && ocfSeries.every(v => v > 0);
   const ocfGrowing = ocfSeries.length >= 2 && ocfSeries[0] > ocfSeries[ocfSeries.length - 1];
 
-  // Earnings surprise consistency (beat by ≥5%)
+  // Earnings surprises
   const surprises = (derived.epsSurprisesRecent as number[]) ?? [];
   const recentSurprises = surprises.slice(0, 4);
   const goodBeats = recentSurprises.filter(v => v >= 5).length;
   const beatRatio = recentSurprises.length ? goodBeats / recentSurprises.length : null;
 
-  // ---------- Short-Term Momentum (55) ----------
-  let stm = 0;
-  // Quarterly EPS YoY (20)
-  const qEps0 = qEps[0];
-  if ((qEps0 ?? -999) >= 25) stm += 20;
-  else if ((qEps0 ?? -999) >= 10) stm += 12;
-  else if ((qEps0 ?? -999) > 0) stm += 5;
-  // Quarterly Sales YoY (18)
-  const qRev0 = qRev[0];
-  if ((qRev0 ?? -999) >= 20) stm += 18;
-  else if ((qRev0 ?? -999) >= 10) stm += 11;
-  else if ((qRev0 ?? -999) > 0) stm += 4;
-  // Earnings surprises (10)
+  // ----------------- Recent Momentum (recentMax) -----------------
+  // Allocation within recent: EPS 35%, Sales 30%, Beat 15%, Margin/Accel 20%
+  let recent = 0;
+  const w = (frac: number) => frac * recentMax;
+  // EPS strength
+  if ((qEps0 ?? -999) >= 25) recent += w(0.35);
+  else if ((qEps0 ?? -999) >= 10) recent += w(0.20);
+  else if ((qEps0 ?? -999) > 0) recent += w(0.08);
+  // Sales strength
+  if ((qRev0 ?? -999) >= 20) recent += w(0.30);
+  else if ((qRev0 ?? -999) >= 10) recent += w(0.18);
+  else if ((qRev0 ?? -999) > 0) recent += w(0.07);
+  // Beat rate
   if (beatRatio !== null) {
-    if (beatRatio >= 0.75) stm += 10;
-    else if (beatRatio >= 0.5) stm += 6;
-    else if (goodBeats >= 1) stm += 3;
+    if (beatRatio >= 0.75) recent += w(0.15);
+    else if (beatRatio >= 0.5) recent += w(0.09);
+    else if (goodBeats >= 1) recent += w(0.04);
   }
-  // Margin expansion (7)
-  if (marginAccel === "accelerating") stm += 7;
-  else if (marginAccel === "stable" && (qMargin[0] ?? -1) > 0) stm += 4;
-  stm = Math.min(55, stm);
+  // Margin direction (and acceleration when 2+ quarters)
+  if (usableQuarters >= 2) {
+    if (epsAccel === "accelerating" && revAccel === "accelerating") recent += w(0.12);
+    else if (epsAccel === "accelerating" || revAccel === "accelerating") recent += w(0.07);
+    if (marginAccel === "accelerating") recent += w(0.08);
+    else if (marginAccel === "stable" && (qMargin[0] ?? -1) > 0) recent += w(0.04);
+  } else {
+    // Single quarter: just margin level
+    if ((qMargin[0] ?? -1) > 15) recent += w(0.20);
+    else if ((qMargin[0] ?? -1) > 5) recent += w(0.10);
+  }
+  recent = Math.min(recentMax, Math.round(recent));
 
-  // ---------- Long-Term Quality (35) ----------
-  let ltq = 0;
-  // Annual EPS avg (8)
-  if ((annEpsAvg ?? -999) >= 25) ltq += 8;
-  else if ((annEpsAvg ?? -999) >= 15) ltq += 5;
-  else if ((annEpsAvg ?? -999) > 0) ltq += 2;
-  // Annual Sales avg (7)
-  if ((annRevAvg ?? -999) >= 20) ltq += 7;
-  else if ((annRevAvg ?? -999) >= 12) ltq += 4;
-  else if ((annRevAvg ?? -999) > 0) ltq += 2;
-  // ROE (8)
-  if ((derived.roePct ?? -1) >= 17) ltq += 8;
-  else if ((derived.roePct ?? -1) >= 10) ltq += 5;
-  // D/E (7)
+  // ----------------- Core Quality (coreMax) -----------------
+  // Allocation: Ann EPS 22%, Ann Sales 18%, ROE 22%, D/E 20%, OCF 18%
+  let core = 0;
+  const cw = (frac: number) => frac * coreMax;
+  if ((annEpsAvg ?? -999) >= 20) core += cw(0.22);
+  else if ((annEpsAvg ?? -999) >= 10) core += cw(0.13);
+  else if ((annEpsAvg ?? -999) > 0) core += cw(0.05);
+
+  if ((annRevAvg ?? -999) >= 15) core += cw(0.18);
+  else if ((annRevAvg ?? -999) >= 8) core += cw(0.11);
+  else if ((annRevAvg ?? -999) > 0) core += cw(0.04);
+
+  if ((derived.roePct ?? -1) >= 15) core += cw(0.22);
+  else if ((derived.roePct ?? -1) >= 8) core += cw(0.12);
+
   const de = derived.debtToEquity;
-  if (de !== null && de <= 0.8) ltq += 7;
-  else if (de !== null && de <= 1.5) ltq += 4;
-  // OCF positive & growing (5)
-  if (ocfPositive && ocfGrowing) ltq += 5;
-  else if (ocfPositive) ltq += 3;
-  ltq = Math.min(35, ltq);
+  if (de !== null && de <= 1.0) core += cw(0.20);
+  else if (de !== null && de <= 1.5) core += cw(0.12);
+  else if (de !== null && de <= 2.5) core += cw(0.05);
 
-  // ---------- Data Consistency (10) ----------
-  const keyMetrics = [qEps0, qRev0, qMargin[0], annEpsAvg, annRevAvg, derived.roePct, derived.debtToEquity, ocfSeries[0] ?? null, beatRatio];
-  const available = keyMetrics.filter(v => v !== null && v !== undefined).length;
-  let dc = Math.round((available / keyMetrics.length) * 7); // up to 7 for completeness
-  // Acceleration bonus
-  if (epsAccel === "accelerating" && revAccel === "accelerating") dc += 3;
-  else if (epsAccel === "accelerating" || revAccel === "accelerating") dc += 2;
-  dc = Math.min(10, dc);
+  if (ocfPositive && ocfGrowing) core += cw(0.18);
+  else if (ocfPositive) core += cw(0.12);
+  core = Math.min(coreMax, Math.round(core));
 
-  const score = Math.max(0, Math.min(100, stm + ltq + dc));
+  // ----------------- Data Reliability (10) -----------------
+  let rel = 0;
+  // Quarter bonus
+  if (usableQuarters >= 4) rel += 5;
+  else if (usableQuarters >= 2) rel += 4;
+  else if (usableQuarters === 1) rel += 2;
+  // Critical-field completeness
+  const critical = [annEpsAvg, annRevAvg, derived.roePct, derived.debtToEquity, ocfSeries[0] ?? null];
+  const presentCritical = critical.filter(v => v !== null && v !== undefined).length;
+  rel += Math.round((presentCritical / critical.length) * 5);
+  rel = Math.min(reliabilityMax, rel);
 
+  const score = Math.max(0, Math.min(100, recent + core + rel));
+
+  // Criteria list
   const criteria: Criterion[] = [
     {
-      name: "Quarterly EPS Growth (YoY)",
+      name: "Latest Quarterly EPS Growth (YoY)",
       value: fmtPct(qEps0),
-      target: "≥25% Strong / +10–25% Decent / <10% Weak",
+      target: "≥+25% Strong / +10–25% Decent / <+10% Weak",
       status: statusFrom(qEps0, (qEps0 ?? -999) >= 25, (qEps0 ?? 999) < 10),
-      comment: `Recent series: ${fmtTrend(qEps.slice(0, 2))}. Trend ${epsAccel}.`,
+      comment: usableQuarters >= 2 ? `Series: ${fmtTrend(qEpsAll.slice(0, Math.min(4, usableQuarters)))}. Trend ${epsAccel}.` : "Single quarter — no trend yet.",
     },
     {
-      name: "Quarterly Sales Growth (YoY)",
+      name: "Latest Quarterly Sales Growth (YoY)",
       value: fmtPct(qRev0),
-      target: "≥20% Strong / +10–20% Decent / <10% Weak",
+      target: "≥+20% Strong",
       status: statusFrom(qRev0, (qRev0 ?? -999) >= 20, (qRev0 ?? 999) < 10),
-      comment: `Recent series: ${fmtTrend(qRev.slice(0, 2))}. Trend ${revAccel}.`,
+      comment: usableQuarters >= 2 ? `Series: ${fmtTrend(qRevAll.slice(0, Math.min(4, usableQuarters)))}. Trend ${revAccel}.` : "Single quarter — no trend yet.",
     },
     {
-      name: "Earnings Surprises",
+      name: "Earnings Beat Rate",
       value: recentSurprises.length ? `${goodBeats}/${recentSurprises.length} ≥+5%` : "N/A",
       target: "Consistent beats ≥+5%",
       status: beatRatio === null ? "neutral" : beatRatio >= 0.5 ? "pass" : beatRatio === 0 ? "fail" : "neutral",
-      comment: recentSurprises.length ? `Recent: ${recentSurprises.map(fmtPct).join(" / ")}.` : "Surprise data unavailable.",
+      comment: recentSurprises.length ? `Recent: ${recentSurprises.map(fmtPct).join(" / ")}.` : "No surprise data available.",
     },
     {
-      name: "Profit Margin Trend",
-      value: fmtTrend(qMargin.slice(0, 3)),
-      target: "Expanding margins",
-      status: marginAccel === "accelerating" ? "pass" : marginAccel === "decelerating" ? "fail" : "neutral",
-      comment: `Margin trend ${marginAccel}.`,
+      name: "Profit Margin Direction",
+      value: usableQuarters >= 2 ? fmtTrend(qMargin.slice(0, Math.min(3, usableQuarters))) : fmtPct(qMargin[0]),
+      target: usableQuarters >= 2 ? "Expanding" : "Healthy positive level",
+      status: usableQuarters >= 2
+        ? (marginAccel === "accelerating" ? "pass" : marginAccel === "decelerating" ? "fail" : "neutral")
+        : statusFrom(qMargin[0], (qMargin[0] ?? -1) > 15, (qMargin[0] ?? 99) < 0),
+      comment: usableQuarters >= 2 ? `Trend ${marginAccel}.` : "Direction not assessable with 1 quarter.",
     },
     {
       name: "Annual EPS Growth (Avg)",
       value: fmtPct(annEpsAvg),
-      target: "≥25% Strong / +15–25% Good / <15% Weak",
-      status: statusFrom(annEpsAvg, (annEpsAvg ?? -999) >= 25, (annEpsAvg ?? 999) < 15),
-      comment: `Across ${annEps.filter(v => v !== null).length} reported years.`,
+      target: "≥+20%",
+      status: statusFrom(annEpsAvg, (annEpsAvg ?? -999) >= 20, (annEpsAvg ?? 999) < 10),
+      comment: `Across ${annEps.filter(v => v !== null).length} years.`,
     },
     {
       name: "Annual Sales Growth (Avg)",
       value: fmtPct(annRevAvg),
-      target: "≥20% Strong / +12–20% Good / <12% Weak",
-      status: statusFrom(annRevAvg, (annRevAvg ?? -999) >= 20, (annRevAvg ?? 999) < 12),
-      comment: `Across ${annRev.filter(v => v !== null).length} reported years.`,
+      target: "≥+15%",
+      status: statusFrom(annRevAvg, (annRevAvg ?? -999) >= 15, (annRevAvg ?? 999) < 8),
+      comment: `Across ${annRev.filter(v => v !== null).length} years.`,
     },
     {
       name: "ROE",
       value: fmtPct(derived.roePct),
-      target: "≥17% Strong / 10–17% Acceptable / <10% Weak",
-      status: statusFrom(derived.roePct, (derived.roePct ?? 0) >= 17, (derived.roePct ?? 99) < 10),
-      comment: "Return on equity indicates capital efficiency.",
+      target: "≥15%",
+      status: statusFrom(derived.roePct, (derived.roePct ?? 0) >= 15, (derived.roePct ?? 99) < 8),
+      comment: "Return on equity.",
     },
     {
       name: "Debt / Equity",
-      value: fmtRatio(derived.debtToEquity),
-      target: "≤0.8x Good / 0.8–1.5x Acceptable / >1.5x Concerning",
-      status: de === null ? "neutral" : de <= 0.8 ? "pass" : de > 1.5 ? "fail" : "neutral",
-      comment: "Lower leverage is preferred.",
+      value: fmtRatio(de),
+      target: "≤1.0x preferred",
+      status: de === null ? "neutral" : de <= 1.0 ? "pass" : de > 2.0 ? "fail" : "neutral",
+      comment: "Lower leverage preferred.",
     },
     {
       name: "Operating Cash Flow",
       value: ocfSeries.length ? (ocfPositive ? (ocfGrowing ? "Positive & growing" : "Positive") : "Negative / mixed") : "N/A",
       target: "Positive and growing",
       status: ocfSeries.length === 0 ? "neutral" : (ocfPositive && ocfGrowing) ? "pass" : ocfPositive ? "neutral" : "fail",
-      comment: ocfSeries.length ? `${ocfSeries.length} recent quarters of OCF data.` : "OCF data unavailable.",
+      comment: `${ocfSeries.length} OCF data points available.`,
     },
     {
-      name: "Data Completeness",
-      value: `${available}/${keyMetrics.length} metrics available`,
-      target: "Fewer N/A values = higher confidence",
-      status: available >= 7 ? "pass" : available >= 5 ? "neutral" : "fail",
-      comment: `Acceleration bonus: EPS ${epsAccel}, Sales ${revAccel}.`,
+      name: "Data Reliability",
+      value: `${usableQuarters}Q · ${presentCritical}/${critical.length} core fields`,
+      target: "More data = higher confidence",
+      status: usableQuarters >= 2 && presentCritical >= 4 ? "pass" : presentCritical >= 3 ? "neutral" : "fail",
+      comment: `Adaptive weighting: Recent ${recentMax}% / Core ${coreMax}% / Reliability ${reliabilityMax}%.`,
     },
   ];
 
-  // Honest, balanced summary
+  // Honest summary
   const strengths: string[] = [];
   const weaknesses: string[] = [];
   if ((qEps0 ?? -1) >= 25) strengths.push(`strong quarterly EPS growth (${fmtPct(qEps0)})`);
-  else if ((qEps0 ?? 99) < 10) weaknesses.push(`weak quarterly EPS growth (${fmtPct(qEps0)})`);
+  else if ((qEps0 ?? 99) < 10 && qEps0 !== null) weaknesses.push(`weak quarterly EPS growth (${fmtPct(qEps0)})`);
   if ((qRev0 ?? -1) >= 20) strengths.push(`strong sales growth (${fmtPct(qRev0)})`);
-  else if ((qRev0 ?? 99) < 10) weaknesses.push(`soft sales growth (${fmtPct(qRev0)})`);
-  if (marginAccel === "accelerating") strengths.push("expanding margins");
-  else if (marginAccel === "decelerating") weaknesses.push("compressing margins");
+  else if ((qRev0 ?? 99) < 10 && qRev0 !== null) weaknesses.push(`soft sales growth (${fmtPct(qRev0)})`);
+  if (usableQuarters >= 2 && marginAccel === "accelerating") strengths.push("expanding margins");
+  else if (usableQuarters >= 2 && marginAccel === "decelerating") weaknesses.push("compressing margins");
   if (beatRatio !== null && beatRatio >= 0.5) strengths.push("consistent earnings beats");
-  if ((derived.roePct ?? -1) >= 17) strengths.push(`high ROE (${fmtPct(derived.roePct)})`);
-  else if ((derived.roePct ?? 99) < 10) weaknesses.push(`low ROE (${fmtPct(derived.roePct)})`);
-  if (de !== null && de > 1.5) weaknesses.push(`high debt (D/E ${fmtRatio(de)})`);
-  else if (de !== null && de <= 0.8) strengths.push("low leverage");
+  if ((derived.roePct ?? -1) >= 15) strengths.push(`solid ROE (${fmtPct(derived.roePct)})`);
+  else if ((derived.roePct ?? 99) < 8 && derived.roePct !== null) weaknesses.push(`low ROE (${fmtPct(derived.roePct)})`);
+  if (de !== null && de > 1.5) weaknesses.push(`elevated leverage (D/E ${fmtRatio(de)})`);
+  else if (de !== null && de <= 1.0) strengths.push("conservative leverage");
   if (!ocfPositive && ocfSeries.length) weaknesses.push("negative operating cash flow");
-  if ((annEpsAvg ?? 99) < 15) weaknesses.push("inconsistent multi-year EPS history");
-  if (available < 5) weaknesses.push("limited data coverage");
+  else if (ocfPositive && ocfGrowing) strengths.push("positive & growing cash flow");
+  if ((annEpsAvg ?? 99) < 10) weaknesses.push("weak multi-year EPS history");
+  if (usableQuarters === 0) weaknesses.push("no recent quarterly data — relying on annual only");
+  else if (usableQuarters === 1) weaknesses.push("only 1 quarter — limited trend visibility");
 
   const summary = strengths.length && weaknesses.length
     ? `${strengths.slice(0, 2).join(" and ")}, but ${weaknesses.slice(0, 2).join(" and ")}.`
@@ -1112,9 +1146,9 @@ function makeCurrentReport(symbol: string, profile: any, derived: any): Minervin
     ? `Strengths: ${strengths.slice(0, 3).join(", ")}.`
     : weaknesses.length
     ? `Concerns: ${weaknesses.slice(0, 3).join(", ")}.`
-    : "Mixed profile with limited differentiating signals.";
+    : "Mixed profile with no standout signals.";
 
-  const bullCase = strengths.length ? strengths.map(s => s[0].toUpperCase() + s.slice(1) + ".") : ["No clear standout strengths in current data."];
+  const bullCase = strengths.length ? strengths.map(s => s[0].toUpperCase() + s.slice(1) + ".") : ["No standout strengths in current data."];
   const bearCase = weaknesses.length ? weaknesses.map(s => s[0].toUpperCase() + s.slice(1) + ".") : ["No major red flags in current data."];
 
   const verdict: "PASS" | "FAIL" | "BORDERLINE" = score >= 75 ? "PASS" : score >= 55 ? "BORDERLINE" : "FAIL";
@@ -1127,7 +1161,7 @@ function makeCurrentReport(symbol: string, profile: any, derived: any): Minervin
     profileLabel: "Current Fundamentals Strength",
     overallScore: score,
     verdict,
-    headline: `${symbol} scores ${score}/100. ${summary}`,
+    headline: `${symbol} scores ${score}/100 (${usableQuarters}Q data). ${summary}`,
     criteria,
     bullCase,
     bearCase,
@@ -1137,12 +1171,13 @@ function makeCurrentReport(symbol: string, profile: any, derived: any): Minervin
       ? `Mixed current fundamentals: ${summary}`
       : `Weak current fundamentals: ${summary}`,
     subScores: [
-      { label: "Short-Term Momentum", score: stm, max: 55 },
-      { label: "Long-Term Quality", score: ltq, max: 35 },
-      { label: "Data Consistency", score: dc, max: 10 },
+      { label: "Recent Momentum", score: recent, max: recentMax },
+      { label: "Core Quality", score: core, max: coreMax },
+      { label: "Data Reliability", score: rel, max: reliabilityMax },
     ],
   };
 }
+
 
 
 function scoreDerived(derived: any) {
