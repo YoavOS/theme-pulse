@@ -1365,7 +1365,7 @@ async function polishWithGroq(report: MinerviniReport, derived: any): Promise<Mi
 }
 
 interface BundleResponse {
-  reports: { minervini: MinerviniReport; oneil: MinerviniReport; ryan: MinerviniReport };
+  reports: { minervini: MinerviniReport; oneil: MinerviniReport; ryan: MinerviniReport; current: MinerviniReport };
   cumulative: { averageScore: number; verdict: "PASS" | "FAIL" | "BORDERLINE"; passCount: number; profileCount: number };
 }
 
@@ -1375,12 +1375,14 @@ function buildAll(symbol: string, profileMeta: any, derived: any): BundleRespons
   const minervini = makeReport(symbol, profileMeta, derived);
   const oneil = makeOneilReport(symbol, profileMeta, derived);
   const ryan = makeRyanReport(symbol, profileMeta, derived);
-  const all = [minervini, oneil, ryan];
+  const current = makeCurrentReport(symbol, profileMeta, derived);
+  const all = [minervini, oneil, ryan, current];
   const averageScore = Math.round(all.reduce((s, r) => s + r.overallScore, 0) / all.length);
   const passCount = all.filter(r => r.verdict === "PASS").length;
   const verdict: "PASS" | "FAIL" | "BORDERLINE" = averageScore >= 80 ? "PASS" : averageScore >= 60 ? "BORDERLINE" : "FAIL";
-  return { reports: { minervini, oneil, ryan }, cumulative: { averageScore, verdict, passCount, profileCount: all.length } };
+  return { reports: { minervini, oneil, ryan, current }, cumulative: { averageScore, verdict, passCount, profileCount: all.length } };
 }
+
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
