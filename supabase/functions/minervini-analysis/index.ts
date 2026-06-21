@@ -101,7 +101,7 @@ interface MinerviniReport {
   symbol: string;
   companyName: string;
   sector: string | null;
-  profile: "minervini" | "oneil" | "ryan";
+  profile: "minervini" | "oneil" | "ryan" | "current";
   profileLabel: string;
   overallScore: number;
   verdict: "PASS" | "FAIL" | "BORDERLINE";
@@ -110,7 +110,9 @@ interface MinerviniReport {
   bullCase: string[];
   bearCase: string[];
   finalVerdict: string;
+  subScores?: { label: string; score: number; max: number }[];
 }
+
 
 interface DataQuality {
   sources: string[];
