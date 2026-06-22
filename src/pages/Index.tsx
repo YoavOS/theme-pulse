@@ -587,6 +587,12 @@ export default function Index() {
       </footer>
 
       <ValidateTickersDialog open={showValidateDialog} onOpenChange={setShowValidateDialog} />
+      <ExportTopLeadersDialog
+        open={showExportLeaders}
+        onOpenChange={setShowExportLeaders}
+        themes={themes}
+        timeframe={activeTimeframe}
+      />
       <ThemeDrilldownModal
         theme={drilldownTheme}
         open={!!drilldownTheme}
