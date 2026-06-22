@@ -67,7 +67,7 @@ export default function Index() {
     try { localStorage.setItem(DASHBOARD_WEIGHTS_KEY, JSON.stringify(overallWeights)); } catch {}
   }, [overallWeights]);
 
-  const { fetchVolume, getThemeSignals } = useVolumeData();
+  const { fetchVolume, getThemeSignals, volumeMap } = useVolumeData();
   const {
     fetchThemeNews, prefetchTopThemes, getThemeArticles,
     getAiSummary, getThemeSentiment,
