@@ -194,15 +194,18 @@ function SmartVolumeRow({
       if (ar !== br) return br - ar;
       return (b.perf_1d ?? 0) - (a.perf_1d ?? 0);
     }).slice(0, 5);
+    // Leader = biggest absolute mover (strongest stock driving the theme).
+    const leader = [...enriched]
+      .filter(e => typeof e.perf_1d === "number" && !Number.isNaN(e.perf_1d))
+      .sort((a, b) => Math.abs(b.perf_1d ?? 0) - Math.abs(a.perf_1d ?? 0))[0] ?? null;
     const withVol = enriched.filter(e => e.relVol != null);
     const elevated = withVol.filter(e => (e.relVol as number) >= RV_ELEVATED).length;
     const participation = withVol.length > 0 ? (elevated / withVol.length) * 100 : null;
-    // Surge score: bounded composite (rel vol + trend + sustained), 0-100.
     const rvN = metrics.relVol == null ? 0 : Math.max(0, Math.min(1, (metrics.relVol - 0.5) / 2.0));
     const trN = metrics.volTrendPct == null ? 0 : Math.max(0, Math.min(1, (metrics.volTrendPct + 20) / 70));
     const suN = metrics.sustainedScore == null ? 0 : Math.max(0, Math.min(1, (metrics.sustainedScore - 0.7) / 0.8));
     const surge = Math.round((rvN * 0.5 + trN * 0.2 + suN * 0.3) * 100);
-    return { top: ranked, participation, surge };
+    return { top: ranked, participation, surge, leader };
   }, [t.tickers, smart.data, metrics.relVol, metrics.volTrendPct, metrics.sustainedScore]);
 
   return (
@@ -230,8 +233,16 @@ function SmartVolumeRow({
               {t.themeName}
             </button>
           </HoverCardTrigger>
-          <HoverCardContent side="right" align="start" className="w-[300px] p-3 z-[70]" style={{ background: "rgba(11,14,18,0.98)", border: "1px solid rgba(255,255,255,0.1)" }}>
-            <div className="text-[12px] font-bold text-foreground mb-2 truncate" style={{ fontFamily: "'Syne', sans-serif" }}>{t.themeName}</div>
+          <HoverCardContent side="right" align="start" className="w-[340px] p-3 z-[70]" style={{ background: "rgba(11,14,18,0.98)", border: "1px solid rgba(255,255,255,0.1)" }}>
+            <div className="text-[12px] font-bold text-foreground mb-0.5 truncate" style={{ fontFamily: "'Syne', sans-serif" }}>{t.themeName}</div>
+            {preview.leader && typeof preview.leader.perf_1d === "number" && (
+              <div className="text-[10.5px] text-muted-foreground mb-2 truncate" style={{ fontFamily: DM_MONO }}>
+                Led by <span className="text-foreground font-semibold">{preview.leader.symbol}</span>{" "}
+                <span style={{ color: (preview.leader.perf_1d ?? 0) >= 0 ? "#4ade80" : "#f87171" }}>
+                  {(preview.leader.perf_1d ?? 0) >= 0 ? "+" : ""}{(preview.leader.perf_1d ?? 0).toFixed(2)}%
+                </span>
+              </div>
+            )}
             <div className="grid grid-cols-2 gap-2 mb-2.5">
               <div className="rounded-md px-2 py-1.5" style={{ background: "rgba(0,245,196,0.06)", border: "1px solid rgba(0,245,196,0.2)" }}>
                 <div className="text-[9.5px] uppercase tracking-widest text-muted-foreground" style={{ fontFamily: DM_MONO }}>Surge</div>
