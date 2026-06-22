@@ -1,11 +1,11 @@
 import { useMemo, useState, useCallback } from "react";
 import { Info } from "lucide-react";
 import { ThemeData } from "@/data/themeData";
-import { ThemeDemandSignals } from "@/hooks/useVolumeData";
+import { ThemeDemandSignals, TickerVolume } from "@/hooks/useVolumeData";
 
 const DM_MONO = "'DM Mono', monospace";
-const TOOLTIP_WIDTH = 220;
-const TOOLTIP_HEIGHT = 120;
+const TOOLTIP_WIDTH = 280;
+const TOOLTIP_HEIGHT = 230;
 
 interface TooltipPosition {
   x: number;
