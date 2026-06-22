@@ -360,6 +360,16 @@ export default function Index() {
                   </span>
                 )}
               </button>
+              <button
+                onClick={() => setShowExportLeaders(true)}
+                disabled={themes.length === 0}
+                className="rounded-md border border-[hsl(40,90%,55%)]/40 bg-[hsl(40,90%,55%)]/10 px-3 py-1.5 text-xs font-semibold text-[hsl(40,90%,55%)] transition-colors hover:bg-[hsl(40,90%,55%)]/20 disabled:opacity-50"
+                title="Export top 3 stocks from top 10 themes in current timeframe"
+              >
+                <span className="inline-flex items-center gap-1">
+                  <Trophy size={12} /> Export Top Leaders
+                </span>
+              </button>
               {fullScanStatus && (
                 <span className="hidden sm:inline-flex max-w-[200px] items-center gap-1 truncate text-[10px] text-muted-foreground" title={fullScanStatus}>
                   {fullScanStatus}
