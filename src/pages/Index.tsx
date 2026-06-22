@@ -560,6 +560,7 @@ export default function Index() {
             onCardClick={setDrilldownTheme}
             onInfoClick={(t) => { setDrilldownTheme(t); setDrilldownDefaultTab("news"); }}
             getThemeSignals={getThemeSignals}
+            volumeMap={volumeMap}
             dimmedThemes={searchMatchSet}
           />
         )}
