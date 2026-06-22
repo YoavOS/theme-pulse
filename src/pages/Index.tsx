@@ -7,9 +7,11 @@ import {
   RefreshCw, Download, Wifi, WifiOff, Loader2, Settings, ScanLine, X,
   ShieldCheck, Brain, ChevronDown, LayoutDashboard, AlertTriangle,
   BarChart3, Zap, Activity, DollarSign, Sun, Database, Trophy,
+  Share2,
 } from "lucide-react";
 import HeatmapGridView from "@/components/dashboard/HeatmapGridView";
 import OverallBestThemesList from "@/components/dashboard/OverallBestThemesList";
+import ExportTopLeadersDialog from "@/components/dashboard/ExportTopLeadersDialog";
 import DashboardWeightsPanel, {
   DashboardWeights,
   DEFAULT_DASHBOARD_WEIGHTS,
@@ -48,6 +50,7 @@ export default function Index() {
   const [drilldownTheme, setDrilldownTheme] = useState<ThemeData | null>(null);
   const [showOptions, setShowOptions] = useState(false);
   const [showDemoConfirm, setShowDemoConfirm] = useState(false);
+  const [showExportLeaders, setShowExportLeaders] = useState(false);
 
   const [overallWeights, setOverallWeights] = useState<DashboardWeights>(() => {
     if (typeof window === "undefined") return { ...DEFAULT_DASHBOARD_WEIGHTS };
@@ -357,6 +360,16 @@ export default function Index() {
                   </span>
                 )}
               </button>
+              <button
+                onClick={() => setShowExportLeaders(true)}
+                disabled={themes.length === 0}
+                className="rounded-md border border-[hsl(40,90%,55%)]/40 bg-[hsl(40,90%,55%)]/10 px-3 py-1.5 text-xs font-semibold text-[hsl(40,90%,55%)] transition-colors hover:bg-[hsl(40,90%,55%)]/20 disabled:opacity-50"
+                title="Export top 3 stocks from top 10 themes in current timeframe"
+              >
+                <span className="inline-flex items-center gap-1">
+                  <Trophy size={12} /> Export Top Leaders
+                </span>
+              </button>
               {fullScanStatus && (
                 <span className="hidden sm:inline-flex max-w-[200px] items-center gap-1 truncate text-[10px] text-muted-foreground" title={fullScanStatus}>
                   {fullScanStatus}
@@ -574,6 +587,12 @@ export default function Index() {
       </footer>
 
       <ValidateTickersDialog open={showValidateDialog} onOpenChange={setShowValidateDialog} />
+      <ExportTopLeadersDialog
+        open={showExportLeaders}
+        onOpenChange={setShowExportLeaders}
+        themes={themes}
+        timeframe={activeTimeframe}
+      />
       <ThemeDrilldownModal
         theme={drilldownTheme}
         open={!!drilldownTheme}
