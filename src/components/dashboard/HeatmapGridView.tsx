@@ -60,12 +60,14 @@ export default function HeatmapGridView({
   onCardClick,
   onInfoClick,
   getThemeSignals,
+  volumeMap,
   dimmedThemes,
 }: {
   themes: ThemeData[];
   onCardClick?: (theme: ThemeData) => void;
   onInfoClick?: (theme: ThemeData) => void;
   getThemeSignals?: (symbols: string[]) => ThemeDemandSignals;
+  volumeMap?: Record<string, TickerVolume>;
   dimmedThemes?: Set<string> | null;
 }) {
   const [hoveredTheme, setHoveredTheme] = useState<string | null>(null);
