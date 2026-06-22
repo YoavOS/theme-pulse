@@ -151,6 +151,19 @@ export default function HeatmapGridView({
           const signals = getThemeSignals ? getThemeSignals(symbols) : null;
           const sign = t.performance_pct >= 0 ? "+" : "";
 
+          // Top 3 movers by absolute performance — uses cached data only.
+          const topMovers = isHovered
+            ? [...validTickers]
+                .sort((a, b) => Math.abs(b.pct) - Math.abs(a.pct))
+                .slice(0, 3)
+                .map(tk => {
+                  const v = volumeMap?.[tk.symbol];
+                  const relVol = v && v.avg_20d > 0 && v.today_vol > 0 ? v.today_vol / v.avg_20d : null;
+                  return { symbol: tk.symbol, pct: tk.pct, relVol };
+                })
+            : [];
+          const leader = topMovers[0] ?? null;
+
           return (
             <div
               key={t.theme_name}
