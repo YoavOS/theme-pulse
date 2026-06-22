@@ -50,6 +50,7 @@ export default function Index() {
   const [drilldownTheme, setDrilldownTheme] = useState<ThemeData | null>(null);
   const [showOptions, setShowOptions] = useState(false);
   const [showDemoConfirm, setShowDemoConfirm] = useState(false);
+  const [showExportLeaders, setShowExportLeaders] = useState(false);
 
   const [overallWeights, setOverallWeights] = useState<DashboardWeights>(() => {
     if (typeof window === "undefined") return { ...DEFAULT_DASHBOARD_WEIGHTS };
