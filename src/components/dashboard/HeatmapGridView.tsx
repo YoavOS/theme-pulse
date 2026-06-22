@@ -263,10 +263,3 @@ export default function HeatmapGridView({
     </div>
   );
 }
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
