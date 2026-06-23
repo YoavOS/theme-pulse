@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { ArrowLeft, RefreshCw, Loader2, Info, ChevronDown, ChevronUp, ArrowUpDown, Filter, Hammer, Pause, Play, RotateCcw, Copy, Download, Settings2, PieChart as PieChartIcon, Database, BarChart3 } from "lucide-react";
+import { ArrowLeft, RefreshCw, Loader2, Info, ChevronDown, ChevronUp, ArrowUpDown, Filter, Hammer, Pause, Play, RotateCcw, Copy, Download, Settings2, PieChart as PieChartIcon, Database, BarChart3, Trophy } from "lucide-react";
 import { toast } from "sonner";
 import { useRsAlpha, RsStock, RS_FILTER_THRESHOLDS } from "@/hooks/useRsAlpha";
 import { useFundamentalsScan } from "@/hooks/useFundamentalsScan";
@@ -11,6 +11,8 @@ import OverallWeightsPanel, { RsWeights, DEFAULT_RS_WEIGHTS, normalizeWeights } 
 import RsRatingBadge, { computeRsRatings } from "@/components/rs/RsRatingBadge";
 import CustomTradingViewListModal from "@/components/rs/CustomTradingViewListModal";
 import CustomListAnalyzerModal from "@/components/rs/CustomListAnalyzerModal";
+import SuperperformanceScanModal from "@/components/rs/SuperperformanceScanModal";
+import { useSuperperformance } from "@/hooks/useSuperperformance";
 import SetupAnalyzerModal from "@/components/rs/SetupAnalyzerModal";
 import SectorDistributionModal from "@/components/rs/SectorDistributionModal";
 import ThemeDistributionModal from "@/components/rs/ThemeDistributionModal";
@@ -161,6 +163,10 @@ export default function RsAlpha() {
   const [themeDistOpen, setThemeDistOpen] = useState(false);
   const [coverageOpen, setCoverageOpen] = useState(false);
   const [universeSettingsOpen, setUniverseSettingsOpen] = useState<null | "resume" | "restart">(null);
+  const [superperfScanOpen, setSuperperfScanOpen] = useState(false);
+  const [superperfFilterOn, setSuperperfFilterOn] = useState(false);
+  const { rows: superperfRows } = useSuperperformance();
+  const superperfSet = useMemo(() => new Set(superperfRows.map((r) => r.symbol)), [superperfRows]);
   const [hideOtc, setHideOtc] = useState<boolean>(() => {
     const saved = typeof window !== "undefined" ? localStorage.getItem("rs-hide-otc") : null;
     return saved === null ? true : saved === "true";
@@ -359,6 +365,7 @@ export default function RsAlpha() {
     const filtered = stocks.filter(s => {
       if (getRsForTab(s, activeTab) === null) return false;
       if (hideOtc && isOtcSymbol(s.symbol)) return false;
+      if (superperfFilterOn && !superperfSet.has(s.symbol)) return false;
       if (growthActive) {
         const f = fundamentalsMap.get(s.symbol);
         if (!passesAllActiveFilters(growthFilters, f)) {
@@ -421,7 +428,7 @@ export default function RsAlpha() {
     });
     return { sortedStocks: sorted, ratingMap: map, growthFilteredOutCount: droppedByGrowth };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stocks, activeTab, sortField, sortDir, hideOtc, weights, growthFilters, fundamentalsMap, coilScores, emaDistances, rsNhFilter]);
+  }, [stocks, activeTab, sortField, sortDir, hideOtc, weights, growthFilters, fundamentalsMap, coilScores, emaDistances, rsNhFilter, superperfFilterOn, superperfSet]);
 
   const otcHiddenCount = useMemo(
     () => hideOtc ? stocks.filter(s => isOtcSymbol(s.symbol) && getRsForTab(s, activeTab) !== null).length : 0,
@@ -1067,6 +1074,25 @@ export default function RsAlpha() {
                   >
                     🎯 Rank Setup List
                   </button>
+                  <button
+                    onClick={() => setSuperperfScanOpen(true)}
+                    className="inline-flex items-center gap-1.5 rounded-md border border-[hsl(40,90%,55%)]/60 bg-[hsl(40,90%,55%)]/15 px-3 py-1.5 text-xs font-semibold text-[hsl(40,90%,65%)] transition-colors hover:bg-[hsl(40,90%,55%)]/25"
+                    title="Manually scan the qualified universe through Minervini — saves stocks scoring ≥ 80"
+                  >
+                    <Trophy size={12} /> Scan for Superperformance Stocks
+                    {superperfSet.size > 0 && (
+                      <span className="ml-1 rounded-full bg-[hsl(40,90%,55%)]/30 px-1.5 text-[10px] font-bold text-[hsl(40,90%,75%)]">{superperfSet.size}</span>
+                    )}
+                  </button>
+                  {superperfSet.size > 0 && (
+                    <button
+                      onClick={() => setSuperperfFilterOn((v) => !v)}
+                      className={`inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-semibold transition-colors ${superperfFilterOn ? "border-[hsl(40,90%,55%)] bg-[hsl(40,90%,55%)]/25 text-[hsl(40,90%,75%)]" : "border-border bg-muted/20 text-muted-foreground hover:bg-muted/40"}`}
+                      title="Filter the table to only show Superperformance Stocks"
+                    >
+                      🏆 {superperfFilterOn ? "Showing Superperf Only" : "Filter: Superperf Only"}
+                    </button>
+                  )}
                 </div>
               </div>
             )}
@@ -1225,6 +1251,7 @@ export default function RsAlpha() {
         coilLongDays={coilSettings.longDays}
         emaDistances={emaDistances}
         qqqPctChange={qqqPctChange}
+        superperfSet={superperfSet}
       />
 
       <CustomListAnalyzerModal
@@ -1241,6 +1268,7 @@ export default function RsAlpha() {
         coilShortDays={coilSettings.shortDays}
         coilLongDays={coilSettings.longDays}
         emaDistances={emaDistances}
+        superperfSet={superperfSet}
       />
 
       <SetupAnalyzerModal
@@ -1285,6 +1313,12 @@ export default function RsAlpha() {
           if (!confirm("Start a fresh universe scan? This wipes the current scan queue and reseeds the full US market. Your live universe keeps serving reads until the new scan finishes and publishes.")) return;
           rebuildUniverse(mode, filters as unknown as Record<string, unknown>);
         }}
+      />
+
+      <SuperperformanceScanModal
+        open={superperfScanOpen}
+        onOpenChange={setSuperperfScanOpen}
+        universe={stocks.filter((s) => !isOtcSymbol(s.symbol)).map((s) => s.symbol)}
       />
     </div>
   );

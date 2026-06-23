@@ -1422,20 +1422,37 @@ function buildAll(symbol: string, profileMeta: any, derived: any): BundleRespons
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   try {
-    const body = await req.json().catch(() => ({})) as { symbol?: string; force?: boolean };
+    const body = await req.json().catch(() => ({})) as { symbol?: string; force?: boolean; minimal?: boolean };
     const symbol = (body.symbol ?? "").toUpperCase().replace(/[^A-Z0-9.-]/g, "").trim();
     const force = !!body.force;
+    const minimal = !!body.minimal;
     if (!symbol) return jsonResponse({ error: "symbol required" }, 400);
 
     if (!force) {
       const hit = multiReportCache.get(symbol);
       if (hit && Date.now() - hit.ts < REPORT_TTL) {
+        if (minimal) {
+          const m = hit.data.reports.minervini;
+          return jsonResponse({ symbol, minerviniScore: m.overallScore, verdict: m.verdict, cached: true });
+        }
         return jsonResponse({ ...hit.data, cached: true, dataQuality: hit.dataQuality });
       }
     }
 
     const { profile, derived, quality } = await buildBundle(symbol, force);
     if (!derived.quarters.length && !derived.annual.length) return jsonResponse({ error: "No reliable fundamentals found for symbol" }, 502);
+
+    if (minimal) {
+      // Lightweight path: only compute the Minervini score, do NOT cache the full bundle,
+      // and discard the derived fundamentals immediately to keep memory minimal.
+      const mini = makeReport(symbol, profile, derived);
+      const score = mini.overallScore;
+      const verdict = mini.verdict;
+      // Drop references so the GC can reclaim the heavy quarterly/annual payloads.
+      (derived as any).quarters = null;
+      (derived as any).annual = null;
+      return jsonResponse({ symbol, minerviniScore: score, verdict, cached: false });
+    }
 
     const data = buildAll(symbol, profile, derived);
     multiReportCache.set(symbol, { ts: Date.now(), data, dataQuality: quality });

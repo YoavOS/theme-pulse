@@ -182,6 +182,8 @@ interface Props {
   emaDistances?: Map<string, EmaDistanceInfo>;
   /** Today's QQQ % change (used for "Red Day Leaders" / market-defiance filtering). */
   qqqPctChange?: number | null;
+  /** Set of tickers in the Superperformance Stocks list (Minervini ≥ 80). */
+  superperfSet?: Set<string>;
 }
 
 const DEFAULT_FILTERS: FilterState = {
@@ -233,9 +235,10 @@ function saveUserProfiles(list: ScannerProfile[]) {
 export default function CustomTradingViewListModal({
   open, onOpenChange, tabId, tabLabel, stocks, ratingMap,
   getRsForTab, getReturnField, isOtcSymbol, fundamentalsMap,
-  coilScores, coilShortDays, coilLongDays, emaDistances, qqqPctChange,
+  coilScores, coilShortDays, coilLongDays, emaDistances, qqqPctChange, superperfSet,
 }: Props) {
   const [state, setState] = useState<FilterState>({ ...DEFAULT_FILTERS });
+  const [superperfOnly, setSuperperfOnly] = useState<boolean>(false);
   const [sectorSearch, setSectorSearch] = useState<string>("");
   const [sectorPopoverOpen, setSectorPopoverOpen] = useState<boolean>(false);
   const [userProfiles, setUserProfiles] = useState<ScannerProfile[]>(() => loadUserProfiles());
@@ -351,6 +354,7 @@ export default function CustomTradingViewListModal({
   const prefiltered = useMemo(() => {
     return stocks.filter((s) => {
       if (state.excludeOtc && isOtcSymbol(s.symbol)) return false;
+      if (superperfOnly && !(superperfSet?.has(s.symbol))) return false;
       const rating = ratingMap.get(s.symbol);
       if (rating === null || rating === undefined || rating < state.minRating) return false;
       if (s.adrPercent === null || s.adrPercent < state.minAdr) return false;
@@ -409,7 +413,7 @@ export default function CustomTradingViewListModal({
       }
       return true;
     });
-  }, [stocks, ratingMap, state, excludedSectorsSet, expandedExclusions, growthActive, fundamentalsMap, coilScores, emaDistances, qqqPctChange, qqqAvailable, isOtcSymbol]);
+  }, [stocks, ratingMap, state, excludedSectorsSet, expandedExclusions, growthActive, fundamentalsMap, coilScores, emaDistances, qqqPctChange, qqqAvailable, isOtcSymbol, superperfOnly, superperfSet]);
 
   // Fetch today's candles for the filtered set (cap to keep it cloud-efficient).
   const candleSymbols = useMemo(
@@ -761,6 +765,22 @@ export default function CustomTradingViewListModal({
               <span>
                 <span className="font-medium text-foreground">Exclude OTC Stocks</span>
                 <span className="block text-[10px] text-muted-foreground">Hide foreign / pink sheets</span>
+              </span>
+            </label>
+            <label
+              className={`flex items-center gap-2 rounded-md border border-[hsl(40,90%,55%)]/40 bg-[hsl(40,90%,55%)]/10 px-3 py-2 text-xs ${superperfSet && superperfSet.size > 0 ? "cursor-pointer" : "opacity-50 cursor-not-allowed"}`}
+              title="Restrict to tickers in the Superperformance Stocks list (Minervini ≥ 80)."
+            >
+              <Checkbox
+                checked={superperfOnly}
+                onCheckedChange={(v) => setSuperperfOnly(!!v)}
+                disabled={!superperfSet || superperfSet.size === 0}
+              />
+              <span>
+                <span className="font-medium text-foreground">🏆 Superperformance Only</span>
+                <span className="block text-[10px] text-muted-foreground">
+                  Minervini ≥ 80 {superperfSet && superperfSet.size > 0 ? `· ${superperfSet.size} saved` : "· run scan first"}
+                </span>
               </span>
             </label>
           </div>
