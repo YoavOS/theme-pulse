@@ -365,6 +365,7 @@ export default function RsAlpha() {
     const filtered = stocks.filter(s => {
       if (getRsForTab(s, activeTab) === null) return false;
       if (hideOtc && isOtcSymbol(s.symbol)) return false;
+      if (superperfFilterOn && !superperfSet.has(s.symbol)) return false;
       if (growthActive) {
         const f = fundamentalsMap.get(s.symbol);
         if (!passesAllActiveFilters(growthFilters, f)) {
