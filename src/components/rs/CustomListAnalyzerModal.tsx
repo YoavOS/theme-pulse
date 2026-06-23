@@ -310,6 +310,7 @@ export default function CustomListAnalyzerModal({
     const filtered = matchedStocks.filter((s) => {
       const r = rMap.get(s.symbol);
       if (excludeOtc && isOtcSymbol(s.symbol)) return false;
+      if (superperfOnly && !(superperfSet?.has(s.symbol))) return false;
       if (minRating > 0 && (r === null || r === undefined || r < minRating)) return false;
       if (minAdr > 0 && (s.adrPercent === null || s.adrPercent < minAdr)) return false;
       if (minMcapM > 0 && (s.marketCap === null || s.marketCap < minMcapM)) return false;
