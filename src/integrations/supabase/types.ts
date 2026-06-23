@@ -593,6 +593,24 @@ export type Database = {
         }
         Relationships: []
       }
+      superperformance_stocks: {
+        Row: {
+          last_scanned: string
+          minervini_score: number
+          symbol: string
+        }
+        Insert: {
+          last_scanned?: string
+          minervini_score: number
+          symbol: string
+        }
+        Update: {
+          last_scanned?: string
+          minervini_score?: number
+          symbol?: string
+        }
+        Relationships: []
+      }
       theme_tickers: {
         Row: {
           added_at: string
