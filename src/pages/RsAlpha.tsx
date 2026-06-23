@@ -1314,6 +1314,12 @@ export default function RsAlpha() {
           rebuildUniverse(mode, filters as unknown as Record<string, unknown>);
         }}
       />
+
+      <SuperperformanceScanModal
+        open={superperfScanOpen}
+        onOpenChange={setSuperperfScanOpen}
+        universe={stocks.filter((s) => !isOtcSymbol(s.symbol)).map((s) => s.symbol)}
+      />
     </div>
   );
 }
