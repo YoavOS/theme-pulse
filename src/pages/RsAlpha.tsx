@@ -1268,6 +1268,7 @@ export default function RsAlpha() {
         coilShortDays={coilSettings.shortDays}
         coilLongDays={coilSettings.longDays}
         emaDistances={emaDistances}
+        superperfSet={superperfSet}
       />
 
       <SetupAnalyzerModal
