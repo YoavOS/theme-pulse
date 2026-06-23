@@ -235,9 +235,10 @@ function saveUserProfiles(list: ScannerProfile[]) {
 export default function CustomTradingViewListModal({
   open, onOpenChange, tabId, tabLabel, stocks, ratingMap,
   getRsForTab, getReturnField, isOtcSymbol, fundamentalsMap,
-  coilScores, coilShortDays, coilLongDays, emaDistances, qqqPctChange,
+  coilScores, coilShortDays, coilLongDays, emaDistances, qqqPctChange, superperfSet,
 }: Props) {
   const [state, setState] = useState<FilterState>({ ...DEFAULT_FILTERS });
+  const [superperfOnly, setSuperperfOnly] = useState<boolean>(false);
   const [sectorSearch, setSectorSearch] = useState<string>("");
   const [sectorPopoverOpen, setSectorPopoverOpen] = useState<boolean>(false);
   const [userProfiles, setUserProfiles] = useState<ScannerProfile[]>(() => loadUserProfiles());
