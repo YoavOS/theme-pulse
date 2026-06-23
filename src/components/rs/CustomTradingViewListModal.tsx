@@ -413,7 +413,7 @@ export default function CustomTradingViewListModal({
       }
       return true;
     });
-  }, [stocks, ratingMap, state, excludedSectorsSet, expandedExclusions, growthActive, fundamentalsMap, coilScores, emaDistances, qqqPctChange, qqqAvailable, isOtcSymbol]);
+  }, [stocks, ratingMap, state, excludedSectorsSet, expandedExclusions, growthActive, fundamentalsMap, coilScores, emaDistances, qqqPctChange, qqqAvailable, isOtcSymbol, superperfOnly, superperfSet]);
 
   // Fetch today's candles for the filtered set (cap to keep it cloud-efficient).
   const candleSymbols = useMemo(
