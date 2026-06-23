@@ -163,6 +163,10 @@ export default function RsAlpha() {
   const [themeDistOpen, setThemeDistOpen] = useState(false);
   const [coverageOpen, setCoverageOpen] = useState(false);
   const [universeSettingsOpen, setUniverseSettingsOpen] = useState<null | "resume" | "restart">(null);
+  const [superperfScanOpen, setSuperperfScanOpen] = useState(false);
+  const [superperfFilterOn, setSuperperfFilterOn] = useState(false);
+  const { rows: superperfRows } = useSuperperformance();
+  const superperfSet = useMemo(() => new Set(superperfRows.map((r) => r.symbol)), [superperfRows]);
   const [hideOtc, setHideOtc] = useState<boolean>(() => {
     const saved = typeof window !== "undefined" ? localStorage.getItem("rs-hide-otc") : null;
     return saved === null ? true : saved === "true";
