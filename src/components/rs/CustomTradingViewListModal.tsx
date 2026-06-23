@@ -767,6 +767,22 @@ export default function CustomTradingViewListModal({
                 <span className="block text-[10px] text-muted-foreground">Hide foreign / pink sheets</span>
               </span>
             </label>
+            <label
+              className={`flex items-center gap-2 rounded-md border border-[hsl(40,90%,55%)]/40 bg-[hsl(40,90%,55%)]/10 px-3 py-2 text-xs ${superperfSet && superperfSet.size > 0 ? "cursor-pointer" : "opacity-50 cursor-not-allowed"}`}
+              title="Restrict to tickers in the Superperformance Stocks list (Minervini ≥ 80)."
+            >
+              <Checkbox
+                checked={superperfOnly}
+                onCheckedChange={(v) => setSuperperfOnly(!!v)}
+                disabled={!superperfSet || superperfSet.size === 0}
+              />
+              <span>
+                <span className="font-medium text-foreground">🏆 Superperformance Only</span>
+                <span className="block text-[10px] text-muted-foreground">
+                  Minervini ≥ 80 {superperfSet && superperfSet.size > 0 ? `· ${superperfSet.size} saved` : "· run scan first"}
+                </span>
+              </span>
+            </label>
           </div>
 
           {/* Growth Filters */}
