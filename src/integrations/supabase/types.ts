@@ -595,18 +595,27 @@ export type Database = {
       }
       superperformance_stocks: {
         Row: {
+          current_score: number | null
           last_scanned: string
-          minervini_score: number
+          minervini_score: number | null
+          oneil_score: number | null
+          ryan_score: number | null
           symbol: string
         }
         Insert: {
+          current_score?: number | null
           last_scanned?: string
-          minervini_score: number
+          minervini_score?: number | null
+          oneil_score?: number | null
+          ryan_score?: number | null
           symbol: string
         }
         Update: {
+          current_score?: number | null
           last_scanned?: string
-          minervini_score?: number
+          minervini_score?: number | null
+          oneil_score?: number | null
+          ryan_score?: number | null
           symbol?: string
         }
         Relationships: []
