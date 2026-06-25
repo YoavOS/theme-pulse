@@ -1419,21 +1419,42 @@ function buildAll(symbol: string, profileMeta: any, derived: any): BundleRespons
 }
 
 
+type ProfileKey = "minervini" | "oneil" | "ryan" | "current";
+const ALL_PROFILES: ProfileKey[] = ["minervini", "oneil", "ryan", "current"];
+
+function scoreForProfile(key: ProfileKey, symbol: string, profileMeta: any, derived: any): number {
+  switch (key) {
+    case "minervini": return makeReport(symbol, profileMeta, derived).overallScore;
+    case "oneil": return makeOneilReport(symbol, profileMeta, derived).overallScore;
+    case "ryan": return makeRyanReport(symbol, profileMeta, derived).overallScore;
+    case "current": return makeCurrentReport(symbol, profileMeta, derived).overallScore;
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   try {
-    const body = await req.json().catch(() => ({})) as { symbol?: string; force?: boolean; minimal?: boolean };
+    const body = await req.json().catch(() => ({})) as {
+      symbol?: string;
+      force?: boolean;
+      minimal?: boolean;
+      profiles?: ProfileKey[];
+    };
     const symbol = (body.symbol ?? "").toUpperCase().replace(/[^A-Z0-9.-]/g, "").trim();
     const force = !!body.force;
     const minimal = !!body.minimal;
+    const requested = Array.isArray(body.profiles) && body.profiles.length > 0
+      ? body.profiles.filter((p): p is ProfileKey => ALL_PROFILES.includes(p as ProfileKey))
+      : (["minervini"] as ProfileKey[]);
     if (!symbol) return jsonResponse({ error: "symbol required" }, 400);
 
     if (!force) {
       const hit = multiReportCache.get(symbol);
       if (hit && Date.now() - hit.ts < REPORT_TTL) {
         if (minimal) {
-          const m = hit.data.reports.minervini;
-          return jsonResponse({ symbol, minerviniScore: m.overallScore, verdict: m.verdict, cached: true });
+          const scores: Record<string, number> = {};
+          for (const p of requested) scores[p] = hit.data.reports[p].overallScore;
+          return jsonResponse({ symbol, scores, minerviniScore: scores.minervini ?? null, cached: true });
         }
         return jsonResponse({ ...hit.data, cached: true, dataQuality: hit.dataQuality });
       }
@@ -1443,15 +1464,19 @@ Deno.serve(async (req) => {
     if (!derived.quarters.length && !derived.annual.length) return jsonResponse({ error: "No reliable fundamentals found for symbol" }, 502);
 
     if (minimal) {
-      // Lightweight path: only compute the Minervini score, do NOT cache the full bundle,
-      // and discard the derived fundamentals immediately to keep memory minimal.
-      const mini = makeReport(symbol, profile, derived);
-      const score = mini.overallScore;
-      const verdict = mini.verdict;
-      // Drop references so the GC can reclaim the heavy quarterly/annual payloads.
+      // Lightweight path: compute only the requested profile scores, do NOT cache the full bundle,
+      // and discard derived fundamentals immediately to keep memory minimal.
+      const scores: Record<string, number> = {};
+      for (const p of requested) scores[p] = scoreForProfile(p, symbol, profile, derived);
+      // Drop references so GC can reclaim the heavy quarterly/annual payloads.
       (derived as any).quarters = null;
       (derived as any).annual = null;
-      return jsonResponse({ symbol, minerviniScore: score, verdict, cached: false });
+      return jsonResponse({
+        symbol,
+        scores,
+        minerviniScore: scores.minervini ?? null,
+        cached: false,
+      });
     }
 
     const data = buildAll(symbol, profile, derived);
