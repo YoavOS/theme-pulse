@@ -593,16 +593,29 @@ export default function CustomListAnalyzerModal({
                 <label className="flex items-center gap-2 text-xs">
                   <Checkbox checked={hideMissing} onCheckedChange={(v) => setHideMissing(!!v)} /> Hide unmatched tickers
                 </label>
-                <label className="flex items-center gap-2 text-xs" title="Restrict to tickers saved in the Superperformance Stocks list (Minervini ≥ 80).">
-                  <Checkbox
-                    checked={superperfOnly}
-                    onCheckedChange={(v) => setSuperperfOnly(!!v)}
-                    disabled={!superperfSet || superperfSet.size === 0}
-                  /> 🏆 Superperformance Stocks Only
-                  {superperfSet && superperfSet.size > 0 && (
-                    <span className="text-muted-foreground">({superperfSet.size})</span>
-                  )}
-                </label>
+                {([
+                  { key: "current",   label: "Current ≥ 80" },
+                  { key: "minervini", label: "Minervini ≥ 80" },
+                  { key: "oneil",     label: "O'Neil ≥ 80" },
+                  { key: "ryan",      label: "Ryan ≥ 80" },
+                ] as const).map(({ key, label }) => {
+                  const set = superperfSets?.[key];
+                  const has = !!set && set.size > 0;
+                  return (
+                    <label
+                      key={key}
+                      className="flex items-center gap-2 text-xs"
+                      title={`Restrict to tickers saved in the Superperformance Stocks list (${label}).`}
+                    >
+                      <Checkbox
+                        checked={superperfFilters[key]}
+                        onCheckedChange={(v) => setSuperperfFilters((prev) => ({ ...prev, [key]: !!v }))}
+                        disabled={!has}
+                      /> 🏆 {label}
+                      {has && <span className="text-muted-foreground">({set!.size})</span>}
+                    </label>
+                  );
+                })}
               </div>
               <div className="flex flex-col gap-1.5 pt-2">
                 <span className="text-[11px] font-medium text-muted-foreground">Growth Filters</span>
