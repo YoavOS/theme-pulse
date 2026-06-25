@@ -178,7 +178,7 @@ export default function CustomListAnalyzerModal({
   const [minMcapM, setMinMcapM] = useState<number>(0);
   const [excludeOtc, setExcludeOtc] = useState<boolean>(true);
   const [hideMissing, setHideMissing] = useState<boolean>(false);
-  const [superperfOnly, setSuperperfOnly] = useState<boolean>(false);
+  const [superperfFilters, setSuperperfFilters] = useState<Record<"current" | "minervini" | "oneil" | "ryan", boolean>>({ current: false, minervini: false, oneil: false, ryan: false });
   const [growthFilters, setGrowthFilters] = useState<GrowthFiltersState>({ ...DEFAULT_GROWTH_FILTERS });
   const [coilFilterOn, setCoilFilterOn] = useState<boolean>(false);
   const [maxCoil, setMaxCoil] = useState<number>(0.85);
