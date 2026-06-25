@@ -1256,7 +1256,7 @@ export default function RsAlpha() {
         coilLongDays={coilSettings.longDays}
         emaDistances={emaDistances}
         qqqPctChange={qqqPctChange}
-        superperfSet={superperfSet}
+        superperfSets={superperfSets}
       />
 
       <CustomListAnalyzerModal
@@ -1273,7 +1273,7 @@ export default function RsAlpha() {
         coilShortDays={coilSettings.shortDays}
         coilLongDays={coilSettings.longDays}
         emaDistances={emaDistances}
-        superperfSet={superperfSet}
+        superperfSets={superperfSets}
       />
 
       <SetupAnalyzerModal
