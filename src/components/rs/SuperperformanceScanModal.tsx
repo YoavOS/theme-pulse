@@ -2,10 +2,11 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Loader2, Play, Pause, Square, Copy, Download, Trophy, Trash2, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { useSuperperformance } from "@/hooks/useSuperperformance";
+import { useSuperperformance, type SuperperformanceProfileKey } from "@/hooks/useSuperperformance";
 
 interface Props {
   open: boolean;
@@ -16,13 +17,23 @@ interface Props {
 
 type Status = "idle" | "running" | "paused" | "done" | "cancelled";
 
+const PROFILE_OPTIONS: { key: SuperperformanceProfileKey; label: string; col: "minervini_score" | "oneil_score" | "ryan_score" | "current_score" }[] = [
+  { key: "current",   label: "Current",   col: "current_score" },
+  { key: "minervini", label: "Minervini", col: "minervini_score" },
+  { key: "oneil",     label: "O'Neil",    col: "oneil_score" },
+  { key: "ryan",      label: "Ryan",      col: "ryan_score" },
+];
+
+const THRESHOLD = 80;
+
 export default function SuperperformanceScanModal({ open, onOpenChange, universe }: Props) {
   const { rows, loading, reload } = useSuperperformance();
   const [status, setStatus] = useState<Status>("idle");
   const [index, setIndex] = useState(0);
   const [currentSymbol, setCurrentSymbol] = useState<string | null>(null);
-  const [qualifiers, setQualifiers] = useState<{ symbol: string; score: number }[]>([]);
+  const [qualifierCount, setQualifierCount] = useState(0);
   const [failed, setFailed] = useState<string[]>([]);
+  const [selectedProfiles, setSelectedProfiles] = useState<SuperperformanceProfileKey[]>(["current", "minervini"]);
   const cancelRef = useRef(false);
   const pauseRef = useRef(false);
 
@@ -36,9 +47,17 @@ export default function SuperperformanceScanModal({ open, onOpenChange, universe
 
   const total = universe.length;
 
+  const toggleProfile = (key: SuperperformanceProfileKey) => {
+    setSelectedProfiles((prev) => prev.includes(key) ? prev.filter((p) => p !== key) : [...prev, key]);
+  };
+
   const runScan = async (fromIndex = 0) => {
     if (total === 0) {
       toast.error("Universe is empty — rebuild RS Alpha first.");
+      return;
+    }
+    if (selectedProfiles.length === 0) {
+      toast.error("Select at least one profile to scan.");
       return;
     }
     cancelRef.current = false;
@@ -46,7 +65,7 @@ export default function SuperperformanceScanModal({ open, onOpenChange, universe
     setStatus("running");
     setIndex(fromIndex);
     if (fromIndex === 0) {
-      setQualifiers([]);
+      setQualifierCount(0);
       setFailed([]);
     }
 
@@ -65,26 +84,54 @@ export default function SuperperformanceScanModal({ open, onOpenChange, universe
 
       try {
         const { data, error } = await supabase.functions.invoke("minervini-analysis", {
-          body: { symbol: sym, minimal: true },
+          body: { symbol: sym, minimal: true, profiles: selectedProfiles },
         });
         if (error) throw new Error(error.message);
         if (data?.error) throw new Error(data.error);
-        const score = typeof data?.minerviniScore === "number" ? data.minerviniScore : null;
+        const scores: Record<string, number> = data?.scores ?? {};
 
-        if (score !== null && score >= 80) {
+        // Build the upsert payload — only columns for selected profiles get updated.
+        const payload: Record<string, any> = {
+          symbol: sym,
+          last_scanned: new Date().toISOString(),
+        };
+        let anyQualified = false;
+        for (const p of selectedProfiles) {
+          const s = typeof scores[p] === "number" ? scores[p] : null;
+          const col = PROFILE_OPTIONS.find((o) => o.key === p)!.col;
+          payload[col] = s;
+          if (s !== null && s >= THRESHOLD) anyQualified = true;
+        }
+
+        if (anyQualified) {
           await supabase
             .from("superperformance_stocks" as any)
-            .upsert(
-              { symbol: sym, minervini_score: score, last_scanned: new Date().toISOString() },
-              { onConflict: "symbol" },
-            );
-          setQualifiers((q) => [...q, { symbol: sym, score }]);
-        } else if (score !== null) {
-          // Score dropped below threshold — purge any stale entry so the list stays clean.
-          await supabase
-            .from("superperformance_stocks" as any)
-            .delete()
-            .eq("symbol", sym);
+            .upsert(payload, { onConflict: "symbol" });
+          setQualifierCount((c) => c + 1);
+        } else {
+          // No selected profile qualified — purge any stale entry so the list stays clean,
+          // but only if this row has no qualifying score in any *other* profile column.
+          const existing = rows.find((r) => r.symbol === sym);
+          const otherProfileKeeps = existing
+            ? PROFILE_OPTIONS
+                .filter((o) => !selectedProfiles.includes(o.key))
+                .some((o) => {
+                  const v = (existing as any)[o.col];
+                  return typeof v === "number" && v >= THRESHOLD;
+                })
+            : false;
+          if (otherProfileKeeps) {
+            // Update only the columns we scanned (clear them since they didn't qualify).
+            await supabase
+              .from("superperformance_stocks" as any)
+              .update(payload)
+              .eq("symbol", sym);
+          } else {
+            await supabase
+              .from("superperformance_stocks" as any)
+              .delete()
+              .eq("symbol", sym);
+          }
         }
       } catch (e) {
         setFailed((f) => [...f, sym]);
@@ -115,7 +162,16 @@ export default function SuperperformanceScanModal({ open, onOpenChange, universe
   };
 
   const progressPct = total > 0 ? Math.round((index / total) * 100) : 0;
-  const sortedRows = useMemo(() => [...rows].sort((a, b) => b.minervini_score - a.minervini_score), [rows]);
+  /** Show rows that qualify on at least one profile (>=80 in any column). */
+  const sortedRows = useMemo(() => {
+    const bestScore = (r: any) => Math.max(
+      r.current_score ?? -1,
+      r.minervini_score ?? -1,
+      r.oneil_score ?? -1,
+      r.ryan_score ?? -1,
+    );
+    return [...rows].sort((a, b) => bestScore(b) - bestScore(a));
+  }, [rows]);
   const tickerString = sortedRows.map((r) => r.symbol).join(",");
 
   const handleCopy = async () => {
@@ -134,19 +190,48 @@ export default function SuperperformanceScanModal({ open, onOpenChange, universe
     URL.revokeObjectURL(url);
   };
 
+  const renderScoreCell = (val: number | null | undefined) => {
+    if (typeof val !== "number") return <span className="text-muted-foreground">—</span>;
+    const cls = val >= THRESHOLD ? "text-[hsl(40,90%,55%)] font-bold" : val >= 60 ? "text-foreground" : "text-muted-foreground";
+    return <span className={`font-mono ${cls}`}>{val}</span>;
+  };
+
+  const scanning = status === "running" || status === "paused";
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl">
+      <DialogContent className="max-w-4xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Trophy size={18} className="text-[hsl(40,90%,55%)]" />
-            Superperformance Stocks (Minervini ≥ 80)
+            Superperformance Stocks (multi-profile ≥ {THRESHOLD})
           </DialogTitle>
           <DialogDescription>
-            Manually scan the qualified RS universe through the Minervini profile. Stocks scoring 80+ are saved.
-            Fundamentals are pulled per ticker and discarded immediately — only ticker, score, and last-scanned date are stored.
+            Scans the qualified RS universe through each selected profile. For every ticker, fundamentals are pulled,
+            scored against the chosen profiles, and discarded immediately — only the ticker, per-profile scores, and
+            last-scanned date are persisted.
           </DialogDescription>
         </DialogHeader>
+
+        {/* Profile selector */}
+        <div className="rounded-lg border border-border bg-card p-4 space-y-2">
+          <div className="text-xs uppercase tracking-wide text-muted-foreground">Profiles to score</div>
+          <div className="flex flex-wrap gap-3">
+            {PROFILE_OPTIONS.map((p) => (
+              <label
+                key={p.key}
+                className={`flex items-center gap-2 rounded-md border border-border bg-background px-3 py-1.5 text-sm ${scanning ? "opacity-60 cursor-not-allowed" : "cursor-pointer hover:bg-muted/50"}`}
+              >
+                <Checkbox
+                  checked={selectedProfiles.includes(p.key)}
+                  onCheckedChange={() => toggleProfile(p.key)}
+                  disabled={scanning}
+                />
+                <span className="font-medium">{p.label}</span>
+              </label>
+            ))}
+          </div>
+        </div>
 
         {/* Scan controls */}
         <div className="rounded-lg border border-border bg-card p-4 space-y-3">
@@ -156,7 +241,7 @@ export default function SuperperformanceScanModal({ open, onOpenChange, universe
               {status !== "idle" && (
                 <span className="ml-3 text-muted-foreground">
                   · Scanned <span className="font-mono">{index}</span>/{total}
-                  · Qualifiers <span className="font-mono text-[hsl(40,90%,55%)]">{qualifiers.length}</span>
+                  · Qualifiers <span className="font-mono text-[hsl(40,90%,55%)]">{qualifierCount}</span>
                   {failed.length > 0 && <> · Failed <span className="font-mono text-loss-medium">{failed.length}</span></>}
                 </span>
               )}
@@ -221,7 +306,10 @@ export default function SuperperformanceScanModal({ open, onOpenChange, universe
                 <thead className="text-xs text-muted-foreground">
                   <tr className="border-b border-border">
                     <th className="text-left px-2 py-1.5">Ticker</th>
-                    <th className="text-right px-2 py-1.5">Minervini Score</th>
+                    <th className="text-right px-2 py-1.5">Current</th>
+                    <th className="text-right px-2 py-1.5">Minervini</th>
+                    <th className="text-right px-2 py-1.5">O'Neil</th>
+                    <th className="text-right px-2 py-1.5">Ryan</th>
                     <th className="text-right px-2 py-1.5">Last Scanned</th>
                   </tr>
                 </thead>
@@ -229,7 +317,10 @@ export default function SuperperformanceScanModal({ open, onOpenChange, universe
                   {sortedRows.map((r) => (
                     <tr key={r.symbol} className="border-b border-border/40 hover:bg-muted/30">
                       <td className="px-2 py-1 font-mono font-bold">{r.symbol}</td>
-                      <td className="px-2 py-1 text-right font-mono text-[hsl(40,90%,55%)] font-bold">{r.minervini_score}</td>
+                      <td className="px-2 py-1 text-right">{renderScoreCell(r.current_score)}</td>
+                      <td className="px-2 py-1 text-right">{renderScoreCell(r.minervini_score)}</td>
+                      <td className="px-2 py-1 text-right">{renderScoreCell(r.oneil_score)}</td>
+                      <td className="px-2 py-1 text-right">{renderScoreCell(r.ryan_score)}</td>
                       <td className="px-2 py-1 text-right text-xs text-muted-foreground">{new Date(r.last_scanned).toLocaleDateString()}</td>
                     </tr>
                   ))}

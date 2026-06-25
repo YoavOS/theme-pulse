@@ -90,8 +90,8 @@ interface Props {
   coilLongDays?: number;
   /** Pre-loaded EMA distances from the parent (for instant rendering when available). */
   emaDistances?: Map<string, EmaDistanceInfo>;
-  /** Set of tickers in the Superperformance Stocks list (Minervini ≥ 80). */
-  superperfSet?: Set<string>;
+  /** Per-profile sets of tickers qualifying (score ≥ 80) in the Superperformance Stocks list. */
+  superperfSets?: Partial<Record<"minervini" | "oneil" | "ryan" | "current", Set<string>>>;
 }
 
 // Strip exchange prefixes (NYSE:, NASDAQ:, AMEX:, BATS:, ARCA:, CBOE:, OTC:, etc.)
@@ -159,7 +159,7 @@ function emaColor(d: number | null | undefined): string {
 export default function CustomListAnalyzerModal({
   open, onOpenChange, tabId, tabLabel, universe,
   getRsForTab, getReturnField, isOtcSymbol, fundamentalsMap,
-  coilScores, coilShortDays, coilLongDays, superperfSet,
+  coilScores, coilShortDays, coilLongDays, superperfSets,
 }: Props) {
   const [raw, setRaw] = useState<string>("");
   const [analyzed, setAnalyzed] = useState<boolean>(false);
@@ -178,7 +178,7 @@ export default function CustomListAnalyzerModal({
   const [minMcapM, setMinMcapM] = useState<number>(0);
   const [excludeOtc, setExcludeOtc] = useState<boolean>(true);
   const [hideMissing, setHideMissing] = useState<boolean>(false);
-  const [superperfOnly, setSuperperfOnly] = useState<boolean>(false);
+  const [superperfFilters, setSuperperfFilters] = useState<Record<"current" | "minervini" | "oneil" | "ryan", boolean>>({ current: false, minervini: false, oneil: false, ryan: false });
   const [growthFilters, setGrowthFilters] = useState<GrowthFiltersState>({ ...DEFAULT_GROWTH_FILTERS });
   const [coilFilterOn, setCoilFilterOn] = useState<boolean>(false);
   const [maxCoil, setMaxCoil] = useState<number>(0.85);
@@ -310,7 +310,12 @@ export default function CustomListAnalyzerModal({
     const filtered = matchedStocks.filter((s) => {
       const r = rMap.get(s.symbol);
       if (excludeOtc && isOtcSymbol(s.symbol)) return false;
-      if (superperfOnly && !(superperfSet?.has(s.symbol))) return false;
+      for (const key of ["current", "minervini", "oneil", "ryan"] as const) {
+        if (superperfFilters[key]) {
+          const set = superperfSets?.[key];
+          if (!set || !set.has(s.symbol)) return false;
+        }
+      }
       if (minRating > 0 && (r === null || r === undefined || r < minRating)) return false;
       if (minAdr > 0 && (s.adrPercent === null || s.adrPercent < minAdr)) return false;
       if (minMcapM > 0 && (s.marketCap === null || s.marketCap < minMcapM)) return false;
@@ -399,7 +404,7 @@ export default function CustomListAnalyzerModal({
     activeEmaFilters, ema9dFilterOn, ema21dFilterOn, ema9wFilterOn,
     maxEma9dAbs, maxEma21dAbs, maxEma9wAbs, emaFilterMode, emaMap, sortBy,
     priceVs9dOn, priceVs9dDir, priceVs21dOn, priceVs21dDir, priceVs9wOn, priceVs9wDir,
-    candleMap, superperfOnly, superperfSet,
+    candleMap, superperfFilters, superperfSets,
   ]);
 
   const visibleMissing = hideMissing ? [] : missing;
@@ -588,16 +593,29 @@ export default function CustomListAnalyzerModal({
                 <label className="flex items-center gap-2 text-xs">
                   <Checkbox checked={hideMissing} onCheckedChange={(v) => setHideMissing(!!v)} /> Hide unmatched tickers
                 </label>
-                <label className="flex items-center gap-2 text-xs" title="Restrict to tickers saved in the Superperformance Stocks list (Minervini ≥ 80).">
-                  <Checkbox
-                    checked={superperfOnly}
-                    onCheckedChange={(v) => setSuperperfOnly(!!v)}
-                    disabled={!superperfSet || superperfSet.size === 0}
-                  /> 🏆 Superperformance Stocks Only
-                  {superperfSet && superperfSet.size > 0 && (
-                    <span className="text-muted-foreground">({superperfSet.size})</span>
-                  )}
-                </label>
+                {([
+                  { key: "current",   label: "Current ≥ 80" },
+                  { key: "minervini", label: "Minervini ≥ 80" },
+                  { key: "oneil",     label: "O'Neil ≥ 80" },
+                  { key: "ryan",      label: "Ryan ≥ 80" },
+                ] as const).map(({ key, label }) => {
+                  const set = superperfSets?.[key];
+                  const has = !!set && set.size > 0;
+                  return (
+                    <label
+                      key={key}
+                      className="flex items-center gap-2 text-xs"
+                      title={`Restrict to tickers saved in the Superperformance Stocks list (${label}).`}
+                    >
+                      <Checkbox
+                        checked={superperfFilters[key]}
+                        onCheckedChange={(v) => setSuperperfFilters((prev) => ({ ...prev, [key]: !!v }))}
+                        disabled={!has}
+                      /> 🏆 {label}
+                      {has && <span className="text-muted-foreground">({set!.size})</span>}
+                    </label>
+                  );
+                })}
               </div>
               <div className="flex flex-col gap-1.5 pt-2">
                 <span className="text-[11px] font-medium text-muted-foreground">Growth Filters</span>
