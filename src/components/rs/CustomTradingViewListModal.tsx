@@ -354,7 +354,13 @@ export default function CustomTradingViewListModal({
   const prefiltered = useMemo(() => {
     return stocks.filter((s) => {
       if (state.excludeOtc && isOtcSymbol(s.symbol)) return false;
-      if (superperfOnly && !(superperfSet?.has(s.symbol))) return false;
+      // Superperformance per-profile filters (AND across enabled profiles).
+      for (const key of ["current", "minervini", "oneil", "ryan"] as const) {
+        if (superperfFilters[key]) {
+          const set = superperfSets?.[key];
+          if (!set || !set.has(s.symbol)) return false;
+        }
+      }
       const rating = ratingMap.get(s.symbol);
       if (rating === null || rating === undefined || rating < state.minRating) return false;
       if (s.adrPercent === null || s.adrPercent < state.minAdr) return false;
