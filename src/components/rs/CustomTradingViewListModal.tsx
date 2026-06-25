@@ -182,8 +182,8 @@ interface Props {
   emaDistances?: Map<string, EmaDistanceInfo>;
   /** Today's QQQ % change (used for "Red Day Leaders" / market-defiance filtering). */
   qqqPctChange?: number | null;
-  /** Set of tickers in the Superperformance Stocks list (Minervini ≥ 80). */
-  superperfSet?: Set<string>;
+  /** Per-profile sets of tickers qualifying (score ≥ 80) in the Superperformance Stocks list. */
+  superperfSets?: Partial<Record<"minervini" | "oneil" | "ryan" | "current", Set<string>>>;
 }
 
 const DEFAULT_FILTERS: FilterState = {
