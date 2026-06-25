@@ -159,7 +159,7 @@ function emaColor(d: number | null | undefined): string {
 export default function CustomListAnalyzerModal({
   open, onOpenChange, tabId, tabLabel, universe,
   getRsForTab, getReturnField, isOtcSymbol, fundamentalsMap,
-  coilScores, coilShortDays, coilLongDays, superperfSet,
+  coilScores, coilShortDays, coilLongDays, superperfSets,
 }: Props) {
   const [raw, setRaw] = useState<string>("");
   const [analyzed, setAnalyzed] = useState<boolean>(false);
