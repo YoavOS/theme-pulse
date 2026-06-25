@@ -90,8 +90,8 @@ interface Props {
   coilLongDays?: number;
   /** Pre-loaded EMA distances from the parent (for instant rendering when available). */
   emaDistances?: Map<string, EmaDistanceInfo>;
-  /** Set of tickers in the Superperformance Stocks list (Minervini ≥ 80). */
-  superperfSet?: Set<string>;
+  /** Per-profile sets of tickers qualifying (score ≥ 80) in the Superperformance Stocks list. */
+  superperfSets?: Partial<Record<"minervini" | "oneil" | "ryan" | "current", Set<string>>>;
 }
 
 // Strip exchange prefixes (NYSE:, NASDAQ:, AMEX:, BATS:, ARCA:, CBOE:, OTC:, etc.)
