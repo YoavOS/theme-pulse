@@ -26,6 +26,28 @@ const PROFILE_OPTIONS: { key: SuperperformanceProfileKey; label: string; col: "m
 
 const THRESHOLD = 80;
 
+const scoreKeys: Record<SuperperformanceProfileKey, string[]> = {
+  current: ["current", "currentScore", "current_score"],
+  minervini: ["minervini", "minerviniScore", "minervini_score"],
+  oneil: ["oneil", "oneilScore", "oneil_score"],
+  ryan: ["ryan", "ryanScore", "ryan_score"],
+};
+
+const normalizeScores = (data: any, profiles: SuperperformanceProfileKey[]) => {
+  const out: Partial<Record<SuperperformanceProfileKey, number>> = {};
+  const scoreBag = data?.scores && typeof data.scores === "object" ? data.scores : {};
+  for (const profile of profiles) {
+    const candidates = [
+      ...scoreKeys[profile].map((k) => scoreBag?.[k]),
+      ...scoreKeys[profile].map((k) => data?.[k]),
+      data?.reports?.[profile]?.overallScore,
+    ];
+    const value = candidates.find((v) => typeof v === "number" && Number.isFinite(v));
+    if (typeof value === "number") out[profile] = value;
+  }
+  return out;
+};
+
 export default function SuperperformanceScanModal({ open, onOpenChange, universe }: Props) {
   const { rows, loading, reload } = useSuperperformance();
   const [status, setStatus] = useState<Status>("idle");
@@ -36,6 +58,7 @@ export default function SuperperformanceScanModal({ open, onOpenChange, universe
   const [selectedProfiles, setSelectedProfiles] = useState<SuperperformanceProfileKey[]>(["current", "minervini"]);
   const cancelRef = useRef(false);
   const pauseRef = useRef(false);
+  const qualifierSymbolsRef = useRef<Set<string>>(new Set());
 
   // Reset on close
   useEffect(() => {
@@ -65,9 +88,12 @@ export default function SuperperformanceScanModal({ open, onOpenChange, universe
     setStatus("running");
     setIndex(fromIndex);
     if (fromIndex === 0) {
+      qualifierSymbolsRef.current = new Set();
       setQualifierCount(0);
       setFailed([]);
     }
+
+    const existingBySymbol = new Map<string, any>(rows.map((r) => [r.symbol, { ...r }]));
 
     for (let i = fromIndex; i < total; i++) {
       if (cancelRef.current) { setStatus("cancelled"); setCurrentSymbol(null); return; }
@@ -88,7 +114,7 @@ export default function SuperperformanceScanModal({ open, onOpenChange, universe
         });
         if (error) throw new Error(error.message);
         if (data?.error) throw new Error(data.error);
-        const scores: Record<string, number> = data?.scores ?? {};
+        const scores = normalizeScores(data, selectedProfiles);
 
         // Build the upsert payload — only columns for selected profiles get updated.
         const payload: Record<string, any> = {
@@ -107,11 +133,13 @@ export default function SuperperformanceScanModal({ open, onOpenChange, universe
           await supabase
             .from("superperformance_stocks" as any)
             .upsert(payload, { onConflict: "symbol" });
-          setQualifierCount((c) => c + 1);
+          qualifierSymbolsRef.current.add(sym);
+          setQualifierCount(qualifierSymbolsRef.current.size);
+          existingBySymbol.set(sym, { ...(existingBySymbol.get(sym) ?? {}), ...payload });
         } else {
           // No selected profile qualified — purge any stale entry so the list stays clean,
           // but only if this row has no qualifying score in any *other* profile column.
-          const existing = rows.find((r) => r.symbol === sym);
+          const existing = existingBySymbol.get(sym);
           const otherProfileKeeps = existing
             ? PROFILE_OPTIONS
                 .filter((o) => !selectedProfiles.includes(o.key))
@@ -126,11 +154,13 @@ export default function SuperperformanceScanModal({ open, onOpenChange, universe
               .from("superperformance_stocks" as any)
               .update(payload)
               .eq("symbol", sym);
+            existingBySymbol.set(sym, { ...existing, ...payload });
           } else {
             await supabase
               .from("superperformance_stocks" as any)
               .delete()
               .eq("symbol", sym);
+            existingBySymbol.delete(sym);
           }
         }
       } catch (e) {
