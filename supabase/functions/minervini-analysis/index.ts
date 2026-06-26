@@ -1454,7 +1454,15 @@ Deno.serve(async (req) => {
         if (minimal) {
           const scores: Record<string, number> = {};
           for (const p of requested) scores[p] = hit.data.reports[p].overallScore;
-          return jsonResponse({ symbol, scores, minerviniScore: scores.minervini ?? null, cached: true });
+          const qualifiedProfiles = requested.filter((p) => typeof scores[p] === "number" && scores[p] >= 80);
+          return jsonResponse({
+            symbol,
+            scores,
+            qualifiedProfiles,
+            qualifies: qualifiedProfiles.length > 0,
+            minerviniScore: scores.minervini ?? null,
+            cached: true,
+          });
         }
         return jsonResponse({ ...hit.data, cached: true, dataQuality: hit.dataQuality });
       }
@@ -1468,12 +1476,15 @@ Deno.serve(async (req) => {
       // and discard derived fundamentals immediately to keep memory minimal.
       const scores: Record<string, number> = {};
       for (const p of requested) scores[p] = scoreForProfile(p, symbol, profile, derived);
+      const qualifiedProfiles = requested.filter((p) => typeof scores[p] === "number" && scores[p] >= 80);
       // Drop references so GC can reclaim the heavy quarterly/annual payloads.
       (derived as any).quarters = null;
       (derived as any).annual = null;
       return jsonResponse({
         symbol,
         scores,
+        qualifiedProfiles,
+        qualifies: qualifiedProfiles.length > 0,
         minerviniScore: scores.minervini ?? null,
         cached: false,
       });
