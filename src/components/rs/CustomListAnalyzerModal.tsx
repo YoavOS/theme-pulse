@@ -310,10 +310,11 @@ export default function CustomListAnalyzerModal({
     const filtered = matchedStocks.filter((s) => {
       const r = rMap.get(s.symbol);
       if (excludeOtc && isOtcSymbol(s.symbol)) return false;
-      for (const key of ["current", "minervini", "oneil", "ryan"] as const) {
-        if (superperfFilters[key]) {
-          const set = superperfSets?.[key];
-          if (!set || !set.has(s.symbol)) return false;
+      {
+        const enabled = (["current", "minervini", "oneil", "ryan"] as const).filter((k) => superperfFilters[k]);
+        if (enabled.length > 0) {
+          const ok = enabled.some((k) => superperfSets?.[k]?.has(s.symbol));
+          if (!ok) return false;
         }
       }
       if (minRating > 0 && (r === null || r === undefined || r < minRating)) return false;

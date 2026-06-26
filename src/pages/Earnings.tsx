@@ -412,62 +412,95 @@ export default function Earnings() {
               Click "Scan Now" to find stocks that gapped ≥ {minGap}% the day after earnings in the last {lookbackDays} days.
             </div>
           ) : (
-            <div className="divide-y divide-border/50">
-              {gappers.map((g) => (
-                <div
-                  key={`${g.symbol}-${g.reportDate}`}
-                  onClick={() => setAnalysisCtx({
-                    symbol: g.symbol, company: g.company, sector: g.sector,
-                    gapPct: g.gapPct, epsSurprisePct: g.epsSurprisePct, revenueSurprisePct: g.revenueSurprisePct,
-                    reportDate: g.reportDate, reportTime: g.reportTime,
-                  })}
-                  className="cursor-pointer px-4 py-3 transition-colors hover:bg-accent/30"
-                >
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div className="flex items-center gap-2">
-                      <span className="font-mono text-sm font-bold text-foreground">{g.symbol}</span>
-                      <span className="text-xs text-muted-foreground truncate max-w-[260px]">{g.company ?? ""}</span>
-                      {reportTimeBadge(g.reportTime)}
-                      <span className="text-[10px] text-muted-foreground">{g.reportDate}</span>
-                      {g.sector && <span className="rounded border border-border bg-muted/40 px-1.5 py-0.5 text-[10px] text-muted-foreground">{g.sector}</span>}
-                    </div>
-                    <div className={`font-mono text-base font-bold ${gapColor(g.gapPct)}`}>
-                      {fmtPct(g.gapPct, 1)}
-                    </div>
-                  </div>
+            (() => {
+              const sorted = [...gappers].sort((a, b) => {
+                const d = (b.reportDate || "").localeCompare(a.reportDate || "");
+                if (d !== 0) return d;
+                return (b.gapPct ?? 0) - (a.gapPct ?? 0);
+              });
+              const groups: { date: string; rows: typeof sorted }[] = [];
+              for (const g of sorted) {
+                const last = groups[groups.length - 1];
+                if (last && last.date === g.reportDate) last.rows.push(g);
+                else groups.push({ date: g.reportDate, rows: [g] });
+              }
+              const dateLabel = (iso: string) => {
+                try {
+                  const d = new Date(iso + "T00:00:00");
+                  return d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+                } catch { return iso; }
+              };
+              return (
+                <div className="divide-y divide-border/70">
+                  {groups.map((grp) => (
+                    <div key={grp.date}>
+                      <div className="sticky top-0 z-[1] flex items-center justify-between gap-2 border-b border-border/60 bg-muted/40 px-4 py-1.5 backdrop-blur">
+                        <div className="flex items-center gap-2">
+                          <span className="font-['Syne',sans-serif] text-[11px] font-semibold uppercase tracking-wider text-foreground">{dateLabel(grp.date)}</span>
+                          <span className="font-mono text-[10px] text-muted-foreground">{grp.date}</span>
+                        </div>
+                        <span className="rounded bg-background/60 px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">{grp.rows.length}</span>
+                      </div>
+                      <div className="divide-y divide-border/40">
+                        {grp.rows.map((g) => (
+                          <div
+                            key={`${g.symbol}-${g.reportDate}`}
+                            onClick={() => setAnalysisCtx({
+                              symbol: g.symbol, company: g.company, sector: g.sector,
+                              gapPct: g.gapPct, epsSurprisePct: g.epsSurprisePct, revenueSurprisePct: g.revenueSurprisePct,
+                              reportDate: g.reportDate, reportTime: g.reportTime,
+                            })}
+                            className="cursor-pointer px-4 py-3 transition-colors hover:bg-accent/30"
+                          >
+                            <div className="flex flex-wrap items-center justify-between gap-3">
+                              <div className="flex min-w-0 items-center gap-2">
+                                <span className="font-mono text-sm font-bold text-foreground">{g.symbol}</span>
+                                {reportTimeBadge(g.reportTime)}
+                                <span className="truncate max-w-[280px] text-xs text-muted-foreground">{g.company ?? ""}</span>
+                                {g.sector && <span className="rounded border border-border bg-muted/40 px-1.5 py-0.5 text-[10px] text-muted-foreground">{g.sector}</span>}
+                              </div>
+                              <div className={`font-mono text-base font-bold ${gapColor(g.gapPct)}`}>
+                                {fmtPct(g.gapPct, 1)}
+                              </div>
+                            </div>
 
-                  <div className="mt-2 grid grid-cols-2 gap-2 text-[11px] sm:grid-cols-4">
-                    <div className="rounded border border-border/60 bg-muted/20 px-2 py-1">
-                      <div className="text-[10px] uppercase text-muted-foreground">Mcap</div>
-                      <div className="font-mono font-semibold text-foreground">{fmtMcap(g.marketCap)}</div>
-                    </div>
-                    <div className="rounded border border-border/60 bg-muted/20 px-2 py-1">
-                      <div className="text-[10px] uppercase text-muted-foreground">EPS Surprise</div>
-                      <div className={`font-mono font-semibold ${g.epsSurprisePct !== null && g.epsSurprisePct >= 0 ? "text-[hsl(160,70%,50%)]" : g.epsSurprisePct !== null ? "text-destructive" : "text-muted-foreground"}`}>
-                        {g.epsSurprisePct !== null ? `${g.epsSurprisePct >= 0 ? "+" : ""}${g.epsSurprisePct.toFixed(1)}%` : "—"}
+                            <div className="mt-2 grid grid-cols-2 gap-2 text-[11px] sm:grid-cols-4">
+                              <div className="rounded border border-border/60 bg-muted/20 px-2 py-1">
+                                <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Mcap</div>
+                                <div className="font-mono font-semibold text-foreground">{fmtMcap(g.marketCap)}</div>
+                              </div>
+                              <div className="rounded border border-border/60 bg-muted/20 px-2 py-1">
+                                <div className="text-[10px] uppercase tracking-wide text-muted-foreground">EPS Surprise</div>
+                                <div className={`font-mono font-semibold ${g.epsSurprisePct !== null && g.epsSurprisePct >= 0 ? "text-[hsl(160,70%,50%)]" : g.epsSurprisePct !== null ? "text-destructive" : "text-muted-foreground"}`}>
+                                  {g.epsSurprisePct !== null ? `${g.epsSurprisePct >= 0 ? "+" : ""}${g.epsSurprisePct.toFixed(1)}%` : "—"}
+                                </div>
+                              </div>
+                              <div className="rounded border border-border/60 bg-muted/20 px-2 py-1">
+                                <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Rev Surprise</div>
+                                <div className={`font-mono font-semibold ${g.revenueSurprisePct !== null && g.revenueSurprisePct >= 0 ? "text-[hsl(160,70%,50%)]" : g.revenueSurprisePct !== null ? "text-destructive" : "text-muted-foreground"}`}>
+                                  {g.revenueSurprisePct !== null ? `${g.revenueSurprisePct >= 0 ? "+" : ""}${g.revenueSurprisePct.toFixed(1)}%` : "—"}
+                                </div>
+                              </div>
+                              <div className="rounded border border-border/60 bg-muted/20 px-2 py-1">
+                                <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Open / Prev Close</div>
+                                <div className="font-mono font-semibold text-foreground">{g.openPrice.toFixed(2)} / {g.prevClose.toFixed(2)}</div>
+                              </div>
+                            </div>
+
+                            {g.aiAnalysis && (
+                              <div className="mt-2 flex items-start gap-2 rounded-md border border-primary/30 bg-primary/[0.04] px-2.5 py-2 text-[12px] leading-relaxed text-foreground/90">
+                                <Sparkles size={12} className="mt-0.5 shrink-0 text-primary" />
+                                <span>{g.aiAnalysis}</span>
+                              </div>
+                            )}
+                          </div>
+                        ))}
                       </div>
                     </div>
-                    <div className="rounded border border-border/60 bg-muted/20 px-2 py-1">
-                      <div className="text-[10px] uppercase text-muted-foreground">Rev Surprise</div>
-                      <div className={`font-mono font-semibold ${g.revenueSurprisePct !== null && g.revenueSurprisePct >= 0 ? "text-[hsl(160,70%,50%)]" : g.revenueSurprisePct !== null ? "text-destructive" : "text-muted-foreground"}`}>
-                        {g.revenueSurprisePct !== null ? `${g.revenueSurprisePct >= 0 ? "+" : ""}${g.revenueSurprisePct.toFixed(1)}%` : "—"}
-                      </div>
-                    </div>
-                    <div className="rounded border border-border/60 bg-muted/20 px-2 py-1">
-                      <div className="text-[10px] uppercase text-muted-foreground">Open / Prev Close</div>
-                      <div className="font-mono font-semibold text-foreground">{g.openPrice.toFixed(2)} / {g.prevClose.toFixed(2)}</div>
-                    </div>
-                  </div>
-
-                  {g.aiAnalysis && (
-                    <div className="mt-2 flex items-start gap-2 rounded-md border border-primary/30 bg-primary/[0.04] px-2.5 py-2 text-[12px] leading-relaxed text-foreground/90">
-                      <Sparkles size={12} className="mt-0.5 shrink-0 text-primary" />
-                      <span>{g.aiAnalysis}</span>
-                    </div>
-                  )}
+                  ))}
                 </div>
-              ))}
-            </div>
+              );
+            })()
           )}
         </section>
       </main>
