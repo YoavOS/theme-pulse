@@ -1,7 +1,7 @@
 import { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import { ThemeIntelData } from "@/hooks/useThemeIntelligence";
 import { Skeleton } from "@/components/ui/skeleton";
-import { TrendingUp, TrendingDown, Minus, Info } from "lucide-react";
+import { TrendingUp, TrendingDown, Minus, Info, Zap, Users } from "lucide-react";
 import { LineChart, Line, ResponsiveContainer } from "recharts";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import VolumeLeaders from "./VolumeLeaders";
@@ -16,14 +16,22 @@ import { ChevronRight } from "lucide-react";
 
 const DM_MONO = "'DM Mono', monospace";
 const VIEW_KEY = "overviewView";
+const TF_KEY = "overviewTimeframe";
 type ViewMode = "table" | "bubble";
+export type Timeframe = "1d" | "1w" | "1m" | "3m" | "ytd";
+const TF_LABEL: Record<Timeframe, string> = { "1d": "1 Day", "1w": "1 Week", "1m": "1 Month", "3m": "3 Month", "ytd": "Overall" };
+const TF_FIELD: Record<Timeframe, "perf_1d" | "perf_1w" | "perf_1m" | "perf_3m" | "perf_ytd"> = {
+  "1d": "perf_1d", "1w": "perf_1w", "1m": "perf_1m", "3m": "perf_3m", "ytd": "perf_ytd",
+};
+const TFS: Timeframe[] = ["1d", "1w", "1m", "3m", "ytd"];
+
 const EOD_TOOLTIP = "Accumulating EOD history — available after more daily saves. 1W and 1M performance require at least 5 and 20 saved trading days respectively.";
 const SIGNAL_TOOLTIP =
   "Divergence between momentum rank and breadth rank. '⚠ Thin' = momentum rank is much better than breadth — price move driven by few tickers, not confirmed by broad participation. '👀 Watch' = breadth rank is much better than momentum — broad quiet strength not yet reflected in price. Potential early rotation signal.";
-const VOL_TOOLTIP = "Average relative volume across all theme tickers vs their 20-day average. >1.8× = unusual institutional interest. >1.4× = elevated. <0.8× = quiet. Factors into momentum score as a conviction multiplier.";
-const MOMENTUM_TOOLTIP = "Weighted score: 20% today + 35% this week + 45% this month, adjusted for volume. Higher = stronger sustained momentum. Normalized 0-100 across all themes. Note: uses absolute performance. Use 'vs SPY' column for relative strength.";
-const SPY_TOOLTIP = "Theme performance minus SPY performance. Positive = outperforming the S&P 500. Negative = underperforming even if nominally positive.";
-type SortMode = "momentum" | "breadth" | "spy";
+const VOL_TOOLTIP = "Average relative volume across all theme tickers vs their 20-day average. >1.8× = unusual institutional interest. >1.4× = elevated. <0.8× = quiet.";
+const MOMENTUM_TOOLTIP = "Weighted score: 20% today + 35% this week + 45% this month, adjusted for volume. Normalized 0-100 across all themes.";
+const SPY_TOOLTIP = "Theme performance minus SPY performance for the selected timeframe.";
+type SortMode = "momentum" | "breadth" | "spy" | "volume";
 
 function getRelVolColor(val: number): string {
   if (val > 1.8) return "#00f5c4";
@@ -40,9 +48,7 @@ function PerfCell({ value, hasData }: { value: number; hasData: boolean }) {
           <TooltipTrigger asChild>
             <span className="text-muted-foreground cursor-help" style={{ fontFamily: DM_MONO }}>--</span>
           </TooltipTrigger>
-          <TooltipContent side="top" className="max-w-[200px] text-xs">
-            {EOD_TOOLTIP}
-          </TooltipContent>
+          <TooltipContent side="top" className="max-w-[200px] text-xs">{EOD_TOOLTIP}</TooltipContent>
         </Tooltip>
       </td>
     );
@@ -57,22 +63,14 @@ function PerfCell({ value, hasData }: { value: number; hasData: boolean }) {
 }
 
 function MiniSparkline({ data }: { data: number[] }) {
-  if (data.length < 3) {
-    return <span className="text-muted-foreground text-[10px]" style={{ fontFamily: DM_MONO }}>--</span>;
-  }
+  if (data.length < 3) return <span className="text-muted-foreground text-[10px]" style={{ fontFamily: DM_MONO }}>--</span>;
   const chartData = data.map((v, i) => ({ v, i }));
   const trend = data[data.length - 1] >= data[0];
   return (
     <div className="w-16 h-6">
       <ResponsiveContainer width="100%" height="100%">
         <LineChart data={chartData}>
-          <Line
-            type="monotone"
-            dataKey="v"
-            stroke={trend ? "#00f5c4" : "#f5a623"}
-            strokeWidth={1.5}
-            dot={false}
-          />
+          <Line type="monotone" dataKey="v" stroke={trend ? "#00f5c4" : "#f5a623"} strokeWidth={1.5} dot={false} />
         </LineChart>
       </ResponsiveContainer>
     </div>
@@ -83,17 +81,8 @@ function MomentumBar({ score }: { score: number }) {
   return (
     <div className="flex items-center gap-2">
       <div className="h-1.5 w-20 overflow-hidden rounded-full bg-[rgba(255,255,255,0.06)]">
-        <div
-          className="h-full rounded-full transition-all duration-700 ease-out"
-          style={{
-            width: `${score}%`,
-            background: score > 70
-              ? "#00f5c4"
-              : score > 40
-              ? "linear-gradient(90deg, #00f5c4, #f5a623)"
-              : "#f5a623",
-          }}
-        />
+        <div className="h-full rounded-full transition-all duration-700 ease-out"
+          style={{ width: `${score}%`, background: score > 70 ? "#00f5c4" : score > 40 ? "linear-gradient(90deg, #00f5c4, #f5a623)" : "#f5a623" }} />
       </div>
       <span className="text-xs text-muted-foreground w-7 text-right" style={{ fontFamily: DM_MONO }}>{score}</span>
     </div>
@@ -117,12 +106,8 @@ function BreadthCell({ up, total }: { up: number; total: number }) {
   const pct = total > 0 ? Math.round((up / total) * 100) : 0;
   return (
     <td className="px-3 py-2.5 text-right">
-      <div style={{ fontFamily: DM_MONO, color: breadthPctColor(pct) }} className="text-sm font-medium">
-        {pct}%
-      </div>
-      <div className="text-[10px] text-muted-foreground" style={{ fontFamily: DM_MONO }}>
-        {up}/{total}
-      </div>
+      <div style={{ fontFamily: DM_MONO, color: breadthPctColor(pct) }} className="text-sm font-medium">{pct}%</div>
+      <div className="text-[10px] text-muted-foreground" style={{ fontFamily: DM_MONO }}>{up}/{total}</div>
     </td>
   );
 }
@@ -133,30 +118,19 @@ function VolCell({ avgRelVol, isDryingUp }: { avgRelVol: number | null; isDrying
       <div className="flex items-center justify-end gap-1">
         {isDryingUp && (
           <Tooltip>
-            <TooltipTrigger asChild>
-              <span className="inline-block h-2 w-2 rounded-full bg-[#f5a623] shrink-0 cursor-help" />
-            </TooltipTrigger>
-            <TooltipContent side="top" className="max-w-[200px] text-xs">
-              Volume drying up after elevated activity
-            </TooltipContent>
+            <TooltipTrigger asChild><span className="inline-block h-2 w-2 rounded-full bg-[#f5a623] shrink-0 cursor-help" /></TooltipTrigger>
+            <TooltipContent side="top" className="max-w-[200px] text-xs">Volume drying up after elevated activity</TooltipContent>
           </Tooltip>
         )}
         <Tooltip>
           <TooltipTrigger asChild>
             {avgRelVol !== null ? (
-              <span
-                className="text-sm font-medium cursor-help"
-                style={{ fontFamily: DM_MONO, color: getRelVolColor(avgRelVol) }}
-              >
-                {avgRelVol.toFixed(1)}×
-              </span>
+              <span className="text-sm font-medium cursor-help" style={{ fontFamily: DM_MONO, color: getRelVolColor(avgRelVol) }}>{avgRelVol.toFixed(1)}×</span>
             ) : (
               <span className="text-sm text-muted-foreground cursor-help" style={{ fontFamily: DM_MONO }}>--</span>
             )}
           </TooltipTrigger>
-          <TooltipContent side="top" className="max-w-[220px] text-xs">
-            {VOL_TOOLTIP}
-          </TooltipContent>
+          <TooltipContent side="top" className="max-w-[220px] text-xs">{VOL_TOOLTIP}</TooltipContent>
         </Tooltip>
       </div>
     </td>
@@ -164,20 +138,8 @@ function VolCell({ avgRelVol, isDryingUp }: { avgRelVol: number | null; isDrying
 }
 
 function SignalCell({ divergence }: { divergence: number }) {
-  if (divergence <= -5) {
-    return (
-      <td className="px-3 py-2.5 text-center">
-        <span className="text-[11px] font-medium text-[#f5a623]" style={{ fontFamily: DM_MONO }}>⚠ Thin</span>
-      </td>
-    );
-  }
-  if (divergence >= 5) {
-    return (
-      <td className="px-3 py-2.5 text-center">
-        <span className="text-[11px] font-medium text-[#00f5c4]" style={{ fontFamily: DM_MONO }}>👀 Watch</span>
-      </td>
-    );
-  }
+  if (divergence <= -5) return <td className="px-3 py-2.5 text-center"><span className="text-[11px] font-medium text-[#f5a623]" style={{ fontFamily: DM_MONO }}>⚠ Thin</span></td>;
+  if (divergence >= 5) return <td className="px-3 py-2.5 text-center"><span className="text-[11px] font-medium text-[#00f5c4]" style={{ fontFamily: DM_MONO }}>👀 Watch</span></td>;
   return <td className="px-3 py-2.5" />;
 }
 
@@ -186,32 +148,25 @@ function SkeletonRows() {
     <>
       {Array.from({ length: 8 }).map((_, i) => (
         <tr key={i} className="border-b border-[rgba(255,255,255,0.04)]">
-          <td className="px-3 py-3"><Skeleton className="h-4 w-6" /></td>
-          <td className="px-3 py-3"><Skeleton className="h-4 w-32" /></td>
-          <td className="px-3 py-3"><Skeleton className="h-4 w-24" /></td>
-          <td className="px-3 py-3"><Skeleton className="h-4 w-14" /></td>
-          <td className="px-3 py-3"><Skeleton className="h-4 w-14" /></td>
-          <td className="px-3 py-3"><Skeleton className="h-4 w-14" /></td>
-          <td className="px-3 py-3"><Skeleton className="h-4 w-10" /></td>
-          <td className="px-3 py-3"><Skeleton className="h-4 w-12" /></td>
-          <td className="px-3 py-3"><Skeleton className="h-4 w-16" /></td>
-          <td className="px-3 py-3"><Skeleton className="h-4 w-12" /></td>
-          <td className="px-3 py-3"><Skeleton className="h-4 w-6" /></td>
+          {Array.from({ length: 11 }).map((__, j) => (<td key={j} className="px-3 py-3"><Skeleton className="h-4 w-14" /></td>))}
         </tr>
       ))}
     </>
   );
 }
 
-/* ─── Expandable row that reveals its underlying tickers on click ─── */
-type EnrichedTheme = ThemeIntelData & { momentumRank: number; breadthRank: number; breadthPct: number; divergence: number };
+export type EnrichedTheme = ThemeIntelData & {
+  momentumRank: number;
+  breadthRank: number;
+  breadthPct: number;     // active-timeframe breadth %
+  breadthUpActive: number;
+  breadthTotalActive: number;
+  perfActive: number;     // active-timeframe perf
+  divergence: number;
+};
+
 function OverviewRow({
-  rank,
-  theme: t,
-  highlight,
-  getRelativeStrength,
-  isThemeDryingUp,
-  rowRefs,
+  rank, theme: t, highlight, getRelativeStrength, isThemeDryingUp, rowRefs, timeframe,
 }: {
   rank: number;
   theme: EnrichedTheme;
@@ -219,14 +174,13 @@ function OverviewRow({
   getRelativeStrength: (perf: number) => number | null;
   isThemeDryingUp: (name: string) => boolean;
   rowRefs: React.MutableRefObject<Map<string, HTMLTableRowElement>>;
+  timeframe: Timeframe;
 }) {
   const { open, toggle } = useThemeRowToggle(`overview-row-${t.themeId}`);
-  const borderColor =
-    t.divergence <= -5 ? "2px solid #f5a623" :
-    t.divergence >= 5 ? "2px solid #00f5c4" :
-    "2px solid transparent";
-  const rs = getRelativeStrength(t.perf_1d);
+  const borderColor = t.divergence <= -5 ? "2px solid #f5a623" : t.divergence >= 5 ? "2px solid #00f5c4" : "2px solid transparent";
+  const rs = getRelativeStrength(t.perfActive);
   const f = formatRS(rs);
+  const tfHasData = timeframe === "1d" ? true : t.hasEodHistory;
 
   return (
     <>
@@ -239,27 +193,23 @@ function OverviewRow({
       >
         <td className="px-3 py-2.5 text-xs text-muted-foreground" style={{ fontFamily: DM_MONO }}>
           <div className="flex items-center gap-1">
-            <ChevronRight
-              size={11}
-              className="text-muted-foreground transition-transform duration-200"
-              style={{ transform: open ? "rotate(90deg)" : "rotate(0deg)" }}
-            />
+            <ChevronRight size={11} className="text-muted-foreground transition-transform duration-200" style={{ transform: open ? "rotate(90deg)" : "rotate(0deg)" }} />
             {rank}
           </div>
         </td>
         <td className="px-3 py-2.5">
           <div className="font-['Syne',sans-serif] font-semibold text-foreground text-[13px] leading-tight">{t.themeName}</div>
-          <div className="text-[10px] text-muted-foreground mt-0.5" style={{ fontFamily: DM_MONO }}>{t.breadthUp}/{t.breadthTotal} advancing · {t.symbols.length} tickers</div>
+          <div className="text-[10px] text-muted-foreground mt-0.5" style={{ fontFamily: DM_MONO }}>{t.breadthUpActive}/{t.breadthTotalActive} advancing · {t.symbols.length} tickers</div>
         </td>
         <td className="px-3 py-2.5"><MomentumBar score={t.momentumScore} /></td>
-        <PerfCell value={t.perf_1d} hasData={true} />
+        <PerfCell value={t.perfActive} hasData={tfHasData} />
         <td className={`px-3 py-2.5 text-right text-sm ${f.color}`} style={{ fontFamily: DM_MONO }}>
           {rs !== null ? `${rs >= 0 ? "+" : ""}${rs.toFixed(2)}%` : "--"}
         </td>
         <PerfCell value={t.perf_1w} hasData={t.hasEodHistory} />
         <PerfCell value={t.perf_1m} hasData={t.hasEodHistory} />
         <VolCell avgRelVol={t.avgRelVol} isDryingUp={isThemeDryingUp(t.themeName)} />
-        <BreadthCell up={t.breadthUp} total={t.breadthTotal} />
+        <BreadthCell up={t.breadthUpActive} total={t.breadthTotalActive} />
         <td className="px-3 py-2.5 text-center"><MiniSparkline data={t.sparklineData} /></td>
         <SignalCell divergence={t.divergence} />
         <td className="px-3 py-2.5 text-center"><TrendArrow score={t.momentumScore} /></td>
@@ -275,17 +225,16 @@ function OverviewRow({
   );
 }
 
-export default function OverviewTab({
-  themes,
-  isLoading,
-}: {
-  themes: ThemeIntelData[];
-  isLoading: boolean;
-}) {
+export default function OverviewTab({ themes, isLoading }: { themes: ThemeIntelData[]; isLoading: boolean; }) {
    const [viewMode, setViewMode] = useState<ViewMode>(() => {
      try { return (localStorage.getItem(VIEW_KEY) as ViewMode) || "table"; } catch { return "table"; }
    });
+   const [timeframe, setTimeframe] = useState<Timeframe>(() => {
+     try { return (localStorage.getItem(TF_KEY) as Timeframe) || "1d"; } catch { return "1d"; }
+   });
    const [sortMode, setSortMode] = useState<SortMode>("momentum");
+   const [filterVolSurge, setFilterVolSurge] = useState(false);
+   const [filterHighBreadth, setFilterHighBreadth] = useState(false);
    const [highlightId, setHighlightId] = useState<string | null>(null);
    const [drilldownOpen, setDrilldownOpen] = useState(false);
    const [drilldownTheme, setDrilldownTheme] = useState<ReturnType<typeof useLiveThemeData>["themes"][0] | null>(null);
@@ -294,6 +243,11 @@ export default function OverviewTab({
    const handleViewChange = useCallback((mode: ViewMode) => {
      setViewMode(mode);
      try { localStorage.setItem(VIEW_KEY, mode); } catch {}
+   }, []);
+
+   const handleTimeframeChange = useCallback((tf: Timeframe) => {
+     setTimeframe(tf);
+     try { localStorage.setItem(TF_KEY, tf); } catch {}
    }, []);
 
    const { themes: liveThemes } = useLiveThemeData("Today");
@@ -310,10 +264,7 @@ export default function OverviewTab({
 
    const handleOpenDrilldown = useCallback((themeName: string) => {
      const theme = liveThemes.find(t => t.theme_name === themeName);
-     if (theme) {
-       setDrilldownTheme(theme);
-       setDrilldownOpen(true);
-     }
+     if (theme) { setDrilldownTheme(theme); setDrilldownOpen(true); }
    }, [liveThemes]);
 
   useEffect(() => {
@@ -322,42 +273,66 @@ export default function OverviewTab({
     return () => clearTimeout(timer);
   }, [highlightId]);
 
-  const enriched = useMemo(() => {
+  const enriched = useMemo<EnrichedTheme[]>(() => {
     if (themes.length === 0) return [];
+    const field = TF_FIELD[timeframe];
 
-    const momentumRanked = themes.map((t, i) => ({ ...t, momentumRank: i + 1 }));
-
-    const byBreadth = [...momentumRanked].sort((a, b) => {
-      const aPct = a.breadthTotal > 0 ? a.breadthUp / a.breadthTotal : 0;
-      const bPct = b.breadthTotal > 0 ? b.breadthUp / b.breadthTotal : 0;
-      return bPct - aPct;
+    // Compute active-timeframe perf + breadth per theme
+    const augmented = themes.map((t, i) => {
+      const valid = t.tickers.filter(tk => tk.status === "done");
+      const perfActive = valid.length > 0
+        ? Math.round((valid.reduce((s, tk) => s + ((tk as any)[field] || 0), 0) / valid.length) * 100) / 100
+        : 0;
+      const breadthUpActive = valid.filter(tk => ((tk as any)[field] || 0) > 0).length;
+      const breadthTotalActive = valid.length;
+      const breadthPct = breadthTotalActive > 0 ? Math.round((breadthUpActive / breadthTotalActive) * 100) : 0;
+      return { ...t, momentumRank: i + 1, perfActive, breadthUpActive, breadthTotalActive, breadthPct };
     });
+
+    const byBreadth = [...augmented].sort((a, b) => b.breadthPct - a.breadthPct);
     const breadthRankMap = new Map<string, number>();
     byBreadth.forEach((t, i) => breadthRankMap.set(t.themeId, i + 1));
 
-    return momentumRanked.map(t => ({
-      ...t,
-      breadthRank: breadthRankMap.get(t.themeId) || 0,
-      breadthPct: t.breadthTotal > 0 ? Math.round((t.breadthUp / t.breadthTotal) * 100) : 0,
-      divergence: t.momentumRank - (breadthRankMap.get(t.themeId) || 0),
-    }));
-  }, [themes]);
+    // Re-rank momentum by perfActive when timeframe != 1d so ranks are timeframe-aware
+    const byPerf = [...augmented].sort((a, b) => b.perfActive - a.perfActive);
+    const perfRankMap = new Map<string, number>();
+    byPerf.forEach((t, i) => perfRankMap.set(t.themeId, i + 1));
+
+    return augmented.map(t => {
+      const momentumRank = timeframe === "1d" ? t.momentumRank : (perfRankMap.get(t.themeId) || 0);
+      const breadthRank = breadthRankMap.get(t.themeId) || 0;
+      return { ...t, momentumRank, breadthRank, divergence: momentumRank - breadthRank };
+    });
+  }, [themes, timeframe]);
+
+  const filtered = useMemo(() => {
+    return enriched.filter(t => {
+      if (filterVolSurge && (t.avgRelVol === null || t.avgRelVol < 1.4)) return false;
+      if (filterHighBreadth && t.breadthPct < 60) return false;
+      return true;
+    });
+  }, [enriched, filterVolSurge, filterHighBreadth]);
 
   const sorted = useMemo(() => {
-    if (sortMode === "breadth") {
-      return [...enriched].sort((a, b) => b.breadthPct - a.breadthPct);
-    }
+    if (sortMode === "breadth") return [...filtered].sort((a, b) => b.breadthPct - a.breadthPct);
     if (sortMode === "spy") {
-      return [...enriched].sort((a, b) => {
-        const aRS = getRelativeStrength(a.perf_1d) ?? -999;
-        const bRS = getRelativeStrength(b.perf_1d) ?? -999;
+      return [...filtered].sort((a, b) => {
+        const aRS = getRelativeStrength(a.perfActive) ?? -999;
+        const bRS = getRelativeStrength(b.perfActive) ?? -999;
         return bRS - aRS;
       });
     }
-    return enriched;
-  }, [enriched, sortMode, getRelativeStrength]);
+    if (sortMode === "volume") {
+      return [...filtered].sort((a, b) => (b.avgRelVol ?? -1) - (a.avgRelVol ?? -1));
+    }
+    // momentum
+    if (timeframe === "1d") return [...filtered].sort((a, b) => b.momentumScore - a.momentumScore);
+    return [...filtered].sort((a, b) => b.perfActive - a.perfActive);
+  }, [filtered, sortMode, getRelativeStrength, timeframe]);
 
-  const top3Names = themes.slice(0, 3).map(t => t.themeName).join(" · ");
+  const top3Names = sorted.slice(0, 3).map(t => t.themeName).join(" · ");
+
+  const activePerfHeader = TF_LABEL[timeframe];
 
   return (
     <div className="h-full overflow-auto space-y-3">
@@ -374,19 +349,37 @@ export default function OverviewTab({
         id="overview-rankings"
         title="Theme Rankings"
         defaultOpen={true}
-        badge={`${themes.length} themes`}
+        badge={`${sorted.length}/${themes.length}`}
         summary={top3Names ? `Top: ${top3Names}` : undefined}
         headerActions={
           <>
+            <div className="flex items-center gap-1 rounded-lg bg-[rgba(255,255,255,0.03)] p-0.5" title="Timeframe">
+              {TFS.map(tf => (
+                <button key={tf} onClick={() => handleTimeframeChange(tf)}
+                  className={`rounded-md px-2 py-1 text-[10px] font-medium ${timeframe === tf ? "bg-[rgba(255,255,255,0.08)] text-foreground" : "text-muted-foreground hover:text-foreground"}`}>
+                  {TF_LABEL[tf]}
+                </button>
+              ))}
+            </div>
             <div className="flex items-center gap-1 rounded-lg bg-[rgba(255,255,255,0.03)] p-0.5">
               <button onClick={() => handleViewChange("table")} className={`rounded-md px-2.5 py-1 text-[10px] font-medium ${viewMode === "table" ? "bg-[rgba(255,255,255,0.08)] text-foreground" : "text-muted-foreground hover:text-foreground"}`}>📋 Table</button>
               <button onClick={() => handleViewChange("bubble")} className={`rounded-md px-2.5 py-1 text-[10px] font-medium ${viewMode === "bubble" ? "bg-[rgba(255,255,255,0.08)] text-foreground" : "text-muted-foreground hover:text-foreground"}`}>⚬ Bubble</button>
             </div>
+            <div className="flex items-center gap-1 rounded-lg bg-[rgba(255,255,255,0.03)] p-0.5" title="Filters">
+              <button onClick={() => setFilterVolSurge(v => !v)} title="Show only themes with rel vol ≥ 1.4×"
+                className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-[10px] font-medium transition-colors ${filterVolSurge ? "bg-[#00f5c4]/15 text-[#00f5c4]" : "text-muted-foreground hover:text-foreground"}`}>
+                <Zap size={10} /> Vol Surge
+              </button>
+              <button onClick={() => setFilterHighBreadth(v => !v)} title="Show only themes with breadth ≥ 60%"
+                className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-[10px] font-medium transition-colors ${filterHighBreadth ? "bg-[#00f5c4]/15 text-[#00f5c4]" : "text-muted-foreground hover:text-foreground"}`}>
+                <Users size={10} /> High Breadth
+              </button>
+            </div>
             {viewMode === "table" && (
               <div className="flex items-center gap-1 rounded-lg bg-[rgba(255,255,255,0.03)] p-0.5">
-                {(["momentum", "breadth", "spy"] as const).map(mode => (
+                {(["momentum", "breadth", "spy", "volume"] as const).map(mode => (
                   <button key={mode} onClick={() => setSortMode(mode)} className={`rounded-md px-2.5 py-1 text-[10px] font-medium ${sortMode === mode ? "bg-[rgba(255,255,255,0.08)] text-foreground" : "text-muted-foreground hover:text-foreground"}`}>
-                    {mode === "momentum" ? "Momentum" : mode === "breadth" ? "Breadth" : "vs SPY"}
+                    {mode === "momentum" ? "Momentum" : mode === "breadth" ? "Breadth" : mode === "spy" ? "vs SPY" : "Vol Surge"}
                   </button>
                 ))}
               </div>
@@ -394,19 +387,12 @@ export default function OverviewTab({
           </>
         }
       >
-      <div key={viewMode} className="animate-in fade-in duration-200">
+      <div key={`${viewMode}-${timeframe}`} className="animate-in fade-in duration-200">
         {viewMode === "bubble" ? (
-          <BubbleChartView themes={themes} isLoading={isLoading} />
+          <BubbleChartView themes={sorted} isLoading={isLoading} timeframe={timeframe} />
         ) : (
           <>
-            <div
-              className="overflow-hidden rounded-lg"
-              style={{
-                background: "rgba(255,255,255,0.04)",
-                border: "1px solid rgba(255,255,255,0.08)",
-                backdropFilter: "blur(12px)",
-              }}
-            >
+            <div className="overflow-hidden rounded-lg" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", backdropFilter: "blur(12px)" }}>
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-[rgba(255,255,255,0.08)] text-xs text-muted-foreground">
@@ -414,55 +400,31 @@ export default function OverviewTab({
                     <th className="px-3 py-2.5 text-left font-medium">Theme</th>
                     <th className="px-3 py-2.5 text-left font-medium">
                       <Tooltip>
-                        <TooltipTrigger asChild>
-                          <span className="cursor-help inline-flex items-center gap-1">
-                            Momentum <Info size={10} className="opacity-50" />
-                          </span>
-                        </TooltipTrigger>
-                        <TooltipContent side="top" className="max-w-[280px] text-xs">
-                          {MOMENTUM_TOOLTIP}
-                        </TooltipContent>
+                        <TooltipTrigger asChild><span className="cursor-help inline-flex items-center gap-1">Momentum <Info size={10} className="opacity-50" /></span></TooltipTrigger>
+                        <TooltipContent side="top" className="max-w-[280px] text-xs">{MOMENTUM_TOOLTIP}</TooltipContent>
                       </Tooltip>
                     </th>
-                    <th className="px-3 py-2.5 text-right font-medium">1D</th>
+                    <th className="px-3 py-2.5 text-right font-medium text-[#00f5c4]">{activePerfHeader}</th>
                     <th className="px-3 py-2.5 text-right font-medium">
                       <Tooltip>
-                        <TooltipTrigger asChild>
-                          <span className="cursor-help inline-flex items-center gap-1">
-                            vs SPY <Info size={10} className="opacity-50" />
-                          </span>
-                        </TooltipTrigger>
-                        <TooltipContent side="top" className="max-w-[220px] text-xs">
-                          {SPY_TOOLTIP}
-                        </TooltipContent>
+                        <TooltipTrigger asChild><span className="cursor-help inline-flex items-center gap-1">vs SPY <Info size={10} className="opacity-50" /></span></TooltipTrigger>
+                        <TooltipContent side="top" className="max-w-[220px] text-xs">{SPY_TOOLTIP}</TooltipContent>
                       </Tooltip>
                     </th>
                     <th className="px-3 py-2.5 text-right font-medium">1W</th>
                     <th className="px-3 py-2.5 text-right font-medium">1M</th>
                     <th className="px-3 py-2.5 text-right font-medium">
                       <Tooltip>
-                        <TooltipTrigger asChild>
-                          <span className="cursor-help inline-flex items-center gap-1">
-                            Vol <Info size={10} className="opacity-50" />
-                          </span>
-                        </TooltipTrigger>
-                        <TooltipContent side="top" className="max-w-[220px] text-xs">
-                          {VOL_TOOLTIP}
-                        </TooltipContent>
+                        <TooltipTrigger asChild><span className="cursor-help inline-flex items-center gap-1">Vol <Info size={10} className="opacity-50" /></span></TooltipTrigger>
+                        <TooltipContent side="top" className="max-w-[220px] text-xs">{VOL_TOOLTIP}</TooltipContent>
                       </Tooltip>
                     </th>
                     <th className="px-3 py-2.5 text-right font-medium">Breadth</th>
                     <th className="px-3 py-2.5 text-center font-medium">7D</th>
                     <th className="px-3 py-2.5 text-center font-medium">
                       <Tooltip>
-                        <TooltipTrigger asChild>
-                          <span className="cursor-help inline-flex items-center gap-1">
-                            Signal <Info size={10} className="opacity-50" />
-                          </span>
-                        </TooltipTrigger>
-                        <TooltipContent side="top" className="max-w-[260px] text-xs">
-                          {SIGNAL_TOOLTIP}
-                        </TooltipContent>
+                        <TooltipTrigger asChild><span className="cursor-help inline-flex items-center gap-1">Signal <Info size={10} className="opacity-50" /></span></TooltipTrigger>
+                        <TooltipContent side="top" className="max-w-[260px] text-xs">{SIGNAL_TOOLTIP}</TooltipContent>
                       </Tooltip>
                     </th>
                     <th className="px-3 py-2.5 text-center font-medium w-10">Trend</th>
@@ -471,29 +433,19 @@ export default function OverviewTab({
                 <tbody>
                   {isLoading ? (
                     <SkeletonRows />
+                  ) : sorted.length === 0 ? (
+                    <tr><td colSpan={12} className="px-3 py-10 text-center text-xs text-muted-foreground">No themes match the current filters.</td></tr>
                   ) : (
                     sorted.map((t, i) => (
-                      <OverviewRow
-                        key={t.themeId}
-                        rank={i + 1}
-                        theme={t}
-                        highlight={highlightId === t.themeId}
-                        getRelativeStrength={getRelativeStrength}
-                        isThemeDryingUp={isThemeDryingUp}
-                        rowRefs={rowRefs}
-                      />
+                      <OverviewRow key={t.themeId} rank={i + 1} theme={t} highlight={highlightId === t.themeId}
+                        getRelativeStrength={getRelativeStrength} isThemeDryingUp={isThemeDryingUp} rowRefs={rowRefs} timeframe={timeframe} />
                     ))
                   )}
                 </tbody>
               </table>
             </div>
 
-            <ThemeDrilldownModal
-              theme={drilldownTheme}
-              open={drilldownOpen}
-              onOpenChange={setDrilldownOpen}
-              defaultSortKey="relVol"
-            />
+            <ThemeDrilldownModal theme={drilldownTheme} open={drilldownOpen} onOpenChange={setDrilldownOpen} defaultSortKey="relVol" />
           </>
         )}
       </div>
