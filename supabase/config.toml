@@ -83,3 +83,6 @@ verify_jwt = false
 
 [functions.volume-catalyst]
 verify_jwt = false
+
+[functions.add-to-universe-queue]
+verify_jwt = false
