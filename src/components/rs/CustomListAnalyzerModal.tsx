@@ -23,6 +23,77 @@ import RsRatingBadge from "@/components/rs/RsRatingBadge";
 import { useDailyCandles } from "@/hooks/useDailyCandles";
 import CandleSummaryBar from "@/components/rs/CandleSummaryBar";
 
+function MissingTickersPanel({ symbols }: { symbols: string[] }) {
+  const [adding, setAdding] = useState(false);
+  const [added, setAdded] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+
+  const handleAdd = async () => {
+    setAdding(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("add-to-universe-queue", {
+        body: { symbols },
+      });
+      if (error) throw error;
+      const queued = (data as any)?.queued ?? symbols.length;
+      toast.success(`Queued ${queued} ticker${queued === 1 ? "" : "s"} for scanning. They will join the qualified universe once processed.`);
+      setAdded(true);
+    } catch (e: any) {
+      toast.error(`Failed to queue: ${e?.message ?? "unknown error"}`);
+    } finally {
+      setAdding(false);
+      setConfirmOpen(false);
+    }
+  };
+
+  return (
+    <div className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex-1 min-w-0">
+          <span className="font-semibold text-amber-500">
+            {symbols.length} ticker{symbols.length === 1 ? "" : "s"} not in qualified universe:
+          </span>{" "}
+          <span className="font-mono text-muted-foreground break-all">{symbols.join(", ")}</span>
+          <div className="mt-1 text-[10px] text-muted-foreground">
+            These are excluded from sorting/export. Add them to the universe to include them on the next scan.
+          </div>
+        </div>
+        {!added ? (
+          confirmOpen ? (
+            <div className="flex shrink-0 items-center gap-1">
+              <button
+                disabled={adding}
+                onClick={handleAdd}
+                className="inline-flex items-center gap-1 rounded-md border border-amber-500/50 bg-amber-500/20 px-2 py-1 text-[10px] font-semibold text-amber-200 hover:bg-amber-500/30 disabled:opacity-50"
+              >
+                {adding ? <Loader2 className="h-3 w-3 animate-spin" /> : null} Confirm
+              </button>
+              <button
+                disabled={adding}
+                onClick={() => setConfirmOpen(false)}
+                className="rounded-md border border-border px-2 py-1 text-[10px] text-muted-foreground hover:text-foreground"
+              >
+                Cancel
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => setConfirmOpen(true)}
+              className="shrink-0 rounded-md border border-amber-500/50 bg-amber-500/20 px-2 py-1 text-[10px] font-semibold text-amber-200 hover:bg-amber-500/30"
+            >
+              + Add Missing Stocks to Universe
+            </button>
+          )
+        ) : (
+          <span className="shrink-0 rounded-md border border-[#00f5c4]/40 bg-[#00f5c4]/10 px-2 py-1 text-[10px] font-semibold text-[#00f5c4]">
+            Queued ✓
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export type AnalyzerTab = "overall" | "1d" | "1w" | "1m" | "3m" | "6m";
 
 export interface CoilScoreInfo {
