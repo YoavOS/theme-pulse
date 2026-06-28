@@ -886,7 +886,7 @@ export default function CustomListAnalyzerModal({
             </div>
 
             {visibleMissing.length > 0 && (
-              <MissingTickersPanel symbols={visibleMissing} />
+              <MissingTickersPanel symbols={visibleMissing} onAdded={onUniverseRefresh} />
             )}
           </div>
         )}
