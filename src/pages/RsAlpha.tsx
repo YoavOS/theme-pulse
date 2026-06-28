@@ -1282,6 +1282,7 @@ export default function RsAlpha() {
         coilLongDays={coilSettings.longDays}
         emaDistances={emaDistances}
         superperfSets={superperfSets}
+        onUniverseRefresh={reloadUniverse}
       />
 
       <SetupAnalyzerModal
