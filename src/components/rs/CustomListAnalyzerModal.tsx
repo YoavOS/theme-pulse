@@ -35,11 +35,25 @@ function MissingTickersPanel({ symbols }: { symbols: string[] }) {
         body: { symbols },
       });
       if (error) throw error;
-      const queued = (data as any)?.queued ?? symbols.length;
-      toast.success(`Queued ${queued} ticker${queued === 1 ? "" : "s"} for scanning. They will join the qualified universe once processed.`);
+      const addedCount = (data as any)?.added ?? 0;
+      const notQualified = ((data as any)?.notQualified ?? []) as { symbol: string; reason: string }[];
+      const already = ((data as any)?.alreadyInUniverse ?? []) as string[];
+      if (addedCount > 0) {
+        toast.success(`${addedCount} new stock${addedCount === 1 ? "" : "s"} successfully added to the qualified universe.`);
+      } else {
+        toast.warning("No new stocks were added.");
+      }
+      if (notQualified.length > 0) {
+        toast.message(`${notQualified.length} did not qualify`, {
+          description: notQualified.slice(0, 6).map((n) => `${n.symbol}: ${n.reason}`).join(" • "),
+        });
+      }
+      if (already.length > 0) {
+        toast.message(`${already.length} already in universe`, { description: already.join(", ") });
+      }
       setAdded(true);
     } catch (e: any) {
-      toast.error(`Failed to queue: ${e?.message ?? "unknown error"}`);
+      toast.error(`Failed to add: ${e?.message ?? "unknown error"}`);
     } finally {
       setAdding(false);
       setConfirmOpen(false);
