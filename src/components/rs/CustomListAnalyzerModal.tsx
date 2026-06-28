@@ -52,6 +52,7 @@ function MissingTickersPanel({ symbols, onAdded }: { symbols: string[]; onAdded?
         toast.message(`${already.length} already in universe`, { description: already.join(", ") });
       }
       setAdded(true);
+      onAdded?.();
     } catch (e: any) {
       toast.error(`Failed to add: ${e?.message ?? "unknown error"}`);
     } finally {
