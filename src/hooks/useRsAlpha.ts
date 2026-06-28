@@ -287,9 +287,26 @@ export function useRsAlpha() {
   }, [loadProgress]);
 
   const resumeScan = useCallback(async () => {
-    // Resume = same as rebuild "resume" (re-enables cron, recovers stuck symbols)
-    await rebuildUniverse("resume");
-  }, [rebuildUniverse]);
+    // Resume = re-enable cron worker only. Do NOT call seed-universe-queue,
+    // which always performs a hard restart (wipes queue + reseeds).
+    setIsMutatingScan(true);
+    try {
+      const { data, error: fnErr } = await supabase.functions.invoke("pause-universe-scan", {
+        body: { action: "resume" },
+      });
+      if (fnErr) throw new Error(fnErr.message);
+      if (data?.error) throw new Error(data.error);
+      // Kick off one immediate worker tick so progress visibly resumes
+      // without waiting up to a minute for the cron.
+      supabase.functions.invoke("process-universe-queue", { body: {} }).catch(() => {});
+      await loadProgress();
+    } catch (e) {
+      console.error("resumeScan error:", e);
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setIsMutatingScan(false);
+    }
+  }, [loadProgress]);
 
   // ── Recalculate RS scores (Stage 2) ──
   // Uses raw fetch (not supabase.functions.invoke) so we can set a long

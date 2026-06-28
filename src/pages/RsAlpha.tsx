@@ -148,7 +148,7 @@ export default function RsAlpha() {
   const {
     stocks, isLoading, isRebuilding, isPaused, isMutatingScan,
     isRecalculating, recalcStatus,
-    error, progress, rebuildUniverse, pauseScan, recalculateRs,
+    error, progress, rebuildUniverse, pauseScan, resumeScan, recalculateRs,
   } = useRsAlpha();
   const fundScan = useFundamentalsScan();
   const { map: fundamentalsMap } = useStockFundamentalsMap();
@@ -501,7 +501,14 @@ export default function RsAlpha() {
             {/* Start / Resume / Continue */}
             {!isRebuilding && (
               <button
-                onClick={() => setUniverseSettingsOpen("restart")}
+                onClick={() => {
+                  if (isPaused) {
+                    // Paused → just resume the existing queue (re-enable cron).
+                    resumeScan();
+                  } else {
+                    setUniverseSettingsOpen("restart");
+                  }
+                }}
                 disabled={isMutatingScan}
                 className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-50"
                 title={isPaused ? "Resume the paused scan" : "Start or continue the qualified universe scan"}
