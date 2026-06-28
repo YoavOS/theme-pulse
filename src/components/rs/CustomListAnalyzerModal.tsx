@@ -100,7 +100,7 @@ function MissingTickersPanel({ symbols }: { symbols: string[] }) {
           )
         ) : (
           <span className="shrink-0 rounded-md border border-[#00f5c4]/40 bg-[#00f5c4]/10 px-2 py-1 text-[10px] font-semibold text-[#00f5c4]">
-            Queued ✓
+            Added ✓
           </span>
         )}
       </div>
