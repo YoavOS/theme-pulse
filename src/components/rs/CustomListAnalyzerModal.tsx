@@ -23,7 +23,7 @@ import RsRatingBadge from "@/components/rs/RsRatingBadge";
 import { useDailyCandles } from "@/hooks/useDailyCandles";
 import CandleSummaryBar from "@/components/rs/CandleSummaryBar";
 
-function MissingTickersPanel({ symbols }: { symbols: string[] }) {
+function MissingTickersPanel({ symbols, onAdded }: { symbols: string[]; onAdded?: () => void }) {
   const [adding, setAdding] = useState(false);
   const [added, setAdded] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
