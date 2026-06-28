@@ -149,6 +149,7 @@ export default function RsAlpha() {
     stocks, isLoading, isRebuilding, isPaused, isMutatingScan,
     isRecalculating, recalcStatus,
     error, progress, rebuildUniverse, pauseScan, resumeScan, recalculateRs,
+    reload: reloadUniverse,
   } = useRsAlpha();
   const fundScan = useFundamentalsScan();
   const { map: fundamentalsMap } = useStockFundamentalsMap();
