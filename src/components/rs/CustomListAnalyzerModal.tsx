@@ -23,7 +23,7 @@ import RsRatingBadge from "@/components/rs/RsRatingBadge";
 import { useDailyCandles } from "@/hooks/useDailyCandles";
 import CandleSummaryBar from "@/components/rs/CandleSummaryBar";
 
-function MissingTickersPanel({ symbols }: { symbols: string[] }) {
+function MissingTickersPanel({ symbols, onAdded }: { symbols: string[]; onAdded?: () => void }) {
   const [adding, setAdding] = useState(false);
   const [added, setAdded] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -52,6 +52,7 @@ function MissingTickersPanel({ symbols }: { symbols: string[] }) {
         toast.message(`${already.length} already in universe`, { description: already.join(", ") });
       }
       setAdded(true);
+      onAdded?.();
     } catch (e: any) {
       toast.error(`Failed to add: ${e?.message ?? "unknown error"}`);
     } finally {
@@ -177,6 +178,8 @@ interface Props {
   emaDistances?: Map<string, EmaDistanceInfo>;
   /** Per-profile sets of tickers qualifying (score ≥ 80) in the Superperformance Stocks list. */
   superperfSets?: Partial<Record<"minervini" | "oneil" | "ryan" | "current", Set<string>>>;
+  /** Called after stocks are appended to the universe so the parent reloads. */
+  onUniverseRefresh?: () => void | Promise<void>;
 }
 
 // Strip exchange prefixes (NYSE:, NASDAQ:, AMEX:, BATS:, ARCA:, CBOE:, OTC:, etc.)
@@ -245,6 +248,7 @@ export default function CustomListAnalyzerModal({
   open, onOpenChange, tabId, tabLabel, universe,
   getRsForTab, getReturnField, isOtcSymbol, fundamentalsMap,
   coilScores, coilShortDays, coilLongDays, superperfSets,
+  onUniverseRefresh,
 }: Props) {
   const [raw, setRaw] = useState<string>("");
   const [analyzed, setAnalyzed] = useState<boolean>(false);
@@ -882,7 +886,7 @@ export default function CustomListAnalyzerModal({
             </div>
 
             {visibleMissing.length > 0 && (
-              <MissingTickersPanel symbols={visibleMissing} />
+              <MissingTickersPanel symbols={visibleMissing} onAdded={onUniverseRefresh} />
             )}
           </div>
         )}
