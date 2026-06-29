@@ -163,7 +163,6 @@ export default function CustomListAnalyzerModal({
   open, onOpenChange, tabId, tabLabel, universe,
   getRsForTab, getReturnField, isOtcSymbol, fundamentalsMap,
   coilScores, coilShortDays, coilLongDays, superperfSets,
-  onUniverseRefresh,
 }: Props) {
   const [raw, setRaw] = useState<string>("");
   const [analyzed, setAnalyzed] = useState<boolean>(false);
