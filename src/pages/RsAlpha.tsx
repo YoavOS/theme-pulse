@@ -601,6 +601,14 @@ export default function RsAlpha() {
               )}
             </button>
 
+            <button
+              onClick={() => setAddSingleStockOpen(true)}
+              className="inline-flex items-center gap-1.5 rounded-md border border-accent/40 bg-accent/10 px-3 py-1.5 text-xs font-semibold text-foreground transition-colors hover:bg-accent/20"
+              title="Manually add a single ticker to the qualified universe (no qualification checks)."
+            >
+              <Hammer size={12} /> Add Single Stock to Universe
+            </button>
+
             {/* ── Pull Fundamentals for Universe ── */}
             {!fundScan.isRunning && (
               <button
