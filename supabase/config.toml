@@ -86,3 +86,6 @@ verify_jwt = false
 
 [functions.add-to-universe-queue]
 verify_jwt = false
+
+[functions.add-single-stock]
+verify_jwt = false

@@ -11,6 +11,7 @@ import OverallWeightsPanel, { RsWeights, DEFAULT_RS_WEIGHTS, normalizeWeights } 
 import RsRatingBadge, { computeRsRatings } from "@/components/rs/RsRatingBadge";
 import CustomTradingViewListModal from "@/components/rs/CustomTradingViewListModal";
 import CustomListAnalyzerModal from "@/components/rs/CustomListAnalyzerModal";
+import AddSingleStockModal from "@/components/rs/AddSingleStockModal";
 import SuperperformanceScanModal from "@/components/rs/SuperperformanceScanModal";
 import { useSuperperformance } from "@/hooks/useSuperperformance";
 import SetupAnalyzerModal from "@/components/rs/SetupAnalyzerModal";
@@ -158,6 +159,7 @@ export default function RsAlpha() {
   const [sortField, setSortField] = useState<SortField>("rs");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [customListOpen, setCustomListOpen] = useState(false);
+  const [addSingleStockOpen, setAddSingleStockOpen] = useState(false);
   const [analyzerOpen, setAnalyzerOpen] = useState(false);
   const [setupAnalyzerOpen, setSetupAnalyzerOpen] = useState(false);
   const [sectorDistOpen, setSectorDistOpen] = useState(false);
@@ -597,6 +599,14 @@ export default function RsAlpha() {
               ) : (
                 <><RefreshCw size={12} /> Recalculate RS Scores</>
               )}
+            </button>
+
+            <button
+              onClick={() => setAddSingleStockOpen(true)}
+              className="inline-flex items-center gap-1.5 rounded-md border border-accent/40 bg-accent/10 px-3 py-1.5 text-xs font-semibold text-foreground transition-colors hover:bg-accent/20"
+              title="Manually add a single ticker to the qualified universe (no qualification checks)."
+            >
+              <Hammer size={12} /> Add Single Stock to Universe
             </button>
 
             {/* ── Pull Fundamentals for Universe ── */}
@@ -1282,8 +1292,15 @@ export default function RsAlpha() {
         coilLongDays={coilSettings.longDays}
         emaDistances={emaDistances}
         superperfSets={superperfSets}
-        onUniverseRefresh={reloadUniverse}
+        
       />
+
+      <AddSingleStockModal
+        open={addSingleStockOpen}
+        onOpenChange={setAddSingleStockOpen}
+        onAdded={reloadUniverse}
+      />
+
 
       <SetupAnalyzerModal
         open={setupAnalyzerOpen}
