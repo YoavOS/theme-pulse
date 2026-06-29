@@ -93,8 +93,6 @@ interface Props {
   emaDistances?: Map<string, EmaDistanceInfo>;
   /** Per-profile sets of tickers qualifying (score ≥ 80) in the Superperformance Stocks list. */
   superperfSets?: Partial<Record<"minervini" | "oneil" | "ryan" | "current", Set<string>>>;
-  /** Called after stocks are appended to the universe so the parent reloads. */
-  onUniverseRefresh?: () => void | Promise<void>;
 }
 
 // Strip exchange prefixes (NYSE:, NASDAQ:, AMEX:, BATS:, ARCA:, CBOE:, OTC:, etc.)
