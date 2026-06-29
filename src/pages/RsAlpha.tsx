@@ -1295,6 +1295,13 @@ export default function RsAlpha() {
         
       />
 
+      <AddSingleStockModal
+        open={addSingleStockOpen}
+        onOpenChange={setAddSingleStockOpen}
+        onAdded={reloadUniverse}
+      />
+
+
       <SetupAnalyzerModal
         open={setupAnalyzerOpen}
         onOpenChange={setSetupAnalyzerOpen}
