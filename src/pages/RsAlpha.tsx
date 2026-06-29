@@ -158,6 +158,7 @@ export default function RsAlpha() {
   const [sortField, setSortField] = useState<SortField>("rs");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [customListOpen, setCustomListOpen] = useState(false);
+  const [addSingleStockOpen, setAddSingleStockOpen] = useState(false);
   const [analyzerOpen, setAnalyzerOpen] = useState(false);
   const [setupAnalyzerOpen, setSetupAnalyzerOpen] = useState(false);
   const [sectorDistOpen, setSectorDistOpen] = useState(false);
