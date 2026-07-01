@@ -12,6 +12,7 @@ import {
 import HeatmapGridView from "@/components/dashboard/HeatmapGridView";
 import OverallBestThemesList from "@/components/dashboard/OverallBestThemesList";
 import ExportTopLeadersDialog from "@/components/dashboard/ExportTopLeadersDialog";
+import ThemeStrengthMeter from "@/components/dashboard/ThemeStrengthMeter";
 import DashboardWeightsPanel, {
   DashboardWeights,
   DEFAULT_DASHBOARD_WEIGHTS,
