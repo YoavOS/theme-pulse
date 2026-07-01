@@ -607,6 +607,12 @@ export default function Index() {
         defaultTab={drilldownDefaultTab}
       />
 
+      <ThemeStrengthMeter
+        theme={strengthMeterTheme}
+        open={!!strengthMeterTheme}
+        onOpenChange={(o) => { if (!o) setStrengthMeterTheme(null); }}
+      />
+
       {newsPanelTheme && (
         <NewsPanel
           themeName={newsPanelTheme.theme_name}
