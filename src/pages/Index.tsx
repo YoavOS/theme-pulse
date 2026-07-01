@@ -573,7 +573,7 @@ export default function Index() {
           <HeatmapGridView
             themes={themes}
             onCardClick={setDrilldownTheme}
-            onInfoClick={(t) => { setDrilldownTheme(t); setDrilldownDefaultTab("news"); }}
+            onInfoClick={(t) => setStrengthMeterTheme(t)}
             getThemeSignals={getThemeSignals}
             volumeMap={volumeMap}
             dimmedThemes={searchMatchSet}
