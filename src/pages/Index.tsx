@@ -12,6 +12,7 @@ import {
 import HeatmapGridView from "@/components/dashboard/HeatmapGridView";
 import OverallBestThemesList from "@/components/dashboard/OverallBestThemesList";
 import ExportTopLeadersDialog from "@/components/dashboard/ExportTopLeadersDialog";
+import ThemeStrengthMeter from "@/components/dashboard/ThemeStrengthMeter";
 import DashboardWeightsPanel, {
   DashboardWeights,
   DEFAULT_DASHBOARD_WEIGHTS,
@@ -51,6 +52,7 @@ export default function Index() {
   const [showOptions, setShowOptions] = useState(false);
   const [showDemoConfirm, setShowDemoConfirm] = useState(false);
   const [showExportLeaders, setShowExportLeaders] = useState(false);
+  const [strengthMeterTheme, setStrengthMeterTheme] = useState<ThemeData | null>(null);
 
   const [overallWeights, setOverallWeights] = useState<DashboardWeights>(() => {
     if (typeof window === "undefined") return { ...DEFAULT_DASHBOARD_WEIGHTS };
@@ -571,7 +573,7 @@ export default function Index() {
           <HeatmapGridView
             themes={themes}
             onCardClick={setDrilldownTheme}
-            onInfoClick={(t) => { setDrilldownTheme(t); setDrilldownDefaultTab("news"); }}
+            onInfoClick={(t) => setStrengthMeterTheme(t)}
             getThemeSignals={getThemeSignals}
             volumeMap={volumeMap}
             dimmedThemes={searchMatchSet}
@@ -603,6 +605,12 @@ export default function Index() {
         fetchFundamentals={fetchFundamentals}
         isFundamentalsLoading={drilldownTheme ? isFundLoading(drilldownTheme.tickers.filter(t => !t.skipped).map(t => t.symbol)) : false}
         defaultTab={drilldownDefaultTab}
+      />
+
+      <ThemeStrengthMeter
+        theme={strengthMeterTheme}
+        open={!!strengthMeterTheme}
+        onOpenChange={(o) => { if (!o) setStrengthMeterTheme(null); }}
       />
 
       {newsPanelTheme && (

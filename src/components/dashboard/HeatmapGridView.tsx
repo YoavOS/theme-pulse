@@ -199,8 +199,8 @@ export default function HeatmapGridView({
                     onInfoClick(t);
                   }}
                   className="absolute top-0.5 right-0.5 z-20 rounded p-0.5 text-white/55 hover:text-white hover:bg-white/15 transition-colors"
-                  title="Theme Momentum Index"
-                  aria-label={`Open Momentum Index for ${t.theme_name}`}
+                  title="Theme Strength Meter"
+                  aria-label={`Open Theme Strength Meter for ${t.theme_name}`}
                 >
                   <Info size={11} />
                 </button>
