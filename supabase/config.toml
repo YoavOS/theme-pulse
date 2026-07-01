@@ -89,3 +89,6 @@ verify_jwt = false
 
 [functions.add-single-stock]
 verify_jwt = false
+
+[functions.theme-strength-summary]
+verify_jwt = false
