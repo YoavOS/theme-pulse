@@ -51,6 +51,7 @@ export default function Index() {
   const [showOptions, setShowOptions] = useState(false);
   const [showDemoConfirm, setShowDemoConfirm] = useState(false);
   const [showExportLeaders, setShowExportLeaders] = useState(false);
+  const [strengthMeterTheme, setStrengthMeterTheme] = useState<ThemeData | null>(null);
 
   const [overallWeights, setOverallWeights] = useState<DashboardWeights>(() => {
     if (typeof window === "undefined") return { ...DEFAULT_DASHBOARD_WEIGHTS };
