@@ -411,6 +411,11 @@ export default function RsAlpha() {
         if (rsNhFilter === "6m" && !hit6) return false;
         if (rsNhFilter === "any" && !hit20 && !hit6) return false;
       }
+      if (nh52wOn) {
+        const nh = nh52wMap.get(s.symbol);
+        if (!nh || nh.lastHighDaysAgo === null) return false;
+        if (nh.lastHighDaysAgo > nh52wWindowDays) return false;
+      }
       return true;
     });
     const rsValues = filtered.map(s => getRsForTab(s, activeTab));
