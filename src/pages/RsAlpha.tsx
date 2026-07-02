@@ -234,6 +234,28 @@ export default function RsAlpha() {
     return (localStorage.getItem("rs-nh-filter") as RsNhFilter) || "off";
   });
   useEffect(() => { localStorage.setItem("rs-nh-filter", rsNhFilter); }, [rsNhFilter]);
+  const [nh52wOn, setNh52wOn] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    return localStorage.getItem("rs-52w-filter") === "true";
+  });
+  useEffect(() => { localStorage.setItem("rs-52w-filter", String(nh52wOn)); }, [nh52wOn]);
+
+  // 52W-high window per active timeframe (days-ago cutoff).
+  const nh52wWindowDays = useMemo(() => {
+    switch (activeTab) {
+      case "1d": return 1;
+      case "1w": return 7;
+      case "1m": return 31;
+      case "3m": return 92;
+      case "6m": return 183;
+      default: return 366; // overall — any 52W-high hit within the last year
+    }
+  }, [activeTab]);
+
+  const { highsMap: nh52wMap, loading: nh52wLoading } = useFiftyTwoWeekHighs(
+    useMemo(() => stocks.map(s => s.symbol), [stocks]),
+    stocks.length > 0,
+  );
 
   useEffect(() => { setShowAll(false); }, [activeTab]);
   useEffect(() => { localStorage.setItem("rs-hide-otc", String(hideOtc)); }, [hideOtc]);
