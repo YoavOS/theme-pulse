@@ -1251,6 +1251,8 @@ export default function RsAlpha() {
                       const badge = growthBadge(fundamentalsMap.get(stock.symbol));
                       const coil = coilScores.get(stock.symbol);
                       const ema = emaDistances.get(stock.symbol);
+                      const nh52 = nh52wMap.get(stock.symbol);
+                      const nh52Fresh = nh52 && nh52.lastHighDaysAgo !== null && nh52.lastHighDaysAgo <= nh52wWindowDays;
                       return (
                         <tr key={stock.symbol} className={`border-b border-border/50 transition-colors hover:bg-muted/20 ${rsBg(rs)}`}>
                           <td className="px-3 py-2 text-xs text-muted-foreground">{idx + 1}</td>
@@ -1260,6 +1262,14 @@ export default function RsAlpha() {
                               {badge && (
                                 <span title={badge.label} className="text-[13px] leading-none">
                                   {badge.emoji}
+                                </span>
+                              )}
+                              {nh52Fresh && (
+                                <span
+                                  className="inline-flex items-center rounded-full border border-[hsl(45,90%,55%)] bg-[hsl(45,90%,55%)]/15 px-1.5 py-0.5 text-[9px] font-semibold text-[hsl(45,90%,60%)]"
+                                  title={`Closed at a new 52-week high ${nh52!.lastHighDaysAgo === 0 ? "today" : `${nh52!.lastHighDaysAgo}d ago`} · high ${nh52!.high52w?.toFixed(2) ?? "—"}`}
+                                >
+                                  52W {nh52!.lastHighDaysAgo === 0 ? "★" : `+${nh52!.lastHighDaysAgo}d`}
                                 </span>
                               )}
                             </span>
