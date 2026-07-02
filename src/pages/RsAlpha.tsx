@@ -948,7 +948,10 @@ export default function RsAlpha() {
                   .txt
                 </button>
               </span>
-            )}
+          </div>
+        </div>
+
+
 
         {(isRebuilding || isPaused || (progress.totalQueued > 0 && progress.processed < progress.totalQueued)) && (
           <div className="container pb-2">
