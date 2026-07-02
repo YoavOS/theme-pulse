@@ -919,6 +919,17 @@ export default function RsAlpha() {
             <span className="text-[10px] text-muted-foreground">
               Window: last {nh52wWindowDays === 1 ? "1 day" : nh52wWindowDays >= 366 ? "12 months" : `${nh52wWindowDays} days`} (matches timeframe {activeTab.toUpperCase()})
             </span>
+            <button
+              onClick={() => { setSortField("nh52w"); setSortDir("asc"); }}
+              className={`rounded px-2 py-0.5 text-[10px] border transition-colors ${
+                sortField === "nh52w"
+                  ? "border-[hsl(45,90%,55%)] bg-[hsl(45,90%,55%)]/15 text-[hsl(45,90%,60%)] font-medium"
+                  : "border-border text-muted-foreground hover:bg-accent hover:text-foreground"
+              }`}
+              title="Sort by freshest 52-week high first"
+            >
+              Sort: New 52W Highs First
+            </button>
             {nh52wOn && (
               <span className="ml-auto flex items-center gap-2 text-[10px] text-muted-foreground">
                 <span>{sortedStocks.length.toLocaleString()} matches</span>
