@@ -948,8 +948,10 @@ export default function RsAlpha() {
                   .txt
                 </button>
               </span>
+            )}
           </div>
         </div>
+
 
 
 
