@@ -20,6 +20,7 @@ import ThemeDistributionModal from "@/components/rs/ThemeDistributionModal";
 import FundamentalsCoverageModal from "@/components/rs/FundamentalsCoverageModal";
 import UniverseSettingsModal, { type UniverseFilters } from "@/components/rs/UniverseSettingsModal";
 import { useStockFundamentalsMap } from "@/hooks/useStockFundamentalsMap";
+import { useFiftyTwoWeekHighs } from "@/hooks/useFiftyTwoWeekHighs";
 import { supabase } from "@/integrations/supabase/client";
 import {
   DEFAULT_GROWTH_FILTERS,
