@@ -383,7 +383,7 @@ export default function RsAlpha() {
 
   const toggleSort = (field: SortField) => {
     // EMA distance + Coil sort: smaller is better → default ascending.
-    const ascByDefault = field === "coil" || field === "ema9d" || field === "ema21d" || field === "ema9w" || field === "rsNh";
+    const ascByDefault = field === "coil" || field === "ema9d" || field === "ema21d" || field === "ema9w" || field === "rsNh" || field === "nh52w";
     if (sortField === field) setSortDir(d => d === "desc" ? "asc" : "desc");
     else { setSortField(field); setSortDir(ascByDefault ? "asc" : "desc"); }
   };
