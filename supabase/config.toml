@@ -92,3 +92,6 @@ verify_jwt = false
 
 [functions.theme-strength-summary]
 verify_jwt = false
+
+[functions.fifty-two-week-highs]
+verify_jwt = false
