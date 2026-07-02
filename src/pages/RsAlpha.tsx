@@ -898,6 +898,58 @@ export default function RsAlpha() {
           </div>
         </div>
 
+        {/* New 52-Week Highs filter */}
+        <div className="container pb-2">
+          <div className="flex flex-wrap items-center gap-2 rounded-md border border-border bg-card/30 px-3 py-2 text-xs">
+            <Filter size={11} className="shrink-0" />
+            <span className="font-medium text-foreground">New 52-Week Highs</span>
+            <span className="text-[10px] text-muted-foreground" title="Stocks whose closing price hit a fresh 52-week high within the currently selected timeframe.">
+              <Info size={10} className="inline" />
+            </span>
+            <button
+              onClick={() => setNh52wOn(v => !v)}
+              className={`ml-1 rounded px-2 py-0.5 text-[11px] border transition-colors ${
+                nh52wOn
+                  ? "border-[hsl(45,90%,55%)] bg-[hsl(45,90%,55%)]/15 text-[hsl(45,90%,60%)] font-medium"
+                  : "border-border text-muted-foreground hover:bg-accent hover:text-foreground"
+              }`}
+            >
+              {nh52wOn ? "On" : "Off"}
+            </button>
+            <span className="text-[10px] text-muted-foreground">
+              Window: last {nh52wWindowDays === 1 ? "1 day" : nh52wWindowDays >= 366 ? "12 months" : `${nh52wWindowDays} days`} (matches timeframe {activeTab.toUpperCase()})
+            </span>
+            {nh52wOn && (
+              <span className="ml-auto flex items-center gap-2 text-[10px] text-muted-foreground">
+                <span>{sortedStocks.length.toLocaleString()} matches</span>
+                {nh52wLoading && <span className="italic">loading…</span>}
+                <button
+                  onClick={() => {
+                    const list = sortedStocks.map(s => s.symbol).join("\n");
+                    navigator.clipboard.writeText(list).then(() => toast.success(`Copied ${sortedStocks.length} tickers`));
+                  }}
+                  className="rounded border border-border px-2 py-0.5 hover:bg-accent hover:text-foreground"
+                >
+                  Copy
+                </button>
+                <button
+                  onClick={() => {
+                    const list = sortedStocks.map(s => s.symbol).join("\n");
+                    const blob = new Blob([list], { type: "text/plain" });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement("a");
+                    a.href = url;
+                    a.download = `new-52w-highs-${activeTab}.txt`;
+                    a.click();
+                    URL.revokeObjectURL(url);
+                  }}
+                  className="rounded border border-border px-2 py-0.5 hover:bg-accent hover:text-foreground"
+                >
+                  .txt
+                </button>
+              </span>
+            )}
+
         {(isRebuilding || isPaused || (progress.totalQueued > 0 && progress.processed < progress.totalQueued)) && (
           <div className="container pb-2">
             <div className={`rounded-md border px-3 py-2 text-xs ${isPaused ? "border-amber-500/30 bg-amber-500/5" : "border-accent/30 bg-accent/5"}`}>
