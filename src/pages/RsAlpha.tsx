@@ -42,7 +42,7 @@ function growthBadge(f: ReturnType<typeof useStockFundamentalsMap>["map"] extend
 }
 
 type TabId = "overall" | "1d" | "1w" | "1m" | "3m" | "6m";
-type SortField = "rank" | "symbol" | "company" | "rs" | "rating" | "stockReturn" | "spyReturn" | "price" | "coil" | "ema9d" | "ema21d" | "ema9w" | "rsNh";
+type SortField = "rank" | "symbol" | "company" | "rs" | "rating" | "stockReturn" | "spyReturn" | "price" | "coil" | "ema9d" | "ema21d" | "ema9w" | "rsNh" | "nh52w";
 type RsNhFilter = "off" | "20d" | "6m" | "any";
 type SortDir = "asc" | "desc";
 
