@@ -448,6 +448,13 @@ export default function RsAlpha() {
           const bv = coilScores.get(b.symbol)?.score ?? 999;
           return mul * (av - bv);
         }
+        case "nh52w": {
+          const av = nh52wMap.get(a.symbol)?.lastHighDaysAgo;
+          const bv = nh52wMap.get(b.symbol)?.lastHighDaysAgo;
+          const aa = av === null || av === undefined ? Infinity : av;
+          const bb = bv === null || bv === undefined ? Infinity : bv;
+          return mul * (aa - bb);
+        }
         case "ema9d":
         case "ema21d":
         case "ema9w": {
@@ -464,7 +471,7 @@ export default function RsAlpha() {
     });
     return { sortedStocks: sorted, ratingMap: map, growthFilteredOutCount: droppedByGrowth };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stocks, activeTab, sortField, sortDir, hideOtc, weights, growthFilters, fundamentalsMap, coilScores, emaDistances, rsNhFilter, superperfFilterOn, superperfSet]);
+  }, [stocks, activeTab, sortField, sortDir, hideOtc, weights, growthFilters, fundamentalsMap, coilScores, emaDistances, rsNhFilter, superperfFilterOn, superperfSet, nh52wOn, nh52wMap, nh52wWindowDays]);
 
   const otcHiddenCount = useMemo(
     () => hideOtc ? stocks.filter(s => isOtcSymbol(s.symbol) && getRsForTab(s, activeTab) !== null).length : 0,
