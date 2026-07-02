@@ -20,6 +20,7 @@ import ThemeDistributionModal from "@/components/rs/ThemeDistributionModal";
 import FundamentalsCoverageModal from "@/components/rs/FundamentalsCoverageModal";
 import UniverseSettingsModal, { type UniverseFilters } from "@/components/rs/UniverseSettingsModal";
 import { useStockFundamentalsMap } from "@/hooks/useStockFundamentalsMap";
+import { useFiftyTwoWeekHighs } from "@/hooks/useFiftyTwoWeekHighs";
 import { supabase } from "@/integrations/supabase/client";
 import {
   DEFAULT_GROWTH_FILTERS,
@@ -41,7 +42,7 @@ function growthBadge(f: ReturnType<typeof useStockFundamentalsMap>["map"] extend
 }
 
 type TabId = "overall" | "1d" | "1w" | "1m" | "3m" | "6m";
-type SortField = "rank" | "symbol" | "company" | "rs" | "rating" | "stockReturn" | "spyReturn" | "price" | "coil" | "ema9d" | "ema21d" | "ema9w" | "rsNh";
+type SortField = "rank" | "symbol" | "company" | "rs" | "rating" | "stockReturn" | "spyReturn" | "price" | "coil" | "ema9d" | "ema21d" | "ema9w" | "rsNh" | "nh52w";
 type RsNhFilter = "off" | "20d" | "6m" | "any";
 type SortDir = "asc" | "desc";
 
@@ -233,6 +234,28 @@ export default function RsAlpha() {
     return (localStorage.getItem("rs-nh-filter") as RsNhFilter) || "off";
   });
   useEffect(() => { localStorage.setItem("rs-nh-filter", rsNhFilter); }, [rsNhFilter]);
+  const [nh52wOn, setNh52wOn] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    return localStorage.getItem("rs-52w-filter") === "true";
+  });
+  useEffect(() => { localStorage.setItem("rs-52w-filter", String(nh52wOn)); }, [nh52wOn]);
+
+  // 52W-high window per active timeframe (days-ago cutoff).
+  const nh52wWindowDays = useMemo(() => {
+    switch (activeTab) {
+      case "1d": return 1;
+      case "1w": return 7;
+      case "1m": return 31;
+      case "3m": return 92;
+      case "6m": return 183;
+      default: return 366; // overall — any 52W-high hit within the last year
+    }
+  }, [activeTab]);
+
+  const { highsMap: nh52wMap, loading: nh52wLoading } = useFiftyTwoWeekHighs(
+    useMemo(() => stocks.map(s => s.symbol), [stocks]),
+    stocks.length > 0,
+  );
 
   useEffect(() => { setShowAll(false); }, [activeTab]);
   useEffect(() => { localStorage.setItem("rs-hide-otc", String(hideOtc)); }, [hideOtc]);
@@ -360,7 +383,7 @@ export default function RsAlpha() {
 
   const toggleSort = (field: SortField) => {
     // EMA distance + Coil sort: smaller is better → default ascending.
-    const ascByDefault = field === "coil" || field === "ema9d" || field === "ema21d" || field === "ema9w" || field === "rsNh";
+    const ascByDefault = field === "coil" || field === "ema9d" || field === "ema21d" || field === "ema9w" || field === "rsNh" || field === "nh52w";
     if (sortField === field) setSortDir(d => d === "desc" ? "asc" : "desc");
     else { setSortField(field); setSortDir(ascByDefault ? "asc" : "desc"); }
   };
@@ -387,6 +410,11 @@ export default function RsAlpha() {
         if (rsNhFilter === "20d" && !hit20) return false;
         if (rsNhFilter === "6m" && !hit6) return false;
         if (rsNhFilter === "any" && !hit20 && !hit6) return false;
+      }
+      if (nh52wOn) {
+        const nh = nh52wMap.get(s.symbol);
+        if (!nh || nh.lastHighDaysAgo === null) return false;
+        if (nh.lastHighDaysAgo > nh52wWindowDays) return false;
       }
       return true;
     });
@@ -420,6 +448,13 @@ export default function RsAlpha() {
           const bv = coilScores.get(b.symbol)?.score ?? 999;
           return mul * (av - bv);
         }
+        case "nh52w": {
+          const av = nh52wMap.get(a.symbol)?.lastHighDaysAgo;
+          const bv = nh52wMap.get(b.symbol)?.lastHighDaysAgo;
+          const aa = av === null || av === undefined ? Infinity : av;
+          const bb = bv === null || bv === undefined ? Infinity : bv;
+          return mul * (aa - bb);
+        }
         case "ema9d":
         case "ema21d":
         case "ema9w": {
@@ -436,7 +471,7 @@ export default function RsAlpha() {
     });
     return { sortedStocks: sorted, ratingMap: map, growthFilteredOutCount: droppedByGrowth };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stocks, activeTab, sortField, sortDir, hideOtc, weights, growthFilters, fundamentalsMap, coilScores, emaDistances, rsNhFilter, superperfFilterOn, superperfSet]);
+  }, [stocks, activeTab, sortField, sortDir, hideOtc, weights, growthFilters, fundamentalsMap, coilScores, emaDistances, rsNhFilter, superperfFilterOn, superperfSet, nh52wOn, nh52wMap, nh52wWindowDays]);
 
   const otcHiddenCount = useMemo(
     () => hideOtc ? stocks.filter(s => isOtcSymbol(s.symbol) && getRsForTab(s, activeTab) !== null).length : 0,
@@ -863,6 +898,74 @@ export default function RsAlpha() {
           </div>
         </div>
 
+        {/* New 52-Week Highs filter */}
+        <div className="container pb-2">
+          <div className="flex flex-wrap items-center gap-2 rounded-md border border-border bg-card/30 px-3 py-2 text-xs">
+            <Filter size={11} className="shrink-0" />
+            <span className="font-medium text-foreground">New 52-Week Highs</span>
+            <span className="text-[10px] text-muted-foreground" title="Stocks whose closing price hit a fresh 52-week high within the currently selected timeframe.">
+              <Info size={10} className="inline" />
+            </span>
+            <button
+              onClick={() => setNh52wOn(v => !v)}
+              className={`ml-1 rounded px-2 py-0.5 text-[11px] border transition-colors ${
+                nh52wOn
+                  ? "border-[hsl(45,90%,55%)] bg-[hsl(45,90%,55%)]/15 text-[hsl(45,90%,60%)] font-medium"
+                  : "border-border text-muted-foreground hover:bg-accent hover:text-foreground"
+              }`}
+            >
+              {nh52wOn ? "On" : "Off"}
+            </button>
+            <span className="text-[10px] text-muted-foreground">
+              Window: last {nh52wWindowDays === 1 ? "1 day" : nh52wWindowDays >= 366 ? "12 months" : `${nh52wWindowDays} days`} (matches timeframe {activeTab.toUpperCase()})
+            </span>
+            <button
+              onClick={() => { setSortField("nh52w"); setSortDir("asc"); }}
+              className={`rounded px-2 py-0.5 text-[10px] border transition-colors ${
+                sortField === "nh52w"
+                  ? "border-[hsl(45,90%,55%)] bg-[hsl(45,90%,55%)]/15 text-[hsl(45,90%,60%)] font-medium"
+                  : "border-border text-muted-foreground hover:bg-accent hover:text-foreground"
+              }`}
+              title="Sort by freshest 52-week high first"
+            >
+              Sort: New 52W Highs First
+            </button>
+            {nh52wOn && (
+              <span className="ml-auto flex items-center gap-2 text-[10px] text-muted-foreground">
+                <span>{sortedStocks.length.toLocaleString()} matches</span>
+                {nh52wLoading && <span className="italic">loading…</span>}
+                <button
+                  onClick={() => {
+                    const list = sortedStocks.map(s => s.symbol).join("\n");
+                    navigator.clipboard.writeText(list).then(() => toast.success(`Copied ${sortedStocks.length} tickers`));
+                  }}
+                  className="rounded border border-border px-2 py-0.5 hover:bg-accent hover:text-foreground"
+                >
+                  Copy
+                </button>
+                <button
+                  onClick={() => {
+                    const list = sortedStocks.map(s => s.symbol).join("\n");
+                    const blob = new Blob([list], { type: "text/plain" });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement("a");
+                    a.href = url;
+                    a.download = `new-52w-highs-${activeTab}.txt`;
+                    a.click();
+                    URL.revokeObjectURL(url);
+                  }}
+                  className="rounded border border-border px-2 py-0.5 hover:bg-accent hover:text-foreground"
+                >
+                  .txt
+                </button>
+              </span>
+            )}
+          </div>
+        </div>
+
+
+
+
         {(isRebuilding || isPaused || (progress.totalQueued > 0 && progress.processed < progress.totalQueued)) && (
           <div className="container pb-2">
             <div className={`rounded-md border px-3 py-2 text-xs ${isPaused ? "border-amber-500/30 bg-amber-500/5" : "border-accent/30 bg-accent/5"}`}>
@@ -1159,6 +1262,8 @@ export default function RsAlpha() {
                       const badge = growthBadge(fundamentalsMap.get(stock.symbol));
                       const coil = coilScores.get(stock.symbol);
                       const ema = emaDistances.get(stock.symbol);
+                      const nh52 = nh52wMap.get(stock.symbol);
+                      const nh52Fresh = nh52 && nh52.lastHighDaysAgo !== null && nh52.lastHighDaysAgo <= nh52wWindowDays;
                       return (
                         <tr key={stock.symbol} className={`border-b border-border/50 transition-colors hover:bg-muted/20 ${rsBg(rs)}`}>
                           <td className="px-3 py-2 text-xs text-muted-foreground">{idx + 1}</td>
@@ -1168,6 +1273,14 @@ export default function RsAlpha() {
                               {badge && (
                                 <span title={badge.label} className="text-[13px] leading-none">
                                   {badge.emoji}
+                                </span>
+                              )}
+                              {nh52Fresh && (
+                                <span
+                                  className="inline-flex items-center rounded-full border border-[hsl(45,90%,55%)] bg-[hsl(45,90%,55%)]/15 px-1.5 py-0.5 text-[9px] font-semibold text-[hsl(45,90%,60%)]"
+                                  title={`Closed at a new 52-week high ${nh52!.lastHighDaysAgo === 0 ? "today" : `${nh52!.lastHighDaysAgo}d ago`} · high ${nh52!.high52w?.toFixed(2) ?? "—"}`}
+                                >
+                                  52W {nh52!.lastHighDaysAgo === 0 ? "★" : `+${nh52!.lastHighDaysAgo}d`}
                                 </span>
                               )}
                             </span>
