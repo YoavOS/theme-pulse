@@ -658,6 +658,93 @@ export default function CustomTradingViewListModal({
             <Slider min={-2} max={5} step={0.5} value={[state.minRelVsQqq]} onValueChange={(v) => set("minRelVsQqq", v[0])} disabled={!state.relVsQqqOn || !qqqAvailable} />
           </div>
 
+          {/* Near 52-Week High filter */}
+          <div className="space-y-2 rounded-md border border-border bg-muted/20 px-3 py-2.5">
+            <div className="flex items-center justify-between">
+              <label className="flex items-center gap-2 text-xs cursor-pointer">
+                <Checkbox
+                  checked={state.near52wOn}
+                  disabled={!nh52wMap || nh52wMap.size === 0}
+                  onCheckedChange={(v) => set("near52wOn", !!v)}
+                />
+                <span>
+                  <span className="font-medium text-foreground">Near 52-Week High</span>
+                  <span className="block text-[10px] text-muted-foreground">
+                    {nh52wMap && nh52wMap.size > 0
+                      ? "Stocks within ±X% of their 52-week high (above or below)."
+                      : "52-week data still loading…"}
+                  </span>
+                </span>
+              </label>
+              <span className="font-mono text-xs text-primary">±{state.near52wPct.toFixed(1)}%</span>
+            </div>
+            <Slider
+              min={1}
+              max={30}
+              step={0.5}
+              value={[state.near52wPct]}
+              onValueChange={(v) => set("near52wPct", v[0])}
+              disabled={!state.near52wOn}
+            />
+            <div className="flex flex-wrap gap-1.5 pt-1">
+              {[3, 5, 8, 10, 15].map((v) => (
+                <button
+                  key={v}
+                  disabled={!state.near52wOn}
+                  onClick={() => set("near52wPct", v)}
+                  className={`rounded-md border px-2 py-0.5 text-[10px] font-medium transition-colors ${state.near52wPct === v ? "border-primary bg-primary/15 text-primary" : "border-border text-muted-foreground hover:bg-accent hover:text-foreground"} ${!state.near52wOn ? "opacity-40 cursor-not-allowed" : ""}`}
+                >
+                  ±{v}%
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Inside Candle filter */}
+          <div className="space-y-2 rounded-md border border-border bg-muted/20 px-3 py-2.5">
+            <div className="flex items-center justify-between">
+              <label className="flex items-center gap-2 text-xs cursor-pointer">
+                <Checkbox
+                  checked={state.insideCandleOn}
+                  onCheckedChange={(v) => set("insideCandleOn", !!v)}
+                />
+                <span>
+                  <span className="font-medium text-foreground">Inside Candle</span>
+                  <span className="block text-[10px] text-muted-foreground">
+                    Current bar's high/low is inside the previous bar's range (coiling setup).
+                  </span>
+                </span>
+              </label>
+              {state.insideCandleOn && insideLoading && (
+                <span className="text-[10px] italic text-muted-foreground">scanning…</span>
+              )}
+            </div>
+            <div className="flex flex-wrap gap-1.5 pt-0.5">
+              {([
+                { key: "daily", label: "Daily" },
+                { key: "weekly", label: "Weekly" },
+                { key: "monthly", label: "Monthly" },
+              ] as const).map(({ key, label }) => {
+                const active = state.insideCandleTfs[key];
+                return (
+                  <button
+                    key={key}
+                    disabled={!state.insideCandleOn}
+                    onClick={() => set("insideCandleTfs", { ...state.insideCandleTfs, [key]: !active })}
+                    className={`rounded-md border px-2.5 py-0.5 text-[10px] font-medium transition-colors ${active ? "border-primary bg-primary/15 text-primary" : "border-border text-muted-foreground hover:bg-accent hover:text-foreground"} ${!state.insideCandleOn ? "opacity-40 cursor-not-allowed" : ""}`}
+                  >
+                    {active ? "✓ " : ""}{label}
+                  </button>
+                );
+              })}
+            </div>
+            {state.insideCandleOn && !state.insideCandleTfs.daily && !state.insideCandleTfs.weekly && !state.insideCandleTfs.monthly && (
+              <p className="text-[10px] italic text-amber-500">Pick at least one timeframe or the filter will be a no-op.</p>
+            )}
+          </div>
+
+
+
           {/* Tight Range / Coil Score filter */}
           <div className="space-y-2 rounded-md border border-border bg-muted/20 px-3 py-2.5">
             <div className="flex items-center justify-between">
