@@ -452,13 +452,31 @@ export default function CustomTradingViewListModal({
     loading: candleLoading,
   } = useDailyCandles(candleSymbols, open);
 
+  // Inside-candle detection — only fetch when the filter is on (cache-first, 12h TTL).
+  const insideCandleSymbols = useMemo(
+    () => (state.insideCandleOn ? prefiltered.slice(0, Math.min(prefiltered.length, 800)).map((s) => s.symbol) : []),
+    [prefiltered, state.insideCandleOn],
+  );
+  const { insideMap, loading: insideLoading } = useInsideCandles(insideCandleSymbols, open && state.insideCandleOn);
+
   const filtered = useMemo(() => {
     const candlePct = (sym: string): number | null => {
       const c = candleMap.get(sym);
       if (!c || !c.open) return null;
       return ((c.close - c.open) / c.open) * 100;
     };
-    const list = [...prefiltered].sort((a, b) => {
+    // Apply inside-candle filter first (post-fetch) — must match ANY of the selected timeframes.
+    const insideOk = (sym: string): boolean => {
+      if (!state.insideCandleOn) return true;
+      const tf = state.insideCandleTfs;
+      const enabled = (["daily", "weekly", "monthly"] as const).filter((k) => tf[k]);
+      if (enabled.length === 0) return true;
+      const info = insideMap.get(sym);
+      if (!info) return false; // not yet resolved — hide until data arrives
+      return enabled.some((k) => info[k] === true);
+    };
+    const base = prefiltered.filter((s) => insideOk(s.symbol));
+    const list = [...base].sort((a, b) => {
       switch (state.sortBy) {
         case "rs":      return (getRsForTab(b, tabId) ?? -999) - (getRsForTab(a, tabId) ?? -999);
         case "rating":  return (ratingMap.get(b.symbol) ?? -1) - (ratingMap.get(a.symbol) ?? -1);
