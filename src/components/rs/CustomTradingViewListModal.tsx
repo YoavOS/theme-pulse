@@ -248,6 +248,7 @@ export default function CustomTradingViewListModal({
   open, onOpenChange, tabId, tabLabel, stocks, ratingMap,
   getRsForTab, getReturnField, isOtcSymbol, fundamentalsMap,
   coilScores, coilShortDays, coilLongDays, emaDistances, qqqPctChange, superperfSets,
+  nh52wMap,
 }: Props) {
   const [state, setState] = useState<FilterState>({ ...DEFAULT_FILTERS });
   const [superperfFilters, setSuperperfFilters] = useState<Record<"current" | "minervini" | "oneil" | "ryan", boolean>>({ current: false, minervini: false, oneil: false, ryan: false });
