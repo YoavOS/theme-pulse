@@ -16,6 +16,8 @@ import {
   anyActive,
 } from "@/lib/growthFilters";
 import { useDailyCandles } from "@/hooks/useDailyCandles";
+import { useInsideCandles } from "@/hooks/useInsideCandles";
+import type { FiftyTwoWeekHigh } from "@/hooks/useFiftyTwoWeekHighs";
 import CandleSummaryBar from "@/components/rs/CandleSummaryBar";
 
 export type CustomListTab = "overall" | "1d" | "1w" | "1m" | "3m" | "6m";
