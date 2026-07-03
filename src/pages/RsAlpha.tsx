@@ -1388,6 +1388,7 @@ export default function RsAlpha() {
         emaDistances={emaDistances}
         qqqPctChange={qqqPctChange}
         superperfSets={superperfSets}
+        nh52wMap={nh52wMap}
       />
 
       <CustomListAnalyzerModal
