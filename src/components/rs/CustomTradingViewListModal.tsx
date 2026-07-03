@@ -77,6 +77,10 @@ interface FilterState {
   priceVs21dDir: "above" | "below";
   priceVs9wOn: boolean;
   priceVs9wDir: "above" | "below";
+  near52wOn: boolean;
+  near52wPct: number;
+  insideCandleOn: boolean;
+  insideCandleTfs: { daily: boolean; weekly: boolean; monthly: boolean };
 }
 
 interface ScannerProfile {
