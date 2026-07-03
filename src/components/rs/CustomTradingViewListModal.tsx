@@ -431,9 +431,16 @@ export default function CustomTradingViewListModal({
         const rel = todayPct - (qqqPctChange ?? 0);
         if (rel < state.minRelVsQqq) return false;
       }
+      if (state.near52wOn) {
+        const nh = nh52wMap?.get(s.symbol);
+        if (!nh || nh.high52w === null || nh.latestClose === null) return false;
+        // |close - high| / high * 100 — matches "within X% (above or below)".
+        const diffPct = Math.abs((nh.latestClose - nh.high52w) / nh.high52w) * 100;
+        if (!Number.isFinite(diffPct) || diffPct > state.near52wPct) return false;
+      }
       return true;
     });
-  }, [stocks, ratingMap, state, excludedSectorsSet, expandedExclusions, growthActive, fundamentalsMap, coilScores, emaDistances, qqqPctChange, qqqAvailable, isOtcSymbol, superperfFilters, superperfSets]);
+  }, [stocks, ratingMap, state, excludedSectorsSet, expandedExclusions, growthActive, fundamentalsMap, coilScores, emaDistances, qqqPctChange, qqqAvailable, isOtcSymbol, superperfFilters, superperfSets, nh52wMap]);
 
   // Fetch today's candles for the filtered set (cap to keep it cloud-efficient).
   const candleSymbols = useMemo(
