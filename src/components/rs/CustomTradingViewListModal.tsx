@@ -190,6 +190,8 @@ interface Props {
   qqqPctChange?: number | null;
   /** Per-profile sets of tickers qualifying (score ≥ 80) in the Superperformance Stocks list. */
   superperfSets?: Partial<Record<"minervini" | "oneil" | "ryan" | "current", Set<string>>>;
+  /** 52-week high info map (from useFiftyTwoWeekHighs) — powers the "Near 52W High" filter. */
+  nh52wMap?: Map<string, FiftyTwoWeekHigh>;
 }
 
 const DEFAULT_FILTERS: FilterState = {
