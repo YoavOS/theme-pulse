@@ -219,6 +219,10 @@ const DEFAULT_FILTERS: FilterState = {
   priceVs21dDir: "above",
   priceVs9wOn: false,
   priceVs9wDir: "above",
+  near52wOn: false,
+  near52wPct: 8,
+  insideCandleOn: false,
+  insideCandleTfs: { daily: true, weekly: false, monthly: false },
 };
 
 function loadUserProfiles(): ScannerProfile[] {
