@@ -16,6 +16,8 @@ import {
   anyActive,
 } from "@/lib/growthFilters";
 import { useDailyCandles } from "@/hooks/useDailyCandles";
+import { useInsideCandles } from "@/hooks/useInsideCandles";
+import type { FiftyTwoWeekHigh } from "@/hooks/useFiftyTwoWeekHighs";
 import CandleSummaryBar from "@/components/rs/CandleSummaryBar";
 
 export type CustomListTab = "overall" | "1d" | "1w" | "1m" | "3m" | "6m";
@@ -75,6 +77,10 @@ interface FilterState {
   priceVs21dDir: "above" | "below";
   priceVs9wOn: boolean;
   priceVs9wDir: "above" | "below";
+  near52wOn: boolean;
+  near52wPct: number;
+  insideCandleOn: boolean;
+  insideCandleTfs: { daily: boolean; weekly: boolean; monthly: boolean };
 }
 
 interface ScannerProfile {
@@ -184,6 +190,8 @@ interface Props {
   qqqPctChange?: number | null;
   /** Per-profile sets of tickers qualifying (score ≥ 80) in the Superperformance Stocks list. */
   superperfSets?: Partial<Record<"minervini" | "oneil" | "ryan" | "current", Set<string>>>;
+  /** 52-week high info map (from useFiftyTwoWeekHighs) — powers the "Near 52W High" filter. */
+  nh52wMap?: Map<string, FiftyTwoWeekHigh>;
 }
 
 const DEFAULT_FILTERS: FilterState = {
@@ -213,6 +221,10 @@ const DEFAULT_FILTERS: FilterState = {
   priceVs21dDir: "above",
   priceVs9wOn: false,
   priceVs9wDir: "above",
+  near52wOn: false,
+  near52wPct: 8,
+  insideCandleOn: false,
+  insideCandleTfs: { daily: true, weekly: false, monthly: false },
 };
 
 function loadUserProfiles(): ScannerProfile[] {
@@ -236,6 +248,7 @@ export default function CustomTradingViewListModal({
   open, onOpenChange, tabId, tabLabel, stocks, ratingMap,
   getRsForTab, getReturnField, isOtcSymbol, fundamentalsMap,
   coilScores, coilShortDays, coilLongDays, emaDistances, qqqPctChange, superperfSets,
+  nh52wMap,
 }: Props) {
   const [state, setState] = useState<FilterState>({ ...DEFAULT_FILTERS });
   const [superperfFilters, setSuperperfFilters] = useState<Record<"current" | "minervini" | "oneil" | "ryan", boolean>>({ current: false, minervini: false, oneil: false, ryan: false });
@@ -418,9 +431,16 @@ export default function CustomTradingViewListModal({
         const rel = todayPct - (qqqPctChange ?? 0);
         if (rel < state.minRelVsQqq) return false;
       }
+      if (state.near52wOn) {
+        const nh = nh52wMap?.get(s.symbol);
+        if (!nh || nh.high52w === null || nh.latestClose === null) return false;
+        // |close - high| / high * 100 — matches "within X% (above or below)".
+        const diffPct = Math.abs((nh.latestClose - nh.high52w) / nh.high52w) * 100;
+        if (!Number.isFinite(diffPct) || diffPct > state.near52wPct) return false;
+      }
       return true;
     });
-  }, [stocks, ratingMap, state, excludedSectorsSet, expandedExclusions, growthActive, fundamentalsMap, coilScores, emaDistances, qqqPctChange, qqqAvailable, isOtcSymbol, superperfFilters, superperfSets]);
+  }, [stocks, ratingMap, state, excludedSectorsSet, expandedExclusions, growthActive, fundamentalsMap, coilScores, emaDistances, qqqPctChange, qqqAvailable, isOtcSymbol, superperfFilters, superperfSets, nh52wMap]);
 
   // Fetch today's candles for the filtered set (cap to keep it cloud-efficient).
   const candleSymbols = useMemo(
@@ -432,13 +452,31 @@ export default function CustomTradingViewListModal({
     loading: candleLoading,
   } = useDailyCandles(candleSymbols, open);
 
+  // Inside-candle detection — only fetch when the filter is on (cache-first, 12h TTL).
+  const insideCandleSymbols = useMemo(
+    () => (state.insideCandleOn ? prefiltered.slice(0, Math.min(prefiltered.length, 800)).map((s) => s.symbol) : []),
+    [prefiltered, state.insideCandleOn],
+  );
+  const { insideMap, loading: insideLoading } = useInsideCandles(insideCandleSymbols, open && state.insideCandleOn);
+
   const filtered = useMemo(() => {
     const candlePct = (sym: string): number | null => {
       const c = candleMap.get(sym);
       if (!c || !c.open) return null;
       return ((c.close - c.open) / c.open) * 100;
     };
-    const list = [...prefiltered].sort((a, b) => {
+    // Apply inside-candle filter first (post-fetch) — must match ANY of the selected timeframes.
+    const insideOk = (sym: string): boolean => {
+      if (!state.insideCandleOn) return true;
+      const tf = state.insideCandleTfs;
+      const enabled = (["daily", "weekly", "monthly"] as const).filter((k) => tf[k]);
+      if (enabled.length === 0) return true;
+      const info = insideMap.get(sym);
+      if (!info) return false; // not yet resolved — hide until data arrives
+      return enabled.some((k) => info[k] === true);
+    };
+    const base = prefiltered.filter((s) => insideOk(s.symbol));
+    const list = [...base].sort((a, b) => {
       switch (state.sortBy) {
         case "rs":      return (getRsForTab(b, tabId) ?? -999) - (getRsForTab(a, tabId) ?? -999);
         case "rating":  return (ratingMap.get(b.symbol) ?? -1) - (ratingMap.get(a.symbol) ?? -1);
@@ -469,7 +507,7 @@ export default function CustomTradingViewListModal({
     });
 
     return state.topN < TOPN_MAX ? list.slice(0, state.topN) : list;
-  }, [prefiltered, state.sortBy, state.topN, ratingMap, coilScores, emaDistances, qqqPctChange, tabId, getRsForTab, getReturnField, candleMap]);
+  }, [prefiltered, state.sortBy, state.topN, state.insideCandleOn, state.insideCandleTfs, insideMap, ratingMap, coilScores, emaDistances, qqqPctChange, tabId, getRsForTab, getReturnField, candleMap]);
 
   const symbols = filtered.map((s) => s.symbol);
 
@@ -619,6 +657,93 @@ export default function CustomTradingViewListModal({
             </div>
             <Slider min={-2} max={5} step={0.5} value={[state.minRelVsQqq]} onValueChange={(v) => set("minRelVsQqq", v[0])} disabled={!state.relVsQqqOn || !qqqAvailable} />
           </div>
+
+          {/* Near 52-Week High filter */}
+          <div className="space-y-2 rounded-md border border-border bg-muted/20 px-3 py-2.5">
+            <div className="flex items-center justify-between">
+              <label className="flex items-center gap-2 text-xs cursor-pointer">
+                <Checkbox
+                  checked={state.near52wOn}
+                  disabled={!nh52wMap || nh52wMap.size === 0}
+                  onCheckedChange={(v) => set("near52wOn", !!v)}
+                />
+                <span>
+                  <span className="font-medium text-foreground">Near 52-Week High</span>
+                  <span className="block text-[10px] text-muted-foreground">
+                    {nh52wMap && nh52wMap.size > 0
+                      ? "Stocks within ±X% of their 52-week high (above or below)."
+                      : "52-week data still loading…"}
+                  </span>
+                </span>
+              </label>
+              <span className="font-mono text-xs text-primary">±{state.near52wPct.toFixed(1)}%</span>
+            </div>
+            <Slider
+              min={1}
+              max={30}
+              step={0.5}
+              value={[state.near52wPct]}
+              onValueChange={(v) => set("near52wPct", v[0])}
+              disabled={!state.near52wOn}
+            />
+            <div className="flex flex-wrap gap-1.5 pt-1">
+              {[3, 5, 8, 10, 15].map((v) => (
+                <button
+                  key={v}
+                  disabled={!state.near52wOn}
+                  onClick={() => set("near52wPct", v)}
+                  className={`rounded-md border px-2 py-0.5 text-[10px] font-medium transition-colors ${state.near52wPct === v ? "border-primary bg-primary/15 text-primary" : "border-border text-muted-foreground hover:bg-accent hover:text-foreground"} ${!state.near52wOn ? "opacity-40 cursor-not-allowed" : ""}`}
+                >
+                  ±{v}%
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Inside Candle filter */}
+          <div className="space-y-2 rounded-md border border-border bg-muted/20 px-3 py-2.5">
+            <div className="flex items-center justify-between">
+              <label className="flex items-center gap-2 text-xs cursor-pointer">
+                <Checkbox
+                  checked={state.insideCandleOn}
+                  onCheckedChange={(v) => set("insideCandleOn", !!v)}
+                />
+                <span>
+                  <span className="font-medium text-foreground">Inside Candle</span>
+                  <span className="block text-[10px] text-muted-foreground">
+                    Current bar's high/low is inside the previous bar's range (coiling setup).
+                  </span>
+                </span>
+              </label>
+              {state.insideCandleOn && insideLoading && (
+                <span className="text-[10px] italic text-muted-foreground">scanning…</span>
+              )}
+            </div>
+            <div className="flex flex-wrap gap-1.5 pt-0.5">
+              {([
+                { key: "daily", label: "Daily" },
+                { key: "weekly", label: "Weekly" },
+                { key: "monthly", label: "Monthly" },
+              ] as const).map(({ key, label }) => {
+                const active = state.insideCandleTfs[key];
+                return (
+                  <button
+                    key={key}
+                    disabled={!state.insideCandleOn}
+                    onClick={() => set("insideCandleTfs", { ...state.insideCandleTfs, [key]: !active })}
+                    className={`rounded-md border px-2.5 py-0.5 text-[10px] font-medium transition-colors ${active ? "border-primary bg-primary/15 text-primary" : "border-border text-muted-foreground hover:bg-accent hover:text-foreground"} ${!state.insideCandleOn ? "opacity-40 cursor-not-allowed" : ""}`}
+                  >
+                    {active ? "✓ " : ""}{label}
+                  </button>
+                );
+              })}
+            </div>
+            {state.insideCandleOn && !state.insideCandleTfs.daily && !state.insideCandleTfs.weekly && !state.insideCandleTfs.monthly && (
+              <p className="text-[10px] italic text-amber-500">Pick at least one timeframe or the filter will be a no-op.</p>
+            )}
+          </div>
+
+
 
           {/* Tight Range / Coil Score filter */}
           <div className="space-y-2 rounded-md border border-border bg-muted/20 px-3 py-2.5">

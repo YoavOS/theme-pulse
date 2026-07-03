@@ -95,3 +95,6 @@ verify_jwt = false
 
 [functions.fifty-two-week-highs]
 verify_jwt = false
+
+[functions.inside-candles]
+verify_jwt = false
