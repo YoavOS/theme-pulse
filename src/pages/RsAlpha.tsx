@@ -257,7 +257,7 @@ export default function RsAlpha() {
 
   const { highsMap: nh52wMap, loading: nh52wLoading } = useFiftyTwoWeekHighs(
     useMemo(() => stocks.map(s => s.symbol), [stocks]),
-    stocks.length > 0,
+    stocks.length > 0 && nh52wOn,
   );
 
   useEffect(() => { setShowAll(false); }, [activeTab]);

@@ -17,6 +17,7 @@ import {
 } from "@/lib/growthFilters";
 import { useDailyCandles } from "@/hooks/useDailyCandles";
 import { useInsideCandles } from "@/hooks/useInsideCandles";
+import { useFiftyTwoWeekHighs } from "@/hooks/useFiftyTwoWeekHighs";
 import type { FiftyTwoWeekHigh } from "@/hooks/useFiftyTwoWeekHighs";
 import CandleSummaryBar from "@/components/rs/CandleSummaryBar";
 
@@ -364,7 +365,7 @@ export default function CustomTradingViewListModal({
 
   const expandedExclusions = useMemo(() => expandSelectedToIndustries(excludedSectorsSet), [excludedSectorsSet]);
 
-  const prefiltered = useMemo(() => {
+  const baseFiltered = useMemo(() => {
     return stocks.filter((s) => {
       if (state.excludeOtc && isOtcSymbol(s.symbol)) return false;
       // Superperformance per-profile filters (OR across enabled profiles: ≥80 in ANY selected).
@@ -431,16 +432,36 @@ export default function CustomTradingViewListModal({
         const rel = todayPct - (qqqPctChange ?? 0);
         if (rel < state.minRelVsQqq) return false;
       }
-      if (state.near52wOn) {
-        const nh = nh52wMap?.get(s.symbol);
-        if (!nh || nh.high52w === null || nh.latestClose === null) return false;
-        // |close - high| / high * 100 — matches "within X% (above or below)".
-        const diffPct = Math.abs((nh.latestClose - nh.high52w) / nh.high52w) * 100;
-        if (!Number.isFinite(diffPct) || diffPct > state.near52wPct) return false;
-      }
       return true;
     });
-  }, [stocks, ratingMap, state, excludedSectorsSet, expandedExclusions, growthActive, fundamentalsMap, coilScores, emaDistances, qqqPctChange, qqqAvailable, isOtcSymbol, superperfFilters, superperfSets, nh52wMap]);
+  }, [stocks, ratingMap, state, excludedSectorsSet, expandedExclusions, growthActive, fundamentalsMap, coilScores, emaDistances, qqqPctChange, qqqAvailable, isOtcSymbol, superperfFilters, superperfSets]);
+
+  const near52wSymbols = useMemo(
+    () => state.near52wOn ? baseFiltered.map((s) => s.symbol) : [],
+    [baseFiltered, state.near52wOn],
+  );
+  const { highsMap: lazy52wMap, loading: lazy52wLoading } = useFiftyTwoWeekHighs(
+    near52wSymbols,
+    open && state.near52wOn,
+  );
+  const effective52wMap = useMemo(() => {
+    if (!nh52wMap || nh52wMap.size === 0) return lazy52wMap;
+    if (lazy52wMap.size === 0) return nh52wMap;
+    const merged = new Map(nh52wMap);
+    lazy52wMap.forEach((value, key) => merged.set(key, value));
+    return merged;
+  }, [nh52wMap, lazy52wMap]);
+
+  const prefiltered = useMemo(() => {
+    if (!state.near52wOn) return baseFiltered;
+    return baseFiltered.filter((s) => {
+      const nh = effective52wMap.get(s.symbol);
+      if (!nh || nh.high52w === null || nh.latestClose === null || nh.high52w <= 0) return false;
+      // |close - high| / high * 100 — matches "within X% (above or below)".
+      const diffPct = Math.abs((nh.latestClose - nh.high52w) / nh.high52w) * 100;
+      return Number.isFinite(diffPct) && diffPct <= state.near52wPct;
+    });
+  }, [baseFiltered, effective52wMap, state.near52wOn, state.near52wPct]);
 
   // Fetch today's candles for the filtered set (cap to keep it cloud-efficient).
   const candleSymbols = useMemo(
@@ -664,15 +685,16 @@ export default function CustomTradingViewListModal({
               <label className="flex items-center gap-2 text-xs cursor-pointer">
                 <Checkbox
                   checked={state.near52wOn}
-                  disabled={!nh52wMap || nh52wMap.size === 0}
                   onCheckedChange={(v) => set("near52wOn", !!v)}
                 />
                 <span>
                   <span className="font-medium text-foreground">Near 52-Week High</span>
                   <span className="block text-[10px] text-muted-foreground">
-                    {nh52wMap && nh52wMap.size > 0
-                      ? `${nh52wMap.size.toLocaleString()} symbols loaded · within ±X% of the 52-week high.`
-                      : "52-week data is loading; keep this off until the count appears."}
+                    {state.near52wOn && lazy52wLoading
+                      ? `${effective52wMap.size.toLocaleString()} / ${near52wSymbols.length.toLocaleString()} symbols loaded…`
+                      : effective52wMap.size > 0
+                        ? `${effective52wMap.size.toLocaleString()} symbols loaded · within ±X% of the 52-week high.`
+                        : "Loads only when enabled to keep the scan lightweight."}
                   </span>
                 </span>
               </label>
