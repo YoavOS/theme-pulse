@@ -7,7 +7,7 @@ export interface InsideCandle {
   monthly: boolean | null;
 }
 
-const LS_KEY = "rs-inside-candles-v1";
+const LS_KEY = "rs-inside-candles-v2";
 const LS_TTL_MS = 12 * 60 * 60 * 1000; // 12h — inside-candle status can flip intraday
 
 interface StoredEntry extends InsideCandle { at: number }

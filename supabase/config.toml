@@ -98,3 +98,6 @@ verify_jwt = false
 
 [functions.inside-candles]
 verify_jwt = false
+
+[functions.clean-21-ema-scan]
+verify_jwt = false
