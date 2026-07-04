@@ -136,8 +136,9 @@ Deno.serve(async (req) => {
     const rows = new Map<string, Row>();
     const cacheHits = new Map<string, OHLCBar[]>();
 
-    // Read cached OHLC in chunks — prefer 6mo, fall back to 1y.
-    for (const period of ["6mo", "1y"] as const) {
+    // Read cached OHLC in chunks — 3mo is enough for daily/weekly/monthly inside bars,
+    // then fall back to richer 6mo/1y rows if already warmed by other scans.
+    for (const period of ["3mo", "6mo", "1y"] as const) {
       const missing = symbols.filter(s => !cacheHits.has(s));
       if (missing.length === 0) break;
       for (let i = 0; i < missing.length; i += 500) {

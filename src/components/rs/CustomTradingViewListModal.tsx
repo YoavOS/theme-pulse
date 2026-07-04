@@ -671,8 +671,8 @@ export default function CustomTradingViewListModal({
                   <span className="font-medium text-foreground">Near 52-Week High</span>
                   <span className="block text-[10px] text-muted-foreground">
                     {nh52wMap && nh52wMap.size > 0
-                      ? "Stocks within ±X% of their 52-week high (above or below)."
-                      : "52-week data still loading…"}
+                      ? `${nh52wMap.size.toLocaleString()} symbols loaded · within ±X% of the 52-week high.`
+                      : "52-week data is loading; keep this off until the count appears."}
                   </span>
                 </span>
               </label>
@@ -755,7 +755,7 @@ export default function CustomTradingViewListModal({
                   <span className="block text-[10px] text-muted-foreground">
                     {coilAvailable
                       ? `Recent ${coilShortDays ?? 7}d ADR ÷ ${coilLongDays ?? 30}d ADR · lower = tighter`
-                      : "Tight Range scores still loading…"}
+                      : "Run Tight Range Settings → Update Scores in RS Alpha first."}
                   </span>
                 </span>
               </label>

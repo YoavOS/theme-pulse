@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import { Link } from "react-router-dom";
 import { ArrowLeft, RefreshCw, Loader2, Info, ChevronDown, ChevronUp, ArrowUpDown, Filter, Hammer, Pause, Play, RotateCcw, Copy, Download, Settings2, PieChart as PieChartIcon, Database, BarChart3, Trophy } from "lucide-react";
 import { toast } from "sonner";
@@ -12,6 +12,7 @@ import RsRatingBadge, { computeRsRatings } from "@/components/rs/RsRatingBadge";
 import CustomTradingViewListModal from "@/components/rs/CustomTradingViewListModal";
 import CustomListAnalyzerModal from "@/components/rs/CustomListAnalyzerModal";
 import AddSingleStockModal from "@/components/rs/AddSingleStockModal";
+import Clean21EmaScanModal from "@/components/rs/Clean21EmaScanModal";
 import SuperperformanceScanModal from "@/components/rs/SuperperformanceScanModal";
 import { useSuperperformance } from "@/hooks/useSuperperformance";
 import SetupAnalyzerModal from "@/components/rs/SetupAnalyzerModal";
@@ -161,6 +162,7 @@ export default function RsAlpha() {
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [customListOpen, setCustomListOpen] = useState(false);
   const [addSingleStockOpen, setAddSingleStockOpen] = useState(false);
+  const [clean21EmaOpen, setClean21EmaOpen] = useState(false);
   const [analyzerOpen, setAnalyzerOpen] = useState(false);
   const [setupAnalyzerOpen, setSetupAnalyzerOpen] = useState(false);
   const [sectorDistOpen, setSectorDistOpen] = useState(false);
@@ -226,6 +228,7 @@ export default function RsAlpha() {
   });
   const [coilScores, setCoilScores] = useState<Map<string, TightRangeScore>>(new Map());
   const [coilLoading, setCoilLoading] = useState(false);
+  const [coilPanelOpen, setCoilPanelOpen] = useState(false);
   const [emaDistances, setEmaDistances] = useState<Map<string, EmaDistanceInfo>>(new Map());
   const [emaLoading, setEmaLoading] = useState(false);
   const [qqqPctChange, setQqqPctChange] = useState<number | null>(null);
@@ -263,20 +266,26 @@ export default function RsAlpha() {
   useEffect(() => { localStorage.setItem(GROWTH_FILTERS_KEY, JSON.stringify(growthFilters)); }, [growthFilters]);
   useEffect(() => { localStorage.setItem(COIL_SETTINGS_KEY, JSON.stringify(coilSettings)); }, [coilSettings]);
 
-  useEffect(() => {
-    if (stocks.length === 0) return;
-    let cancelled = false;
-    const run = async () => {
-      setCoilLoading(true);
-      try {
-        const longDays = Math.max(coilSettings.longDays, coilSettings.shortDays + 1);
+  useEffect(() => { setCoilScores(new Map()); }, [coilSettings.shortDays, coilSettings.longDays]);
+
+  const loadCoilScores = useCallback(async () => {
+    if (stocks.length === 0) {
+      toast.error("No qualified universe stocks available for Tight Range scoring.");
+      return;
+    }
+    setCoilLoading(true);
+    const next = new Map<string, TightRangeScore>();
+    try {
+      const symbols = stocks.map((s) => s.symbol);
+      const longDays = Math.max(coilSettings.longDays, coilSettings.shortDays + 1);
+      const CHUNK = 400;
+      for (let i = 0; i < symbols.length; i += CHUNK) {
+        const slice = symbols.slice(i, i + CHUNK);
         const { data, error } = await supabase.functions.invoke("tight-range-scores", {
-          body: { symbols: stocks.map((s) => s.symbol), shortDays: coilSettings.shortDays, longDays },
+          body: { symbols: slice, shortDays: coilSettings.shortDays, longDays },
         });
         if (error) throw error;
         if (data?.error) throw new Error(data.error);
-        if (cancelled) return;
-        const next = new Map<string, TightRangeScore>();
         for (const row of data?.rows ?? []) {
           next.set(String(row.symbol).toUpperCase(), {
             score: row.score ?? null,
@@ -286,15 +295,14 @@ export default function RsAlpha() {
             dataPoints: row.dataPoints ?? 0,
           });
         }
-        setCoilScores(next);
-      } catch (e) {
-        if (!cancelled) toast.error(e instanceof Error ? e.message : "Failed to calculate Tight Range scores");
-      } finally {
-        if (!cancelled) setCoilLoading(false);
+        setCoilScores(new Map(next));
       }
-    };
-    run();
-    return () => { cancelled = true; };
+      toast.success(`Tight Range scores updated for ${next.size.toLocaleString()} stocks.`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to calculate Tight Range scores");
+    } finally {
+      setCoilLoading(false);
+    }
   }, [stocks, coilSettings.shortDays, coilSettings.longDays]);
 
   // Load EMA distances (9D / 21D / 9W) for the qualified universe.
@@ -596,32 +604,84 @@ export default function RsAlpha() {
               />
             )}
 
-            <div className="flex items-center gap-1.5 rounded-md border border-border bg-muted/20 px-2 py-1 text-[11px] text-muted-foreground" title="Tight Range Score = recent average daily range divided by baseline average daily range">
-              <span className="font-medium text-foreground">Coil</span>
-              <input
-                type="number"
-                min={2}
-                max={40}
-                value={coilSettings.shortDays}
-                onChange={(e) => setCoilSettings((p) => ({ ...p, shortDays: Math.max(2, Math.min(40, Number(e.target.value))) }))}
-                className="w-10 rounded border border-border bg-background px-1 py-0.5 text-right font-mono text-foreground"
-              />
-              <span>vs</span>
-              <input
-                type="number"
-                min={10}
-                max={120}
-                value={coilSettings.longDays}
-                onChange={(e) => setCoilSettings((p) => ({ ...p, longDays: Math.max(10, Math.min(120, Number(e.target.value))) }))}
-                className="w-11 rounded border border-border bg-background px-1 py-0.5 text-right font-mono text-foreground"
-              />
+            <div className="relative">
               <button
-                onClick={() => { setSortField("coil"); setSortDir("asc"); }}
-                className="rounded border border-border px-1.5 py-0.5 text-foreground hover:bg-accent"
+                onClick={() => setCoilPanelOpen((v) => !v)}
+                className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                title="Configure and update Tight Range / Coil scores"
               >
-                Tightest First
+                <Settings2 size={12} /> Tight Range Settings
+                {coilScores.size > 0 && <span className="rounded-full bg-primary/15 px-1.5 text-[10px] text-primary">{coilScores.size}</span>}
               </button>
-              {coilLoading && <Loader2 size={11} className="animate-spin text-primary" />}
+              {coilPanelOpen && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setCoilPanelOpen(false)} />
+                  <div className="absolute right-0 top-full z-50 mt-1 w-[360px] rounded-lg border border-border bg-card p-4 shadow-xl">
+                    <div className="mb-2 flex items-center justify-between">
+                      <h3 className="text-sm font-semibold text-foreground">Tight Range / Coil Score</h3>
+                      <button
+                        onClick={() => { setSortField("coil"); setSortDir("asc"); setCoilPanelOpen(false); }}
+                        className="text-[11px] text-muted-foreground hover:text-foreground"
+                      >
+                        Tightest first
+                      </button>
+                    </div>
+                    <p className="mb-3 text-[11px] text-muted-foreground">
+                      Score = recent average daily range divided by baseline range. Lower values are tighter coils.
+                    </p>
+                    <div className="space-y-2.5">
+                      <div className="flex items-center gap-3">
+                        <span className="w-24 text-xs font-medium text-muted-foreground">Recent days</span>
+                        <input
+                          type="range"
+                          min={2}
+                          max={40}
+                          value={coilSettings.shortDays}
+                          onChange={(e) => setCoilSettings((p) => ({ ...p, shortDays: Math.max(2, Math.min(40, Number(e.target.value))) }))}
+                          className="flex-1 accent-primary"
+                        />
+                        <input
+                          type="number"
+                          min={2}
+                          max={40}
+                          value={coilSettings.shortDays}
+                          onChange={(e) => setCoilSettings((p) => ({ ...p, shortDays: Math.max(2, Math.min(40, Number(e.target.value))) }))}
+                          className="w-14 rounded-md border border-border bg-background px-2 py-1 text-right text-xs"
+                        />
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <span className="w-24 text-xs font-medium text-muted-foreground">Baseline days</span>
+                        <input
+                          type="range"
+                          min={10}
+                          max={120}
+                          value={coilSettings.longDays}
+                          onChange={(e) => setCoilSettings((p) => ({ ...p, longDays: Math.max(10, Math.min(120, Number(e.target.value))) }))}
+                          className="flex-1 accent-primary"
+                        />
+                        <input
+                          type="number"
+                          min={10}
+                          max={120}
+                          value={coilSettings.longDays}
+                          onChange={(e) => setCoilSettings((p) => ({ ...p, longDays: Math.max(10, Math.min(120, Number(e.target.value))) }))}
+                          className="w-14 rounded-md border border-border bg-background px-2 py-1 text-right text-xs"
+                        />
+                      </div>
+                    </div>
+                    <div className="mt-3 flex items-center justify-between border-t border-border pt-3">
+                      <span className="text-[11px] text-muted-foreground">{coilScores.size > 0 ? `${coilScores.size.toLocaleString()} scores ready` : "Scores update only when requested"}</span>
+                      <button
+                        onClick={loadCoilScores}
+                        disabled={coilLoading || stocks.length === 0}
+                        className="inline-flex items-center gap-1.5 rounded-md border border-primary/40 bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary transition-colors hover:bg-primary/20 disabled:opacity-50"
+                      >
+                        {coilLoading ? <><Loader2 size={12} className="animate-spin" /> Updating…</> : "Update Scores"}
+                      </button>
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
 
             <button
@@ -642,6 +702,14 @@ export default function RsAlpha() {
               title="Manually add a single ticker to the qualified universe (no qualification checks)."
             >
               <Hammer size={12} /> Add Single Stock to Universe
+            </button>
+
+            <button
+              onClick={() => setClean21EmaOpen(true)}
+              className="inline-flex items-center gap-1.5 rounded-md border border-primary/40 bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary transition-colors hover:bg-primary/20"
+              title="Run a manual weekend scan for stocks that stayed above the 21 EMA."
+            >
+              <Settings2 size={12} /> Weekend Clean 21 EMA Scan
             </button>
 
             {/* ── Pull Fundamentals for Universe ── */}
@@ -1413,6 +1481,12 @@ export default function RsAlpha() {
         open={addSingleStockOpen}
         onOpenChange={setAddSingleStockOpen}
         onAdded={reloadUniverse}
+      />
+
+      <Clean21EmaScanModal
+        open={clean21EmaOpen}
+        onOpenChange={setClean21EmaOpen}
+        universe={stocks}
       />
 
 
