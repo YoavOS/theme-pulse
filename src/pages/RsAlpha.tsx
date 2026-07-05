@@ -707,9 +707,9 @@ export default function RsAlpha() {
             <button
               onClick={() => setClean21EmaOpen(true)}
               className="inline-flex items-center gap-1.5 rounded-md border border-primary/40 bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary transition-colors hover:bg-primary/20"
-              title="Run a manual weekend scan for stocks that stayed above the 21 EMA."
+              title="Run a manual scan for stocks that stayed above the selected EMA."
             >
-              <Settings2 size={12} /> Weekend Clean 21 EMA Scan
+              <Settings2 size={12} /> Clean EMA Uptrend Scan
             </button>
 
             {/* ── Pull Fundamentals for Universe ── */}
