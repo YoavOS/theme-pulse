@@ -6,6 +6,9 @@ const CACHE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 const CONCURRENCY = 8;
 const MAX_SYMBOLS = 600;
 const DEADLINE_MS = 125_000;
+const EMA_LENGTHS = new Set([9, 21, 50, 200]);
+
+type EmaTimeframe = "daily" | "weekly";
 
 interface OHLCBar {
   ts: number;
@@ -23,7 +26,11 @@ interface ResultRow {
   latestClose: number | null;
   startClose: number | null;
   ema21: number | null;
+  emaValue: number | null;
+  emaLength: number;
+  timeframe: EmaTimeframe;
   daysWithoutBelow: number;
+  periodsWithoutBelow: number;
   source: "cache" | "yahoo" | "none";
   error?: string;
 }
@@ -56,6 +63,15 @@ function normalizeNumber(raw: unknown, fallback: number, min: number, max: numbe
   return Math.max(min, Math.min(max, Number.isFinite(n) ? n : fallback));
 }
 
+function normalizeEmaLength(raw: unknown): number {
+  const n = Math.round(Number(raw ?? 21));
+  return EMA_LENGTHS.has(n) ? n : 21;
+}
+
+function normalizeTimeframe(raw: unknown): EmaTimeframe {
+  return raw === "weekly" ? "weekly" : "daily";
+}
+
 function computeEmaSeries(closes: number[], length: number): Array<number | null> {
   const out: Array<number | null> = new Array(closes.length).fill(null);
   if (closes.length < length) return out;
@@ -69,18 +85,76 @@ function computeEmaSeries(closes: number[], length: number): Array<number | null
   return out;
 }
 
-function computeRow(symbol: string, rawBars: OHLCBar[], minGainPct: number, minDays: number, source: ResultRow["source"]): ResultRow {
-  const bars = rawBars
+function isoWeekKey(d: Date): string {
+  const target = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+  const dayNr = (target.getUTCDay() + 6) % 7;
+  target.setUTCDate(target.getUTCDate() - dayNr + 3);
+  const firstThursday = new Date(Date.UTC(target.getUTCFullYear(), 0, 4));
+  const diff = (target.getTime() - firstThursday.getTime()) / 86400000;
+  const weekNum = 1 + Math.round((diff - 3 + ((firstThursday.getUTCDay() + 6) % 7)) / 7);
+  return `${target.getUTCFullYear()}-W${String(weekNum).padStart(2, "0")}`;
+}
+
+function toWeeklyBars(dailyBars: OHLCBar[]): OHLCBar[] {
+  const byWeek = new Map<string, OHLCBar>();
+  const order: string[] = [];
+  for (const bar of dailyBars) {
+    if (!bar.ts || bar.close === null || !Number.isFinite(bar.close) || (bar.close as number) <= 0) continue;
+    const key = isoWeekKey(new Date(bar.ts * 1000));
+    const existing = byWeek.get(key);
+    if (!existing) {
+      byWeek.set(key, { ...bar });
+      order.push(key);
+    } else {
+      existing.high = existing.high === null || bar.high === null ? existing.high ?? bar.high : Math.max(existing.high, bar.high);
+      existing.low = existing.low === null || bar.low === null ? existing.low ?? bar.low : Math.min(existing.low, bar.low);
+      existing.close = bar.close;
+      existing.volume = (existing.volume ?? 0) + (bar.volume ?? 0);
+      existing.ts = bar.ts;
+    }
+  }
+  return order.map((key) => byWeek.get(key)!).filter(Boolean);
+}
+
+function emptyRow(symbol: string, source: ResultRow["source"], emaLength: number, timeframe: EmaTimeframe, error: string): ResultRow {
+  return {
+    symbol,
+    qualifies: false,
+    gainPct: null,
+    latestClose: null,
+    startClose: null,
+    ema21: null,
+    emaValue: null,
+    emaLength,
+    timeframe,
+    daysWithoutBelow: 0,
+    periodsWithoutBelow: 0,
+    source,
+    error,
+  };
+}
+
+function computeRow(
+  symbol: string,
+  rawBars: OHLCBar[],
+  minGainPct: number,
+  minPeriod: number,
+  emaLength: number,
+  timeframe: EmaTimeframe,
+  source: ResultRow["source"],
+): ResultRow {
+  const dailyBars = rawBars
     .filter((bar) => bar.ts && bar.close !== null && Number.isFinite(bar.close) && (bar.close as number) > 0)
     .sort((a, b) => a.ts - b.ts);
-  const requiredBars = minDays + 21;
+  const bars = timeframe === "weekly" ? toWeeklyBars(dailyBars) : dailyBars;
+  const requiredBars = minPeriod + emaLength;
   if (bars.length < requiredBars) {
-    return { symbol, qualifies: false, gainPct: null, latestClose: null, startClose: null, ema21: null, daysWithoutBelow: 0, source, error: "insufficient_history" };
+    return emptyRow(symbol, source, emaLength, timeframe, "insufficient_history");
   }
 
   const closes = bars.map((bar) => bar.close as number);
-  const ema = computeEmaSeries(closes, 21);
-  const startIdx = closes.length - minDays;
+  const ema = computeEmaSeries(closes, emaLength);
+  const startIdx = closes.length - minPeriod;
   let clean = true;
   for (let i = startIdx; i < closes.length; i++) {
     const e = ema[i];
@@ -97,21 +171,37 @@ function computeRow(symbol: string, rawBars: OHLCBar[], minGainPct: number, minD
   const startClose = closes[startIdx];
   const latestClose = closes[closes.length - 1];
   const gainPct = startClose > 0 ? Math.round(((latestClose - startClose) / startClose) * 1000) / 10 : null;
-  const ema21 = ema[ema.length - 1];
+  const emaValue = ema[ema.length - 1];
   const qualifies = clean && gainPct !== null && gainPct >= minGainPct;
+  const periodMultiplier = timeframe === "weekly" ? 5 : 1;
   return {
     symbol,
     qualifies,
     gainPct,
     latestClose: Math.round(latestClose * 100) / 100,
     startClose: Math.round(startClose * 100) / 100,
-    ema21: ema21 !== null ? Math.round(ema21 * 100) / 100 : null,
-    daysWithoutBelow,
+    ema21: emaValue !== null ? Math.round(emaValue * 100) / 100 : null,
+    emaValue: emaValue !== null ? Math.round(emaValue * 100) / 100 : null,
+    emaLength,
+    timeframe,
+    daysWithoutBelow: timeframe === "weekly" ? daysWithoutBelow * periodMultiplier : daysWithoutBelow,
+    periodsWithoutBelow: daysWithoutBelow,
     source,
   };
 }
 
-async function fetchYahoo(symbol: string, range: "6mo" | "1y"): Promise<OHLCBar[] | null> {
+function requiredDailyBars(emaLength: number, minPeriod: number, timeframe: EmaTimeframe) {
+  return timeframe === "weekly" ? (emaLength + minPeriod) * 5 + 10 : emaLength + minPeriod;
+}
+
+function rangeFor(requiredBars: number): "6mo" | "1y" | "2y" | "5y" {
+  if (requiredBars <= 126) return "6mo";
+  if (requiredBars <= 252) return "1y";
+  if (requiredBars <= 504) return "2y";
+  return "5y";
+}
+
+async function fetchYahoo(symbol: string, range: "6mo" | "1y" | "2y" | "5y"): Promise<OHLCBar[] | null> {
   const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=${range}&interval=1d&includePrePost=false`;
   try {
     const res = await fetch(url, { headers: { "User-Agent": UA, "Accept": "application/json" } });
@@ -147,7 +237,10 @@ Deno.serve(async (req) => {
     const body = await req.json().catch(() => ({}));
     const symbols = sanitize(body?.symbols);
     const minGainPct = normalizeNumber(body?.minGainPct, 70, 0, 500);
-    const minDays = normalizeNumber(body?.minDays, 60, 30, 252);
+    const emaLength = normalizeEmaLength(body?.emaLength);
+    const timeframe = normalizeTimeframe(body?.timeframe);
+    const minDefault = timeframe === "weekly" ? 12 : 60;
+    const minPeriod = normalizeNumber(body?.minPeriod ?? body?.minDays, minDefault, timeframe === "weekly" ? 1 : 5, timeframe === "weekly" ? 260 : 504);
     if (symbols.length === 0) return json({ error: "symbols[] required", rows: [] }, 400);
 
     const SB_URL = Deno.env.get("SUPABASE_URL");
@@ -157,9 +250,17 @@ Deno.serve(async (req) => {
 
     const rows = new Map<string, ResultRow>();
     const cacheHits = new Map<string, OHLCBar[]>();
-    const minBarsNeeded = minDays + 21;
+    const minBarsNeeded = requiredDailyBars(emaLength, minPeriod, timeframe);
+    const preferredRange = rangeFor(minBarsNeeded);
+    const periods = preferredRange === "6mo"
+      ? ["6mo", "1y", "2y", "5y"] as const
+      : preferredRange === "1y"
+        ? ["1y", "2y", "5y"] as const
+        : preferredRange === "2y"
+          ? ["2y", "5y"] as const
+          : ["5y"] as const;
 
-    for (const period of ["6mo", "1y", "3mo"] as const) {
+    for (const period of periods) {
       const missing = symbols.filter((s) => !cacheHits.has(s));
       if (missing.length === 0) break;
       for (let i = 0; i < missing.length; i += 500) {
@@ -182,11 +283,11 @@ Deno.serve(async (req) => {
 
     for (const symbol of symbols) {
       const cached = cacheHits.get(symbol);
-      if (cached?.length) rows.set(symbol, computeRow(symbol, cached, minGainPct, minDays, "cache"));
+      if (cached?.length) rows.set(symbol, computeRow(symbol, cached, minGainPct, minPeriod, emaLength, timeframe, "cache"));
     }
 
     const missing = symbols.filter((symbol) => !rows.has(symbol));
-    const range: "6mo" | "1y" = minDays > 120 ? "1y" : "6mo";
+    const range = preferredRange;
     let idx = 0;
     let fetched = 0;
     const worker = async () => {
@@ -194,11 +295,11 @@ Deno.serve(async (req) => {
         const symbol = missing[idx++];
         const ohlc = await fetchYahoo(symbol, range);
         if (!ohlc) {
-          rows.set(symbol, { symbol, qualifies: false, gainPct: null, latestClose: null, startClose: null, ema21: null, daysWithoutBelow: 0, source: "none", error: "no_history" });
+          rows.set(symbol, emptyRow(symbol, "none", emaLength, timeframe, "no_history"));
           continue;
         }
         fetched++;
-        rows.set(symbol, computeRow(symbol, ohlc, minGainPct, minDays, "yahoo"));
+        rows.set(symbol, computeRow(symbol, ohlc, minGainPct, minPeriod, emaLength, timeframe, "yahoo"));
         const closes = ohlc.map((bar) => bar.close).filter((v): v is number => v !== null);
         const start = closes[0] ?? null;
         const end = closes[closes.length - 1] ?? null;
@@ -225,7 +326,11 @@ Deno.serve(async (req) => {
       latestClose: null,
       startClose: null,
       ema21: null,
+      emaValue: null,
+      emaLength,
+      timeframe,
       daysWithoutBelow: 0,
+      periodsWithoutBelow: 0,
       source: "none" as const,
       error: "not_processed",
     });
@@ -236,7 +341,9 @@ Deno.serve(async (req) => {
     return json({
       total: symbols.length,
       minGainPct,
-      minDays,
+      minPeriod,
+      emaLength,
+      timeframe,
       cacheHits: cacheHits.size,
       fetched,
       partial: allRows.some((row) => row.error === "not_processed"),
