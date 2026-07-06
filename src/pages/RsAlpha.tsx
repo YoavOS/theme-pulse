@@ -1487,6 +1487,7 @@ export default function RsAlpha() {
         open={clean21EmaOpen}
         onOpenChange={setClean21EmaOpen}
         universe={stocks}
+        ratingMap={ratingMap}
       />
 
 
