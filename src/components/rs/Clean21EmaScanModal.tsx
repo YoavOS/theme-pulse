@@ -39,7 +39,7 @@ interface Props {
   universe: RsStock[];
 }
 
-const LS_KEY = "rs-clean-ema-uptrend-v2";
+const LS_KEY = "rs-clean-ema-uptrend-v3";
 
 function readSaved(): SavedScan | null {
   if (typeof window === "undefined") return null;
@@ -169,7 +169,7 @@ export default function Clean21EmaScanModal({ open, onOpenChange, universe }: Pr
             <Save size={16} className="text-primary" /> Clean EMA Uptrend Scan
           </DialogTitle>
           <DialogDescription className="text-xs">
-            Finds qualified-universe stocks with large gains that stayed above the selected EMA for the full window.
+            Finds qualified-universe stocks with large gains during the current uninterrupted run above the selected EMA.
           </DialogDescription>
         </DialogHeader>
 
@@ -245,7 +245,7 @@ export default function Clean21EmaScanModal({ open, onOpenChange, universe }: Pr
             <div className="flex items-center justify-between gap-2">
               <div>
                 <div className="font-semibold text-foreground">Clean {emaLength} EMA Uptrend Stocks</div>
-                <div className="text-[10px] text-muted-foreground">Sorted by gain over the selected {periodUnit} window.</div>
+                <div className="text-[10px] text-muted-foreground">Sorted by gain across the current clean EMA run after the minimum {periodUnit} requirement is met.</div>
               </div>
               <div className="font-mono text-lg font-bold text-primary">{rows.length}</div>
             </div>
