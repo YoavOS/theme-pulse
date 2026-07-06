@@ -154,25 +154,26 @@ function computeRow(
 
   const closes = bars.map((bar) => bar.close as number);
   const ema = computeEmaSeries(closes, emaLength);
-  const startIdx = closes.length - minPeriod;
-  let clean = true;
-  for (let i = startIdx; i < closes.length; i++) {
-    const e = ema[i];
-    if (e === null || closes[i] < e) { clean = false; break; }
-  }
 
-  let daysWithoutBelow = 0;
+  let periodsWithoutBelow = 0;
   for (let i = closes.length - 1; i >= 0; i--) {
     const e = ema[i];
     if (e === null || closes[i] < e) break;
-    daysWithoutBelow++;
+    periodsWithoutBelow++;
   }
 
+  // The period input is a minimum clean-streak requirement, not the gain window.
+  // A stock qualifies when it has been above the selected EMA for at least that
+  // many bars, and the gain across the current uninterrupted EMA run meets the
+  // user's threshold. This prevents long clean uptrends from being incorrectly
+  // rejected just because the most recent 10 bars alone were not up 30%+.
+  const cleanRunStartIdx = Math.max(0, closes.length - periodsWithoutBelow);
+  const startIdx = periodsWithoutBelow > 0 ? cleanRunStartIdx : closes.length - minPeriod;
   const startClose = closes[startIdx];
   const latestClose = closes[closes.length - 1];
   const gainPct = startClose > 0 ? Math.round(((latestClose - startClose) / startClose) * 1000) / 10 : null;
   const emaValue = ema[ema.length - 1];
-  const qualifies = clean && gainPct !== null && gainPct >= minGainPct;
+  const qualifies = periodsWithoutBelow >= minPeriod && gainPct !== null && gainPct >= minGainPct;
   const periodMultiplier = timeframe === "weekly" ? 5 : 1;
   return {
     symbol,
@@ -184,8 +185,8 @@ function computeRow(
     emaValue: emaValue !== null ? Math.round(emaValue * 100) / 100 : null,
     emaLength,
     timeframe,
-    daysWithoutBelow: timeframe === "weekly" ? daysWithoutBelow * periodMultiplier : daysWithoutBelow,
-    periodsWithoutBelow: daysWithoutBelow,
+    daysWithoutBelow: timeframe === "weekly" ? periodsWithoutBelow * periodMultiplier : periodsWithoutBelow,
+    periodsWithoutBelow,
     source,
   };
 }
