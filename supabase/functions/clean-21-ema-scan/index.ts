@@ -268,7 +268,7 @@ Deno.serve(async (req) => {
     const minBarsNeeded = requiredDailyBars(emaLength, minPeriod, timeframe);
     const preferredRange = rangeFor(minBarsNeeded);
     const periods = preferredRange === "6mo"
-      ? ["6mo", "1y", "2y", "5y"] as const
+      ? ["1y", "6mo", "2y", "5y"] as const
       : preferredRange === "1y"
         ? ["1y", "2y", "5y"] as const
         : preferredRange === "2y"
