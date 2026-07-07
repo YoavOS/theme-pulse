@@ -493,7 +493,7 @@ export default function CustomTradingViewListModal({
       const enabled = (["daily", "weekly", "monthly"] as const).filter((k) => tf[k]);
       if (enabled.length === 0) return true;
       const info = insideMap.get(sym);
-      if (!info) return false; // not yet resolved — hide until data arrives
+      if (!info) return insideLoading; // keep list stable while data is in-flight
       return enabled.some((k) => info[k] === true);
     };
     const base = prefiltered.filter((s) => insideOk(s.symbol));
@@ -528,7 +528,7 @@ export default function CustomTradingViewListModal({
     });
 
     return state.topN < TOPN_MAX ? list.slice(0, state.topN) : list;
-  }, [prefiltered, state.sortBy, state.topN, state.insideCandleOn, state.insideCandleTfs, insideMap, ratingMap, coilScores, emaDistances, qqqPctChange, tabId, getRsForTab, getReturnField, candleMap]);
+  }, [prefiltered, state.sortBy, state.topN, state.insideCandleOn, state.insideCandleTfs, insideMap, insideLoading, ratingMap, coilScores, emaDistances, qqqPctChange, tabId, getRsForTab, getReturnField, candleMap]);
 
   const symbols = filtered.map((s) => s.symbol);
 
