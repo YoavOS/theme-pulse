@@ -14,7 +14,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
 import { corsHeaders } from "../_shared/cors.ts";
 
 const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36";
-const CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000; // 24h
+const CACHE_MAX_AGE_MS = 12 * 60 * 60 * 1000; // 12h — inside-candle state can change intraday
 const CONCURRENCY = 8;
 const MAX_SYMBOLS = 1500;
 const DEADLINE_MS = 125_000;
@@ -64,14 +64,22 @@ function aggregateByKey(bars: OHLCBar[], keyFn: (d: Date) => string): { key: str
   return order.map(k => ({ key: k, ...(map.get(k)!) }));
 }
 
+function isInside(current: { high: number; low: number }, prior: { high: number; low: number }): boolean {
+  // Tiny tolerance handles split-adjusted/cache-vs-Yahoo rounding without changing the rule.
+  const eps = Math.max(0.01, prior.high * 0.0002);
+  return current.high <= prior.high + eps && current.low >= prior.low - eps;
+}
+
 function computeFlags(symbol: string, ohlc: OHLCBar[], source: Row["source"]): Row {
-  const bars = ohlc.filter(b => b.high !== null && b.low !== null).sort((a, b) => a.ts - b.ts);
+  const bars = ohlc
+    .filter(b => b.high !== null && b.low !== null && Number.isFinite(b.high) && Number.isFinite(b.low) && (b.high as number) > 0 && (b.low as number) > 0)
+    .sort((a, b) => a.ts - b.ts);
   if (bars.length < 2) return { symbol, daily: null, weekly: null, monthly: null, source, error: "insufficient_history" };
 
   // Daily
   const d1 = bars[bars.length - 1];
   const d0 = bars[bars.length - 2];
-  const daily = (d1.high as number) <= (d0.high as number) && (d1.low as number) >= (d0.low as number);
+  const daily = isInside({ high: d1.high as number, low: d1.low as number }, { high: d0.high as number, low: d0.low as number });
 
   // Weekly
   const weeks = aggregateByKey(bars, isoWeekKey);
@@ -79,7 +87,7 @@ function computeFlags(symbol: string, ohlc: OHLCBar[], source: Row["source"]): R
   if (weeks.length >= 2) {
     const w1 = weeks[weeks.length - 1];
     const w0 = weeks[weeks.length - 2];
-    weekly = w1.high <= w0.high && w1.low >= w0.low;
+    weekly = isInside(w1, w0);
   }
 
   // Monthly
@@ -88,7 +96,7 @@ function computeFlags(symbol: string, ohlc: OHLCBar[], source: Row["source"]): R
   if (months.length >= 2) {
     const m1 = months[months.length - 1];
     const m0 = months[months.length - 2];
-    monthly = m1.high <= m0.high && m1.low >= m0.low;
+    monthly = isInside(m1, m0);
   }
 
   return { symbol, daily, weekly, monthly, source };

@@ -44,7 +44,7 @@ interface Props {
   ratingMap?: Map<string, number | null>;
 }
 
-const LS_KEY = "rs-clean-ema-uptrend-v3";
+const LS_KEY = "rs-clean-ema-uptrend-v4";
 
 const SLICE_COLORS = [
   "hsl(160, 70%, 50%)", "hsl(200, 80%, 55%)", "hsl(280, 65%, 60%)",
@@ -157,15 +157,15 @@ export default function Clean21EmaScanModal({ open, onOpenChange, universe, rati
         });
         if (error) throw new Error(error.message);
         if ((data as { error?: string } | null)?.error) throw new Error((data as { error: string }).error);
-        if ((data as { partial?: boolean } | null)?.partial) {
-          throw new Error("Scan timed out before every symbol was checked. Run again after cache warms, or use a smaller universe slice.");
-        }
         const qualifying = ((data as { rows?: Clean21EmaRow[] } | null)?.rows ?? [])
           .filter((row) => Number.isFinite(row.gainPct));
         next.push(...qualifying);
         next.sort((a, b) => b.gainPct - a.gainPct);
         setRows([...next]);
         setProcessed(Math.min(symbols.length, i + slice.length));
+        if ((data as { partial?: boolean } | null)?.partial) {
+          toast.warning("A scan chunk timed out; saved all completed matches. Run again to warm the remaining symbols.");
+        }
       }
       const saved: SavedScan = { at: Date.now(), emaLength, timeframe, minGainPct: gain, minPeriod: period, rows: next };
       writeSaved(saved);
