@@ -2,9 +2,9 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
 import { corsHeaders } from "../_shared/cors.ts";
 
 const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36";
-const CACHE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+const CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 const CONCURRENCY = 8;
-const MAX_SYMBOLS = 600;
+const MAX_SYMBOLS = 2500;
 const DEADLINE_MS = 125_000;
 const EMA_LENGTHS = new Set([9, 21, 50, 200]);
 
@@ -85,6 +85,11 @@ function computeEmaSeries(closes: number[], length: number): Array<number | null
   return out;
 }
 
+function pctGain(from: number | null | undefined, to: number | null | undefined): number | null {
+  if (!from || !to || from <= 0 || !Number.isFinite(from) || !Number.isFinite(to)) return null;
+  return Math.round(((to - from) / from) * 1000) / 10;
+}
+
 function isoWeekKey(d: Date): string {
   const target = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
   const dayNr = (target.getUTCDay() + 6) % 7;
@@ -163,15 +168,24 @@ function computeRow(
   }
 
   // The period input is a minimum clean-streak requirement, not the gain window.
-  // A stock qualifies when it has been above the selected EMA for at least that
-  // many bars, and the gain across the current uninterrupted EMA run meets the
-  // user's threshold. This prevents long clean uptrends from being incorrectly
-  // rejected just because the most recent 10 bars alone were not up 30%+.
+  // The gain threshold is a prior-advance filter: qualify if the stock has made
+  // the requested move either during the current uninterrupted EMA run OR from
+  // the lowest close in the available recent history. This keeps names like ENVA
+  // eligible after a brief reset below the EMA, once they rebuild the requested
+  // clean streak above the EMA.
   const cleanRunStartIdx = Math.max(0, closes.length - periodsWithoutBelow);
-  const startIdx = periodsWithoutBelow > 0 ? cleanRunStartIdx : closes.length - minPeriod;
-  const startClose = closes[startIdx];
   const latestClose = closes[closes.length - 1];
-  const gainPct = startClose > 0 ? Math.round(((latestClose - startClose) / startClose) * 1000) / 10 : null;
+  const cleanRunStartClose = periodsWithoutBelow > 0 ? closes[cleanRunStartIdx] : closes[Math.max(0, closes.length - minPeriod)];
+  let lowIdx = 0;
+  for (let i = 1; i < closes.length; i++) {
+    if (closes[i] < closes[lowIdx]) lowIdx = i;
+  }
+  const priorAdvanceStartClose = closes[lowIdx];
+  const cleanRunGainPct = pctGain(cleanRunStartClose, latestClose);
+  const priorAdvanceGainPct = pctGain(priorAdvanceStartClose, latestClose);
+  const usePriorAdvance = (priorAdvanceGainPct ?? -Infinity) >= (cleanRunGainPct ?? -Infinity);
+  const startClose = usePriorAdvance ? priorAdvanceStartClose : cleanRunStartClose;
+  const gainPct = usePriorAdvance ? priorAdvanceGainPct : cleanRunGainPct;
   const emaValue = ema[ema.length - 1];
   const qualifies = periodsWithoutBelow >= minPeriod && gainPct !== null && gainPct >= minGainPct;
   const periodMultiplier = timeframe === "weekly" ? 5 : 1;
