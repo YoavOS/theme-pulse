@@ -475,7 +475,7 @@ export default function CustomTradingViewListModal({
 
   // Inside-candle detection — only fetch when the filter is on (cache-first, 12h TTL).
   const insideCandleSymbols = useMemo(
-    () => (state.insideCandleOn ? prefiltered.slice(0, Math.min(prefiltered.length, 800)).map((s) => s.symbol) : []),
+    () => (state.insideCandleOn ? prefiltered.map((s) => s.symbol) : []),
     [prefiltered, state.insideCandleOn],
   );
   const { insideMap, loading: insideLoading } = useInsideCandles(insideCandleSymbols, open && state.insideCandleOn);
