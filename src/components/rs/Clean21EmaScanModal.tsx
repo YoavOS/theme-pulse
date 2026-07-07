@@ -44,7 +44,7 @@ interface Props {
   ratingMap?: Map<string, number | null>;
 }
 
-const LS_KEY = "rs-clean-ema-uptrend-v3";
+const LS_KEY = "rs-clean-ema-uptrend-v4";
 
 const SLICE_COLORS = [
   "hsl(160, 70%, 50%)", "hsl(200, 80%, 55%)", "hsl(280, 65%, 60%)",
