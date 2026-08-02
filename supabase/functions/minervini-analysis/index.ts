@@ -353,6 +353,111 @@ async function fetchFinnhubMetric(symbol: string, quality: DataQuality) {
   return data;
 }
 
+// ---------- Finnhub reported statements (PRIMARY source for depth) ----------
+const finnhubStatementCache = new Map<string, { ts: number; data: PeriodPoint[] }>();
+
+function conceptValue(rows: any[], patterns: RegExp[]): number | null {
+  for (const re of patterns) {
+    for (const row of rows) {
+      const concept = String(row?.concept ?? "");
+      const label = String(row?.label ?? "");
+      if (re.test(concept) || re.test(label)) {
+        const v = num(row?.value);
+        if (v !== null) return v;
+      }
+    }
+  }
+  return null;
+}
+
+function finnhubReportToPoint(entry: any): PeriodPoint | null {
+  const date = String(entry?.endDate ?? "").slice(0, 10);
+  if (!date) return null;
+  const ic = entry?.report?.ic ?? [];
+  const bs = entry?.report?.bs ?? [];
+  const cf = entry?.report?.cf ?? [];
+
+  const revenue = conceptValue(ic, [
+    /^us-gaap_RevenueFromContractWithCustomerExcludingAssessedTax$/,
+    /^us-gaap_RevenueFromContractWithCustomerIncludingAssessedTax$/,
+    /^us-gaap_Revenues$/, /^us-gaap_SalesRevenueNet$/,
+    /^Total revenue/i, /^Revenues?$/i, /^Net (sales|revenues?)$/i,
+  ]);
+  const netIncome = conceptValue(ic, [/^us-gaap_NetIncomeLoss$/, /^us-gaap_ProfitLoss$/, /^Net income/i]);
+  const eps = conceptValue(ic, [
+    /^us-gaap_EarningsPerShareDiluted$/, /^us-gaap_IncomeLossFromContinuingOperationsPerDilutedShare$/,
+    /diluted.*per share/i,
+  ]);
+  const operatingIncome = conceptValue(ic, [/^us-gaap_OperatingIncomeLoss$/, /^Operating income/i]);
+  const grossProfit = conceptValue(ic, [/^us-gaap_GrossProfit$/, /^Gross (profit|margin)$/i]);
+  const equity = conceptValue(bs, [
+    /^us-gaap_StockholdersEquity$/,
+    /^us-gaap_StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest$/,
+    /total (stockholders|shareholders).? equity/i,
+  ]);
+  const longDebt = conceptValue(bs, [/^us-gaap_LongTermDebtNoncurrent$/, /^us-gaap_LongTermDebt$/, /long-?term debt/i]);
+  const shortDebt = conceptValue(bs, [/^us-gaap_LongTermDebtCurrent$/, /^us-gaap_ShortTermBorrowings$/, /short-?term (debt|borrowings)/i]);
+  const currentAssets = conceptValue(bs, [/^us-gaap_AssetsCurrent$/, /total current assets/i]);
+  const currentLiabilities = conceptValue(bs, [/^us-gaap_LiabilitiesCurrent$/, /total current liabilities/i]);
+  const ocf = conceptValue(cf, [
+    /^us-gaap_NetCashProvidedByUsedInOperatingActivities$/,
+    /^us-gaap_NetCashProvidedByUsedInOperatingActivitiesContinuingOperations$/,
+    /operating activities/i,
+  ]);
+  const capex = conceptValue(cf, [
+    /^us-gaap_PaymentsToAcquirePropertyPlantAndEquipment$/,
+    /purchases? of property/i, /capital expenditure/i,
+  ]);
+
+  const totalDebt = (longDebt ?? 0) + (shortDebt ?? 0) || null;
+  const point: PeriodPoint = {
+    ...emptyPoint(date),
+    revenue,
+    eps,
+    netIncome,
+    operatingIncome,
+    grossProfit,
+    totalDebt,
+    equity,
+    operatingCashFlow: ocf,
+    freeCashFlow: ocf !== null && capex !== null ? ocf - Math.abs(capex) : null,
+    currentRatio: currentAssets !== null && currentLiabilities ? round(currentAssets / currentLiabilities) : null,
+    debtToEquityRatio: totalDebt !== null && equity && equity > 0 ? round(totalDebt / equity) : null,
+  };
+  // Nothing usable → skip so it doesn't create empty rows.
+  if (revenue === null && netIncome === null && eps === null && ocf === null) return null;
+  return point;
+}
+
+async function fetchFinnhubStatements(symbol: string, freq: "quarterly" | "annual", quality: DataQuality): Promise<PeriodPoint[]> {
+  if (!FINNHUB_KEY) return [];
+  const key = `${symbol}:${freq}`;
+  const hit = finnhubStatementCache.get(key);
+  if (hit && Date.now() - hit.ts < DB_CACHE_TTL) return hit.data;
+  const count = freq === "quarterly" ? RAW_QUARTERS_FOR_YOY + 2 : 10;
+  const url = `https://finnhub.io/api/v1/stock/financials-reported?symbol=${encodeURIComponent(symbol)}&freq=${freq}&count=${count}&token=${FINNHUB_KEY}`;
+  try {
+    const r = await fetch(url);
+    quality.finnhubCalls++;
+    if (!r.ok) return [];
+    const j = await r.json().catch(() => null);
+    const rows: any[] = Array.isArray(j?.data) ? j.data : [];
+    const points = rows
+      .map(finnhubReportToPoint)
+      .filter((p): p is PeriodPoint => p !== null)
+      .sort((a, b) => b.date.localeCompare(a.date));
+    // De-dupe by date (amended filings)
+    const byDate = new Map<string, PeriodPoint>();
+    for (const p of points) if (!byDate.has(p.date)) byDate.set(p.date, p);
+    const out = [...byDate.values()];
+    finnhubStatementCache.set(key, { ts: Date.now(), data: out });
+    return out;
+  } catch {
+    return [];
+  }
+}
+
+
 async function fmpGet(path: string, quality: DataQuality, version: "v3" | "v4" = "v3") {
   if (!FMP_KEY) return null;
   const key = `${version}:${path}`;
