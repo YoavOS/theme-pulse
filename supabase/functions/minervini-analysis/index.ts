@@ -1417,13 +1417,18 @@ async function buildBundle(symbol: string, force: boolean) {
     yQuarters = qDates.map(d => pointFor(d, timeseries, "quarterly"));
     yAnnual = aDates.map(d => pointFor(d, timeseries, "annual"));
   }
-  if (yQuarters.length < 4 && quote) {
+  if (needYahooStatements && yQuarters.length < 4 && quote) {
     const fb = fallbackQuartersFromQuote(quote, yahooGrowth);
     yQuarters = mergePoints(yQuarters, fb);
   }
-  if (yAnnual.length < 2 && quote) {
+  if (needYahooStatements && yAnnual.length < 2 && quote) {
     yAnnual = mergePoints(yAnnual, fallbackAnnualFromQuote(quote));
   }
+  // Yahoo period ends can disagree with SEC filing dates by more than the merge
+  // tolerance, which would inject duplicate half-empty rows. Only blend Yahoo
+  // statement rows when they actually add missing periods.
+  if (!needYahooStatements) { yQuarters = []; yAnnual = []; }
+
 
   // Priority: Finnhub reported > FMP > Yahoo (per-date, per-field gap filling)
   const quarters = applyGrowthFallback(
