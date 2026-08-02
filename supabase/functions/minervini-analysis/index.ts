@@ -1342,24 +1342,30 @@ async function buildBundle(symbol: string, force: boolean) {
     enrichQuarters(fhQuartersRaw, { revenueYoY: null, epsYoY: null }),
     enrichAnnual(fhAnnualRaw),
   );
+  // Finnhub is only "deep enough" to skip FMP statements when its reported filings
+  // cover every trend field we need (revenue, EPS and cash flow across 8 quarters).
   const finnhubDeepEnough =
     fhQuartersRaw.length >= RAW_QUARTERS_FOR_YOY &&
     fhProbe.quarterlyRevenueYoY >= TARGET_QUARTER_TREND_COUNT &&
     fhProbe.quarterlyEpsYoY >= TARGET_QUARTER_TREND_COUNT &&
-    fhProbe.quarterlyCashFlow >= MIN_QUARTER_TREND_COUNT &&
+    fhProbe.quarterlyCashFlow >= TARGET_QUARTER_TREND_COUNT &&
+    fhProbe.quarterlyMargins >= TARGET_QUARTER_TREND_COUNT &&
     fhAnnualRaw.length >= 4 &&
-    fhProbe.annualRevenueYoY >= 2 &&
-    fhProbe.annualEpsYoY >= 2;
+    fhProbe.annualRevenueYoY >= 3 &&
+    fhProbe.annualEpsYoY >= 3;
 
 
-  // ----- Secondary source: FMP (full statement bundle only when Finnhub is short) -----
+  // ----- Secondary source: FMP (full statement bundle unless Finnhub already covers everything) -----
   const fmp = await fetchFmpBundle(symbol, quality, finnhubDeepEnough ? "lite" : "full");
   if (fmp) quality.sources.push(finnhubDeepEnough ? "FMP ratios & ownership (lite)" : "FMP statements & ratios");
 
   const fmpQuartersRaw = fmp ? mergeGrowthRows(fmpToPoints(fmp.incQ, fmp.bsQ, fmp.cfQ, [], fmp.kmQ), fmp.growthQ) : [];
   const fmpAnnualRaw = fmp ? mergeGrowthRows(fmpToPoints(fmp.incA, fmp.bsA, fmp.cfA, [], fmp.kmA), fmp.growthA) : [];
-  const combinedQuartersRaw = mergePoints(fhQuartersRaw, fmpQuartersRaw);
-  const combinedAnnualRaw = mergePoints(fhAnnualRaw, fmpAnnualRaw);
+  // FMP statements are period-normalized (true per-quarter cash flow), so they win per field;
+  // Finnhub supplies the deep history and any dates/fields FMP is missing.
+  const combinedQuartersRaw = mergePoints(fmpQuartersRaw, fhQuartersRaw);
+  const combinedAnnualRaw = mergePoints(fmpAnnualRaw, fhAnnualRaw);
+
   const combinedProbe = computeCoverage(
     applyGrowthFallback(enrichQuarters(combinedQuartersRaw, { revenueYoY: null, epsYoY: null }), fmp?.growthQ ?? []),
     applyGrowthFallback(enrichAnnual(combinedAnnualRaw), fmp?.growthA ?? []),
