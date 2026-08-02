@@ -1320,26 +1320,46 @@ async function buildBundle(symbol: string, force: boolean) {
   const sb = createClient(SB_URL, SB_KEY);
   const { stockFund, fundCache } = force ? { stockFund: null, fundCache: null } : await readCachedFundamentals(sb, symbol, quality);
 
-  // ----- Primary source: FMP (in parallel with DB cache read above) -----
-  const fmp = await fetchFmpBundle(symbol, quality);
-  if (fmp) quality.sources.push("FMP statements & ratios");
+  // ----- Primary source: Finnhub reported statements (deepest quarter history) -----
+  const [fhQuartersRaw, fhAnnualRaw] = await Promise.all([
+    fetchFinnhubStatements(symbol, "quarterly", quality),
+    fetchFinnhubStatements(symbol, "annual", quality),
+  ]);
+  if (fhQuartersRaw.length || fhAnnualRaw.length) quality.sources.push("Finnhub reported statements");
+  const fhProbe = computeCoverage(
+    enrichQuarters(fhQuartersRaw, { revenueYoY: null, epsYoY: null }),
+    enrichAnnual(fhAnnualRaw),
+  );
+  const finnhubDeepEnough =
+    fhQuartersRaw.length >= RAW_QUARTERS_FOR_YOY &&
+    fhProbe.quarterlyRevenueYoY >= MIN_QUARTER_TREND_COUNT &&
+    fhProbe.quarterlyEpsYoY >= MIN_QUARTER_TREND_COUNT &&
+    fhAnnualRaw.length >= 4;
+
+  // ----- Secondary source: FMP (full statement bundle only when Finnhub is short) -----
+  const fmp = await fetchFmpBundle(symbol, quality, finnhubDeepEnough ? "lite" : "full");
+  if (fmp) quality.sources.push(finnhubDeepEnough ? "FMP ratios & ownership (lite)" : "FMP statements & ratios");
 
   const fmpQuartersRaw = fmp ? mergeGrowthRows(fmpToPoints(fmp.incQ, fmp.bsQ, fmp.cfQ, [], fmp.kmQ), fmp.growthQ) : [];
   const fmpAnnualRaw = fmp ? mergeGrowthRows(fmpToPoints(fmp.incA, fmp.bsA, fmp.cfA, [], fmp.kmA), fmp.growthA) : [];
-  const fmpQuarterProbe = applyGrowthFallback(enrichQuarters(fmpQuartersRaw, { revenueYoY: null, epsYoY: null }), fmp?.growthQ ?? []);
-  const fmpAnnualProbe = applyGrowthFallback(enrichAnnual(fmpAnnualRaw), fmp?.growthA ?? []);
-  const fmpQuarterCoverage = computeCoverage(fmpQuarterProbe, fmpAnnualProbe);
-  const fmpHasQuarters = fmpQuartersRaw.length >= RAW_QUARTERS_FOR_YOY
-    && fmpQuarterCoverage.quarterlyRevenueYoY >= MIN_QUARTER_TREND_COUNT
-    && fmpQuarterCoverage.quarterlyEpsYoY >= MIN_QUARTER_TREND_COUNT;
-  const fmpHasAnnual = fmpAnnualRaw.length >= 4
-    && fmpQuarterCoverage.annualRevenueYoY >= 2
-    && fmpQuarterCoverage.annualEpsYoY >= 2;
+  const combinedQuartersRaw = mergePoints(fhQuartersRaw, fmpQuartersRaw);
+  const combinedAnnualRaw = mergePoints(fhAnnualRaw, fmpAnnualRaw);
+  const combinedProbe = computeCoverage(
+    applyGrowthFallback(enrichQuarters(combinedQuartersRaw, { revenueYoY: null, epsYoY: null }), fmp?.growthQ ?? []),
+    applyGrowthFallback(enrichAnnual(combinedAnnualRaw), fmp?.growthA ?? []),
+  );
+  const hasQuarters = combinedQuartersRaw.length >= RAW_QUARTERS_FOR_YOY
+    && combinedProbe.quarterlyRevenueYoY >= MIN_QUARTER_TREND_COUNT
+    && combinedProbe.quarterlyEpsYoY >= MIN_QUARTER_TREND_COUNT;
+  const hasAnnual = combinedAnnualRaw.length >= 4
+    && combinedProbe.annualRevenueYoY >= 2
+    && combinedProbe.annualEpsYoY >= 2;
 
-  // ----- Fallback / supplement: Yahoo + Finnhub only when FMP is short -----
-  const needYahooStatements = !fmpHasQuarters || !fmpHasAnnual;
+  // ----- Tertiary: Yahoo only when Finnhub + FMP are still short -----
+  const needYahooStatements = !hasQuarters || !hasAnnual;
   const needAnyYahoo = force || needYahooStatements || !fmp;
-  const needFinnhub = !fmp && (force || !stockFund);
+  const needFinnhub = !fmp && !fhQuartersRaw.length && (force || !stockFund);
+
 
   const [quote, timeseries, fh] = await Promise.all([
     needAnyYahoo ? fetchQuoteSummary(symbol, quality) : Promise.resolve(null),
