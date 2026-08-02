@@ -1337,7 +1337,7 @@ async function buildBundle(symbol: string, force: boolean) {
     fetchFinnhubStatements(symbol, "quarterly", quality),
     fetchFinnhubStatements(symbol, "annual", quality),
   ]);
-  if (fhQuartersRaw.length || fhAnnualRaw.length) quality.sources.push("Finnhub reported statements");
+  if (fhQuartersRaw.length || fhAnnualRaw.length) quality.sources.push(`Finnhub reported statements (${fhQuartersRaw.length}Q/${fhAnnualRaw.length}A)`);
   const fhProbe = computeCoverage(
     enrichQuarters(fhQuartersRaw, { revenueYoY: null, epsYoY: null }),
     enrichAnnual(fhAnnualRaw),
