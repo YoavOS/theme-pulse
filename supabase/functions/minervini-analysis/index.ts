@@ -1337,11 +1337,14 @@ async function buildBundle(symbol: string, force: boolean) {
     fetchFinnhubStatements(symbol, "quarterly", quality),
     fetchFinnhubStatements(symbol, "annual", quality),
   ]);
-  if (fhQuartersRaw.length || fhAnnualRaw.length) quality.sources.push(`Finnhub reported statements v3 (${fhQuartersRaw.length}Q/${fhAnnualRaw.length}A, probeEps=${fhProbe.quarterlyEpsYoY}, probeAnnEps=${fhProbe.annualEpsYoY})`);
   const fhProbe = computeCoverage(
     enrichQuarters(fhQuartersRaw.slice(0, RAW_QUARTERS_FOR_YOY), { revenueYoY: null, epsYoY: null }),
     enrichAnnual(fhAnnualRaw.slice(0, 5)),
   );
+  if (fhQuartersRaw.length || fhAnnualRaw.length) {
+    quality.sources.push(`Finnhub reported statements (${fhQuartersRaw.length}Q/${fhAnnualRaw.length}A)`);
+  }
+
 
   // Finnhub is only "deep enough" to skip FMP statements when its reported filings
   // cover every trend field we need (revenue, EPS and cash flow across 8 quarters).
