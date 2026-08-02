@@ -384,10 +384,19 @@ function finnhubReportToPoint(entry: any): PeriodPoint | null {
     /^Total revenue/i, /^Revenues?$/i, /^Net (sales|revenues?)$/i,
   ]);
   const netIncome = conceptValue(ic, [/^us-gaap_NetIncomeLoss$/, /^us-gaap_ProfitLoss$/, /^Net income/i]);
-  const eps = conceptValue(ic, [
+  let eps = conceptValue(ic, [
     /^us-gaap_EarningsPerShareDiluted$/, /^us-gaap_IncomeLossFromContinuingOperationsPerDilutedShare$/,
     /diluted.*per share/i,
   ]);
+  if (eps === null && netIncome !== null) {
+    const dilutedShares = conceptValue(ic, [
+      /^us-gaap_WeightedAverageNumberOfDilutedSharesOutstanding$/,
+      /^us-gaap_WeightedAverageNumberOfDilutedSharesOutstandingBasicAndDiluted$/,
+      /weighted average.*diluted/i,
+    ]);
+    if (dilutedShares && dilutedShares > 0) eps = round(netIncome / dilutedShares, 4);
+  }
+
   const operatingIncome = conceptValue(ic, [/^us-gaap_OperatingIncomeLoss$/, /^Operating income/i]);
   const grossProfit = conceptValue(ic, [/^us-gaap_GrossProfit$/, /^Gross (profit|margin)$/i]);
   const equity = conceptValue(bs, [
