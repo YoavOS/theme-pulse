@@ -1399,9 +1399,13 @@ async function buildBundle(symbol: string, force: boolean) {
     yAnnual = mergePoints(yAnnual, fallbackAnnualFromQuote(quote));
   }
 
-  // FMP primary, Yahoo fills gaps per-date and per-field
-  const quarters = applyGrowthFallback(enrichQuarters(mergePoints(fmpQuartersRaw, yQuarters), yahooGrowth), fmp?.growthQ ?? []).slice(0, RAW_QUARTERS_FOR_YOY);
-  const annual = applyGrowthFallback(enrichAnnual(mergePoints(fmpAnnualRaw, yAnnual)), fmp?.growthA ?? []).slice(0, 5);
+  // Priority: Finnhub reported > FMP > Yahoo (per-date, per-field gap filling)
+  const quarters = applyGrowthFallback(
+    enrichQuarters(mergePoints(combinedQuartersRaw, yQuarters), yahooGrowth),
+    fmp?.growthQ ?? [],
+  ).slice(0, RAW_QUARTERS_FOR_YOY);
+  const annual = applyGrowthFallback(enrichAnnual(mergePoints(combinedAnnualRaw, yAnnual)), fmp?.growthA ?? []).slice(0, 5);
+
   quality.coverage = computeCoverage(quarters, annual);
 
   const fhMetric = fh?.metric ?? {};
