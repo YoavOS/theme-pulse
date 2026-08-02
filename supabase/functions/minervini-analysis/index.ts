@@ -1344,9 +1344,13 @@ async function buildBundle(symbol: string, force: boolean) {
   );
   const finnhubDeepEnough =
     fhQuartersRaw.length >= RAW_QUARTERS_FOR_YOY &&
-    fhProbe.quarterlyRevenueYoY >= MIN_QUARTER_TREND_COUNT &&
-    fhProbe.quarterlyEpsYoY >= MIN_QUARTER_TREND_COUNT &&
-    fhAnnualRaw.length >= 4;
+    fhProbe.quarterlyRevenueYoY >= TARGET_QUARTER_TREND_COUNT &&
+    fhProbe.quarterlyEpsYoY >= TARGET_QUARTER_TREND_COUNT &&
+    fhProbe.quarterlyCashFlow >= MIN_QUARTER_TREND_COUNT &&
+    fhAnnualRaw.length >= 4 &&
+    fhProbe.annualRevenueYoY >= 2 &&
+    fhProbe.annualEpsYoY >= 2;
+
 
   // ----- Secondary source: FMP (full statement bundle only when Finnhub is short) -----
   const fmp = await fetchFmpBundle(symbol, quality, finnhubDeepEnough ? "lite" : "full");
