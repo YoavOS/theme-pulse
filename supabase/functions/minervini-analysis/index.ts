@@ -478,17 +478,19 @@ async function fmpGet(path: string, quality: DataQuality, version: "v3" | "v4" =
   return null;
 }
 
-async function fetchFmpBundle(symbol: string, quality: DataQuality) {
+async function fetchFmpBundle(symbol: string, quality: DataQuality, mode: "full" | "lite" = "full") {
   if (!FMP_KEY) return null;
+  const none = Promise.resolve(null);
+  const deep = mode === "full";
   const [incQ, incA, bsQ, bsA, cfQ, cfA, kmQ, kmA, growthQ, growthA, ratiosTTM, surp, profile, instOwn] = await Promise.all([
-    fmpGet(`income-statement/${symbol}?period=quarter&limit=${RAW_QUARTERS_FOR_YOY}`, quality),
-    fmpGet(`income-statement/${symbol}?period=annual&limit=10`, quality),
-    fmpGet(`balance-sheet-statement/${symbol}?period=quarter&limit=${RAW_QUARTERS_FOR_YOY}`, quality),
-    fmpGet(`balance-sheet-statement/${symbol}?period=annual&limit=10`, quality),
-    fmpGet(`cash-flow-statement/${symbol}?period=quarter&limit=${RAW_QUARTERS_FOR_YOY}`, quality),
-    fmpGet(`cash-flow-statement/${symbol}?period=annual&limit=10`, quality),
-    fmpGet(`key-metrics/${symbol}?period=quarter&limit=${RAW_QUARTERS_FOR_YOY}`, quality),
-    fmpGet(`key-metrics/${symbol}?period=annual&limit=5`, quality),
+    deep ? fmpGet(`income-statement/${symbol}?period=quarter&limit=${RAW_QUARTERS_FOR_YOY}`, quality) : none,
+    deep ? fmpGet(`income-statement/${symbol}?period=annual&limit=10`, quality) : none,
+    deep ? fmpGet(`balance-sheet-statement/${symbol}?period=quarter&limit=${RAW_QUARTERS_FOR_YOY}`, quality) : none,
+    deep ? fmpGet(`balance-sheet-statement/${symbol}?period=annual&limit=10`, quality) : none,
+    deep ? fmpGet(`cash-flow-statement/${symbol}?period=quarter&limit=${RAW_QUARTERS_FOR_YOY}`, quality) : none,
+    deep ? fmpGet(`cash-flow-statement/${symbol}?period=annual&limit=10`, quality) : none,
+    fmpGet(`key-metrics/${symbol}?period=quarter&limit=${deep ? RAW_QUARTERS_FOR_YOY : 1}`, quality),
+    deep ? fmpGet(`key-metrics/${symbol}?period=annual&limit=5`, quality) : none,
     fmpGet(`financial-growth/${symbol}?period=quarter&limit=${TARGET_QUARTER_TREND_COUNT}`, quality),
     fmpGet(`financial-growth/${symbol}?period=annual&limit=5`, quality),
     fmpGet(`ratios-ttm/${symbol}`, quality),
@@ -496,6 +498,7 @@ async function fetchFmpBundle(symbol: string, quality: DataQuality) {
     fmpGet(`profile/${symbol}`, quality),
     fmpGet(`institutional-ownership/symbol-ownership-percent?symbol=${symbol}&date=&page=0`, quality, "v4"),
   ]);
+
   const a = (x: any) => Array.isArray(x) ? x : [];
   const first = (x: any) => Array.isArray(x) ? x[0] : x;
   return {
