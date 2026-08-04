@@ -9,6 +9,8 @@ const corsHeaders = {
 
 const CALL_DELAY_MS = 1100;
 const CACHE_TTL_HOURS = 24;
+// Stop well before the 150s platform idle timeout and return partial results.
+const TIME_BUDGET_MS = 100_000;
 
 function jsonResponse(body: Record<string, unknown>, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -270,9 +272,17 @@ serve(async (req) => {
 
     const results: Record<string, any> = { ...cachedMap };
 
+    const startedAt = Date.now();
+    let processed = 0;
+
     for (let i = 0; i < toFetch.length; i++) {
       const symbol = toFetch[i];
+      if (Date.now() - startedAt > TIME_BUDGET_MS) {
+        console.log(`Time budget reached after ${processed} symbols; ${toFetch.length - i} remaining`);
+        break;
+      }
       if (i > 0) await sleep(CALL_DELAY_MS);
+      processed = i + 1;
 
       try {
         // 1. Stock metrics
@@ -388,7 +398,13 @@ serve(async (req) => {
       }
     }
 
-    return jsonResponse({ fundamentals: results, fetched: toFetch.length, cached: cachedSymbols.size });
+    const remaining = toFetch.slice(processed);
+    return jsonResponse({
+      fundamentals: results,
+      fetched: processed,
+      cached: cachedSymbols.size,
+      remaining,
+    });
   } catch (e) {
     console.error("Unhandled error in fetch-fundamentals:", e);
     return jsonResponse({ error: "internal_error", message: "An unexpected error occurred" }, 500);

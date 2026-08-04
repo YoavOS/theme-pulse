@@ -129,16 +129,21 @@ export function useFundamentals() {
 
     try {
       const uniqueSymbols = [...new Set(symbols)];
-      const result = await supabase.functions.invoke("fetch-fundamentals", {
-        body: { symbols: uniqueSymbols },
-      });
-
-      if (result.error) {
-        console.error("Fundamentals fetch error:", result.error);
-        return {};
+      const fundamentals: Record<string, FundamentalsData> = {};
+      let pending = uniqueSymbols;
+      let guard = 0;
+      while (pending.length > 0 && guard++ < 20) {
+        const result = await supabase.functions.invoke("fetch-fundamentals", {
+          body: { symbols: pending },
+        });
+        if (result.error) {
+          console.error("Fundamentals fetch error:", result.error);
+          break;
+        }
+        Object.assign(fundamentals, result.data?.fundamentals ?? {});
+        pending = (result.data?.remaining ?? []) as string[];
       }
 
-      const fundamentals: Record<string, FundamentalsData> = result.data?.fundamentals || {};
       setCache(prev => ({ ...prev, [key]: { data: fundamentals, fetchedAt: Date.now() } }));
       return fundamentals;
     } catch (e) {
