@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -499,9 +499,8 @@ export default function SuperperformanceScanModal({
                 </thead>
                 <tbody>
                   {sortedRows.map((r) => (
-                    <>
+                    <Fragment key={r.symbol}>
                       <tr
-                        key={r.symbol}
                         className="border-b border-border/40 hover:bg-muted/30 cursor-pointer"
                         onClick={() => openBreakdown(r.symbol)}
                         title="Click for score breakdown"
@@ -517,7 +516,7 @@ export default function SuperperformanceScanModal({
                         <td className="px-2 py-1 text-right text-xs text-muted-foreground">{new Date(r.last_scanned).toLocaleDateString()}</td>
                       </tr>
                       {breakdownSymbol === r.symbol && (
-                        <tr key={`${r.symbol}-bd`} className="bg-muted/20">
+                        <tr className="bg-muted/20">
                           <td colSpan={6} className="px-3 py-3">
                             {breakdownLoading ? (
                               <div className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -571,7 +570,7 @@ export default function SuperperformanceScanModal({
                           </td>
                         </tr>
                       )}
-                    </>
+                    </Fragment>
                   ))}
                 </tbody>
               </table>
