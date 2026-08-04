@@ -1539,6 +1539,16 @@ export default function RsAlpha() {
         open={superperfScanOpen}
         onOpenChange={setSuperperfScanOpen}
         universe={stocks.filter((s) => !isOtcSymbol(s.symbol)).map((s) => s.symbol)}
+        universeStocks={stocks}
+        ratingMap={ratingMap}
+        getRsForTab={getRsForTab as any}
+        getReturnField={getReturnField as any}
+        isOtcSymbol={isOtcSymbol}
+        fundamentalsMap={fundamentalsMap}
+        coilScores={coilScores}
+        emaDistances={emaDistances}
+        nh52wMap={nh52wMap}
+        qqqPctChange={qqqPctChange}
       />
     </div>
   );
