@@ -158,7 +158,7 @@ export default function MarketFlag() {
                       className="rounded px-1.5 py-0.5 font-mono text-[11px] font-bold"
                       style={{ background: `${scoreColor(f.score)}22`, color: scoreColor(f.score) }}
                     >
-                      {f.score > 0 ? "+" : ""}{f.score}
+                      {f.score > 0 ? "+" : ""}{f.score.toFixed(1)}
                     </span>
                   </div>
                   <div className="mt-1 font-mono text-sm">{f.value}</div>
