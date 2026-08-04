@@ -9,6 +9,8 @@ const corsHeaders = {
 
 const CALL_DELAY_MS = 1100;
 const CACHE_TTL_HOURS = 24;
+// Stop well before the 150s platform idle timeout and return partial results.
+const TIME_BUDGET_MS = 100_000;
 
 function jsonResponse(body: Record<string, unknown>, status = 200) {
   return new Response(JSON.stringify(body), {
