@@ -398,7 +398,13 @@ serve(async (req) => {
       }
     }
 
-    return jsonResponse({ fundamentals: results, fetched: toFetch.length, cached: cachedSymbols.size });
+    const remaining = toFetch.slice(processed);
+    return jsonResponse({
+      fundamentals: results,
+      fetched: processed,
+      cached: cachedSymbols.size,
+      remaining,
+    });
   } catch (e) {
     console.error("Unhandled error in fetch-fundamentals:", e);
     return jsonResponse({ error: "internal_error", message: "An unexpected error occurred" }, 500);
