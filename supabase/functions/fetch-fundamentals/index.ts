@@ -272,9 +272,17 @@ serve(async (req) => {
 
     const results: Record<string, any> = { ...cachedMap };
 
+    const startedAt = Date.now();
+    let processed = 0;
+
     for (let i = 0; i < toFetch.length; i++) {
       const symbol = toFetch[i];
+      if (Date.now() - startedAt > TIME_BUDGET_MS) {
+        console.log(`Time budget reached after ${processed} symbols; ${toFetch.length - i} remaining`);
+        break;
+      }
       if (i > 0) await sleep(CALL_DELAY_MS);
+      processed = i + 1;
 
       try {
         // 1. Stock metrics
