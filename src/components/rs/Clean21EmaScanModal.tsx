@@ -188,18 +188,23 @@ export default function Clean21EmaScanModal({ open, onOpenChange, universe, rati
     setFundProgress({ done: 0, total: rows.length });
     try {
       const syms = rows.map(r => r.symbol);
-      const CHUNK = 40;
+      const CHUNK = 15;
       const merged: Record<string, FundamentalsData> = {};
       for (let i = 0; i < syms.length; i += CHUNK) {
-        const slice = syms.slice(i, i + CHUNK);
-        const { data, error } = await supabase.functions.invoke("fetch-fundamentals", {
-          body: { symbols: slice },
-        });
-        if (error) throw new Error(error.message);
-        const fundamentals = (data as { fundamentals?: Record<string, FundamentalsData> } | null)?.fundamentals ?? {};
-        Object.assign(merged, fundamentals);
-        setFundMap({ ...merged });
-        setFundProgress({ done: Math.min(syms.length, i + slice.length), total: syms.length });
+        let slice = syms.slice(i, i + CHUNK);
+        // The edge function returns partial results if it hits its time budget.
+        let guard = 0;
+        while (slice.length > 0 && guard++ < 10) {
+          const { data, error } = await supabase.functions.invoke("fetch-fundamentals", {
+            body: { symbols: slice },
+          });
+          if (error) throw new Error(error.message);
+          const res = data as { fundamentals?: Record<string, FundamentalsData>; remaining?: string[] } | null;
+          Object.assign(merged, res?.fundamentals ?? {});
+          setFundMap({ ...merged });
+          slice = res?.remaining ?? [];
+        }
+        setFundProgress({ done: Math.min(syms.length, i + CHUNK), total: syms.length });
       }
       const covered = Object.values(merged).filter(f => f?.fundamental_score != null).length;
       toast.success(`Fundamentals loaded for ${covered}/${syms.length} tickers.`);
