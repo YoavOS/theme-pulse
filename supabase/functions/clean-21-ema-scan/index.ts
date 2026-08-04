@@ -167,25 +167,13 @@ function computeRow(
     periodsWithoutBelow++;
   }
 
-  // The period input is a minimum clean-streak requirement, not the gain window.
-  // The gain threshold is a prior-advance filter: qualify if the stock has made
-  // the requested move either during the current uninterrupted EMA run OR from
-  // the lowest close in the available recent history. This keeps names like ENVA
-  // eligible after a brief reset below the EMA, once they rebuild the requested
-  // clean streak above the EMA.
-  const cleanRunStartIdx = Math.max(0, closes.length - periodsWithoutBelow);
+  // Performance is measured strictly from the first close above the EMA after
+  // the last close below it (i.e. the start of the current clean run) up to the
+  // latest close. No "prior advance" shortcut — that let unqualified names in.
   const latestClose = closes[closes.length - 1];
-  const cleanRunStartClose = periodsWithoutBelow > 0 ? closes[cleanRunStartIdx] : closes[Math.max(0, closes.length - minPeriod)];
-  let lowIdx = 0;
-  for (let i = 1; i < closes.length; i++) {
-    if (closes[i] < closes[lowIdx]) lowIdx = i;
-  }
-  const priorAdvanceStartClose = closes[lowIdx];
-  const cleanRunGainPct = pctGain(cleanRunStartClose, latestClose);
-  const priorAdvanceGainPct = pctGain(priorAdvanceStartClose, latestClose);
-  const usePriorAdvance = (priorAdvanceGainPct ?? -Infinity) >= (cleanRunGainPct ?? -Infinity);
-  const startClose = usePriorAdvance ? priorAdvanceStartClose : cleanRunStartClose;
-  const gainPct = usePriorAdvance ? priorAdvanceGainPct : cleanRunGainPct;
+  const cleanRunStartIdx = Math.max(0, closes.length - periodsWithoutBelow);
+  const startClose = periodsWithoutBelow > 0 ? closes[cleanRunStartIdx] : latestClose;
+  const gainPct = periodsWithoutBelow > 0 ? pctGain(startClose, latestClose) : null;
   const emaValue = ema[ema.length - 1];
   const qualifies = periodsWithoutBelow >= minPeriod && gainPct !== null && gainPct >= minGainPct;
   const periodMultiplier = timeframe === "weekly" ? 5 : 1;
