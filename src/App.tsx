@@ -13,6 +13,7 @@ import LiveExecution from "./pages/LiveExecution";
 import Earnings from "./pages/Earnings";
 import MarketDrivers from "./pages/MarketDrivers";
 import MorningBrief from "./pages/MorningBrief";
+import MarketFlag from "./pages/MarketFlag";
 import StorageManager from "./pages/StorageManager";
 import MinerviniChecker from "./pages/MinerviniChecker";
 import NotFound from "./pages/NotFound";
@@ -36,6 +37,7 @@ const App = () => (
             <Route path="/earnings" element={<Earnings />} />
             <Route path="/market-drivers" element={<MarketDrivers />} />
             <Route path="/morning-brief" element={<MorningBrief />} />
+            <Route path="/market-flag" element={<MarketFlag />} />
             <Route path="/storage" element={<StorageManager />} />
             <Route path="/minervini" element={<MinerviniChecker />} />
             <Route path="*" element={<NotFound />} />

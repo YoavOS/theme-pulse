@@ -220,6 +220,7 @@ export default function Index() {
   const dashboardTabs = [
     { to: "/", label: "Dashboard", icon: <LayoutDashboard size={14} />, active: true, color: "" },
     { to: "/morning-brief", label: "Morning Brief", icon: <Sun size={14} />, active: false, color: "text-[hsl(40,90%,55%)]" },
+    { to: "/market-flag", label: "Market Flag", icon: <Flag size={14} />, active: false, color: "text-[hsl(150,70%,45%)]" },
     { to: "/intelligence", label: "Intelligence", icon: <Brain size={14} />, active: false, color: "text-primary" },
     { to: "/rs-alpha", label: "RS Alpha", icon: <Zap size={14} />, active: false, color: "text-[hsl(280,70%,60%)]" },
     { to: "/live", label: "Live Execution", icon: <Activity size={14} />, active: false, color: "text-[hsl(160,80%,45%)]" },
