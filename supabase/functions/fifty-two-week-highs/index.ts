@@ -34,6 +34,18 @@ interface Row {
   pctBelowHigh: number | null;    // (latestClose / high52w - 1) * 100
   source: "cache" | "yahoo" | "none";
   error?: string;
+  // ── Extended setup metrics (all derived from the same cached 1y OHLC) ──
+  low52w?: number | null;
+  pctAboveLow?: number | null;
+  sma50?: number | null;
+  sma150?: number | null;
+  sma200?: number | null;
+  avgVol10?: number | null;
+  avgVol30?: number | null;
+  dollarVol10?: number | null;   // latestClose * avgVol10
+  volSurgePct?: number | null;   // (avgVol10 / avgVol30 - 1) * 100
+  coilWeekly?: number | null;    // last 5 weekly ranges avg / previous 10 weekly ranges avg
+  coilMonthly?: number | null;   // last 3 monthly ranges avg / previous 6 monthly ranges avg
 }
 
 function json(body: unknown, status = 200) {
@@ -57,6 +69,47 @@ function sanitize(input: unknown): string[] {
   return out;
 }
 
+function round2(v: number | null): number | null {
+  return v === null || !Number.isFinite(v) ? null : Math.round(v * 100) / 100;
+}
+
+function smaOf(closes: number[], n: number): number | null {
+  if (closes.length < n) return null;
+  const slice = closes.slice(-n);
+  return slice.reduce((a, b) => a + b, 0) / n;
+}
+
+/** Group daily bars into period buckets and return avg range% for the last N vs the previous M buckets. */
+function coilRatio(bars: OHLCBar[], keyOf: (ts: number) => string, recent: number, baseline: number): number | null {
+  const buckets = new Map<string, { high: number; low: number; close: number }>();
+  for (const b of bars) {
+    if (b.high === null || b.low === null || b.close === null) continue;
+    const k = keyOf(b.ts);
+    const cur = buckets.get(k);
+    if (!cur) buckets.set(k, { high: b.high, low: b.low, close: b.close });
+    else {
+      cur.high = Math.max(cur.high, b.high);
+      cur.low = Math.min(cur.low, b.low);
+      cur.close = b.close;
+    }
+  }
+  const ordered = Array.from(buckets.entries()).sort((a, b) => (a[0] < b[0] ? -1 : 1)).map(e => e[1]);
+  if (ordered.length < recent + baseline) return null;
+  const ranges = ordered.map(o => (o.close > 0 ? ((o.high - o.low) / o.close) * 100 : 0));
+  const recentAvg = ranges.slice(-recent).reduce((a, b) => a + b, 0) / recent;
+  const baseAvg = ranges.slice(-(recent + baseline), -recent).reduce((a, b) => a + b, 0) / baseline;
+  if (!(baseAvg > 0)) return null;
+  return Math.round((recentAvg / baseAvg) * 1000) / 1000;
+}
+
+function weekKey(ts: number): string {
+  return String(Math.floor(ts / 604800)).padStart(8, "0");
+}
+function monthKey(ts: number): string {
+  const d = new Date(ts * 1000);
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+
 function computeFromOhlc(symbol: string, ohlc: OHLCBar[], source: Row["source"]): Row {
   // Consider the last ~365 days worth of bars.
   const cutoff = Math.floor(Date.now() / 1000) - 366 * 86400;
@@ -65,7 +118,11 @@ function computeFromOhlc(symbol: string, ohlc: OHLCBar[], source: Row["source"])
     return { symbol, high52w: null, latestClose: null, lastHighDaysAgo: null, pctBelowHigh: null, source, error: "insufficient_history" };
   }
   let high = 0;
-  for (const b of bars) if ((b.high as number) > high) high = b.high as number;
+  let low = Number.POSITIVE_INFINITY;
+  for (const b of bars) {
+    if ((b.high as number) > high) high = b.high as number;
+    if (b.low !== null && b.low > 0 && b.low < low) low = b.low;
+  }
   // Find last bar within 0.05% of the 52W high (accounts for split-adjust rounding).
   const threshold = high * 0.9995;
   let lastHighTs = 0;
@@ -75,15 +132,34 @@ function computeFromOhlc(symbol: string, ohlc: OHLCBar[], source: Row["source"])
   const lastClose = [...bars].reverse().find(b => b.close !== null)?.close ?? null;
   const daysAgo = lastHighTs > 0 ? Math.max(0, Math.floor((Date.now() / 1000 - lastHighTs) / 86400)) : null;
   const pctBelow = lastClose && high > 0 ? Math.round(((lastClose / high - 1) * 10000)) / 100 : null;
+
+  const closes = bars.map(b => b.close).filter((v): v is number => v !== null && v > 0);
+  const vols = bars.map(b => b.volume).filter((v): v is number => v !== null && v >= 0);
+  const avgVol10 = vols.length >= 10 ? vols.slice(-10).reduce((a, b) => a + b, 0) / 10 : null;
+  const avgVol30 = vols.length >= 30 ? vols.slice(-30).reduce((a, b) => a + b, 0) / 30 : null;
+  const lowFinite = Number.isFinite(low) ? low : null;
+
   return {
     symbol,
-    high52w: Math.round(high * 100) / 100,
-    latestClose: lastClose !== null ? Math.round(lastClose * 100) / 100 : null,
+    high52w: round2(high),
+    latestClose: round2(lastClose),
     lastHighDaysAgo: daysAgo,
     pctBelowHigh: pctBelow,
     source,
+    low52w: round2(lowFinite),
+    pctAboveLow: lastClose && lowFinite && lowFinite > 0 ? round2((lastClose / lowFinite - 1) * 100) : null,
+    sma50: round2(smaOf(closes, 50)),
+    sma150: round2(smaOf(closes, 150)),
+    sma200: round2(smaOf(closes, 200)),
+    avgVol10: avgVol10 !== null ? Math.round(avgVol10) : null,
+    avgVol30: avgVol30 !== null ? Math.round(avgVol30) : null,
+    dollarVol10: avgVol10 !== null && lastClose ? Math.round(avgVol10 * lastClose) : null,
+    volSurgePct: avgVol10 !== null && avgVol30 !== null && avgVol30 > 0 ? round2((avgVol10 / avgVol30 - 1) * 100) : null,
+    coilWeekly: coilRatio(bars, weekKey, 5, 10),
+    coilMonthly: coilRatio(bars, monthKey, 3, 6),
   };
 }
+
 
 async function fetchYahoo1y(symbol: string): Promise<OHLCBar[] | null> {
   const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=1y&interval=1d&includePrePost=false`;
