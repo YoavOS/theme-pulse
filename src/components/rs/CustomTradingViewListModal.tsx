@@ -20,6 +20,8 @@ import { useInsideCandles } from "@/hooks/useInsideCandles";
 import { useFiftyTwoWeekHighs } from "@/hooks/useFiftyTwoWeekHighs";
 import type { FiftyTwoWeekHigh } from "@/hooks/useFiftyTwoWeekHighs";
 import CandleSummaryBar from "@/components/rs/CandleSummaryBar";
+import { useSetupMetrics } from "@/hooks/useSetupMetrics";
+
 
 export type CustomListTab = "overall" | "1d" | "1w" | "1m" | "3m" | "6m";
 type SortBy =
@@ -82,6 +84,11 @@ interface FilterState {
   near52wPct: number;
   insideCandleOn: boolean;
   insideCandleTfs: { daily: boolean; weekly: boolean; monthly: boolean };
+  coilWeeklyOn: boolean;
+  maxCoilWeekly: number;
+  coilMonthlyOn: boolean;
+  maxCoilMonthly: number;
+
 }
 
 interface ScannerProfile {
@@ -226,7 +233,12 @@ const DEFAULT_FILTERS: FilterState = {
   near52wPct: 8,
   insideCandleOn: false,
   insideCandleTfs: { daily: true, weekly: false, monthly: false },
+  coilWeeklyOn: false,
+  maxCoilWeekly: 0.65,
+  coilMonthlyOn: false,
+  maxCoilMonthly: 0.70,
 };
+
 
 function loadUserProfiles(): ScannerProfile[] {
   if (typeof window === "undefined") return [];
