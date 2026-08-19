@@ -165,6 +165,7 @@ export default function CustomListAnalyzerModal({
   const [raw, setRaw] = useState<string>("");
   const [analyzed, setAnalyzed] = useState<boolean>(false);
   const [dragOver, setDragOver] = useState<boolean>(false);
+  const [mode, setMode] = useState<"simple" | "theme_setup">("simple");
   const [lastFileName, setLastFileName] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
