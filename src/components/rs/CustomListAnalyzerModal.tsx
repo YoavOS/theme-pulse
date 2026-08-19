@@ -22,6 +22,7 @@ import { computeRsRatings } from "@/components/rs/RsRatingBadge";
 import RsRatingBadge from "@/components/rs/RsRatingBadge";
 import { useDailyCandles } from "@/hooks/useDailyCandles";
 import CandleSummaryBar from "@/components/rs/CandleSummaryBar";
+import ThemeSetupAnalyzer from "@/components/rs/ThemeSetupAnalyzer";
 
 
 export type AnalyzerTab = "overall" | "1d" | "1w" | "1m" | "3m" | "6m";
@@ -165,6 +166,7 @@ export default function CustomListAnalyzerModal({
   const [raw, setRaw] = useState<string>("");
   const [analyzed, setAnalyzed] = useState<boolean>(false);
   const [dragOver, setDragOver] = useState<boolean>(false);
+  const [mode, setMode] = useState<"simple" | "theme_setup">("simple");
   const [lastFileName, setLastFileName] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -468,14 +470,32 @@ export default function CustomListAnalyzerModal({
       <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <ListChecks size={18} /> Custom List Analyzer · {tabLabel}
+            <ListChecks size={18} /> {mode === "simple" ? `Custom List Analyzer · ${tabLabel}` : "Theme Setup Analyzer"}
           </DialogTitle>
           <DialogDescription>
-            Paste, upload (.txt) or drop a TradingView list. Exchange prefixes like <code>NYSE:</code> / <code>NASDAQ:</code> are stripped automatically.
+            {mode === "simple"
+              ? <>Paste, upload (.txt) or drop a TradingView list. Exchange prefixes like <code>NYSE:</code> / <code>NASDAQ:</code> are stripped automatically.</>
+              : <>Combine multiple screens (RS, Superperformance, Clean EMA, 52W Highs, Volume, Coil) into a layered theme setup ranking.</>}
           </DialogDescription>
         </DialogHeader>
 
-        {!analyzed ? (
+        {/* Mode toggle */}
+        <div className="flex items-center gap-1 rounded-lg border border-border bg-muted/20 p-1 text-xs">
+          {([["simple", "Simple Analyze"], ["theme_setup", "Theme Setup Analyzer"]] as const).map(([id, label]) => (
+            <button
+              key={id}
+              onClick={() => setMode(id)}
+              className={`flex-1 rounded-md px-3 py-1.5 font-medium transition ${mode === id ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-accent"}`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {mode === "theme_setup" ? (
+          <ThemeSetupAnalyzer universe={universe} isOtcSymbol={isOtcSymbol} />
+        ) : !analyzed ? (
+
           <div className="space-y-3">
             {/* Drag & drop / upload zone */}
             <div

@@ -517,8 +517,9 @@ export default function ThemeSetupAnalyzer({ universe, isOtcSymbol }: Props) {
                       outerRadius={95}
                       paddingAngle={1}
                       activeIndex={activeIndex ?? undefined}
-                      activeShape={(props: Record<string, unknown>) => (
-                        <Sector {...(props as never)} outerRadius={(props.outerRadius as number) + 6} />
+                      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                      activeShape={(props: any) => (
+                        <Sector {...props} outerRadius={(props.outerRadius ?? 95) + 6} />
                       )}
                       onMouseEnter={(_, i) => setActiveIndex(i)}
                       onMouseLeave={() => setActiveIndex(null)}
