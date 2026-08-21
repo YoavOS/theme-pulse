@@ -72,13 +72,6 @@ const GROUP_LABEL_LC: Record<GroupMode, string> = {
   theme: "themes", industry: "industries", sector: "sectors",
 };
 
-const SLICE_COLORS = [
-  "hsl(160, 70%, 50%)", "hsl(200, 80%, 55%)", "hsl(280, 65%, 60%)",
-  "hsl(30, 85%, 55%)", "hsl(340, 75%, 60%)", "hsl(50, 85%, 55%)",
-  "hsl(180, 70%, 50%)", "hsl(260, 70%, 65%)", "hsl(15, 80%, 60%)",
-  "hsl(100, 55%, 50%)", "hsl(220, 70%, 60%)", "hsl(320, 60%, 60%)",
-];
-const UNASSIGNED_COLOR = "hsl(0, 0%, 40%)";
 
 const CLEAN_EMA_LS_KEY = "rs-clean-ema-uptrend-v4";
 
