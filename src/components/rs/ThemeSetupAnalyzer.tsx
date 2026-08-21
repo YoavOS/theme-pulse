@@ -162,8 +162,11 @@ export default function ThemeSetupAnalyzer({ universe, isOtcSymbol }: Props) {
   const [runNote, setRunNote] = useState<string | null>(null);
   const [cleanEmaSet, setCleanEmaSet] = useState<Set<string> | null>(null);
   const [membership, setMembership] = useState<Map<string, Set<ListId>> | null>(null);
-  const [activeIndex, setActiveIndex] = useState<number | null>(null);
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [groupMode, setGroupMode] = useState<GroupMode>("industry");
+  const [viewList, setViewList] = useState<ListId | null>(null);
+  const [overlapSel, setOverlapSel] = useState<Set<ListId>>(new Set());
+
 
   const toggle = (id: ListId) => setEnabled(p => ({ ...p, [id]: !p[id] }));
 
