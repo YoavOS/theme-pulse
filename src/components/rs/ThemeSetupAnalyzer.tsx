@@ -11,7 +11,8 @@ import { useCuratedThemes } from "@/hooks/useCuratedThemes";
 import { useSuperperformance } from "@/hooks/useSuperperformance";
 import { useSetupMetrics, type SetupMetrics } from "@/hooks/useSetupMetrics";
 import GroupConcentrationPanel, { type ConcentrationItem } from "@/components/shared/GroupConcentrationPanel";
-import type { GroupMode } from "@/lib/groupColors";
+import { GROUP_MODE_LABEL, type GroupMode } from "@/lib/groupColors";
+import { gicsForIndustry } from "@/lib/sectorTaxonomy";
 
 
 /* ───────────────────────── Types & config ───────────────────────── */
@@ -66,6 +67,10 @@ const LIST_LABEL: Record<ListId, string> = {
 };
 
 const RS_TFS: RsTf[] = ["1d", "1w", "1m", "3m", "6m", "overall"];
+
+const GROUP_LABEL_LC: Record<GroupMode, string> = {
+  theme: "themes", industry: "industries", sector: "sectors",
+};
 
 const SLICE_COLORS = [
   "hsl(160, 70%, 50%)", "hsl(200, 80%, 55%)", "hsl(280, 65%, 60%)",
