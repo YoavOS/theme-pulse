@@ -74,6 +74,7 @@ const GROUP_LABEL_LC: Record<GroupMode, string> = {
 
 
 const CLEAN_EMA_LS_KEY = "rs-clean-ema-uptrend-v4";
+const SNAP_LS_KEY = "theme-setup-analyzer-snapshot-v1";
 
 interface CleanEmaSaved {
   at: number;
@@ -164,6 +165,9 @@ export default function ThemeSetupAnalyzer({ universe, isOtcSymbol }: Props) {
   const [groupMode, setGroupMode] = useState<GroupMode>("industry");
   const [viewList, setViewList] = useState<ListId | null>(null);
   const [overlapSel, setOverlapSel] = useState<Set<ListId>>(new Set());
+  const [snapshot, setSnapshot] = useState<Record<string, number> | null>(() => {
+    try { const r = localStorage.getItem(SNAP_LS_KEY); return r ? JSON.parse(r) as Record<string, number> : null; } catch { return null; }
+  });
 
 
   const toggle = (id: ListId) => setEnabled(p => ({ ...p, [id]: !p[id] }));
@@ -324,8 +328,9 @@ export default function ThemeSetupAnalyzer({ universe, isOtcSymbol }: Props) {
           }
 
           if (enabled.coil) {
-            const weekly = m.coilWeekly !== null && m.coilWeekly <= 0.65;
-            const monthly = m.coilMonthly !== null && m.coilMonthly <= 0.70;
+            // Real contraction ratios cluster near 1.0 — 0.65 was unreachable.
+            const weekly = m.coilWeekly !== null && m.coilWeekly <= 0.85;
+            const monthly = m.coilMonthly !== null && m.coilMonthly <= 0.90;
             if (weekly || monthly) add(s.symbol, "coil");
           }
         }
@@ -702,6 +707,18 @@ export default function ThemeSetupAnalyzer({ universe, isOtcSymbol }: Props) {
               <span className="text-xs font-semibold text-foreground">Theme Setup Score Ranking</span>
               <div className="flex items-center gap-2">
                 <button
+                  onClick={() => {
+                    const snap: Record<string, number> = {};
+                    for (const t of themeAggs) snap[t.name] = t.score;
+                    try { localStorage.setItem(SNAP_LS_KEY, JSON.stringify(snap)); } catch { /* quota */ }
+                    setSnapshot(snap);
+                    toast.success("Snapshot saved — future runs show the score change per theme.");
+                  }}
+                  className="inline-flex items-center gap-1 rounded border border-border/60 px-2 py-1 text-[11px] text-muted-foreground hover:text-foreground"
+                >
+                  <Save size={11} /> Save snapshot
+                </button>
+                <button
                   onClick={() => copyList(Array.from(membership.keys()), "all qualifying stocks")}
                   className="inline-flex items-center gap-1 rounded border border-border/60 px-2 py-1 text-[11px] text-muted-foreground hover:text-foreground"
                 >
@@ -731,7 +748,20 @@ export default function ThemeSetupAnalyzer({ universe, isOtcSymbol }: Props) {
                         <span className="ml-2 font-mono text-[10px] text-muted-foreground">
                           {t.symbols.length}/{t.themeSize}
                         </span>
+                        {snapshot && typeof snapshot[t.name] === "number" && Math.abs(t.score - snapshot[t.name]) >= 0.1 && (
+                          <span className={`ml-2 font-mono text-[10px] ${t.score > snapshot[t.name] ? "text-gain-medium" : "text-loss-strong"}`}>
+                            {t.score > snapshot[t.name] ? "+" : ""}{(t.score - snapshot[t.name]).toFixed(1)} vs snapshot
+                          </span>
+                        )}
+                        {snapshot && snapshot[t.name] === undefined && (
+                          <span className="ml-2 rounded bg-primary/15 px-1 font-mono text-[9px] text-primary">NEW</span>
+                        )}
                       </span>
+                      {t.baseDensity >= 0.15 && (
+                        <span className="inline-flex items-center gap-1 rounded border border-[hsl(200,80%,55%)]/40 bg-[hsl(200,80%,55%)]/10 px-1.5 py-0.5 text-[9px] font-semibold text-[hsl(200,80%,55%)]">
+                          <Waves size={9} /> Early / Basing
+                        </span>
+                      )}
                       <span className="flex flex-wrap items-center gap-1">
                         {LAYERS.filter(l => t.layerScores[l.id] >= 0.25).map(l => {
                           const Icon = l.icon;
