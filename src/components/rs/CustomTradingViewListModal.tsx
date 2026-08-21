@@ -492,6 +492,14 @@ export default function CustomTradingViewListModal({
   );
   const { insideMap, loading: insideLoading } = useInsideCandles(insideCandleSymbols, open && state.insideCandleOn);
 
+  // Weekly / Monthly coil (range-contraction) — reuses the cached 1y OHLC metrics.
+  const coilTfOn = state.coilWeeklyOn || state.coilMonthlyOn;
+  const { metrics: setupMetrics, loading: setupLoading, load: loadSetupMetrics } = useSetupMetrics();
+  useEffect(() => {
+    if (!open || !coilTfOn) return;
+    loadSetupMetrics(prefiltered.map((s) => s.symbol));
+  }, [open, coilTfOn, prefiltered, loadSetupMetrics]);
+
   const filtered = useMemo(() => {
     const candlePct = (sym: string): number | null => {
       const c = candleMap.get(sym);
@@ -508,8 +516,18 @@ export default function CustomTradingViewListModal({
       if (!info) return insideLoading; // keep list stable while data is in-flight
       return enabled.some((k) => info[k] === true);
     };
-    const base = prefiltered.filter((s) => insideOk(s.symbol));
+    // Coil filters pass when EITHER enabled timeframe contracts enough.
+    const coilOk = (sym: string): boolean => {
+      if (!coilTfOn) return true;
+      const m = setupMetrics.get(sym);
+      if (!m) return setupLoading;
+      const w = state.coilWeeklyOn && m.coilWeekly !== null && m.coilWeekly <= state.maxCoilWeekly;
+      const mo = state.coilMonthlyOn && m.coilMonthly !== null && m.coilMonthly <= state.maxCoilMonthly;
+      return w || mo;
+    };
+    const base = prefiltered.filter((s) => insideOk(s.symbol) && coilOk(s.symbol));
     const list = [...base].sort((a, b) => {
+
       switch (state.sortBy) {
         case "rs":      return (getRsForTab(b, tabId) ?? -999) - (getRsForTab(a, tabId) ?? -999);
         case "rating":  return (ratingMap.get(b.symbol) ?? -1) - (ratingMap.get(a.symbol) ?? -1);
