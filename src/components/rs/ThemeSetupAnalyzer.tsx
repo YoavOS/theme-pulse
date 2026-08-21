@@ -1,7 +1,6 @@
 import { useCallback, useMemo, useState } from "react";
-import { Copy, Download, Loader2, Play, Layers, Flame, Crown, Gem, Boxes, ArrowUpRight, ArrowDownRight } from "lucide-react";
+import { Copy, Download, Loader2, Play, Layers, Flame, Crown, Gem, Boxes, ArrowUpRight, ArrowDownRight, Eye, Save, GitCompare, Waves } from "lucide-react";
 import { toast } from "sonner";
-import { PieChart, Pie, Cell, Tooltip as RechartsTooltip, ResponsiveContainer, Sector } from "recharts";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -11,6 +10,9 @@ import { computeRsRatings } from "@/components/rs/RsRatingBadge";
 import { useCuratedThemes } from "@/hooks/useCuratedThemes";
 import { useSuperperformance } from "@/hooks/useSuperperformance";
 import { useSetupMetrics, type SetupMetrics } from "@/hooks/useSetupMetrics";
+import GroupConcentrationPanel, { type ConcentrationItem } from "@/components/shared/GroupConcentrationPanel";
+import type { GroupMode } from "@/lib/groupColors";
+
 
 /* ───────────────────────── Types & config ───────────────────────── */
 
