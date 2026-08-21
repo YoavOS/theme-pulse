@@ -558,7 +558,7 @@ export default function CustomTradingViewListModal({
     });
 
     return state.topN < TOPN_MAX ? list.slice(0, state.topN) : list;
-  }, [prefiltered, state.sortBy, state.topN, state.insideCandleOn, state.insideCandleTfs, insideMap, insideLoading, ratingMap, coilScores, emaDistances, qqqPctChange, tabId, getRsForTab, getReturnField, candleMap]);
+  }, [prefiltered, state.sortBy, state.topN, state.insideCandleOn, state.insideCandleTfs, insideMap, insideLoading, coilTfOn, setupMetrics, setupLoading, state.coilWeeklyOn, state.maxCoilWeekly, state.coilMonthlyOn, state.maxCoilMonthly, ratingMap, coilScores, emaDistances, qqqPctChange, tabId, getRsForTab, getReturnField, candleMap]);
 
   const symbols = filtered.map((s) => s.symbol);
 
