@@ -795,6 +795,32 @@ export default function CustomTradingViewListModal({
             )}
           </div>
 
+          {/* Weekly / Monthly Coil (range contraction) */}
+          <div className="space-y-2 rounded-md border border-border bg-muted/20 px-3 py-2.5">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-medium text-foreground">Basing / Coil (Weekly &amp; Monthly)</span>
+              {coilTfOn && setupLoading && <span className="text-[10px] italic text-muted-foreground">loading…</span>}
+            </div>
+            <p className="text-[10px] text-muted-foreground">
+              Recent average range vs the prior window — lower = tighter base. A stock passes if EITHER enabled timeframe qualifies.
+            </p>
+            <div className="flex items-center justify-between gap-2">
+              <label className="flex items-center gap-2 text-xs cursor-pointer">
+                <Checkbox checked={state.coilWeeklyOn} onCheckedChange={(v) => set("coilWeeklyOn", !!v)} />
+                <span className="text-foreground">Weekly coil <span className="text-[10px] text-muted-foreground">(5w vs prior 10w)</span></span>
+              </label>
+              <span className="font-mono text-xs text-primary">≤ {state.maxCoilWeekly.toFixed(2)}x</span>
+            </div>
+            <Slider min={0.4} max={1.2} step={0.05} value={[state.maxCoilWeekly]} onValueChange={(v) => set("maxCoilWeekly", v[0])} disabled={!state.coilWeeklyOn} />
+            <div className="flex items-center justify-between gap-2 pt-1">
+              <label className="flex items-center gap-2 text-xs cursor-pointer">
+                <Checkbox checked={state.coilMonthlyOn} onCheckedChange={(v) => set("coilMonthlyOn", !!v)} />
+                <span className="text-foreground">Monthly coil <span className="text-[10px] text-muted-foreground">(3m vs prior 6m)</span></span>
+              </label>
+              <span className="font-mono text-xs text-primary">≤ {state.maxCoilMonthly.toFixed(2)}x</span>
+            </div>
+            <Slider min={0.4} max={1.2} step={0.05} value={[state.maxCoilMonthly]} onValueChange={(v) => set("maxCoilMonthly", v[0])} disabled={!state.coilMonthlyOn} />
+          </div>
 
 
           {/* Tight Range / Coil Score filter */}
