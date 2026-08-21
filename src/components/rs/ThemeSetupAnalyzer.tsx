@@ -501,51 +501,97 @@ export default function ThemeSetupAnalyzer({ universe, isOtcSymbol }: Props) {
 
       {membership && themeAggs.length > 0 && (
         <>
-          {/* Concentration pie */}
+          {/* Concentration — Industry (primary) / Sector / Theme, shared colors */}
+          <div className="rounded-lg border border-border/60 bg-card/40 p-3">
+            <div className="mb-2 text-xs font-semibold text-foreground">Concentration &amp; Performance Context</div>
+            <GroupConcentrationPanel
+              items={concentrationItems}
+              mode={groupMode}
+              onModeChange={setGroupMode}
+              availableModes={["industry", "sector", "theme"]}
+              height={280}
+            />
+          </div>
+
           <div className="grid gap-4 lg:grid-cols-2">
+            {/* Per-list breakdown */}
             <div className="rounded-lg border border-border/60 bg-card/40 p-3">
-              <div className="mb-1 text-xs font-semibold text-foreground">Theme Concentration</div>
-              <div className="mb-2 font-mono text-[11px] text-muted-foreground">
-                {totalHits} qualifying stocks · {themeAggs.filter(t => !t.isUnassigned).length} themes
+              <div className="mb-2 flex items-center justify-between">
+                <span className="text-xs font-semibold text-foreground">Lists &amp; Overlap</span>
+                <span className="font-mono text-[10px] text-muted-foreground">{totalHits} unique stocks</span>
               </div>
-              <div className="h-[260px]">
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={pieData}
-                      dataKey="value"
-                      nameKey="name"
-                      innerRadius={55}
-                      outerRadius={95}
-                      paddingAngle={1}
-                      activeIndex={activeIndex ?? undefined}
-                      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                      activeShape={(props: any) => (
-                        <Sector {...props} outerRadius={(props.outerRadius ?? 95) + 6} />
-                      )}
-                      onMouseEnter={(_, i) => setActiveIndex(i)}
-                      onMouseLeave={() => setActiveIndex(null)}
-                      onClick={(_, i) => {
-                        const name = pieData[i]?.name;
-                        if (name && name !== "Other themes") setExpanded(prev => (prev === name ? null : name));
-                      }}
-                    >
-                      {pieData.map((d, i) => (
-                        <Cell
-                          key={d.name}
-                          fill={d.name === "Unassigned" ? UNASSIGNED_COLOR : SLICE_COLORS[i % SLICE_COLORS.length]}
-                          className="cursor-pointer"
-                        />
-                      ))}
-                    </Pie>
-                    <RechartsTooltip
-                      contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", fontSize: 12 }}
-                      formatter={(v: number, n: string) => [`${v} stocks (${((v / totalHits) * 100).toFixed(1)}%)`, n]}
-                    />
-                  </PieChart>
-                </ResponsiveContainer>
+              <div className="space-y-1">
+                {activeLists.map(id => {
+                  const syms = listSets.get(id) ?? [];
+                  const selected = overlapSel.has(id);
+                  return (
+                    <div key={id} className="flex items-center gap-2 text-[11px]">
+                      <Checkbox
+                        checked={selected}
+                        onCheckedChange={() => setOverlapSel(prev => {
+                          const next = new Set(prev);
+                          next.has(id) ? next.delete(id) : next.add(id);
+                          return next;
+                        })}
+                      />
+                      <span className="min-w-0 flex-1 truncate text-foreground">
+                        {LIST_LABEL[id]} <span className="font-mono text-muted-foreground">({syms.length})</span>
+                      </span>
+                      <button onClick={() => setViewList(viewList === id ? null : id)} className="rounded border border-border/60 px-1.5 py-0.5 text-[10px] text-muted-foreground hover:text-foreground">
+                        <Eye size={10} />
+                      </button>
+                      <button onClick={() => copyList(syms, LIST_LABEL[id])} className="rounded border border-border/60 px-1.5 py-0.5 text-[10px] text-muted-foreground hover:text-foreground">
+                        <Copy size={10} />
+                      </button>
+                      <button onClick={() => download(exportSymbols(syms), `${id}-${syms.length}.txt`)} className="rounded border border-border/60 px-1.5 py-0.5 text-[10px] text-muted-foreground hover:text-foreground">
+                        <Download size={10} />
+                      </button>
+                    </div>
+                  );
+                })}
               </div>
+
+              {viewList && (
+                <div className="mt-2 max-h-40 overflow-y-auto rounded border border-border/60 bg-background/50 p-2 font-mono text-[10px] text-muted-foreground">
+                  {(listSets.get(viewList) ?? []).join(", ") || "No stocks."}
+                </div>
+              )}
+
+              {overlapSel.size >= 2 && (
+                <div className="mt-3 border-t border-border/50 pt-2">
+                  <div className="mb-1 flex items-center gap-1.5 text-[11px] font-semibold text-foreground">
+                    <GitCompare size={11} /> List comparison
+                  </div>
+                  <div className="flex items-center justify-between py-0.5 text-[11px]">
+                    <span className="text-foreground">In all selected lists</span>
+                    <span className="flex items-center gap-2">
+                      <span className="font-mono text-primary">{overlap.intersection.length}</span>
+                      <button onClick={() => copyList(overlap.intersection, "overlap")} className="text-muted-foreground hover:text-foreground"><Copy size={10} /></button>
+                      <button onClick={() => download(exportSymbols(overlap.intersection), "overlap.txt")} className="text-muted-foreground hover:text-foreground"><Download size={10} /></button>
+                    </span>
+                  </div>
+                  {overlap.uniques.map(u => (
+                    <div key={u.id} className="flex items-center justify-between py-0.5 text-[11px]">
+                      <span className="truncate text-muted-foreground">Only in {LIST_LABEL[u.id]}</span>
+                      <span className="flex items-center gap-2">
+                        <span className="font-mono text-foreground">{u.symbols.length}</span>
+                        <button onClick={() => copyList(u.symbols, `only ${LIST_LABEL[u.id]}`)} className="text-muted-foreground hover:text-foreground"><Copy size={10} /></button>
+                        <button onClick={() => download(exportSymbols(u.symbols), `only-${u.id}.txt`)} className="text-muted-foreground hover:text-foreground"><Download size={10} /></button>
+                      </span>
+                    </div>
+                  ))}
+                  <div className="mt-2 text-[10px] text-muted-foreground">Top {GROUP_LABEL_LC[groupMode]} per selected list</div>
+                  {overlap.perList.map(p => (
+                    <div key={p.id} className="flex items-center justify-between py-0.5 text-[10px]">
+                      <span className="truncate text-muted-foreground">{LIST_LABEL[p.id]}</span>
+                      <span className="truncate font-mono text-foreground">{p.top || "—"}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
+
+
 
             {/* Rotation / change of character */}
             <div className="rounded-lg border border-border/60 bg-card/40 p-3">
