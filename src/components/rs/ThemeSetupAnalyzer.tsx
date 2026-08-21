@@ -403,16 +403,75 @@ export default function ThemeSetupAnalyzer({ universe, isOtcSymbol }: Props) {
 
   const totalHits = useMemo(() => themeAggs.reduce((n, t) => n + t.symbols.length, 0), [themeAggs]);
 
-  const pieData = useMemo(() => {
-    const named = themeAggs.filter(t => !t.isUnassigned).slice(0, 12);
-    const rest = themeAggs.filter(t => !t.isUnassigned).slice(12);
-    const data = named.map(t => ({ name: t.name, value: t.symbols.length }));
-    const restCount = rest.reduce((n, t) => n + t.symbols.length, 0);
-    if (restCount > 0) data.push({ name: "Other themes", value: restCount });
-    const un = themeAggs.find(t => t.isUnassigned);
-    if (un) data.push({ name: "Unassigned", value: un.symbols.length });
-    return data;
-  }, [themeAggs]);
+  /* ── Items for the shared concentration panel (industry / sector / theme) ── */
+  const concentrationItems = useMemo<ConcentrationItem[]>(() => {
+    if (!membership) return [];
+    const themeOf = new Map<string, string>();
+    for (const t of curated) for (const sym of t.symbols) if (!themeOf.has(sym)) themeOf.set(sym, t.name);
+    const bySym = new Map(universe.map(s => [s.symbol.toUpperCase(), s]));
+    const rOverall = ratingsByTf.get("overall")!;
+    return Array.from(membership.keys()).map(sym => {
+      const s = bySym.get(sym);
+      return {
+        symbol: sym,
+        industry: s?.sector ?? null,
+        theme: themeOf.get(sym) ?? null,
+        rating: (s ? rOverall.get(s.symbol) : null) ?? null,
+        ret: s?.return1m ?? null,
+      };
+    });
+  }, [membership, curated, universe, ratingsByTf]);
+
+  /* ── Per-list membership (sorted symbol arrays) ── */
+  const listSets = useMemo(() => {
+    const out = new Map<ListId, string[]>();
+    if (!membership) return out;
+    for (const [sym, lists] of membership) {
+      for (const l of lists) {
+        const arr = out.get(l) ?? [];
+        arr.push(sym);
+        out.set(l, arr);
+      }
+    }
+    out.forEach(arr => arr.sort());
+    return out;
+  }, [membership]);
+
+  const activeLists = useMemo(
+    () => (Object.keys(LIST_LABEL) as ListId[]).filter(id => (listSets.get(id)?.length ?? 0) > 0),
+    [listSets],
+  );
+
+  const overlap = useMemo(() => {
+    const sel = activeLists.filter(id => overlapSel.has(id));
+    if (sel.length < 2) return { intersection: [], uniques: [], perList: [] as { id: ListId; top: string }[] };
+    const sets = sel.map(id => new Set(listSets.get(id) ?? []));
+    const intersection = (listSets.get(sel[0]) ?? []).filter(s => sets.every(x => x.has(s)));
+    const uniques = sel.map((id, i) => ({
+      id,
+      symbols: (listSets.get(id) ?? []).filter(s => sets.every((x, j) => j === i || !x.has(s))),
+    }));
+    const groupOf = (sym: string) => {
+      const it = concentrationItems.find(c => c.symbol === sym);
+      if (!it) return null;
+      if (groupMode === "theme") return it.theme ?? null;
+      if (groupMode === "industry") return it.industry ?? null;
+      return gicsForIndustry(it.industry);
+    };
+    const perList = sel.map(id => {
+      const counts = new Map<string, number>();
+      for (const sym of listSets.get(id) ?? []) {
+        const g = groupOf(sym);
+        if (!g) continue;
+        counts.set(g, (counts.get(g) ?? 0) + 1);
+      }
+      const top = Array.from(counts.entries()).sort((a, b) => b[1] - a[1]).slice(0, 2)
+        .map(([g, n]) => `${g} (${n})`).join(" · ");
+      return { id, top };
+    });
+    return { intersection, uniques, perList };
+  }, [activeLists, overlapSel, listSets, concentrationItems, groupMode]);
+
 
   const exportSymbols = useCallback((syms: string[]) => syms.map(s => s.toUpperCase()).join(","), []);
 
