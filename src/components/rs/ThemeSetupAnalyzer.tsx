@@ -1,7 +1,6 @@
 import { useCallback, useMemo, useState } from "react";
-import { Copy, Download, Loader2, Play, Layers, Flame, Crown, Gem, Boxes, ArrowUpRight, ArrowDownRight } from "lucide-react";
+import { Copy, Download, Loader2, Play, Layers, Flame, Crown, Gem, Boxes, ArrowUpRight, ArrowDownRight, Eye, Save, GitCompare, Waves } from "lucide-react";
 import { toast } from "sonner";
-import { PieChart, Pie, Cell, Tooltip as RechartsTooltip, ResponsiveContainer, Sector } from "recharts";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -11,6 +10,10 @@ import { computeRsRatings } from "@/components/rs/RsRatingBadge";
 import { useCuratedThemes } from "@/hooks/useCuratedThemes";
 import { useSuperperformance } from "@/hooks/useSuperperformance";
 import { useSetupMetrics, type SetupMetrics } from "@/hooks/useSetupMetrics";
+import GroupConcentrationPanel, { type ConcentrationItem } from "@/components/shared/GroupConcentrationPanel";
+import { GROUP_MODE_LABEL, type GroupMode } from "@/lib/groupColors";
+import { gicsForIndustry } from "@/lib/sectorTaxonomy";
+
 
 /* ───────────────────────── Types & config ───────────────────────── */
 
@@ -65,15 +68,13 @@ const LIST_LABEL: Record<ListId, string> = {
 
 const RS_TFS: RsTf[] = ["1d", "1w", "1m", "3m", "6m", "overall"];
 
-const SLICE_COLORS = [
-  "hsl(160, 70%, 50%)", "hsl(200, 80%, 55%)", "hsl(280, 65%, 60%)",
-  "hsl(30, 85%, 55%)", "hsl(340, 75%, 60%)", "hsl(50, 85%, 55%)",
-  "hsl(180, 70%, 50%)", "hsl(260, 70%, 65%)", "hsl(15, 80%, 60%)",
-  "hsl(100, 55%, 50%)", "hsl(220, 70%, 60%)", "hsl(320, 60%, 60%)",
-];
-const UNASSIGNED_COLOR = "hsl(0, 0%, 40%)";
+const GROUP_LABEL_LC: Record<GroupMode, string> = {
+  theme: "themes", industry: "industries", sector: "sectors",
+};
+
 
 const CLEAN_EMA_LS_KEY = "rs-clean-ema-uptrend-v4";
+const SNAP_LS_KEY = "theme-setup-analyzer-snapshot-v1";
 
 interface CleanEmaSaved {
   at: number;
@@ -160,8 +161,14 @@ export default function ThemeSetupAnalyzer({ universe, isOtcSymbol }: Props) {
   const [runNote, setRunNote] = useState<string | null>(null);
   const [cleanEmaSet, setCleanEmaSet] = useState<Set<string> | null>(null);
   const [membership, setMembership] = useState<Map<string, Set<ListId>> | null>(null);
-  const [activeIndex, setActiveIndex] = useState<number | null>(null);
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [groupMode, setGroupMode] = useState<GroupMode>("industry");
+  const [viewList, setViewList] = useState<ListId | null>(null);
+  const [overlapSel, setOverlapSel] = useState<Set<ListId>>(new Set());
+  const [snapshot, setSnapshot] = useState<Record<string, number> | null>(() => {
+    try { const r = localStorage.getItem(SNAP_LS_KEY); return r ? JSON.parse(r) as Record<string, number> : null; } catch { return null; }
+  });
+
 
   const toggle = (id: ListId) => setEnabled(p => ({ ...p, [id]: !p[id] }));
 
@@ -321,8 +328,9 @@ export default function ThemeSetupAnalyzer({ universe, isOtcSymbol }: Props) {
           }
 
           if (enabled.coil) {
-            const weekly = m.coilWeekly !== null && m.coilWeekly <= 0.65;
-            const monthly = m.coilMonthly !== null && m.coilMonthly <= 0.70;
+            // Real contraction ratios cluster near 1.0 — 0.65 was unreachable.
+            const weekly = m.coilWeekly !== null && m.coilWeekly <= 0.85;
+            const monthly = m.coilMonthly !== null && m.coilMonthly <= 0.90;
             if (weekly || monthly) add(s.symbol, "coil");
           }
         }
@@ -401,16 +409,75 @@ export default function ThemeSetupAnalyzer({ universe, isOtcSymbol }: Props) {
 
   const totalHits = useMemo(() => themeAggs.reduce((n, t) => n + t.symbols.length, 0), [themeAggs]);
 
-  const pieData = useMemo(() => {
-    const named = themeAggs.filter(t => !t.isUnassigned).slice(0, 12);
-    const rest = themeAggs.filter(t => !t.isUnassigned).slice(12);
-    const data = named.map(t => ({ name: t.name, value: t.symbols.length }));
-    const restCount = rest.reduce((n, t) => n + t.symbols.length, 0);
-    if (restCount > 0) data.push({ name: "Other themes", value: restCount });
-    const un = themeAggs.find(t => t.isUnassigned);
-    if (un) data.push({ name: "Unassigned", value: un.symbols.length });
-    return data;
-  }, [themeAggs]);
+  /* ── Items for the shared concentration panel (industry / sector / theme) ── */
+  const concentrationItems = useMemo<ConcentrationItem[]>(() => {
+    if (!membership) return [];
+    const themeOf = new Map<string, string>();
+    for (const t of curated) for (const sym of t.symbols) if (!themeOf.has(sym)) themeOf.set(sym, t.name);
+    const bySym = new Map(universe.map(s => [s.symbol.toUpperCase(), s]));
+    const rOverall = ratingsByTf.get("overall")!;
+    return Array.from(membership.keys()).map(sym => {
+      const s = bySym.get(sym);
+      return {
+        symbol: sym,
+        industry: s?.sector ?? null,
+        theme: themeOf.get(sym) ?? null,
+        rating: (s ? rOverall.get(s.symbol) : null) ?? null,
+        ret: s?.return1m ?? null,
+      };
+    });
+  }, [membership, curated, universe, ratingsByTf]);
+
+  /* ── Per-list membership (sorted symbol arrays) ── */
+  const listSets = useMemo(() => {
+    const out = new Map<ListId, string[]>();
+    if (!membership) return out;
+    for (const [sym, lists] of membership) {
+      for (const l of lists) {
+        const arr = out.get(l) ?? [];
+        arr.push(sym);
+        out.set(l, arr);
+      }
+    }
+    out.forEach(arr => arr.sort());
+    return out;
+  }, [membership]);
+
+  const activeLists = useMemo(
+    () => (Object.keys(LIST_LABEL) as ListId[]).filter(id => (listSets.get(id)?.length ?? 0) > 0),
+    [listSets],
+  );
+
+  const overlap = useMemo(() => {
+    const sel = activeLists.filter(id => overlapSel.has(id));
+    if (sel.length < 2) return { intersection: [], uniques: [], perList: [] as { id: ListId; top: string }[] };
+    const sets = sel.map(id => new Set(listSets.get(id) ?? []));
+    const intersection = (listSets.get(sel[0]) ?? []).filter(s => sets.every(x => x.has(s)));
+    const uniques = sel.map((id, i) => ({
+      id,
+      symbols: (listSets.get(id) ?? []).filter(s => sets.every((x, j) => j === i || !x.has(s))),
+    }));
+    const groupOf = (sym: string) => {
+      const it = concentrationItems.find(c => c.symbol === sym);
+      if (!it) return null;
+      if (groupMode === "theme") return it.theme ?? null;
+      if (groupMode === "industry") return it.industry ?? null;
+      return gicsForIndustry(it.industry);
+    };
+    const perList = sel.map(id => {
+      const counts = new Map<string, number>();
+      for (const sym of listSets.get(id) ?? []) {
+        const g = groupOf(sym);
+        if (!g) continue;
+        counts.set(g, (counts.get(g) ?? 0) + 1);
+      }
+      const top = Array.from(counts.entries()).sort((a, b) => b[1] - a[1]).slice(0, 2)
+        .map(([g, n]) => `${g} (${n})`).join(" · ");
+      return { id, top };
+    });
+    return { intersection, uniques, perList };
+  }, [activeLists, overlapSel, listSets, concentrationItems, groupMode]);
+
 
   const exportSymbols = useCallback((syms: string[]) => syms.map(s => s.toUpperCase()).join(","), []);
 
@@ -499,51 +566,97 @@ export default function ThemeSetupAnalyzer({ universe, isOtcSymbol }: Props) {
 
       {membership && themeAggs.length > 0 && (
         <>
-          {/* Concentration pie */}
+          {/* Concentration — Industry (primary) / Sector / Theme, shared colors */}
+          <div className="rounded-lg border border-border/60 bg-card/40 p-3">
+            <div className="mb-2 text-xs font-semibold text-foreground">Concentration &amp; Performance Context</div>
+            <GroupConcentrationPanel
+              items={concentrationItems}
+              mode={groupMode}
+              onModeChange={setGroupMode}
+              availableModes={["industry", "sector", "theme"]}
+              height={280}
+            />
+          </div>
+
           <div className="grid gap-4 lg:grid-cols-2">
+            {/* Per-list breakdown */}
             <div className="rounded-lg border border-border/60 bg-card/40 p-3">
-              <div className="mb-1 text-xs font-semibold text-foreground">Theme Concentration</div>
-              <div className="mb-2 font-mono text-[11px] text-muted-foreground">
-                {totalHits} qualifying stocks · {themeAggs.filter(t => !t.isUnassigned).length} themes
+              <div className="mb-2 flex items-center justify-between">
+                <span className="text-xs font-semibold text-foreground">Lists &amp; Overlap</span>
+                <span className="font-mono text-[10px] text-muted-foreground">{totalHits} unique stocks</span>
               </div>
-              <div className="h-[260px]">
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={pieData}
-                      dataKey="value"
-                      nameKey="name"
-                      innerRadius={55}
-                      outerRadius={95}
-                      paddingAngle={1}
-                      activeIndex={activeIndex ?? undefined}
-                      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                      activeShape={(props: any) => (
-                        <Sector {...props} outerRadius={(props.outerRadius ?? 95) + 6} />
-                      )}
-                      onMouseEnter={(_, i) => setActiveIndex(i)}
-                      onMouseLeave={() => setActiveIndex(null)}
-                      onClick={(_, i) => {
-                        const name = pieData[i]?.name;
-                        if (name && name !== "Other themes") setExpanded(prev => (prev === name ? null : name));
-                      }}
-                    >
-                      {pieData.map((d, i) => (
-                        <Cell
-                          key={d.name}
-                          fill={d.name === "Unassigned" ? UNASSIGNED_COLOR : SLICE_COLORS[i % SLICE_COLORS.length]}
-                          className="cursor-pointer"
-                        />
-                      ))}
-                    </Pie>
-                    <RechartsTooltip
-                      contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", fontSize: 12 }}
-                      formatter={(v: number, n: string) => [`${v} stocks (${((v / totalHits) * 100).toFixed(1)}%)`, n]}
-                    />
-                  </PieChart>
-                </ResponsiveContainer>
+              <div className="space-y-1">
+                {activeLists.map(id => {
+                  const syms = listSets.get(id) ?? [];
+                  const selected = overlapSel.has(id);
+                  return (
+                    <div key={id} className="flex items-center gap-2 text-[11px]">
+                      <Checkbox
+                        checked={selected}
+                        onCheckedChange={() => setOverlapSel(prev => {
+                          const next = new Set(prev);
+                          next.has(id) ? next.delete(id) : next.add(id);
+                          return next;
+                        })}
+                      />
+                      <span className="min-w-0 flex-1 truncate text-foreground">
+                        {LIST_LABEL[id]} <span className="font-mono text-muted-foreground">({syms.length})</span>
+                      </span>
+                      <button onClick={() => setViewList(viewList === id ? null : id)} className="rounded border border-border/60 px-1.5 py-0.5 text-[10px] text-muted-foreground hover:text-foreground">
+                        <Eye size={10} />
+                      </button>
+                      <button onClick={() => copyList(syms, LIST_LABEL[id])} className="rounded border border-border/60 px-1.5 py-0.5 text-[10px] text-muted-foreground hover:text-foreground">
+                        <Copy size={10} />
+                      </button>
+                      <button onClick={() => download(exportSymbols(syms), `${id}-${syms.length}.txt`)} className="rounded border border-border/60 px-1.5 py-0.5 text-[10px] text-muted-foreground hover:text-foreground">
+                        <Download size={10} />
+                      </button>
+                    </div>
+                  );
+                })}
               </div>
+
+              {viewList && (
+                <div className="mt-2 max-h-40 overflow-y-auto rounded border border-border/60 bg-background/50 p-2 font-mono text-[10px] text-muted-foreground">
+                  {(listSets.get(viewList) ?? []).join(", ") || "No stocks."}
+                </div>
+              )}
+
+              {overlapSel.size >= 2 && (
+                <div className="mt-3 border-t border-border/50 pt-2">
+                  <div className="mb-1 flex items-center gap-1.5 text-[11px] font-semibold text-foreground">
+                    <GitCompare size={11} /> List comparison
+                  </div>
+                  <div className="flex items-center justify-between py-0.5 text-[11px]">
+                    <span className="text-foreground">In all selected lists</span>
+                    <span className="flex items-center gap-2">
+                      <span className="font-mono text-primary">{overlap.intersection.length}</span>
+                      <button onClick={() => copyList(overlap.intersection, "overlap")} className="text-muted-foreground hover:text-foreground"><Copy size={10} /></button>
+                      <button onClick={() => download(exportSymbols(overlap.intersection), "overlap.txt")} className="text-muted-foreground hover:text-foreground"><Download size={10} /></button>
+                    </span>
+                  </div>
+                  {overlap.uniques.map(u => (
+                    <div key={u.id} className="flex items-center justify-between py-0.5 text-[11px]">
+                      <span className="truncate text-muted-foreground">Only in {LIST_LABEL[u.id]}</span>
+                      <span className="flex items-center gap-2">
+                        <span className="font-mono text-foreground">{u.symbols.length}</span>
+                        <button onClick={() => copyList(u.symbols, `only ${LIST_LABEL[u.id]}`)} className="text-muted-foreground hover:text-foreground"><Copy size={10} /></button>
+                        <button onClick={() => download(exportSymbols(u.symbols), `only-${u.id}.txt`)} className="text-muted-foreground hover:text-foreground"><Download size={10} /></button>
+                      </span>
+                    </div>
+                  ))}
+                  <div className="mt-2 text-[10px] text-muted-foreground">Top {GROUP_LABEL_LC[groupMode]} per selected list</div>
+                  {overlap.perList.map(p => (
+                    <div key={p.id} className="flex items-center justify-between py-0.5 text-[10px]">
+                      <span className="truncate text-muted-foreground">{LIST_LABEL[p.id]}</span>
+                      <span className="truncate font-mono text-foreground">{p.top || "—"}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
+
+
 
             {/* Rotation / change of character */}
             <div className="rounded-lg border border-border/60 bg-card/40 p-3">
@@ -594,6 +707,18 @@ export default function ThemeSetupAnalyzer({ universe, isOtcSymbol }: Props) {
               <span className="text-xs font-semibold text-foreground">Theme Setup Score Ranking</span>
               <div className="flex items-center gap-2">
                 <button
+                  onClick={() => {
+                    const snap: Record<string, number> = {};
+                    for (const t of themeAggs) snap[t.name] = t.score;
+                    try { localStorage.setItem(SNAP_LS_KEY, JSON.stringify(snap)); } catch { /* quota */ }
+                    setSnapshot(snap);
+                    toast.success("Snapshot saved — future runs show the score change per theme.");
+                  }}
+                  className="inline-flex items-center gap-1 rounded border border-border/60 px-2 py-1 text-[11px] text-muted-foreground hover:text-foreground"
+                >
+                  <Save size={11} /> Save snapshot
+                </button>
+                <button
                   onClick={() => copyList(Array.from(membership.keys()), "all qualifying stocks")}
                   className="inline-flex items-center gap-1 rounded border border-border/60 px-2 py-1 text-[11px] text-muted-foreground hover:text-foreground"
                 >
@@ -623,7 +748,20 @@ export default function ThemeSetupAnalyzer({ universe, isOtcSymbol }: Props) {
                         <span className="ml-2 font-mono text-[10px] text-muted-foreground">
                           {t.symbols.length}/{t.themeSize}
                         </span>
+                        {snapshot && typeof snapshot[t.name] === "number" && Math.abs(t.score - snapshot[t.name]) >= 0.1 && (
+                          <span className={`ml-2 font-mono text-[10px] ${t.score > snapshot[t.name] ? "text-gain-medium" : "text-loss-strong"}`}>
+                            {t.score > snapshot[t.name] ? "+" : ""}{(t.score - snapshot[t.name]).toFixed(1)} vs snapshot
+                          </span>
+                        )}
+                        {snapshot && snapshot[t.name] === undefined && (
+                          <span className="ml-2 rounded bg-primary/15 px-1 font-mono text-[9px] text-primary">NEW</span>
+                        )}
                       </span>
+                      {t.baseDensity >= 0.15 && (
+                        <span className="inline-flex items-center gap-1 rounded border border-[hsl(200,80%,55%)]/40 bg-[hsl(200,80%,55%)]/10 px-1.5 py-0.5 text-[9px] font-semibold text-[hsl(200,80%,55%)]">
+                          <Waves size={9} /> Early / Basing
+                        </span>
+                      )}
                       <span className="flex flex-wrap items-center gap-1">
                         {LAYERS.filter(l => t.layerScores[l.id] >= 0.25).map(l => {
                           const Icon = l.icon;

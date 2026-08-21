@@ -492,6 +492,14 @@ export default function CustomTradingViewListModal({
   );
   const { insideMap, loading: insideLoading } = useInsideCandles(insideCandleSymbols, open && state.insideCandleOn);
 
+  // Weekly / Monthly coil (range-contraction) — reuses the cached 1y OHLC metrics.
+  const coilTfOn = state.coilWeeklyOn || state.coilMonthlyOn;
+  const { metrics: setupMetrics, loading: setupLoading, load: loadSetupMetrics } = useSetupMetrics();
+  useEffect(() => {
+    if (!open || !coilTfOn) return;
+    loadSetupMetrics(prefiltered.map((s) => s.symbol));
+  }, [open, coilTfOn, prefiltered, loadSetupMetrics]);
+
   const filtered = useMemo(() => {
     const candlePct = (sym: string): number | null => {
       const c = candleMap.get(sym);
@@ -508,8 +516,18 @@ export default function CustomTradingViewListModal({
       if (!info) return insideLoading; // keep list stable while data is in-flight
       return enabled.some((k) => info[k] === true);
     };
-    const base = prefiltered.filter((s) => insideOk(s.symbol));
+    // Coil filters pass when EITHER enabled timeframe contracts enough.
+    const coilOk = (sym: string): boolean => {
+      if (!coilTfOn) return true;
+      const m = setupMetrics.get(sym);
+      if (!m) return setupLoading;
+      const w = state.coilWeeklyOn && m.coilWeekly !== null && m.coilWeekly <= state.maxCoilWeekly;
+      const mo = state.coilMonthlyOn && m.coilMonthly !== null && m.coilMonthly <= state.maxCoilMonthly;
+      return w || mo;
+    };
+    const base = prefiltered.filter((s) => insideOk(s.symbol) && coilOk(s.symbol));
     const list = [...base].sort((a, b) => {
+
       switch (state.sortBy) {
         case "rs":      return (getRsForTab(b, tabId) ?? -999) - (getRsForTab(a, tabId) ?? -999);
         case "rating":  return (ratingMap.get(b.symbol) ?? -1) - (ratingMap.get(a.symbol) ?? -1);
@@ -540,7 +558,7 @@ export default function CustomTradingViewListModal({
     });
 
     return state.topN < TOPN_MAX ? list.slice(0, state.topN) : list;
-  }, [prefiltered, state.sortBy, state.topN, state.insideCandleOn, state.insideCandleTfs, insideMap, insideLoading, ratingMap, coilScores, emaDistances, qqqPctChange, tabId, getRsForTab, getReturnField, candleMap]);
+  }, [prefiltered, state.sortBy, state.topN, state.insideCandleOn, state.insideCandleTfs, insideMap, insideLoading, coilTfOn, setupMetrics, setupLoading, state.coilWeeklyOn, state.maxCoilWeekly, state.coilMonthlyOn, state.maxCoilMonthly, ratingMap, coilScores, emaDistances, qqqPctChange, tabId, getRsForTab, getReturnField, candleMap]);
 
   const symbols = filtered.map((s) => s.symbol);
 
@@ -777,6 +795,32 @@ export default function CustomTradingViewListModal({
             )}
           </div>
 
+          {/* Weekly / Monthly Coil (range contraction) */}
+          <div className="space-y-2 rounded-md border border-border bg-muted/20 px-3 py-2.5">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-medium text-foreground">Basing / Coil (Weekly &amp; Monthly)</span>
+              {coilTfOn && setupLoading && <span className="text-[10px] italic text-muted-foreground">loading…</span>}
+            </div>
+            <p className="text-[10px] text-muted-foreground">
+              Recent average range vs the prior window — lower = tighter base. A stock passes if EITHER enabled timeframe qualifies.
+            </p>
+            <div className="flex items-center justify-between gap-2">
+              <label className="flex items-center gap-2 text-xs cursor-pointer">
+                <Checkbox checked={state.coilWeeklyOn} onCheckedChange={(v) => set("coilWeeklyOn", !!v)} />
+                <span className="text-foreground">Weekly coil <span className="text-[10px] text-muted-foreground">(5w vs prior 10w)</span></span>
+              </label>
+              <span className="font-mono text-xs text-primary">≤ {state.maxCoilWeekly.toFixed(2)}x</span>
+            </div>
+            <Slider min={0.4} max={1.2} step={0.05} value={[state.maxCoilWeekly]} onValueChange={(v) => set("maxCoilWeekly", v[0])} disabled={!state.coilWeeklyOn} />
+            <div className="flex items-center justify-between gap-2 pt-1">
+              <label className="flex items-center gap-2 text-xs cursor-pointer">
+                <Checkbox checked={state.coilMonthlyOn} onCheckedChange={(v) => set("coilMonthlyOn", !!v)} />
+                <span className="text-foreground">Monthly coil <span className="text-[10px] text-muted-foreground">(3m vs prior 6m)</span></span>
+              </label>
+              <span className="font-mono text-xs text-primary">≤ {state.maxCoilMonthly.toFixed(2)}x</span>
+            </div>
+            <Slider min={0.4} max={1.2} step={0.05} value={[state.maxCoilMonthly]} onValueChange={(v) => set("maxCoilMonthly", v[0])} disabled={!state.coilMonthlyOn} />
+          </div>
 
 
           {/* Tight Range / Coil Score filter */}
