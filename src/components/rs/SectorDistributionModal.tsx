@@ -57,8 +57,9 @@ export default function SectorDistributionModal({
   const [excludedSectors, setExcludedSectors] = useState<Set<string>>(new Set());
   const [sectorSearch, setSectorSearch] = useState("");
   const [sectorPopoverOpen, setSectorPopoverOpen] = useState(false);
-  const [activeIndex, setActiveIndex] = useState<number | null>(null);
-  const [expandedSlice, setExpandedSlice] = useState<string | null>(null);
+  const [groupMode, setGroupMode] = useState<GroupMode>("sector");
+  const { themes: curatedThemes } = useCuratedThemes();
+
 
   const universeIndustries = useMemo(() => {
     const set = new Set<string>();
