@@ -164,40 +164,28 @@ export default function ThemeDistributionModal({
     return { slices: buckets, unassignedSymbols: unassigned };
   }, [curated, filteredStocks, stockMap, ratingMap, tabId, getRsForTab, getReturnField]);
 
-  const expandedSlice = expanded ? slices.find(s => s.name === expanded) ?? null : null;
   const totalCount = filteredStocks.length;
   const topNLabel = topN >= TOPN_MAX ? "All" : `Top ${topN}`;
   const topNPresets = [10, 25, 50, 100, 200, TOPN_MAX];
 
-  const renderActiveShape = (props: any) => {
-    const { cx, cy, innerRadius, outerRadius, startAngle, endAngle, fill } = props;
-    return (
-      <g>
-        <Sector cx={cx} cy={cy} innerRadius={innerRadius} outerRadius={outerRadius + 6} startAngle={startAngle} endAngle={endAngle} fill={fill} />
-        <Sector cx={cx} cy={cy} innerRadius={outerRadius + 8} outerRadius={outerRadius + 11} startAngle={startAngle} endAngle={endAngle} fill={fill} opacity={0.4} />
-      </g>
-    );
-  };
+  // Theme lookup for the shared concentration panel.
+  const themeBySymbol = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const t of curated) for (const sym of t.symbols) if (!m.has(sym)) m.set(sym, t.name);
+    return m;
+  }, [curated]);
 
-  const copySymbols = async (syms: string[]) => {
-    try {
-      await navigator.clipboard.writeText(syms.join(","));
-      toast.success(`${syms.length} symbols copied to clipboard.`, { description: "Paste into TradingView Watchlist → Import symbols." });
-    } catch { toast.error("Could not copy to clipboard."); }
-  };
+  const panelItems: ConcentrationItem[] = useMemo(
+    () => filteredStocks.map(s => ({
+      symbol: s.symbol,
+      industry: s.sector,
+      theme: themeBySymbol.get(s.symbol.toUpperCase()) ?? null,
+      rating: ratingMap.get(s.symbol) ?? null,
+      ret: getReturnField(s, tabId),
+    })),
+    [filteredStocks, themeBySymbol, ratingMap, getReturnField, tabId],
+  );
 
-  const downloadSymbols = (syms: string[], name: string) => {
-    const blob = new Blob([syms.join("\n") + "\n"], { type: "text/plain;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const safeTab = tabLabel.replace(/\s+/g, "");
-    const safeName = name.replace(/[^A-Za-z0-9]+/g, "_");
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `RS_Theme_${safeName}_${safeTab}_${syms.length}tickers.txt`;
-    document.body.appendChild(a); a.click(); document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    toast.success(`Downloaded ${syms.length} symbols.`, { description: "One ticker per line — ready for TradingView import." });
-  };
 
   const handleSuggest = async () => {
     if (unassignedSymbols.length < 3) { toast.info("Not enough unassigned tickers for AI suggestions."); return; }
