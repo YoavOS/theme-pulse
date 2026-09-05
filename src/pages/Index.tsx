@@ -581,7 +581,9 @@ export default function Index() {
           />
         )}
 
+        <DashboardConcentrationPanel themes={themes} />
       </main>
+
 
       <footer className="border-t border-border py-6 text-center text-xs text-muted-foreground">
         {isLive
