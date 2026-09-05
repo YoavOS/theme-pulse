@@ -1,15 +1,16 @@
 import { useMemo, useState } from "react";
-import { Layers, Sparkles, Loader2, Plus, Check, Copy, Download } from "lucide-react";
+import { Layers, Sparkles, Loader2, Plus, Check } from "lucide-react";
 import { toast } from "sonner";
-import { PieChart, Pie, Cell, Tooltip as RechartsTooltip, ResponsiveContainer, Sector } from "recharts";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Slider } from "@/components/ui/slider";
 import { Checkbox } from "@/components/ui/checkbox";
 import { supabase } from "@/integrations/supabase/client";
 import { RsStock } from "@/hooks/useRsAlpha";
 import { useCuratedThemes } from "@/hooks/useCuratedThemes";
-import RsRatingBadge from "@/components/rs/RsRatingBadge";
+import GroupConcentrationPanel, { type ConcentrationItem } from "@/components/shared/GroupConcentrationPanel";
+import type { GroupMode } from "@/lib/groupColors";
 import type { SectorTab } from "@/components/rs/SectorDistributionModal";
+
 
 const TOPN_MIN = 10;
 const TOPN_MAX = 500;
@@ -93,8 +94,8 @@ export default function ThemeDistributionModal({
   const [minAdr, setMinAdr] = useState(3.0);
   const [excludeOtc, setExcludeOtc] = useState(true);
 
-  const [activeIndex, setActiveIndex] = useState<number | null>(null);
-  const [expanded, setExpanded] = useState<string | null>(null);
+  const [groupMode, setGroupMode] = useState<GroupMode>("theme");
+
 
   const [suggesting, setSuggesting] = useState(false);
   const [suggestions, setSuggestions] = useState<NewThemeSuggestion[] | null>(null);
@@ -164,40 +165,28 @@ export default function ThemeDistributionModal({
     return { slices: buckets, unassignedSymbols: unassigned };
   }, [curated, filteredStocks, stockMap, ratingMap, tabId, getRsForTab, getReturnField]);
 
-  const expandedSlice = expanded ? slices.find(s => s.name === expanded) ?? null : null;
   const totalCount = filteredStocks.length;
   const topNLabel = topN >= TOPN_MAX ? "All" : `Top ${topN}`;
   const topNPresets = [10, 25, 50, 100, 200, TOPN_MAX];
 
-  const renderActiveShape = (props: any) => {
-    const { cx, cy, innerRadius, outerRadius, startAngle, endAngle, fill } = props;
-    return (
-      <g>
-        <Sector cx={cx} cy={cy} innerRadius={innerRadius} outerRadius={outerRadius + 6} startAngle={startAngle} endAngle={endAngle} fill={fill} />
-        <Sector cx={cx} cy={cy} innerRadius={outerRadius + 8} outerRadius={outerRadius + 11} startAngle={startAngle} endAngle={endAngle} fill={fill} opacity={0.4} />
-      </g>
-    );
-  };
+  // Theme lookup for the shared concentration panel.
+  const themeBySymbol = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const t of curated) for (const sym of t.symbols) if (!m.has(sym)) m.set(sym, t.name);
+    return m;
+  }, [curated]);
 
-  const copySymbols = async (syms: string[]) => {
-    try {
-      await navigator.clipboard.writeText(syms.join(","));
-      toast.success(`${syms.length} symbols copied to clipboard.`, { description: "Paste into TradingView Watchlist → Import symbols." });
-    } catch { toast.error("Could not copy to clipboard."); }
-  };
+  const panelItems: ConcentrationItem[] = useMemo(
+    () => filteredStocks.map(s => ({
+      symbol: s.symbol,
+      industry: s.sector,
+      theme: themeBySymbol.get(s.symbol.toUpperCase()) ?? null,
+      rating: ratingMap.get(s.symbol) ?? null,
+      ret: getReturnField(s, tabId),
+    })),
+    [filteredStocks, themeBySymbol, ratingMap, getReturnField, tabId],
+  );
 
-  const downloadSymbols = (syms: string[], name: string) => {
-    const blob = new Blob([syms.join("\n") + "\n"], { type: "text/plain;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const safeTab = tabLabel.replace(/\s+/g, "");
-    const safeName = name.replace(/[^A-Za-z0-9]+/g, "_");
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `RS_Theme_${safeName}_${safeTab}_${syms.length}tickers.txt`;
-    document.body.appendChild(a); a.click(); document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    toast.success(`Downloaded ${syms.length} symbols.`, { description: "One ticker per line — ready for TradingView import." });
-  };
 
   const handleSuggest = async () => {
     if (unassignedSymbols.length < 3) { toast.info("Not enough unassigned tickers for AI suggestions."); return; }
@@ -290,166 +279,15 @@ export default function ThemeDistributionModal({
         </DialogHeader>
 
         <div className="grid grid-cols-1 gap-4 py-2 lg:grid-cols-[1fr_320px]">
-          {/* LEFT: Pie + legend + drill-down */}
-          <div className="space-y-3">
-            <div className="rounded-lg border border-border bg-card/50 p-3">
-              {totalCount === 0 ? (
-                <div className="flex h-[320px] items-center justify-center text-xs text-muted-foreground">
-                  No stocks match the current filters.
-                </div>
-              ) : (
-                <div className="h-[340px] w-full animate-fade-in">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie
-                        data={slices}
-                        dataKey="count"
-                        nameKey="name"
-                        cx="50%" cy="50%" innerRadius={70} outerRadius={120} paddingAngle={1}
-                        activeIndex={activeIndex ?? undefined}
-                        activeShape={renderActiveShape}
-                        onMouseEnter={(_, i) => setActiveIndex(i)}
-                        onMouseLeave={() => setActiveIndex(null)}
-                        onClick={(d: any) => setExpanded(prev => prev === d.name ? null : d.name)}
-                        isAnimationActive
-                      >
-                        {slices.map((s, i) => (
-                          <Cell key={i}
-                            fill={s.isUnassigned ? UNASSIGNED_COLOR : SLICE_COLORS[i % SLICE_COLORS.length]}
-                            stroke="hsl(var(--background))" strokeWidth={2} className="cursor-pointer" />
-                        ))}
-                      </Pie>
-                      <RechartsTooltip
-                        cursor={false}
-                        content={({ active, payload }) => {
-                          if (!active || !payload?.length) return null;
-                          const d = payload[0].payload as Slice;
-                          const top = d.stocks.slice(0, 5);
-                          return (
-                            <div className="rounded-lg border border-border bg-background px-3 py-2 text-xs shadow-xl">
-                              <div className="mb-1 flex items-center justify-between gap-3">
-                                <span className="font-semibold text-foreground">{d.name}</span>
-                                <span className="font-mono text-primary">{d.pct.toFixed(1)}%</span>
-                              </div>
-                              <div className="mb-2 text-[10px] text-muted-foreground">{d.count} stock{d.count === 1 ? "" : "s"}</div>
-                              <div className="space-y-0.5 border-t border-border/50 pt-1.5">
-                                {top.map(s => (
-                                  <div key={s.symbol} className="flex items-center justify-between gap-3 text-[11px]">
-                                    <span className="font-mono font-semibold text-foreground">{s.symbol}</span>
-                                    <span className="font-mono text-muted-foreground">
-                                      RS {s.rs !== null ? `${s.rs >= 0 ? "+" : ""}${s.rs.toFixed(1)}` : "—"} · #{s.rating ?? "—"}
-                                    </span>
-                                  </div>
-                                ))}
-                                {d.stocks.length > top.length && (
-                                  <div className="pt-1 text-[10px] italic text-muted-foreground">
-                                    +{d.stocks.length - top.length} more · click to expand
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          );
-                        }}
-                      />
-                    </PieChart>
-                  </ResponsiveContainer>
-                </div>
-              )}
+          {/* LEFT: shared concentration panel (Theme / Industry / Sector) */}
+          <GroupConcentrationPanel
+            items={panelItems}
+            mode={groupMode}
+            onModeChange={setGroupMode}
+            availableModes={["theme", "industry", "sector"]}
+            height={340}
+          />
 
-              {slices.length > 0 && (
-                <div className="mt-2 flex flex-wrap gap-2 border-t border-border/50 pt-2">
-                  {slices.map((d, i) => {
-                    const active = expanded === d.name;
-                    return (
-                      <button
-                        key={d.name}
-                        onMouseEnter={() => setActiveIndex(i)}
-                        onMouseLeave={() => setActiveIndex(null)}
-                        onClick={() => setExpanded(prev => prev === d.name ? null : d.name)}
-                        className={`flex items-center gap-1.5 rounded-md border px-2 py-1 text-[10px] transition-all hover:scale-105 ${active ? "border-primary bg-primary/10" : "border-border bg-muted/20"}`}
-                      >
-                        <span className="h-2 w-2 rounded-full" style={{ background: d.isUnassigned ? UNASSIGNED_COLOR : SLICE_COLORS[i % SLICE_COLORS.length] }} />
-                        <span className="font-medium text-foreground">{d.name}</span>
-                        <span className="font-mono text-muted-foreground">{d.pct.toFixed(1)}% ({d.count})</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-
-            {/* Drilldown */}
-            {expandedSlice && (
-              <div className="animate-fade-in rounded-lg border border-primary/30 bg-card p-3">
-                <div className="mb-2 flex items-start justify-between gap-3">
-                  <div>
-                    <div className="text-sm font-semibold text-foreground">{expandedSlice.name}</div>
-                    <div className="text-[11px] text-muted-foreground">
-                      {expandedSlice.count} stocks · {expandedSlice.pct.toFixed(1)}% of selection
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <button
-                      onClick={() => copySymbols(expandedSlice.stocks.map(s => s.symbol))}
-                      className="inline-flex items-center gap-1 rounded-md border border-primary/40 bg-primary/10 px-2 py-1 text-[10px] font-medium text-primary hover:bg-primary/20"
-                      title="Copy all tickers in this theme"
-                    >
-                      <Copy size={11} /> Copy
-                    </button>
-                    <button
-                      onClick={() => downloadSymbols(expandedSlice.stocks.map(s => s.symbol), expandedSlice.name)}
-                      className="inline-flex items-center gap-1 rounded-md border border-border bg-background px-2 py-1 text-[10px] font-medium text-foreground hover:bg-accent"
-                      title="Download all tickers in this theme as .txt"
-                    >
-                      <Download size={11} /> .txt
-                    </button>
-                    <span className="hidden lg:inline text-[10px] font-medium text-muted-foreground px-1">
-                      Export Theme to TradingView
-                    </span>
-                    <button
-                      onClick={() => setExpanded(null)}
-                      className="rounded-md border border-border px-2 py-0.5 text-[10px] text-muted-foreground hover:bg-accent hover:text-foreground"
-                    >
-                      Close
-                    </button>
-                  </div>
-                </div>
-                <div className="mb-2 text-[10px] italic text-muted-foreground">
-                  Exports all {expandedSlice.count} tickers in this theme from the current timeframe list ({tabLabel}).
-                </div>
-                <div className="max-h-72 overflow-y-auto">
-                  <table className="w-full text-xs">
-                    <thead className="sticky top-0 bg-card">
-                      <tr className="border-b border-border text-[10px] text-muted-foreground">
-                        <th className="px-2 py-1 text-left">#</th>
-                        <th className="px-2 py-1 text-left">Ticker</th>
-                        <th className="px-2 py-1 text-center">Rating</th>
-                        <th className="px-2 py-1 text-right">RS</th>
-                        <th className="px-2 py-1 text-right">Return</th>
-                        <th className="px-2 py-1 text-left">Industry</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {expandedSlice.stocks.map((s, i) => (
-                        <tr key={s.symbol} className="border-b border-border/40 hover:bg-muted/20">
-                          <td className="px-2 py-1 text-muted-foreground">{i + 1}</td>
-                          <td className="px-2 py-1 font-mono font-semibold text-foreground">{s.symbol}</td>
-                          <td className="px-2 py-1 text-center"><RsRatingBadge rating={s.rating} /></td>
-                          <td className={`px-2 py-1 text-right font-mono ${s.rs !== null && s.rs >= 0 ? "text-[hsl(160,70%,50%)]" : "text-destructive/80"}`}>
-                            {s.rs !== null ? `${s.rs >= 0 ? "+" : ""}${s.rs.toFixed(2)}%` : "—"}
-                          </td>
-                          <td className={`px-2 py-1 text-right font-mono ${s.ret !== null && s.ret >= 0 ? "text-[hsl(160,60%,55%)]" : "text-destructive/80"}`}>
-                            {s.ret !== null ? `${s.ret >= 0 ? "+" : ""}${s.ret.toFixed(2)}%` : "—"}
-                          </td>
-                          <td className="px-2 py-1 text-muted-foreground">{s.industry ?? "—"}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
-          </div>
 
           {/* RIGHT: Filters + AI suggestions */}
           <div className="space-y-3">

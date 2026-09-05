@@ -1,7 +1,5 @@
 import { useMemo, useState } from "react";
-import { PieChart as PieChartIcon, ChevronDown, Check, Copy, Download } from "lucide-react";
-import { toast } from "sonner";
-import { PieChart, Pie, Cell, Tooltip as RechartsTooltip, ResponsiveContainer, Sector } from "recharts";
+import { PieChart as PieChartIcon, ChevronDown, Check } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Slider } from "@/components/ui/slider";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -9,7 +7,10 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Input } from "@/components/ui/input";
 import { RsStock } from "@/hooks/useRsAlpha";
 import { ALL_GICS_SECTORS, GICS_SECTORS, expandSelectedToIndustries, gicsForIndustry } from "@/lib/sectorTaxonomy";
-import RsRatingBadge from "@/components/rs/RsRatingBadge";
+import GroupConcentrationPanel, { type ConcentrationItem } from "@/components/shared/GroupConcentrationPanel";
+import type { GroupMode } from "@/lib/groupColors";
+import { useCuratedThemes } from "@/hooks/useCuratedThemes";
+
 
 export type SectorTab = "overall" | "1d" | "1w" | "1m" | "3m" | "6m";
 type SortBy = "rs" | "rating" | "return";
@@ -56,8 +57,9 @@ export default function SectorDistributionModal({
   const [excludedSectors, setExcludedSectors] = useState<Set<string>>(new Set());
   const [sectorSearch, setSectorSearch] = useState("");
   const [sectorPopoverOpen, setSectorPopoverOpen] = useState(false);
-  const [activeIndex, setActiveIndex] = useState<number | null>(null);
-  const [expandedSlice, setExpandedSlice] = useState<string | null>(null);
+  const [groupMode, setGroupMode] = useState<GroupMode>("sector");
+  const { themes: curatedThemes } = useCuratedThemes();
+
 
   const universeIndustries = useMemo(() => {
     const set = new Set<string>();
@@ -153,18 +155,24 @@ export default function SectorDistributionModal({
   const topNLabel = topN >= TOPN_MAX ? "All" : `Top ${topN}`;
   const topNPresets = [10, 25, 50, 100, 200, TOPN_MAX];
 
-  // Active shape: subtle outer ring on hover/click
-  const renderActiveShape = (props: any) => {
-    const { cx, cy, innerRadius, outerRadius, startAngle, endAngle, fill } = props;
-    return (
-      <g>
-        <Sector cx={cx} cy={cy} innerRadius={innerRadius} outerRadius={outerRadius + 6} startAngle={startAngle} endAngle={endAngle} fill={fill} />
-        <Sector cx={cx} cy={cy} innerRadius={outerRadius + 8} outerRadius={outerRadius + 11} startAngle={startAngle} endAngle={endAngle} fill={fill} opacity={0.4} />
-      </g>
-    );
-  };
+  // Theme lookup for the "Theme" view of the shared panel.
+  const themeBySymbol = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const t of curatedThemes) for (const sym of t.symbols) if (!m.has(sym)) m.set(sym, t.name);
+    return m;
+  }, [curatedThemes]);
 
-  const expandedDatum = expandedSlice ? sliceData.find(d => d.gics === expandedSlice) ?? null : null;
+  const panelItems: ConcentrationItem[] = useMemo(
+    () => filteredStocks.map(s => ({
+      symbol: s.symbol,
+      industry: s.sector,
+      theme: themeBySymbol.get(s.symbol.toUpperCase()) ?? null,
+      rating: ratingMap.get(s.symbol) ?? null,
+      ret: getReturnField(s, tabId),
+    })),
+    [filteredStocks, themeBySymbol, ratingMap, getReturnField, tabId],
+  );
+
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -180,202 +188,15 @@ export default function SectorDistributionModal({
         </DialogHeader>
 
         <div className="grid grid-cols-1 gap-4 py-2 lg:grid-cols-[1fr_320px]">
-          {/* LEFT: Pie + legend + expanded panel */}
-          <div className="space-y-3">
-            <div className="rounded-lg border border-border bg-card/50 p-3">
-              {totalCount === 0 ? (
-                <div className="flex h-[320px] items-center justify-center text-xs text-muted-foreground">
-                  No stocks match the current filters.
-                </div>
-              ) : (
-                <div className="h-[340px] w-full animate-fade-in">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie
-                        data={sliceData}
-                        dataKey="count"
-                        nameKey="gics"
-                        cx="50%"
-                        cy="50%"
-                        innerRadius={70}
-                        outerRadius={120}
-                        paddingAngle={1}
-                        activeIndex={activeIndex ?? undefined}
-                        activeShape={renderActiveShape}
-                        onMouseEnter={(_, i) => setActiveIndex(i)}
-                        onMouseLeave={() => setActiveIndex(null)}
-                        onClick={(d: any) => setExpandedSlice(prev => prev === d.gics ? null : d.gics)}
-                        isAnimationActive
-                      >
-                        {sliceData.map((_, i) => (
-                          <Cell key={i} fill={SLICE_COLORS[i % SLICE_COLORS.length]} stroke="hsl(var(--background))" strokeWidth={2} className="cursor-pointer" />
-                        ))}
-                      </Pie>
-                      <RechartsTooltip
-                        cursor={false}
-                        contentStyle={{
-                          background: "hsl(var(--background))",
-                          border: "1px solid hsl(var(--border))",
-                          borderRadius: 8,
-                          fontSize: 12,
-                          padding: "8px 10px",
-                        }}
-                        content={({ active, payload }) => {
-                          if (!active || !payload || !payload.length) return null;
-                          const d = payload[0].payload as SliceDatum;
-                          const top = d.stocks.slice(0, 5);
-                          return (
-                            <div className="rounded-lg border border-border bg-background px-3 py-2 text-xs shadow-xl">
-                              <div className="mb-1 flex items-center justify-between gap-3">
-                                <span className="font-semibold text-foreground">{d.gics}</span>
-                                <span className="font-mono text-primary">{d.pct.toFixed(1)}%</span>
-                              </div>
-                              <div className="mb-2 text-[10px] text-muted-foreground">{d.count} stock{d.count === 1 ? "" : "s"}</div>
-                              <div className="space-y-0.5 border-t border-border/50 pt-1.5">
-                                {top.map(s => (
-                                  <div key={s.symbol} className="flex items-center justify-between gap-3 text-[11px]">
-                                    <span className="font-mono font-semibold text-foreground">{s.symbol}</span>
-                                    <span className="font-mono text-muted-foreground">
-                                      RS {s.rs !== null ? `${s.rs >= 0 ? "+" : ""}${s.rs.toFixed(1)}` : "—"} · #{s.rating ?? "—"}
-                                    </span>
-                                  </div>
-                                ))}
-                                {d.stocks.length > top.length && (
-                                  <div className="pt-1 text-[10px] italic text-muted-foreground">
-                                    +{d.stocks.length - top.length} more · click slice to expand
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          );
-                        }}
-                      />
-                    </PieChart>
-                  </ResponsiveContainer>
-                </div>
-              )}
+          {/* LEFT: shared concentration panel (Sector / Industry / Theme) */}
+          <GroupConcentrationPanel
+            items={panelItems}
+            mode={groupMode}
+            onModeChange={setGroupMode}
+            availableModes={["sector", "industry", "theme"]}
+            height={340}
+          />
 
-              {/* Legend */}
-              {sliceData.length > 0 && (
-                <div className="mt-2 flex flex-wrap gap-2 border-t border-border/50 pt-2">
-                  {sliceData.map((d, i) => {
-                    const active = expandedSlice === d.gics;
-                    return (
-                      <button
-                        key={d.gics}
-                        onMouseEnter={() => setActiveIndex(i)}
-                        onMouseLeave={() => setActiveIndex(null)}
-                        onClick={() => setExpandedSlice(prev => prev === d.gics ? null : d.gics)}
-                        className={`flex items-center gap-1.5 rounded-md border px-2 py-1 text-[10px] transition-all hover:scale-105 ${active ? "border-primary bg-primary/10" : "border-border bg-muted/20"}`}
-                      >
-                        <span className="h-2 w-2 rounded-full" style={{ background: SLICE_COLORS[i % SLICE_COLORS.length] }} />
-                        <span className="font-medium text-foreground">{d.gics}</span>
-                        <span className="font-mono text-muted-foreground">{d.pct.toFixed(1)}% ({d.count})</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-
-            {/* Expanded sector details */}
-            {expandedDatum && (
-              <div className="animate-fade-in rounded-lg border border-primary/30 bg-card p-3">
-                <div className="mb-2 flex items-start justify-between gap-3">
-                  <div>
-                    <div className="text-sm font-semibold text-foreground">{expandedDatum.gics}</div>
-                    <div className="text-[11px] text-muted-foreground">
-                      {expandedDatum.count} stocks · {expandedDatum.pct.toFixed(1)}% of selection
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <button
-                      onClick={async () => {
-                        const syms = expandedDatum.stocks.map(s => s.symbol);
-                        try {
-                          await navigator.clipboard.writeText(syms.join(","));
-                          toast.success(`${syms.length} symbols copied to clipboard.`, {
-                            description: "Paste into TradingView Watchlist → Import symbols.",
-                          });
-                        } catch {
-                          toast.error("Could not copy to clipboard.");
-                        }
-                      }}
-                      className="inline-flex items-center gap-1 rounded-md border border-primary/40 bg-primary/10 px-2 py-1 text-[10px] font-medium text-primary hover:bg-primary/20"
-                      title="Copy all tickers in this sector"
-                    >
-                      <Copy size={11} /> Copy
-                    </button>
-                    <button
-                      onClick={() => {
-                        const syms = expandedDatum.stocks.map(s => s.symbol);
-                        const blob = new Blob([syms.join("\n") + "\n"], { type: "text/plain;charset=utf-8" });
-                        const url = URL.createObjectURL(blob);
-                        const safeTab = tabLabel.replace(/\s+/g, "");
-                        const safeSec = expandedDatum.gics.replace(/\s+/g, "");
-                        const a = document.createElement("a");
-                        a.href = url;
-                        a.download = `RS_${safeSec}_${safeTab}_${syms.length}tickers.txt`;
-                        document.body.appendChild(a);
-                        a.click();
-                        document.body.removeChild(a);
-                        URL.revokeObjectURL(url);
-                        toast.success(`Downloaded ${syms.length} symbols.`, {
-                          description: "One ticker per line — ready for TradingView import.",
-                        });
-                      }}
-                      className="inline-flex items-center gap-1 rounded-md border border-border bg-background px-2 py-1 text-[10px] font-medium text-foreground hover:bg-accent"
-                      title="Download all tickers in this sector as .txt"
-                    >
-                      <Download size={11} /> .txt
-                    </button>
-                    <span className="hidden lg:inline text-[10px] font-medium text-muted-foreground px-1">
-                      Export Sector to TradingView
-                    </span>
-                    <button
-                      onClick={() => setExpandedSlice(null)}
-                      className="rounded-md border border-border px-2 py-0.5 text-[10px] text-muted-foreground hover:bg-accent hover:text-foreground"
-                    >
-                      Close
-                    </button>
-                  </div>
-                </div>
-                <div className="mb-2 text-[10px] italic text-muted-foreground">
-                  Exports all {expandedDatum.count} tickers in this sector from the current timeframe list ({tabLabel}).
-                </div>
-                <div className="max-h-72 overflow-y-auto">
-                  <table className="w-full text-xs">
-                    <thead className="sticky top-0 bg-card">
-                      <tr className="border-b border-border text-[10px] text-muted-foreground">
-                        <th className="px-2 py-1 text-left">#</th>
-                        <th className="px-2 py-1 text-left">Ticker</th>
-                        <th className="px-2 py-1 text-center">Rating</th>
-                        <th className="px-2 py-1 text-right">RS</th>
-                        <th className="px-2 py-1 text-right">Return</th>
-                        <th className="px-2 py-1 text-left">Industry</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {expandedDatum.stocks.map((s, i) => (
-                        <tr key={s.symbol} className="border-b border-border/40 hover:bg-muted/20">
-                          <td className="px-2 py-1 text-muted-foreground">{i + 1}</td>
-                          <td className="px-2 py-1 font-mono font-semibold text-foreground">{s.symbol}</td>
-                          <td className="px-2 py-1 text-center"><RsRatingBadge rating={s.rating} /></td>
-                          <td className={`px-2 py-1 text-right font-mono ${s.rs !== null && s.rs >= 0 ? "text-[hsl(160,70%,50%)]" : "text-destructive/80"}`}>
-                            {s.rs !== null ? `${s.rs >= 0 ? "+" : ""}${s.rs.toFixed(2)}%` : "—"}
-                          </td>
-                          <td className={`px-2 py-1 text-right font-mono ${s.ret !== null && s.ret >= 0 ? "text-[hsl(160,60%,55%)]" : "text-destructive/80"}`}>
-                            {s.ret !== null ? `${s.ret >= 0 ? "+" : ""}${s.ret.toFixed(2)}%` : "—"}
-                          </td>
-                          <td className="px-2 py-1 text-muted-foreground">{s.industry ?? "—"}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
-          </div>
 
           {/* RIGHT: Filter panel */}
           <div className="space-y-3 rounded-lg border border-border bg-muted/10 p-3">

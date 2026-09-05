@@ -10,6 +10,8 @@ import {
   Share2, Flag,
 } from "lucide-react";
 import HeatmapGridView from "@/components/dashboard/HeatmapGridView";
+import DashboardConcentrationPanel from "@/components/dashboard/DashboardConcentrationPanel";
+
 import OverallBestThemesList from "@/components/dashboard/OverallBestThemesList";
 import ExportTopLeadersDialog from "@/components/dashboard/ExportTopLeadersDialog";
 import ThemeStrengthMeter from "@/components/dashboard/ThemeStrengthMeter";
@@ -581,7 +583,9 @@ export default function Index() {
           />
         )}
 
+        <DashboardConcentrationPanel themes={themes} />
       </main>
+
 
       <footer className="border-t border-border py-6 text-center text-xs text-muted-foreground">
         {isLive
