@@ -1,15 +1,16 @@
 import { useMemo, useState } from "react";
-import { Layers, Sparkles, Loader2, Plus, Check, Copy, Download } from "lucide-react";
+import { Layers, Sparkles, Loader2, Plus, Check } from "lucide-react";
 import { toast } from "sonner";
-import { PieChart, Pie, Cell, Tooltip as RechartsTooltip, ResponsiveContainer, Sector } from "recharts";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Slider } from "@/components/ui/slider";
 import { Checkbox } from "@/components/ui/checkbox";
 import { supabase } from "@/integrations/supabase/client";
 import { RsStock } from "@/hooks/useRsAlpha";
 import { useCuratedThemes } from "@/hooks/useCuratedThemes";
-import RsRatingBadge from "@/components/rs/RsRatingBadge";
+import GroupConcentrationPanel, { type ConcentrationItem } from "@/components/shared/GroupConcentrationPanel";
+import type { GroupMode } from "@/lib/groupColors";
 import type { SectorTab } from "@/components/rs/SectorDistributionModal";
+
 
 const TOPN_MIN = 10;
 const TOPN_MAX = 500;
