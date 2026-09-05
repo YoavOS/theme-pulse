@@ -94,8 +94,8 @@ export default function ThemeDistributionModal({
   const [minAdr, setMinAdr] = useState(3.0);
   const [excludeOtc, setExcludeOtc] = useState(true);
 
-  const [activeIndex, setActiveIndex] = useState<number | null>(null);
-  const [expanded, setExpanded] = useState<string | null>(null);
+  const [groupMode, setGroupMode] = useState<GroupMode>("theme");
+
 
   const [suggesting, setSuggesting] = useState(false);
   const [suggestions, setSuggestions] = useState<NewThemeSuggestion[] | null>(null);
