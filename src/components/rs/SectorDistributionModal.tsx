@@ -153,18 +153,24 @@ export default function SectorDistributionModal({
   const topNLabel = topN >= TOPN_MAX ? "All" : `Top ${topN}`;
   const topNPresets = [10, 25, 50, 100, 200, TOPN_MAX];
 
-  // Active shape: subtle outer ring on hover/click
-  const renderActiveShape = (props: any) => {
-    const { cx, cy, innerRadius, outerRadius, startAngle, endAngle, fill } = props;
-    return (
-      <g>
-        <Sector cx={cx} cy={cy} innerRadius={innerRadius} outerRadius={outerRadius + 6} startAngle={startAngle} endAngle={endAngle} fill={fill} />
-        <Sector cx={cx} cy={cy} innerRadius={outerRadius + 8} outerRadius={outerRadius + 11} startAngle={startAngle} endAngle={endAngle} fill={fill} opacity={0.4} />
-      </g>
-    );
-  };
+  // Theme lookup for the "Theme" view of the shared panel.
+  const themeBySymbol = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const t of curatedThemes) for (const sym of t.symbols) if (!m.has(sym)) m.set(sym, t.name);
+    return m;
+  }, [curatedThemes]);
 
-  const expandedDatum = expandedSlice ? sliceData.find(d => d.gics === expandedSlice) ?? null : null;
+  const panelItems: ConcentrationItem[] = useMemo(
+    () => filteredStocks.map(s => ({
+      symbol: s.symbol,
+      industry: s.sector,
+      theme: themeBySymbol.get(s.symbol.toUpperCase()) ?? null,
+      rating: ratingMap.get(s.symbol) ?? null,
+      ret: getReturnField(s, tabId),
+    })),
+    [filteredStocks, themeBySymbol, ratingMap, getReturnField, tabId],
+  );
+
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
