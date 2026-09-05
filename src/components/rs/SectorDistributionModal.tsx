@@ -1,7 +1,5 @@
 import { useMemo, useState } from "react";
-import { PieChart as PieChartIcon, ChevronDown, Check, Copy, Download } from "lucide-react";
-import { toast } from "sonner";
-import { PieChart, Pie, Cell, Tooltip as RechartsTooltip, ResponsiveContainer, Sector } from "recharts";
+import { PieChart as PieChartIcon, ChevronDown, Check } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Slider } from "@/components/ui/slider";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -9,7 +7,10 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Input } from "@/components/ui/input";
 import { RsStock } from "@/hooks/useRsAlpha";
 import { ALL_GICS_SECTORS, GICS_SECTORS, expandSelectedToIndustries, gicsForIndustry } from "@/lib/sectorTaxonomy";
-import RsRatingBadge from "@/components/rs/RsRatingBadge";
+import GroupConcentrationPanel, { type ConcentrationItem } from "@/components/shared/GroupConcentrationPanel";
+import type { GroupMode } from "@/lib/groupColors";
+import { useCuratedThemes } from "@/hooks/useCuratedThemes";
+
 
 export type SectorTab = "overall" | "1d" | "1w" | "1m" | "3m" | "6m";
 type SortBy = "rs" | "rating" | "return";
