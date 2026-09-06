@@ -13,6 +13,8 @@ export interface SetupMetrics {
   pctBelowHigh: number | null;
   pctAboveLow: number | null;
   lastHighDaysAgo: number | null;
+  lastLowDaysAgo: number | null;
+  rangePos: number | null;
   sma50: number | null;
   sma150: number | null;
   sma200: number | null;
@@ -24,7 +26,7 @@ export interface SetupMetrics {
   coilMonthly: number | null;
 }
 
-const LS_KEY = "rs-setup-metrics-v1";
+const LS_KEY = "rs-setup-metrics-v2";
 const LS_TTL_MS = 24 * 60 * 60 * 1000;
 
 type Stored = SetupMetrics & { at: number };
@@ -59,6 +61,8 @@ function pick(r: Record<string, unknown>): SetupMetrics {
     pctBelowHigh: n("pctBelowHigh"),
     pctAboveLow: n("pctAboveLow"),
     lastHighDaysAgo: n("lastHighDaysAgo"),
+    lastLowDaysAgo: n("lastLowDaysAgo"),
+    rangePos: n("rangePos"),
     sma50: n("sma50"),
     sma150: n("sma150"),
     sma200: n("sma200"),
