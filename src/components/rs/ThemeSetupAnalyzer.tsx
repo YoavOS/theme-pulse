@@ -11,6 +11,7 @@ import { useCuratedThemes } from "@/hooks/useCuratedThemes";
 import { useSuperperformance } from "@/hooks/useSuperperformance";
 import { useSetupMetrics, type SetupMetrics } from "@/hooks/useSetupMetrics";
 import GroupConcentrationPanel, { type ConcentrationItem } from "@/components/shared/GroupConcentrationPanel";
+import HighLowLeadership, { type HighLowItem } from "@/components/shared/HighLowLeadership";
 import { GROUP_MODE_LABEL, type GroupMode } from "@/lib/groupColors";
 import { gicsForIndustry } from "@/lib/sectorTaxonomy";
 
@@ -319,8 +320,8 @@ export default function ThemeSetupAnalyzer({ universe, isOtcSymbol }: Props) {
 
           if (enabled.volSurge) {
             const ok =
-              m.volSurgePct !== null && m.volSurgePct >= 40 &&
-              (s.return1m ?? -999) > 30 &&
+              m.volSurgePct !== null && m.volSurgePct >= 25 &&
+              (s.return1m ?? -999) > 0 &&
               (s.price ?? 0) > 6 &&
               (s.adrPercent ?? 0) >= 3 &&
               (m.dollarVol10 ?? 0) >= 8_000_000;
@@ -328,10 +329,12 @@ export default function ThemeSetupAnalyzer({ universe, isOtcSymbol }: Props) {
           }
 
           if (enabled.coil) {
-            // Real contraction ratios cluster near 1.0 — 0.65 was unreachable.
-            const weekly = m.coilWeekly !== null && m.coilWeekly <= 0.85;
-            const monthly = m.coilMonthly !== null && m.coilMonthly <= 0.90;
-            if (weekly || monthly) add(s.symbol, "coil");
+            // 7 weeks vs prior 30 weeks / 3 months vs prior 9 months, and the
+            // stock should sit in the upper half of its 52-week range.
+            const weekly = m.coilWeekly !== null && m.coilWeekly <= 0.65;
+            const monthly = m.coilMonthly !== null && m.coilMonthly <= 0.70;
+            const upperHalf = m.rangePos === null || m.rangePos >= 50;
+            if ((weekly || monthly) && upperHalf) add(s.symbol, "coil");
           }
         }
       }
@@ -353,24 +356,44 @@ export default function ThemeSetupAnalyzer({ universe, isOtcSymbol }: Props) {
     enabled, manualRaw, ratingsByTf, universe, excludeOtc, isOtcSymbol, minRating, topN, metrics,
   ]);
 
-  /* ── Theme aggregation ── */
+  /* ── Group aggregation (Theme / Industry / Sector) ── */
   const themeAggs = useMemo<ThemeAgg[]>(() => {
     if (!membership) return [];
     const themeOf = new Map<string, string>();
-    const sizeOf = new Map<string, number>();
+    const themeSizeOf = new Map<string, number>();
     for (const t of curated) {
-      sizeOf.set(t.name, t.symbols.length);
+      themeSizeOf.set(t.name, t.symbols.length);
       for (const sym of t.symbols) if (!themeOf.has(sym)) themeOf.set(sym, t.name);
+    }
+    const bySym = new Map(universe.map(u => [u.symbol.toUpperCase(), u]));
+
+    const groupOf = (sym: string): string => {
+      if (groupMode === "theme") return themeOf.get(sym) ?? "Unassigned";
+      const ind = bySym.get(sym)?.sector ?? null;
+      if (groupMode === "industry") return (ind ?? "").trim() || "Unknown";
+      return gicsForIndustry(ind) ?? (ind ? "Other" : "Unknown");
+    };
+
+    // Universe-wide group sizes so participation stays meaningful.
+    const sizeOf = new Map<string, number>();
+    if (groupMode === "theme") {
+      themeSizeOf.forEach((v, k) => sizeOf.set(k, v));
+    } else {
+      for (const u of universe) {
+        const g = groupOf(u.symbol.toUpperCase());
+        sizeOf.set(g, (sizeOf.get(g) ?? 0) + 1);
+      }
     }
 
     const buckets = new Map<string, string[]>();
     for (const sym of membership.keys()) {
-      const name = themeOf.get(sym) ?? "Unassigned";
+      const name = groupOf(sym);
       const arr = buckets.get(name) ?? [];
       arr.push(sym);
       buckets.set(name, arr);
     }
 
+    const isBlank = (n: string) => n === "Unassigned" || n === "Unknown";
     const out: ThemeAgg[] = [];
     for (const [name, symbols] of buckets) {
       const themeSize = Math.max(sizeOf.get(name) ?? symbols.length, symbols.length);
@@ -393,7 +416,7 @@ export default function ThemeSetupAnalyzer({ universe, isOtcSymbol }: Props) {
       }
       out.push({
         name,
-        isUnassigned: name === "Unassigned",
+        isUnassigned: isBlank(name),
         themeSize,
         symbols: symbols.sort(),
         layerMembers,
@@ -405,7 +428,7 @@ export default function ThemeSetupAnalyzer({ universe, isOtcSymbol }: Props) {
     }
     out.sort((a, b) => (a.isUnassigned ? 1 : b.isUnassigned ? -1 : 0) || b.score - a.score);
     return out;
-  }, [membership, curated]);
+  }, [membership, curated, universe, groupMode]);
 
   const totalHits = useMemo(() => themeAggs.reduce((n, t) => n + t.symbols.length, 0), [themeAggs]);
 
@@ -427,6 +450,27 @@ export default function ThemeSetupAnalyzer({ universe, isOtcSymbol }: Props) {
       };
     });
   }, [membership, curated, universe, ratingsByTf]);
+
+  /* ── Items for the 52-week high/low leadership panel ── */
+  const highLowItems = useMemo<HighLowItem[]>(() => {
+    const themeOf = new Map<string, string>();
+    for (const t of curated) for (const sym of t.symbols) if (!themeOf.has(sym)) themeOf.set(sym, t.name);
+    const rOverall = ratingsByTf.get("overall")!;
+    return pool
+      .map(s => {
+        const m = metrics.get(s.symbol.toUpperCase());
+        if (!m) return null;
+        return {
+          symbol: s.symbol.toUpperCase(),
+          industry: s.sector ?? null,
+          theme: themeOf.get(s.symbol.toUpperCase()) ?? null,
+          rating: rOverall.get(s.symbol) ?? null,
+          lastHighDaysAgo: m.lastHighDaysAgo,
+          lastLowDaysAgo: m.lastLowDaysAgo,
+        } as HighLowItem;
+      })
+      .filter((v): v is HighLowItem => v !== null);
+  }, [pool, metrics, curated, ratingsByTf]);
 
   /* ── Per-list membership (sorted symbol arrays) ── */
   const listSets = useMemo(() => {
@@ -578,6 +622,17 @@ export default function ThemeSetupAnalyzer({ universe, isOtcSymbol }: Props) {
             />
           </div>
 
+          {/* 52-Week High / Low Leadership */}
+          <div className="rounded-lg border border-border/60 bg-card/40 p-3">
+            <div className="mb-2 text-xs font-semibold text-foreground">52-Week High / Low Leadership</div>
+            <HighLowLeadership
+              items={highLowItems}
+              mode={groupMode}
+              onModeChange={setGroupMode}
+              availableModes={["industry", "sector", "theme"]}
+            />
+          </div>
+
           <div className="grid gap-4 lg:grid-cols-2">
             {/* Per-list breakdown */}
             <div className="rounded-lg border border-border/60 bg-card/40 p-3">
@@ -660,7 +715,7 @@ export default function ThemeSetupAnalyzer({ universe, isOtcSymbol }: Props) {
 
             {/* Rotation / change of character */}
             <div className="rounded-lg border border-border/60 bg-card/40 p-3">
-              <div className="mb-2 text-xs font-semibold text-foreground">Leadership Rotation — Change of Character</div>
+              <div className="mb-2 text-xs font-semibold text-foreground">Leadership Rotation — Change of Character ({GROUP_MODE_LABEL[groupMode]})</div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <div className="mb-1 flex items-center gap-1 text-[11px] font-semibold text-[hsl(160,70%,50%)]">
@@ -704,7 +759,7 @@ export default function ThemeSetupAnalyzer({ universe, isOtcSymbol }: Props) {
           {/* Ranking */}
           <div className="rounded-lg border border-border/60 bg-card/40">
             <div className="flex items-center justify-between border-b border-border/60 px-3 py-2">
-              <span className="text-xs font-semibold text-foreground">Theme Setup Score Ranking</span>
+              <span className="text-xs font-semibold text-foreground">Setup Score Ranking — by {GROUP_MODE_LABEL[groupMode]}</span>
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => {

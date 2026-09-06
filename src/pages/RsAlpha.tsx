@@ -16,6 +16,10 @@ import Clean21EmaScanModal from "@/components/rs/Clean21EmaScanModal";
 import SuperperformanceScanModal from "@/components/rs/SuperperformanceScanModal";
 import { useSuperperformance } from "@/hooks/useSuperperformance";
 import SetupAnalyzerModal from "@/components/rs/SetupAnalyzerModal";
+import HighLowLeadership, { type HighLowItem } from "@/components/shared/HighLowLeadership";
+import { useSetupMetrics } from "@/hooks/useSetupMetrics";
+import { useCuratedThemes } from "@/hooks/useCuratedThemes";
+import type { GroupMode } from "@/lib/groupColors";
 import SectorDistributionModal from "@/components/rs/SectorDistributionModal";
 import ThemeDistributionModal from "@/components/rs/ThemeDistributionModal";
 import FundamentalsCoverageModal from "@/components/rs/FundamentalsCoverageModal";
@@ -242,6 +246,12 @@ export default function RsAlpha() {
     return localStorage.getItem("rs-52w-filter") === "true";
   });
   useEffect(() => { localStorage.setItem("rs-52w-filter", String(nh52wOn)); }, [nh52wOn]);
+
+  // 52-Week High / Low Leadership (lazy — reuses the cached 1y OHLC metrics).
+  const [hlOpen, setHlOpen] = useState(false);
+  const [hlMode, setHlMode] = useState<GroupMode>("industry");
+  const { themes: curatedThemesForHl } = useCuratedThemes();
+  const { metrics: hlMetrics, loading: hlLoading, progress: hlProgress, load: loadHlMetrics } = useSetupMetrics();
 
   // 52W-high window per active timeframe (days-ago cutoff).
   const nh52wWindowDays = useMemo(() => {
@@ -486,6 +496,33 @@ export default function RsAlpha() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [stocks, hideOtc, activeTab, weights]
   );
+
+  const hlPool = useMemo(
+    () => stocks
+      .filter(s => !isOtcSymbol(s.symbol))
+      .sort((a, b) => (b.avgDollarVolume ?? 0) - (a.avgDollarVolume ?? 0))
+      .slice(0, 1500),
+    [stocks], // eslint-disable-line react-hooks/exhaustive-deps
+  );
+
+  const hlItems = useMemo<HighLowItem[]>(() => {
+    const themeOf = new Map<string, string>();
+    for (const t of curatedThemesForHl) for (const sym of t.symbols) if (!themeOf.has(sym)) themeOf.set(sym, t.name);
+    const out: HighLowItem[] = [];
+    for (const s of hlPool) {
+      const m = hlMetrics.get(s.symbol.toUpperCase());
+      if (!m) continue;
+      out.push({
+        symbol: s.symbol.toUpperCase(),
+        industry: s.sector ?? null,
+        theme: themeOf.get(s.symbol.toUpperCase()) ?? null,
+        rating: ratingMap.get(s.symbol) ?? null,
+        lastHighDaysAgo: m.lastHighDaysAgo,
+        lastLowDaysAgo: m.lastLowDaysAgo,
+      });
+    }
+    return out;
+  }, [hlPool, hlMetrics, curatedThemesForHl, ratingMap]);
 
   const displayStocks = showAll ? sortedStocks : sortedStocks.slice(0, 25);
   const hasMore = sortedStocks.length > 25;
@@ -1027,6 +1064,45 @@ export default function RsAlpha() {
                   .txt
                 </button>
               </span>
+            )}
+          </div>
+        </div>
+
+        {/* 52-Week High / Low Leadership */}
+        <div className="container pb-2">
+          <div className="rounded-md border border-border bg-card/30 px-3 py-2">
+            <div className="flex flex-wrap items-center gap-2 text-xs">
+              <span className="font-medium text-foreground">52-Week High / Low Leadership</span>
+              <span className="text-[10px] text-muted-foreground">
+                Which industries, sectors or themes are printing new highs and new lows.
+              </span>
+              <button
+                onClick={() => {
+                  setHlOpen(v => !v);
+                  if (!hlOpen && hlItems.length === 0) void loadHlMetrics(hlPool.map(s => s.symbol));
+                }}
+                className="ml-auto rounded border border-border px-2 py-0.5 text-[11px] text-muted-foreground hover:bg-accent hover:text-foreground"
+              >
+                {hlOpen ? "Hide" : "Show"}
+              </button>
+              {hlOpen && (
+                <button
+                  onClick={() => void loadHlMetrics(hlPool.map(s => s.symbol))}
+                  disabled={hlLoading}
+                  className="rounded border border-border px-2 py-0.5 text-[11px] text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-50"
+                >
+                  {hlLoading ? `Loading ${hlProgress.done}/${hlProgress.total}…` : "Refresh"}
+                </button>
+              )}
+            </div>
+            {hlOpen && (
+              <div className="mt-2">
+                {hlItems.length === 0 && !hlLoading ? (
+                  <div className="py-2 text-[11px] text-muted-foreground">No data yet — press Refresh.</div>
+                ) : (
+                  <HighLowLeadership items={hlItems} mode={hlMode} onModeChange={setHlMode} />
+                )}
+              </div>
             )}
           </div>
         </div>
