@@ -44,8 +44,10 @@ interface Row {
   avgVol30?: number | null;
   dollarVol10?: number | null;   // latestClose * avgVol10
   volSurgePct?: number | null;   // (avgVol10 / avgVol30 - 1) * 100
-  coilWeekly?: number | null;    // last 5 weekly ranges avg / previous 10 weekly ranges avg
-  coilMonthly?: number | null;   // last 3 monthly ranges avg / previous 6 monthly ranges avg
+  coilWeekly?: number | null;    // last 7 weekly ranges avg / previous 30 weekly ranges avg
+  coilMonthly?: number | null;   // last 3 monthly ranges avg / previous 9 monthly ranges avg
+  lastLowDaysAgo?: number | null; // days since the most recent bar at the 52W low
+  rangePos?: number | null;       // 0..100 position of latest close inside the 52W range
 }
 
 function json(body: unknown, status = 200) {
@@ -130,6 +132,12 @@ function computeFromOhlc(symbol: string, ohlc: OHLCBar[], source: Row["source"])
     if ((b.high as number) >= threshold && b.ts > lastHighTs) lastHighTs = b.ts;
   }
   const lastClose = [...bars].reverse().find(b => b.close !== null)?.close ?? null;
+  const lowThreshold = Number.isFinite(low) ? low * 1.0005 : Number.POSITIVE_INFINITY;
+  let lastLowTs = 0;
+  for (const b of bars) {
+    if (b.low !== null && b.low > 0 && b.low <= lowThreshold && b.ts > lastLowTs) lastLowTs = b.ts;
+  }
+  const lowDaysAgo = lastLowTs > 0 ? Math.max(0, Math.floor((Date.now() / 1000 - lastLowTs) / 86400)) : null;
   const daysAgo = lastHighTs > 0 ? Math.max(0, Math.floor((Date.now() / 1000 - lastHighTs) / 86400)) : null;
   const pctBelow = lastClose && high > 0 ? Math.round(((lastClose / high - 1) * 10000)) / 100 : null;
 
@@ -155,8 +163,12 @@ function computeFromOhlc(symbol: string, ohlc: OHLCBar[], source: Row["source"])
     avgVol30: avgVol30 !== null ? Math.round(avgVol30) : null,
     dollarVol10: avgVol10 !== null && lastClose ? Math.round(avgVol10 * lastClose) : null,
     volSurgePct: avgVol10 !== null && avgVol30 !== null && avgVol30 > 0 ? round2((avgVol10 / avgVol30 - 1) * 100) : null,
-    coilWeekly: coilRatio(bars, weekKey, 5, 10),
-    coilMonthly: coilRatio(bars, monthKey, 3, 6),
+    coilWeekly: coilRatio(bars, weekKey, 7, 30),
+    coilMonthly: coilRatio(bars, monthKey, 3, 9),
+    lastLowDaysAgo: lowDaysAgo,
+    rangePos: lastClose && lowFinite !== null && high > lowFinite
+      ? round2(((lastClose - lowFinite) / (high - lowFinite)) * 100)
+      : null,
   };
 }
 
