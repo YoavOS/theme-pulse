@@ -257,7 +257,7 @@ Deno.serve(async (req) => {
     }
     for (const s of symbols) {
       const c = cacheHits.get(s);
-      if (c?.length) rows.set(s, computeFromOhlc(s, c, "cache"));
+      if (c?.length) rows.set(s, computeFromOhlc(s, c, "cache", coil));
     }
 
     // Step 2: fetch missing from Yahoo (throttled, deadline-aware).
@@ -273,7 +273,7 @@ Deno.serve(async (req) => {
           continue;
         }
         fetched++;
-        rows.set(s, computeFromOhlc(s, ohlc, "yahoo"));
+        rows.set(s, computeFromOhlc(s, ohlc, "yahoo", coil));
         const closes = ohlc.map(b => b.close).filter((v): v is number => v !== null);
         const start = closes[0] ?? null;
         const end = closes[closes.length - 1] ?? null;
@@ -298,6 +298,7 @@ Deno.serve(async (req) => {
 
     return json({
       total: symbols.length,
+      coil,
       cacheHits: cacheHits.size,
       fetched,
       computed: resultRows.filter(r => r.high52w !== null).length,
