@@ -136,15 +136,20 @@ export function useSetupMetrics() {
   const [progress, setProgress] = useState<{ done: number; total: number }>({ done: 0, total: 0 });
   const inflight = useRef(false);
 
-  /** Loads metrics for symbols, using the 24h localStorage cache first. */
-  const load = useCallback(async (symbols: string[]) => {
-    if (inflight.current || symbols.length === 0) return;
+  /**
+   * Loads metrics for symbols, using the 24h localStorage cache first.
+   * Returns the resulting map so callers don't have to wait for a state flush
+   * (this was the "empty list on first run" bug in the Theme Setup Analyzer).
+   */
+  const load = useCallback(async (symbols: string[], cfg: CoilConfig = DEFAULT_COIL_CONFIG) => {
+    const next = new Map<string, SetupMetrics>();
+    if (inflight.current || symbols.length === 0) return next;
     inflight.current = true;
     setLoading(true);
     try {
-      const store = readStore();
+      purgeStaleSetupMetricCaches(cfg);
+      const store = readStore(cfg);
       const now = Date.now();
-      const next = new Map<string, SetupMetrics>();
       const need: string[] = [];
       for (const s of symbols) {
         const hit = store[s];
@@ -157,17 +162,17 @@ export function useSetupMetrics() {
       }
       setMap(new Map(next));
       setProgress({ done: symbols.length - need.length, total: symbols.length });
-      if (need.length === 0) return;
+      if (need.length === 0) return next;
 
       const CHUNK = 300;
       for (let i = 0; i < need.length; i += CHUNK) {
         const slice = need.slice(i, i + CHUNK);
         const { data, error } = await supabase.functions.invoke("fifty-two-week-highs", {
-          body: { symbols: slice },
+          body: { symbols: slice, coil: cfg },
         });
         if (error) throw new Error(error.message);
         const rows = (data as { rows?: Array<Record<string, unknown>> })?.rows ?? [];
-        const store2 = readStore();
+        const store2 = readStore(cfg);
         const stamp = Date.now();
         for (const r of rows) {
           const sym = String(r.symbol ?? "").toUpperCase();
@@ -176,7 +181,7 @@ export function useSetupMetrics() {
           next.set(sym, m);
           store2[sym] = { ...m, at: stamp };
         }
-        writeStore(store2);
+        writeStore(cfg, store2);
         setMap(new Map(next));
         setProgress({ done: Math.min(symbols.length, symbols.length - need.length + i + slice.length), total: symbols.length });
       }
@@ -186,6 +191,7 @@ export function useSetupMetrics() {
       inflight.current = false;
       setLoading(false);
     }
+    return next;
   }, []);
 
   return { metrics: map, loading, progress, load };
