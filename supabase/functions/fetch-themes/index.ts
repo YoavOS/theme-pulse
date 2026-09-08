@@ -30,14 +30,6 @@ function timeframeToYahooPeriod(timeframe: string): YahooPeriod | null {
   }
 }
 
-    case "1W": return "5d";
-    case "1M": return "1mo";
-    case "3M": return "3mo";
-    case "6M": return "6mo";
-    case "YTD": return "ytd";
-    default: return null; // "Today" — uses Finnhub /quote
-  }
-}
 
 // Today: Yahoo /chart first (range=5d), Finnhub /quote as fallback.
 async function fetchYahooDaily(symbol: string): Promise<QuoteResult | null> {

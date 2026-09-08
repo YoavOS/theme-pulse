@@ -112,7 +112,32 @@ function monthKey(ts: number): string {
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
 }
 
-function computeFromOhlc(symbol: string, ohlc: OHLCBar[], source: Row["source"]): Row {
+export interface CoilConfig {
+  weeklyRecent: number;
+  weeklyBase: number;
+  monthlyRecent: number;
+  monthlyBase: number;
+}
+
+const DEFAULT_COIL: CoilConfig = { weeklyRecent: 7, weeklyBase: 30, monthlyRecent: 3, monthlyBase: 9 };
+
+function clampInt(v: unknown, min: number, max: number, fallback: number): number {
+  const n = Math.round(Number(v));
+  if (!Number.isFinite(n)) return fallback;
+  return Math.max(min, Math.min(max, n));
+}
+
+function parseCoilConfig(body: Record<string, unknown> | null | undefined): CoilConfig {
+  const c = (body?.coil ?? {}) as Record<string, unknown>;
+  return {
+    weeklyRecent: clampInt(c.weeklyRecent, 2, 26, DEFAULT_COIL.weeklyRecent),
+    weeklyBase: clampInt(c.weeklyBase, 4, 40, DEFAULT_COIL.weeklyBase),
+    monthlyRecent: clampInt(c.monthlyRecent, 1, 6, DEFAULT_COIL.monthlyRecent),
+    monthlyBase: clampInt(c.monthlyBase, 2, 10, DEFAULT_COIL.monthlyBase),
+  };
+}
+
+function computeFromOhlc(symbol: string, ohlc: OHLCBar[], source: Row["source"], coil: CoilConfig = DEFAULT_COIL): Row {
   // Consider the last ~365 days worth of bars.
   const cutoff = Math.floor(Date.now() / 1000) - 366 * 86400;
   const bars = ohlc.filter(b => b.ts >= cutoff && b.high !== null && b.high > 0);
@@ -163,8 +188,8 @@ function computeFromOhlc(symbol: string, ohlc: OHLCBar[], source: Row["source"])
     avgVol30: avgVol30 !== null ? Math.round(avgVol30) : null,
     dollarVol10: avgVol10 !== null && lastClose ? Math.round(avgVol10 * lastClose) : null,
     volSurgePct: avgVol10 !== null && avgVol30 !== null && avgVol30 > 0 ? round2((avgVol10 / avgVol30 - 1) * 100) : null,
-    coilWeekly: coilRatio(bars, weekKey, 7, 30),
-    coilMonthly: coilRatio(bars, monthKey, 3, 9),
+    coilWeekly: coilRatio(bars, weekKey, coil.weeklyRecent, coil.weeklyBase),
+    coilMonthly: coilRatio(bars, monthKey, coil.monthlyRecent, coil.monthlyBase),
     lastLowDaysAgo: lowDaysAgo,
     rangePos: lastClose && lowFinite !== null && high > lowFinite
       ? round2(((lastClose - lowFinite) / (high - lowFinite)) * 100)
@@ -206,6 +231,7 @@ Deno.serve(async (req) => {
   try {
     const body = await req.json().catch(() => ({}));
     const symbols = sanitize(body?.symbols);
+    const coil = parseCoilConfig(body as Record<string, unknown>);
     if (symbols.length === 0) return json({ error: "symbols[] required", rows: [] }, 400);
 
     const SB_URL = Deno.env.get("SUPABASE_URL");
@@ -231,7 +257,7 @@ Deno.serve(async (req) => {
     }
     for (const s of symbols) {
       const c = cacheHits.get(s);
-      if (c?.length) rows.set(s, computeFromOhlc(s, c, "cache"));
+      if (c?.length) rows.set(s, computeFromOhlc(s, c, "cache", coil));
     }
 
     // Step 2: fetch missing from Yahoo (throttled, deadline-aware).
@@ -247,7 +273,7 @@ Deno.serve(async (req) => {
           continue;
         }
         fetched++;
-        rows.set(s, computeFromOhlc(s, ohlc, "yahoo"));
+        rows.set(s, computeFromOhlc(s, ohlc, "yahoo", coil));
         const closes = ohlc.map(b => b.close).filter((v): v is number => v !== null);
         const start = closes[0] ?? null;
         const end = closes[closes.length - 1] ?? null;
@@ -272,6 +298,7 @@ Deno.serve(async (req) => {
 
     return json({
       total: symbols.length,
+      coil,
       cacheHits: cacheHits.size,
       fetched,
       computed: resultRows.filter(r => r.high52w !== null).length,
