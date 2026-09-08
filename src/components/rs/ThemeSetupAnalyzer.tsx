@@ -243,7 +243,14 @@ export default function ThemeSetupAnalyzer({ universe, isOtcSymbol }: Props) {
     setExpanded(null);
     try {
       let ema = cleanEmaSet;
-      if (needsMetrics) await loadMetrics(pool.map(s => s.symbol));
+      const coilCfg = loadCoilConfig();
+      // Use the map returned by load() — reading `metrics` state here is stale
+      // on the first run and left the metric-driven lists empty.
+      const freshMetrics = needsMetrics
+        ? await loadMetrics(pool.map(s => s.symbol), coilCfg)
+        : new Map<string, SetupMetrics>();
+      const metricsFor = (sym: string): SetupMetrics | undefined =>
+        freshMetrics.get(sym.toUpperCase()) ?? metrics.get(sym.toUpperCase());
       if (needsCleanEma && !ema) {
         ema = await loadCleanEma(pool.map(s => s.symbol));
         setCleanEmaSet(ema);
