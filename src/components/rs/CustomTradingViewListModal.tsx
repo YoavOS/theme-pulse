@@ -819,22 +819,66 @@ export default function CustomTradingViewListModal({
             <p className="text-[10px] text-muted-foreground">
               Recent average range vs the prior window — lower = tighter base. A stock passes if EITHER enabled timeframe qualifies.
             </p>
+            {/* Weekly */}
             <div className="flex items-center justify-between gap-2">
               <label className="flex items-center gap-2 text-xs cursor-pointer">
                 <Checkbox checked={state.coilWeeklyOn} onCheckedChange={(v) => set("coilWeeklyOn", !!v)} />
-                <span className="text-foreground">Weekly coil <span className="text-[10px] text-muted-foreground">(5w vs prior 10w)</span></span>
+                <span className="text-foreground">
+                  Weekly coil{" "}
+                  <span className="text-[10px] text-muted-foreground">
+                    (last {coilCfg.weeklyRecent}w vs prior {coilCfg.weeklyBase}w)
+                  </span>
+                </span>
               </label>
               <span className="font-mono text-xs text-primary">≤ {state.maxCoilWeekly.toFixed(2)}x</span>
             </div>
             <Slider min={0.4} max={1.2} step={0.05} value={[state.maxCoilWeekly]} onValueChange={(v) => set("maxCoilWeekly", v[0])} disabled={!state.coilWeeklyOn} />
-            <div className="flex items-center justify-between gap-2 pt-1">
+            <div className="grid grid-cols-2 gap-3 pt-1">
+              <div className={!state.coilWeeklyOn ? "opacity-40 pointer-events-none" : ""}>
+                <div className="flex items-center justify-between text-[10px] text-muted-foreground">
+                  <span>Recent weeks</span><span className="font-mono text-foreground">{coilCfg.weeklyRecent}w</span>
+                </div>
+                <Slider min={2} max={26} step={1} value={[coilCfg.weeklyRecent]} onValueChange={(v) => setCoil("weeklyRecent", v[0])} />
+              </div>
+              <div className={!state.coilWeeklyOn ? "opacity-40 pointer-events-none" : ""}>
+                <div className="flex items-center justify-between text-[10px] text-muted-foreground">
+                  <span>Base weeks</span><span className="font-mono text-foreground">{coilCfg.weeklyBase}w</span>
+                </div>
+                <Slider min={4} max={40} step={1} value={[coilCfg.weeklyBase]} onValueChange={(v) => setCoil("weeklyBase", v[0])} />
+              </div>
+            </div>
+
+            {/* Monthly */}
+            <div className="flex items-center justify-between gap-2 pt-2">
               <label className="flex items-center gap-2 text-xs cursor-pointer">
                 <Checkbox checked={state.coilMonthlyOn} onCheckedChange={(v) => set("coilMonthlyOn", !!v)} />
-                <span className="text-foreground">Monthly coil <span className="text-[10px] text-muted-foreground">(3m vs prior 6m)</span></span>
+                <span className="text-foreground">
+                  Monthly coil{" "}
+                  <span className="text-[10px] text-muted-foreground">
+                    (last {coilCfg.monthlyRecent}m vs prior {coilCfg.monthlyBase}m)
+                  </span>
+                </span>
               </label>
               <span className="font-mono text-xs text-primary">≤ {state.maxCoilMonthly.toFixed(2)}x</span>
             </div>
             <Slider min={0.4} max={1.2} step={0.05} value={[state.maxCoilMonthly]} onValueChange={(v) => set("maxCoilMonthly", v[0])} disabled={!state.coilMonthlyOn} />
+            <div className="grid grid-cols-2 gap-3 pt-1">
+              <div className={!state.coilMonthlyOn ? "opacity-40 pointer-events-none" : ""}>
+                <div className="flex items-center justify-between text-[10px] text-muted-foreground">
+                  <span>Recent months</span><span className="font-mono text-foreground">{coilCfg.monthlyRecent}m</span>
+                </div>
+                <Slider min={1} max={6} step={1} value={[coilCfg.monthlyRecent]} onValueChange={(v) => setCoil("monthlyRecent", v[0])} />
+              </div>
+              <div className={!state.coilMonthlyOn ? "opacity-40 pointer-events-none" : ""}>
+                <div className="flex items-center justify-between text-[10px] text-muted-foreground">
+                  <span>Base months</span><span className="font-mono text-foreground">{coilCfg.monthlyBase}m</span>
+                </div>
+                <Slider min={2} max={10} step={1} value={[coilCfg.monthlyBase]} onValueChange={(v) => setCoil("monthlyBase", v[0])} />
+              </div>
+            </div>
+            <p className="text-[10px] italic text-muted-foreground">
+              Needs {coilCfg.weeklyRecent + coilCfg.weeklyBase} weeks / {coilCfg.monthlyRecent + coilCfg.monthlyBase} months of history — very long windows will exclude newer stocks.
+            </p>
           </div>
 
 
