@@ -500,11 +500,20 @@ export default function CustomTradingViewListModal({
 
   // Weekly / Monthly coil (range-contraction) — reuses the cached 1y OHLC metrics.
   const coilTfOn = state.coilWeeklyOn || state.coilMonthlyOn;
+  const [coilCfg, setCoilCfg] = useState<CoilConfig>(() => loadCoilConfig());
+  const setCoil = <K extends keyof CoilConfig>(k: K, v: number) =>
+    setCoilCfg((p) => ({ ...p, [k]: Math.round(v) }));
+  useEffect(() => {
+    try { localStorage.setItem(COIL_CONFIG_KEY, JSON.stringify(coilCfg)); } catch { /* ignore */ }
+  }, [coilCfg]);
+  const coilCfgKey = coilConfigKey(coilCfg);
+
   const { metrics: setupMetrics, loading: setupLoading, load: loadSetupMetrics } = useSetupMetrics();
   useEffect(() => {
     if (!open || !coilTfOn) return;
-    loadSetupMetrics(prefiltered.map((s) => s.symbol));
-  }, [open, coilTfOn, prefiltered, loadSetupMetrics]);
+    void loadSetupMetrics(prefiltered.map((s) => s.symbol), coilCfg);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, coilTfOn, prefiltered, loadSetupMetrics, coilCfgKey]);
 
   const filtered = useMemo(() => {
     const candlePct = (sym: string): number | null => {
