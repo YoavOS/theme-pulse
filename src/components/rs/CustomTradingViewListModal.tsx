@@ -20,7 +20,13 @@ import { useInsideCandles } from "@/hooks/useInsideCandles";
 import { useFiftyTwoWeekHighs } from "@/hooks/useFiftyTwoWeekHighs";
 import type { FiftyTwoWeekHigh } from "@/hooks/useFiftyTwoWeekHighs";
 import CandleSummaryBar from "@/components/rs/CandleSummaryBar";
-import { useSetupMetrics } from "@/hooks/useSetupMetrics";
+import {
+  useSetupMetrics,
+  loadCoilConfig,
+  COIL_CONFIG_KEY,
+  coilConfigKey,
+  type CoilConfig,
+} from "@/hooks/useSetupMetrics";
 
 
 export type CustomListTab = "overall" | "1d" | "1w" | "1m" | "3m" | "6m";
