@@ -231,6 +231,7 @@ Deno.serve(async (req) => {
   try {
     const body = await req.json().catch(() => ({}));
     const symbols = sanitize(body?.symbols);
+    const coil = parseCoilConfig(body as Record<string, unknown>);
     if (symbols.length === 0) return json({ error: "symbols[] required", rows: [] }, 400);
 
     const SB_URL = Deno.env.get("SUPABASE_URL");
