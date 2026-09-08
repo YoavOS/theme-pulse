@@ -26,26 +26,81 @@ export interface SetupMetrics {
   coilMonthly: number | null;
 }
 
-const LS_KEY = "rs-setup-metrics-v2";
+/** User-adjustable coil (range-contraction) windows. */
+export interface CoilConfig {
+  weeklyRecent: number;
+  weeklyBase: number;
+  monthlyRecent: number;
+  monthlyBase: number;
+}
+
+export const DEFAULT_COIL_CONFIG: CoilConfig = {
+  weeklyRecent: 7,
+  weeklyBase: 30,
+  monthlyRecent: 3,
+  monthlyBase: 9,
+};
+
+export const COIL_CONFIG_KEY = "rs-coil-windows-v1";
+
+export function loadCoilConfig(): CoilConfig {
+  if (typeof window === "undefined") return DEFAULT_COIL_CONFIG;
+  try {
+    const raw = localStorage.getItem(COIL_CONFIG_KEY);
+    if (!raw) return DEFAULT_COIL_CONFIG;
+    return { ...DEFAULT_COIL_CONFIG, ...(JSON.parse(raw) as Partial<CoilConfig>) };
+  } catch {
+    return DEFAULT_COIL_CONFIG;
+  }
+}
+
+export function coilConfigKey(c: CoilConfig): string {
+  return `${c.weeklyRecent}-${c.weeklyBase}-${c.monthlyRecent}-${c.monthlyBase}`;
+}
+
+// v3: cache is namespaced by the coil window config so changing the windows
+// never surfaces stale ratios computed with the old settings.
+const LS_PREFIX = "rs-setup-metrics-v3:";
 const LS_TTL_MS = 24 * 60 * 60 * 1000;
 
 type Stored = SetupMetrics & { at: number };
 type Store = Record<string, Stored>;
 
-function readStore(): Store {
+function storeKey(cfg: CoilConfig) {
+  return LS_PREFIX + coilConfigKey(cfg);
+}
+
+function readStore(cfg: CoilConfig): Store {
   if (typeof window === "undefined") return {};
   try {
-    const raw = localStorage.getItem(LS_KEY);
+    const raw = localStorage.getItem(storeKey(cfg));
     return raw ? (JSON.parse(raw) as Store) : {};
   } catch {
     return {};
   }
 }
-function writeStore(s: Store) {
+function writeStore(cfg: CoilConfig, s: Store) {
   try {
-    localStorage.setItem(LS_KEY, JSON.stringify(s));
+    localStorage.setItem(storeKey(cfg), JSON.stringify(s));
   } catch {
     /* quota — ignore */
+  }
+}
+
+/** Drops legacy caches and any namespace that isn't the active config. */
+export function purgeStaleSetupMetricCaches(active: CoilConfig) {
+  if (typeof window === "undefined") return;
+  try {
+    const keep = storeKey(active);
+    const drop: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (!k) continue;
+      if (k === "rs-setup-metrics-v2" || k === "rs-setup-metrics" || (k.startsWith(LS_PREFIX) && k !== keep)) drop.push(k);
+    }
+    drop.forEach(k => localStorage.removeItem(k));
+  } catch {
+    /* ignore */
   }
 }
 
