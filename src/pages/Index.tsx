@@ -58,6 +58,12 @@ export default function Index() {
   const [showDemoConfirm, setShowDemoConfirm] = useState(false);
   const [showExportLeaders, setShowExportLeaders] = useState(false);
   const [strengthMeterTheme, setStrengthMeterTheme] = useState<ThemeData | null>(null);
+  const [groupMode, setGroupMode] = useState<GroupMode>(
+    () => ((typeof window !== "undefined" && localStorage.getItem("dashboard_group_mode_v1")) as GroupMode) || "theme",
+  );
+  useEffect(() => {
+    try { localStorage.setItem("dashboard_group_mode_v1", groupMode); } catch { /* ignore */ }
+  }, [groupMode]);
 
   const [overallWeights, setOverallWeights] = useState<DashboardWeights>(() => {
     if (typeof window === "undefined") return { ...DEFAULT_DASHBOARD_WEIGHTS };
