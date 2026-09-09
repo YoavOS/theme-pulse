@@ -7,6 +7,9 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { gicsForIndustry } from "@/lib/sectorTaxonomy";
+import GroupConcentrationPanel, { type ConcentrationItem } from "@/components/shared/GroupConcentrationPanel";
+import type { GroupMode } from "@/lib/groupColors";
+import { useCuratedThemes } from "@/hooks/useCuratedThemes";
 import type { RsStock } from "@/hooks/useRsAlpha";
 import type { FundamentalsData } from "@/hooks/useFundamentals";
 
