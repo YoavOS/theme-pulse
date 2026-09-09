@@ -33,6 +33,9 @@ import { useThemeSearch } from "@/hooks/useThemeSearch";
 import { useThemeNews } from "@/hooks/useThemeNews";
 import { useFundamentals } from "@/hooks/useFundamentals";
 import NewsPanel from "@/components/NewsPanel";
+import { useUniverseSectors } from "@/hooks/useUniverseSectors";
+import { buildGroupedThemes } from "@/lib/groupThemes";
+import { GROUP_MODE_LABEL, type GroupMode } from "@/lib/groupColors";
 
 const TIMEFRAMES = ["Today", "1W", "1M", "3M", "Overall"] as const;
 const DASHBOARD_WEIGHTS_KEY = "dashboard_overall_weights_v1";
