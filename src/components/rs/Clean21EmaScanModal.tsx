@@ -275,6 +275,25 @@ export default function Clean21EmaScanModal({ open, onOpenChange, universe, rati
     return out;
   }, [rows, universeMap]);
 
+  const [groupMode, setGroupMode] = useState<GroupMode>("sector");
+  const { themes: curatedThemes } = useCuratedThemes();
+  const themeBySymbol = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const t of curatedThemes) for (const sym of t.symbols) if (!m.has(sym)) m.set(sym.toUpperCase(), t.name);
+    return m;
+  }, [curatedThemes]);
+
+  const concentrationItems: ConcentrationItem[] = useMemo(
+    () => rows.map(r => ({
+      symbol: r.symbol,
+      industry: universeMap.get(r.symbol)?.sector ?? null,
+      theme: themeBySymbol.get(r.symbol.toUpperCase()) ?? null,
+      rating: ratingMap?.get(r.symbol) ?? null,
+      ret: r.gainPct,
+    })),
+    [rows, universeMap, themeBySymbol, ratingMap],
+  );
+
   const leadingSector = sliceData[0] ?? null;
   const expandedDatum = expandedSector ? sliceData.find(d => d.gics === expandedSector) ?? null : null;
 
