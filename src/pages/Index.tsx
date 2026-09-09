@@ -194,8 +194,8 @@ export default function Index() {
 
   // Prefetch news for the top 5 most-moving themes
   useEffect(() => {
-    if (isLive && themes.length > 0) {
-      const sorted = [...themes].sort(
+    if (isLive && baseThemes.length > 0) {
+      const sorted = [...baseThemes].sort(
         (a, b) => Math.abs(b.performance_pct) - Math.abs(a.performance_pct),
       );
       const top5 = sorted.slice(0, 5).map(t => ({
@@ -204,7 +204,7 @@ export default function Index() {
       }));
       prefetchTopThemes(top5);
     }
-  }, [isLive, themes, prefetchTopThemes]);
+  }, [isLive, baseThemes, prefetchTopThemes]);
 
   const nonEmptyThemeNames = allThemes
     .filter((t) => t.tickers.length > 0 || t.up_count > 0 || t.down_count > 0)
@@ -238,10 +238,10 @@ export default function Index() {
 
   // Trigger volume fetch once themes are loaded so signals are populated.
   useEffect(() => {
-    if (!isLive || themes.length === 0) return;
-    const allSymbols = themes.flatMap(t => t.tickers.filter(tk => !tk.skipped).map(tk => tk.symbol));
+    if (!isLive || baseThemes.length === 0) return;
+    const allSymbols = baseThemes.flatMap(t => t.tickers.filter(tk => !tk.skipped).map(tk => tk.symbol));
     if (allSymbols.length > 0) fetchVolume(allSymbols);
-  }, [isLive, themes, fetchVolume]);
+  }, [isLive, baseThemes, fetchVolume]);
 
   const dashboardTabs = [
     { to: "/", label: "Dashboard", icon: <LayoutDashboard size={14} />, active: true, color: "" },
