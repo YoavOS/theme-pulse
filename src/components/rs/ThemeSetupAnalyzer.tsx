@@ -9,7 +9,7 @@ import type { RsStock } from "@/hooks/useRsAlpha";
 import { computeRsRatings } from "@/components/rs/RsRatingBadge";
 import { useCuratedThemes } from "@/hooks/useCuratedThemes";
 import { useSuperperformance } from "@/hooks/useSuperperformance";
-import { useSetupMetrics, type SetupMetrics } from "@/hooks/useSetupMetrics";
+import { useSetupMetrics, loadCoilConfig, type SetupMetrics } from "@/hooks/useSetupMetrics";
 import GroupConcentrationPanel, { type ConcentrationItem } from "@/components/shared/GroupConcentrationPanel";
 import HighLowLeadership, { type HighLowItem } from "@/components/shared/HighLowLeadership";
 import { GROUP_MODE_LABEL, type GroupMode } from "@/lib/groupColors";
