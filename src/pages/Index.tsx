@@ -327,7 +327,7 @@ export default function Index() {
                 </TooltipProvider>
               )}
               <span className="hidden sm:inline">· {formatTime(lastFetched)}</span>
-              <span className="hidden sm:inline">· {themes.length} themes</span>
+              <span className="hidden sm:inline">· {themes.length} {GROUP_MODE_LABEL[groupMode].toLowerCase()}s</span>
               {isLive && <span className="hidden sm:inline">· {symbolsFetched} symbols</span>}
               {scanProgress && scanProgress.failed > 0 && (
                 <span className="text-[10px] text-destructive">⚠ {scanProgress.failed} unavailable</span>
