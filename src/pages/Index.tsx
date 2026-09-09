@@ -590,9 +590,31 @@ export default function Index() {
           </div>
         )}
 
+        <div className="mb-4 flex flex-wrap items-center gap-2">
+          <span className="text-[11px] uppercase tracking-wide text-muted-foreground">Group by</span>
+          <div className="inline-flex items-center gap-0.5 rounded-md border border-border bg-muted/20 p-0.5">
+            {(["theme", "industry", "sector"] as GroupMode[]).map(m => (
+              <button
+                key={m}
+                onClick={() => setGroupMode(m)}
+                className={`rounded px-3 py-1 text-[11px] font-medium transition ${
+                  groupMode === m ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {GROUP_MODE_LABEL[m]}
+              </button>
+            ))}
+          </div>
+          <span className="text-[11px] text-muted-foreground">
+            {sectorsLoading && groupMode !== "theme"
+              ? "Loading industry data…"
+              : `${themes.length} ${GROUP_MODE_LABEL[groupMode].toLowerCase()} groups`}
+          </span>
+        </div>
+
         {activeTimeframe === "Overall" ? (
           <OverallBestThemesList
-            themes={searchMatchSet ? themes.filter(t => searchMatchSet.has(t.theme_name.toLowerCase())) : themes}
+            themes={groupMode === "theme" && searchMatchSet ? themes.filter(t => searchMatchSet.has(t.theme_name.toLowerCase())) : themes}
             weights={overallWeights}
             onThemeClick={setDrilldownTheme}
           />
@@ -603,11 +625,11 @@ export default function Index() {
             onInfoClick={(t) => setStrengthMeterTheme(t)}
             getThemeSignals={getThemeSignals}
             volumeMap={volumeMap}
-            dimmedThemes={searchMatchSet}
+            dimmedThemes={groupMode === "theme" ? searchMatchSet : null}
           />
         )}
 
-        <DashboardConcentrationPanel themes={themes} />
+        <DashboardConcentrationPanel themes={baseThemes} />
       </main>
 
 
