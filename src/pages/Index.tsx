@@ -33,6 +33,9 @@ import { useThemeSearch } from "@/hooks/useThemeSearch";
 import { useThemeNews } from "@/hooks/useThemeNews";
 import { useFundamentals } from "@/hooks/useFundamentals";
 import NewsPanel from "@/components/NewsPanel";
+import { useUniverseSectors } from "@/hooks/useUniverseSectors";
+import { buildGroupedThemes } from "@/lib/groupThemes";
+import { GROUP_MODE_LABEL, type GroupMode } from "@/lib/groupColors";
 
 const TIMEFRAMES = ["Today", "1W", "1M", "3M", "Overall"] as const;
 const DASHBOARD_WEIGHTS_KEY = "dashboard_overall_weights_v1";
@@ -55,6 +58,12 @@ export default function Index() {
   const [showDemoConfirm, setShowDemoConfirm] = useState(false);
   const [showExportLeaders, setShowExportLeaders] = useState(false);
   const [strengthMeterTheme, setStrengthMeterTheme] = useState<ThemeData | null>(null);
+  const [groupMode, setGroupMode] = useState<GroupMode>(
+    () => ((typeof window !== "undefined" && localStorage.getItem("dashboard_group_mode_v1")) as GroupMode) || "theme",
+  );
+  useEffect(() => {
+    try { localStorage.setItem("dashboard_group_mode_v1", groupMode); } catch { /* ignore */ }
+  }, [groupMode]);
 
   const [overallWeights, setOverallWeights] = useState<DashboardWeights>(() => {
     if (typeof window === "undefined") return { ...DEFAULT_DASHBOARD_WEIGHTS };
@@ -161,17 +170,32 @@ export default function Index() {
     setNewsPanelSentiment(getThemeSentiment(theme.theme_name));
   }, [fetchThemeNews, getAiSummary, getThemeSentiment]);
 
-  const themes = useMemo(() => {
+  const baseThemes = useMemo(() => {
     if (showPlaceholders) return allThemes;
     return allThemes.filter(
       (t) => t.tickers.length > 0 || t.up_count > 0 || t.down_count > 0
     );
   }, [allThemes, showPlaceholders]);
 
+  // ── Theme / Industry / Sector grouping ──────────────────────────
+  const { rows: sectorRows, loading: sectorsLoading, load: loadSectors } = useUniverseSectors();
+  useEffect(() => { if (groupMode !== "theme") loadSectors(); }, [groupMode, loadSectors]);
+
+  const industryBySymbol = useMemo(() => {
+    const m = new Map<string, string | null>();
+    for (const r of sectorRows) m.set(r.symbol.toUpperCase(), r.sector);
+    return m;
+  }, [sectorRows]);
+
+  const themes = useMemo(
+    () => buildGroupedThemes(baseThemes, industryBySymbol, groupMode),
+    [baseThemes, industryBySymbol, groupMode],
+  );
+
   // Prefetch news for the top 5 most-moving themes
   useEffect(() => {
-    if (isLive && themes.length > 0) {
-      const sorted = [...themes].sort(
+    if (isLive && baseThemes.length > 0) {
+      const sorted = [...baseThemes].sort(
         (a, b) => Math.abs(b.performance_pct) - Math.abs(a.performance_pct),
       );
       const top5 = sorted.slice(0, 5).map(t => ({
@@ -180,7 +204,7 @@ export default function Index() {
       }));
       prefetchTopThemes(top5);
     }
-  }, [isLive, themes, prefetchTopThemes]);
+  }, [isLive, baseThemes, prefetchTopThemes]);
 
   const nonEmptyThemeNames = allThemes
     .filter((t) => t.tickers.length > 0 || t.up_count > 0 || t.down_count > 0)
@@ -214,10 +238,10 @@ export default function Index() {
 
   // Trigger volume fetch once themes are loaded so signals are populated.
   useEffect(() => {
-    if (!isLive || themes.length === 0) return;
-    const allSymbols = themes.flatMap(t => t.tickers.filter(tk => !tk.skipped).map(tk => tk.symbol));
+    if (!isLive || baseThemes.length === 0) return;
+    const allSymbols = baseThemes.flatMap(t => t.tickers.filter(tk => !tk.skipped).map(tk => tk.symbol));
     if (allSymbols.length > 0) fetchVolume(allSymbols);
-  }, [isLive, themes, fetchVolume]);
+  }, [isLive, baseThemes, fetchVolume]);
 
   const dashboardTabs = [
     { to: "/", label: "Dashboard", icon: <LayoutDashboard size={14} />, active: true, color: "" },
@@ -303,7 +327,7 @@ export default function Index() {
                 </TooltipProvider>
               )}
               <span className="hidden sm:inline">· {formatTime(lastFetched)}</span>
-              <span className="hidden sm:inline">· {themes.length} themes</span>
+              <span className="hidden sm:inline">· {themes.length} {GROUP_MODE_LABEL[groupMode].toLowerCase()}s</span>
               {isLive && <span className="hidden sm:inline">· {symbolsFetched} symbols</span>}
               {scanProgress && scanProgress.failed > 0 && (
                 <span className="text-[10px] text-destructive">⚠ {scanProgress.failed} unavailable</span>
@@ -566,9 +590,31 @@ export default function Index() {
           </div>
         )}
 
+        <div className="mb-4 flex flex-wrap items-center gap-2">
+          <span className="text-[11px] uppercase tracking-wide text-muted-foreground">Group by</span>
+          <div className="inline-flex items-center gap-0.5 rounded-md border border-border bg-muted/20 p-0.5">
+            {(["theme", "industry", "sector"] as GroupMode[]).map(m => (
+              <button
+                key={m}
+                onClick={() => setGroupMode(m)}
+                className={`rounded px-3 py-1 text-[11px] font-medium transition ${
+                  groupMode === m ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {GROUP_MODE_LABEL[m]}
+              </button>
+            ))}
+          </div>
+          <span className="text-[11px] text-muted-foreground">
+            {sectorsLoading && groupMode !== "theme"
+              ? "Loading industry data…"
+              : `${themes.length} ${GROUP_MODE_LABEL[groupMode].toLowerCase()} groups`}
+          </span>
+        </div>
+
         {activeTimeframe === "Overall" ? (
           <OverallBestThemesList
-            themes={searchMatchSet ? themes.filter(t => searchMatchSet.has(t.theme_name.toLowerCase())) : themes}
+            themes={groupMode === "theme" && searchMatchSet ? themes.filter(t => searchMatchSet.has(t.theme_name.toLowerCase())) : themes}
             weights={overallWeights}
             onThemeClick={setDrilldownTheme}
           />
@@ -579,11 +625,11 @@ export default function Index() {
             onInfoClick={(t) => setStrengthMeterTheme(t)}
             getThemeSignals={getThemeSignals}
             volumeMap={volumeMap}
-            dimmedThemes={searchMatchSet}
+            dimmedThemes={groupMode === "theme" ? searchMatchSet : null}
           />
         )}
 
-        <DashboardConcentrationPanel themes={themes} />
+        <DashboardConcentrationPanel themes={baseThemes} />
       </main>
 
 

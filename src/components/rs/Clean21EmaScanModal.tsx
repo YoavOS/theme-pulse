@@ -7,6 +7,9 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { gicsForIndustry } from "@/lib/sectorTaxonomy";
+import GroupConcentrationPanel, { type ConcentrationItem } from "@/components/shared/GroupConcentrationPanel";
+import type { GroupMode } from "@/lib/groupColors";
+import { useCuratedThemes } from "@/hooks/useCuratedThemes";
 import type { RsStock } from "@/hooks/useRsAlpha";
 import type { FundamentalsData } from "@/hooks/useFundamentals";
 
@@ -272,6 +275,25 @@ export default function Clean21EmaScanModal({ open, onOpenChange, universe, rati
     return out;
   }, [rows, universeMap]);
 
+  const [groupMode, setGroupMode] = useState<GroupMode>("sector");
+  const { themes: curatedThemes } = useCuratedThemes();
+  const themeBySymbol = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const t of curatedThemes) for (const sym of t.symbols) if (!m.has(sym)) m.set(sym.toUpperCase(), t.name);
+    return m;
+  }, [curatedThemes]);
+
+  const concentrationItems: ConcentrationItem[] = useMemo(
+    () => rows.map(r => ({
+      symbol: r.symbol,
+      industry: universeMap.get(r.symbol)?.sector ?? null,
+      theme: themeBySymbol.get(r.symbol.toUpperCase()) ?? null,
+      rating: ratingMap?.get(r.symbol) ?? null,
+      ret: r.gainPct,
+    })),
+    [rows, universeMap, themeBySymbol, ratingMap],
+  );
+
   const leadingSector = sliceData[0] ?? null;
   const expandedDatum = expandedSector ? sliceData.find(d => d.gics === expandedSector) ?? null : null;
 
@@ -408,132 +430,19 @@ export default function Clean21EmaScanModal({ open, onOpenChange, universe, rati
             </div>
           </div>
 
-          {/* Sector Distribution */}
-          {sliceData.length > 0 && (
+          {/* Concentration — Sector / Industry / Theme */}
+          {rows.length > 0 && (
             <div className="rounded-lg border border-border bg-card/50 p-3">
-              <div className="mb-2 flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2 text-xs font-semibold text-foreground">
-                  <PieChartIcon size={13} className="text-primary" /> Sector Distribution
-                </div>
-                {leadingSector && (
-                  <div className="text-[10px] text-muted-foreground">
-                    Leader: <span className="font-semibold text-primary">{leadingSector.gics}</span>
-                    <span className="ml-1 font-mono">{leadingSector.pct.toFixed(1)}% ({leadingSector.count})</span>
-                  </div>
-                )}
+              <div className="mb-2 flex items-center gap-2 text-xs font-semibold text-foreground">
+                <PieChartIcon size={13} className="text-primary" /> Concentration — Sector · Industry · Theme
               </div>
-
-              <div className="grid grid-cols-1 gap-3 md:grid-cols-[280px_1fr]">
-                <div className="h-[220px] w-full">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie
-                        data={sliceData}
-                        dataKey="count"
-                        nameKey="gics"
-                        cx="50%"
-                        cy="50%"
-                        innerRadius={50}
-                        outerRadius={90}
-                        paddingAngle={1}
-                        activeIndex={activeSliceIdx ?? undefined}
-                        activeShape={renderActiveShape}
-                        onMouseEnter={(_, i) => setActiveSliceIdx(i)}
-                        onMouseLeave={() => setActiveSliceIdx(null)}
-                        onClick={(d: any) => setExpandedSector(prev => prev === d.gics ? null : d.gics)}
-                        isAnimationActive
-                      >
-                        {sliceData.map((_, i) => (
-                          <Cell key={i} fill={SLICE_COLORS[i % SLICE_COLORS.length]} stroke="hsl(var(--background))" strokeWidth={2} className="cursor-pointer" />
-                        ))}
-                      </Pie>
-                      <RechartsTooltip
-                        cursor={false}
-                        content={({ active, payload }) => {
-                          if (!active || !payload || !payload.length) return null;
-                          const d = payload[0].payload as SliceDatum;
-                          return (
-                            <div className="rounded-lg border border-border bg-background px-3 py-2 text-xs shadow-xl">
-                              <div className="flex items-center justify-between gap-3">
-                                <span className="font-semibold text-foreground">{d.gics}</span>
-                                <span className="font-mono text-primary">{d.pct.toFixed(1)}%</span>
-                              </div>
-                              <div className="text-[10px] text-muted-foreground">{d.count} stock{d.count === 1 ? "" : "s"} · click to expand</div>
-                            </div>
-                          );
-                        }}
-                      />
-                    </PieChart>
-                  </ResponsiveContainer>
-                </div>
-
-                <div className="flex flex-wrap content-start gap-1.5">
-                  {sliceData.map((d, i) => {
-                    const active = expandedSector === d.gics;
-                    return (
-                      <button
-                        key={d.gics}
-                        onMouseEnter={() => setActiveSliceIdx(i)}
-                        onMouseLeave={() => setActiveSliceIdx(null)}
-                        onClick={() => setExpandedSector(prev => prev === d.gics ? null : d.gics)}
-                        className={`flex items-center gap-1.5 rounded-md border px-2 py-1 text-[10px] transition-all hover:scale-105 ${active ? "border-primary bg-primary/10" : "border-border bg-muted/20"}`}
-                      >
-                        <span className="h-2 w-2 rounded-full" style={{ background: SLICE_COLORS[i % SLICE_COLORS.length] }} />
-                        <span className="font-medium text-foreground">{d.gics}</span>
-                        <span className="font-mono text-muted-foreground">{d.pct.toFixed(1)}% ({d.count})</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {expandedDatum && (
-                <div className="mt-3 animate-fade-in rounded-md border border-primary/30 bg-card p-3">
-                  <div className="mb-2 flex items-center justify-between gap-2">
-                    <div>
-                      <div className="text-sm font-semibold text-foreground">{expandedDatum.gics}</div>
-                      <div className="text-[11px] text-muted-foreground">
-                        {expandedDatum.count} stocks · {expandedDatum.pct.toFixed(1)}% of list
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                      <button
-                        onClick={() => copy(expandedDatum.symbols)}
-                        className="inline-flex items-center gap-1 rounded-md border border-primary/40 bg-primary/10 px-2 py-1 text-[10px] font-medium text-primary hover:bg-primary/20"
-                      >
-                        <Copy size={11} /> Copy
-                      </button>
-                      <button
-                        onClick={() => download(expandedDatum.symbols, expandedDatum.gics.replace(/\s+/g, ""))}
-                        className="inline-flex items-center gap-1 rounded-md border border-border bg-background px-2 py-1 text-[10px] font-medium text-foreground hover:bg-accent"
-                      >
-                        <Download size={11} /> .txt
-                      </button>
-                      <button
-                        onClick={() => setExpandedSector(null)}
-                        className="rounded-md border border-border px-2 py-0.5 text-[10px] text-muted-foreground hover:bg-accent hover:text-foreground"
-                      >
-                        Close
-                      </button>
-                    </div>
-                  </div>
-                  <div className="max-h-48 overflow-y-auto rounded border border-border/60 bg-background/40">
-                    {expandedDatum.symbols.map(sym => {
-                      const row = rows.find(r => r.symbol === sym);
-                      const rating = ratingMap?.get(sym);
-                      const fs = fundMap[sym]?.fundamental_score ?? null;
-                      return (
-                        <div key={sym} className="grid grid-cols-[70px_1fr_60px_60px] items-center gap-2 border-b border-border/40 px-2 py-1 last:border-b-0 text-[11px]">
-                          <span className="font-mono font-semibold text-foreground">{sym}</span>
-                          <span className="text-muted-foreground truncate">{universeMap.get(sym)?.sector ?? "—"}</span>
-                          <span className="text-right font-mono text-muted-foreground">R{rating ?? "—"}</span>
-                          <span className={`text-right font-mono ${row ? "text-[hsl(var(--gain-strong))]" : "text-muted-foreground"}`}>{row ? `+${row.gainPct.toFixed(1)}%` : "—"}</span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
+              <GroupConcentrationPanel
+                items={concentrationItems}
+                mode={groupMode}
+                onModeChange={setGroupMode}
+                availableModes={["sector", "industry", "theme"]}
+                height={260}
+              />
             </div>
           )}
 
