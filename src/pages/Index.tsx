@@ -161,12 +161,27 @@ export default function Index() {
     setNewsPanelSentiment(getThemeSentiment(theme.theme_name));
   }, [fetchThemeNews, getAiSummary, getThemeSentiment]);
 
-  const themes = useMemo(() => {
+  const baseThemes = useMemo(() => {
     if (showPlaceholders) return allThemes;
     return allThemes.filter(
       (t) => t.tickers.length > 0 || t.up_count > 0 || t.down_count > 0
     );
   }, [allThemes, showPlaceholders]);
+
+  // ── Theme / Industry / Sector grouping ──────────────────────────
+  const { rows: sectorRows, loading: sectorsLoading, load: loadSectors } = useUniverseSectors();
+  useEffect(() => { if (groupMode !== "theme") loadSectors(); }, [groupMode, loadSectors]);
+
+  const industryBySymbol = useMemo(() => {
+    const m = new Map<string, string | null>();
+    for (const r of sectorRows) m.set(r.symbol.toUpperCase(), r.sector);
+    return m;
+  }, [sectorRows]);
+
+  const themes = useMemo(
+    () => buildGroupedThemes(baseThemes, industryBySymbol, groupMode),
+    [baseThemes, industryBySymbol, groupMode],
+  );
 
   // Prefetch news for the top 5 most-moving themes
   useEffect(() => {
