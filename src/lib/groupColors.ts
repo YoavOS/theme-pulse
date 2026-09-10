@@ -1,13 +1,18 @@
 // ─────────────────────────────────────────────────────────────
-// App-wide color system for Sector / Industry / Theme grouping.
+// App-wide color system for Sector / Industry / Sub-Industry / Theme grouping.
 //
-// Rule: every GICS Sector owns one hue family. Industries that
-// belong to that sector get deterministic shades of the same hue
-// (lightness + saturation steps), so the same industry always
+// Rule: every GICS Sector owns one hue family. Industries and
+// sub-industries under that sector get deterministic shades of the
+// same hue (lightness + saturation steps), so the same group always
 // renders with the same color everywhere in the app.
 // ─────────────────────────────────────────────────────────────
 
-import { GICS_SECTORS, ALL_GICS_SECTORS, gicsForIndustry } from "@/lib/sectorTaxonomy";
+import {
+  SECTOR_HIERARCHY,
+  ALL_GICS_SECTORS,
+  INDUSTRIES_BY_SECTOR,
+  classifyIndustry,
+} from "@/lib/sectorTaxonomy";
 
 /** Base hue per GICS sector (deliberately spread across the wheel). */
 export const SECTOR_HUES: Record<string, number> = {
@@ -30,13 +35,23 @@ const SECTOR_SAT: Record<string, number> = { Other: 0, Unknown: 0 };
 
 const norm = (v: string | null | undefined) => (v ?? "").toLowerCase().trim();
 
-/** Stable index of an industry within its sector's industry list. */
+/** Stable index of a mid-level industry within its sector. */
 const INDUSTRY_INDEX = (() => {
   const map = new Map<string, { sector: string; index: number; total: number }>();
   for (const sector of ALL_GICS_SECTORS) {
-    const list = GICS_SECTORS[sector];
-    list.forEach((ind, i) => {
-      map.set(norm(ind), { sector, index: i, total: list.length });
+    const list = INDUSTRIES_BY_SECTOR[sector];
+    list.forEach((ind, i) => map.set(norm(ind), { sector, index: i, total: list.length }));
+  }
+  return map;
+})();
+
+/** Stable index of a raw sub-industry label within its sector. */
+const SUB_INDUSTRY_INDEX = (() => {
+  const map = new Map<string, { sector: string; index: number; total: number }>();
+  for (const sector of ALL_GICS_SECTORS) {
+    const labels = Object.values(SECTOR_HIERARCHY[sector]).flat();
+    labels.forEach((l, i) => {
+      if (!map.has(norm(l))) map.set(norm(l), { sector, index: i, total: labels.length });
     });
   }
   return map;
@@ -54,36 +69,46 @@ export function colorForSector(sector: string | null | undefined): string {
   if (!key) return "hsl(0, 0%, 40%)";
   const hue = SECTOR_HUES[key];
   if (hue === undefined) {
-    // Unmapped label — derive a stable hue but keep it desaturated so it
-    // never competes visually with a real sector family.
     return `hsl(${hashString(key) % 360}, 25%, 50%)`;
   }
   const sat = SECTOR_SAT[key] ?? 72;
   return `hsl(${hue}, ${sat}%, ${sat === 0 ? 45 : 52}%)`;
 }
 
+function shade(meta: { sector: string; index: number; total: number }, spread: [number, number]) {
+  const hue = SECTOR_HUES[meta.sector] ?? hashString(meta.sector) % 360;
+  const span = Math.max(1, meta.total - 1);
+  const t = meta.index / span;
+  const light = spread[0] + t * spread[1];
+  const sat = 78 - t * 26;
+  const hueShift = (meta.index % 3) * 4 - 4;
+  return `hsl(${hue + hueShift}, ${sat.toFixed(0)}%, ${light.toFixed(0)}%)`;
+}
+
 /**
- * Color for a granular industry — a shade of its parent sector's hue.
- * Unmapped industries fall back to a stable neutral shade.
+ * Color for a mid-level industry — a shade of its parent sector's hue.
+ * Accepts either an industry name or a raw provider label.
  */
 export function colorForIndustry(industry: string | null | undefined): string {
   const key = (industry ?? "").trim();
   if (!key) return "hsl(0, 0%, 40%)";
-
   const meta = INDUSTRY_INDEX.get(norm(key));
-  if (!meta) {
-    const parent = gicsForIndustry(key);
-    if (parent) return colorForSector(parent);
-    return `hsl(${hashString(key) % 360}, 22%, 48%)`;
-  }
+  if (meta) return shade(meta, [38, 30]);
 
-  const hue = SECTOR_HUES[meta.sector] ?? hashString(meta.sector) % 360;
-  const span = Math.max(1, meta.total - 1);
-  const t = meta.index / span;                 // 0..1 within the family
-  const light = 38 + t * 30;                   // 38% → 68%
-  const sat = 78 - t * 26;                     // 78% → 52%
-  const hueShift = (meta.index % 3) * 4 - 4;   // ±4° so neighbours stay distinct
-  return `hsl(${hue + hueShift}, ${sat.toFixed(0)}%, ${light.toFixed(0)}%)`;
+  const cls = classifyIndustry(key);
+  const viaParent = INDUSTRY_INDEX.get(norm(cls.industry));
+  if (viaParent) return shade(viaParent, [38, 30]);
+  if (SECTOR_HUES[cls.sector] !== undefined && cls.sector !== "Other") return colorForSector(cls.sector);
+  return `hsl(${hashString(key) % 360}, 22%, 48%)`;
+}
+
+/** Color for a granular sub-industry — a lighter shade inside the sector family. */
+export function colorForSubIndustry(sub: string | null | undefined): string {
+  const key = (sub ?? "").trim();
+  if (!key) return "hsl(0, 0%, 40%)";
+  const meta = SUB_INDUSTRY_INDEX.get(norm(key));
+  if (meta) return shade(meta, [34, 38]);
+  return colorForIndustry(key);
 }
 
 /** Stable, distinct color for a custom theme name (not sector-derived). */
@@ -94,7 +119,7 @@ export function colorForTheme(name: string | null | undefined): string {
   return `hsl(${h % 360}, ${60 + (h % 3) * 8}%, ${50 + ((h >> 3) % 3) * 6}%)`;
 }
 
-export type GroupMode = "theme" | "industry" | "sector";
+export type GroupMode = "theme" | "industry" | "sector" | "subIndustry";
 
 /** One entry point used by every chart in the app. */
 export function colorForGroup(name: string | null | undefined, mode: GroupMode): string {
@@ -103,6 +128,7 @@ export function colorForGroup(name: string | null | undefined, mode: GroupMode):
   if (key === "Other" || key === "Other themes") return "hsl(0, 0%, 52%)";
   if (mode === "sector") return colorForSector(key);
   if (mode === "industry") return colorForIndustry(key);
+  if (mode === "subIndustry") return colorForSubIndustry(key);
   return colorForTheme(key);
 }
 
@@ -110,4 +136,19 @@ export const GROUP_MODE_LABEL: Record<GroupMode, string> = {
   theme: "Theme",
   industry: "Industry",
   sector: "Sector",
+  subIndustry: "Sub-Industry",
 };
+
+export const ALL_GROUP_MODES: GroupMode[] = ["theme", "industry", "sector", "subIndustry"];
+
+/**
+ * Single source of truth for turning a stock's raw provider industry label
+ * into the bucket name for the active grouping mode.
+ */
+export function groupKeyForIndustry(raw: string | null | undefined, mode: GroupMode): string {
+  const cls = classifyIndustry(raw);
+  if (mode === "sector") return cls.sector;
+  if (mode === "industry") return cls.industry;
+  if (mode === "subIndustry") return cls.subIndustry;
+  return cls.industry;
+}
