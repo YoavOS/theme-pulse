@@ -12,7 +12,7 @@ import { useSuperperformance } from "@/hooks/useSuperperformance";
 import { useSetupMetrics, loadCoilConfig, type SetupMetrics } from "@/hooks/useSetupMetrics";
 import GroupConcentrationPanel, { type ConcentrationItem } from "@/components/shared/GroupConcentrationPanel";
 import HighLowLeadership, { type HighLowItem } from "@/components/shared/HighLowLeadership";
-import { GROUP_MODE_LABEL, type GroupMode } from "@/lib/groupColors";
+import { GROUP_MODE_LABEL, groupKeyForIndustry, type GroupMode } from "@/lib/groupColors";
 import { gicsForIndustry } from "@/lib/sectorTaxonomy";
 
 
@@ -510,8 +510,7 @@ export default function ThemeSetupAnalyzer({ universe, isOtcSymbol }: Props) {
       const it = concentrationItems.find(c => c.symbol === sym);
       if (!it) return null;
       if (groupMode === "theme") return it.theme ?? null;
-      if (groupMode === "industry") return it.industry ?? null;
-      return gicsForIndustry(it.industry);
+      return groupKeyForIndustry(it.industry, groupMode);
     };
     const perList = sel.map(id => {
       const counts = new Map<string, number>();
@@ -622,7 +621,7 @@ export default function ThemeSetupAnalyzer({ universe, isOtcSymbol }: Props) {
               items={concentrationItems}
               mode={groupMode}
               onModeChange={setGroupMode}
-              availableModes={["industry", "sector", "theme"]}
+              availableModes={["industry", "subIndustry", "sector", "theme"]}
               height={280}
             />
           </div>
@@ -634,7 +633,7 @@ export default function ThemeSetupAnalyzer({ universe, isOtcSymbol }: Props) {
               items={highLowItems}
               mode={groupMode}
               onModeChange={setGroupMode}
-              availableModes={["industry", "sector", "theme"]}
+              availableModes={["industry", "subIndustry", "sector", "theme"]}
             />
           </div>
 
