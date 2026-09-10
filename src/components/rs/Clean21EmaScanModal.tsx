@@ -440,7 +440,7 @@ export default function Clean21EmaScanModal({ open, onOpenChange, universe, rati
                 items={concentrationItems}
                 mode={groupMode}
                 onModeChange={setGroupMode}
-                availableModes={["sector", "industry", "theme"]}
+                availableModes={["sector", "industry", "subIndustry", "theme"]}
                 height={260}
               />
             </div>

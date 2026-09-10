@@ -93,7 +93,7 @@ export default function DashboardConcentrationPanel({ themes }: Props) {
             items={items}
             mode={mode}
             onModeChange={setMode}
-            availableModes={["theme", "industry", "sector"]}
+            availableModes={["theme", "industry", "subIndustry", "sector"]}
             height={320}
             emptyLabel={loading ? "Loading industry data…" : "No stocks available yet."}
             headerExtra={

@@ -13,7 +13,6 @@ import { useSetupMetrics, loadCoilConfig, type SetupMetrics } from "@/hooks/useS
 import GroupConcentrationPanel, { type ConcentrationItem } from "@/components/shared/GroupConcentrationPanel";
 import HighLowLeadership, { type HighLowItem } from "@/components/shared/HighLowLeadership";
 import { GROUP_MODE_LABEL, groupKeyForIndustry, type GroupMode } from "@/lib/groupColors";
-import { gicsForIndustry } from "@/lib/sectorTaxonomy";
 
 
 /* ───────────────────────── Types & config ───────────────────────── */

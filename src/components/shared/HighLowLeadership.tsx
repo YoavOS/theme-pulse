@@ -1,8 +1,7 @@
 import { useMemo, useState } from "react";
 import { ArrowUpRight, ArrowDownRight, Copy } from "lucide-react";
 import { toast } from "sonner";
-import { colorForGroup, GROUP_MODE_LABEL, type GroupMode } from "@/lib/groupColors";
-import { gicsForIndustry } from "@/lib/sectorTaxonomy";
+import { colorForGroup, GROUP_MODE_LABEL, groupKeyForIndustry, type GroupMode } from "@/lib/groupColors";
 
 export interface HighLowItem {
   symbol: string;
@@ -121,7 +120,7 @@ interface Props {
 
 export default function HighLowLeadership({
   items, mode, onModeChange,
-  availableModes = ["industry", "sector", "theme"],
+  availableModes = ["industry", "subIndustry", "sector", "theme"],
   timeframe, onTimeframeChange, headerExtra,
 }: Props) {
   const [localTf, setLocalTf] = useState<HlTf>("1w");
