@@ -70,7 +70,7 @@ const LIST_LABEL: Record<ListId, string> = {
 const RS_TFS: RsTf[] = ["1d", "1w", "1m", "3m", "6m", "overall"];
 
 const GROUP_LABEL_LC: Record<GroupMode, string> = {
-  theme: "themes", industry: "industries", sector: "sectors",
+  theme: "themes", industry: "industries", sector: "sectors", subIndustry: "sub-industries",
 };
 
 
@@ -376,9 +376,7 @@ export default function ThemeSetupAnalyzer({ universe, isOtcSymbol }: Props) {
 
     const groupOf = (sym: string): string => {
       if (groupMode === "theme") return themeOf.get(sym) ?? "Unassigned";
-      const ind = bySym.get(sym)?.sector ?? null;
-      if (groupMode === "industry") return (ind ?? "").trim() || "Unknown";
-      return gicsForIndustry(ind) ?? (ind ? "Other" : "Unknown");
+      return groupKeyForIndustry(bySym.get(sym)?.sector ?? null, groupMode);
     };
 
     // Universe-wide group sizes so participation stays meaningful.
