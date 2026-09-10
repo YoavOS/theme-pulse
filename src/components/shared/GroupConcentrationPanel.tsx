@@ -2,8 +2,7 @@ import { useMemo, useState } from "react";
 import { Copy, Download } from "lucide-react";
 import { toast } from "sonner";
 import { PieChart, Pie, Cell, Tooltip as RechartsTooltip, ResponsiveContainer, Sector } from "recharts";
-import { colorForGroup, GROUP_MODE_LABEL, type GroupMode } from "@/lib/groupColors";
-import { gicsForIndustry } from "@/lib/sectorTaxonomy";
+import { colorForGroup, GROUP_MODE_LABEL, groupKeyForIndustry, type GroupMode } from "@/lib/groupColors";
 
 export interface ConcentrationItem {
   symbol: string;
@@ -28,8 +27,7 @@ export function buildGroups(items: ConcentrationItem[], mode: GroupMode): GroupS
   for (const it of items) {
     let key: string;
     if (mode === "theme") key = (it.theme ?? "").trim() || "Unassigned";
-    else if (mode === "industry") key = (it.industry ?? "").trim() || "Unknown";
-    else key = gicsForIndustry(it.industry) ?? (it.industry ? "Other" : "Unknown");
+    else key = groupKeyForIndustry(it.industry, mode);
     const arr = buckets.get(key) ?? [];
     arr.push(it);
     buckets.set(key, arr);
@@ -81,7 +79,7 @@ interface Props {
 
 export default function GroupConcentrationPanel({
   items, mode, onModeChange,
-  availableModes = ["theme", "industry", "sector"],
+  availableModes = ["theme", "industry", "subIndustry", "sector"],
   headerExtra, maxSlices = 14, height = 320,
   emptyLabel = "No stocks match the current filters.",
 }: Props) {

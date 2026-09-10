@@ -1,8 +1,7 @@
 import { useMemo, useState } from "react";
 import { ArrowUpRight, ArrowDownRight, Copy } from "lucide-react";
 import { toast } from "sonner";
-import { colorForGroup, GROUP_MODE_LABEL, type GroupMode } from "@/lib/groupColors";
-import { gicsForIndustry } from "@/lib/sectorTaxonomy";
+import { colorForGroup, GROUP_MODE_LABEL, groupKeyForIndustry, type GroupMode } from "@/lib/groupColors";
 
 export interface HighLowItem {
   symbol: string;
@@ -29,8 +28,7 @@ interface GroupRow {
 
 function groupKey(it: HighLowItem, mode: GroupMode): string {
   if (mode === "theme") return (it.theme ?? "").trim() || "Unassigned";
-  if (mode === "industry") return (it.industry ?? "").trim() || "Unknown";
-  return gicsForIndustry(it.industry) ?? (it.industry ? "Other" : "Unknown");
+  return groupKeyForIndustry(it.industry, mode);
 }
 
 function rank(items: HighLowItem[], mode: GroupMode, days: number, side: "high" | "low"): GroupRow[] {
@@ -121,7 +119,7 @@ interface Props {
 
 export default function HighLowLeadership({
   items, mode, onModeChange,
-  availableModes = ["industry", "sector", "theme"],
+  availableModes = ["industry", "subIndustry", "sector", "theme"],
   timeframe, onTimeframeChange, headerExtra,
 }: Props) {
   const [localTf, setLocalTf] = useState<HlTf>("1w");

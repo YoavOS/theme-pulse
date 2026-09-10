@@ -1,6 +1,5 @@
 import type { ThemeData, Ticker } from "@/data/themeData";
-import { gicsForIndustry } from "@/lib/sectorTaxonomy";
-import type { GroupMode } from "@/lib/groupColors";
+import { groupKeyForIndustry, type GroupMode } from "@/lib/groupColors";
 
 /**
  * Re-buckets the curated theme dataset into Industry or Sector "themes" so
@@ -23,10 +22,7 @@ export function buildGroupedThemes(
       if (seen.has(sym)) continue;
       seen.add(sym);
       const industry = industryBySymbol.get(sym) ?? null;
-      const key =
-        mode === "industry"
-          ? (industry ?? "").trim() || "Unknown"
-          : gicsForIndustry(industry) ?? (industry ? "Other" : "Unknown");
+      const key = groupKeyForIndustry(industry, mode);
       const arr = buckets.get(key) ?? [];
       arr.push(tk);
       buckets.set(key, arr);

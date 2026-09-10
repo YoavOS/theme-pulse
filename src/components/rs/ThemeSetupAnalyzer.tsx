@@ -12,8 +12,7 @@ import { useSuperperformance } from "@/hooks/useSuperperformance";
 import { useSetupMetrics, loadCoilConfig, type SetupMetrics } from "@/hooks/useSetupMetrics";
 import GroupConcentrationPanel, { type ConcentrationItem } from "@/components/shared/GroupConcentrationPanel";
 import HighLowLeadership, { type HighLowItem } from "@/components/shared/HighLowLeadership";
-import { GROUP_MODE_LABEL, type GroupMode } from "@/lib/groupColors";
-import { gicsForIndustry } from "@/lib/sectorTaxonomy";
+import { GROUP_MODE_LABEL, groupKeyForIndustry, type GroupMode } from "@/lib/groupColors";
 
 
 /* ───────────────────────── Types & config ───────────────────────── */
@@ -70,7 +69,7 @@ const LIST_LABEL: Record<ListId, string> = {
 const RS_TFS: RsTf[] = ["1d", "1w", "1m", "3m", "6m", "overall"];
 
 const GROUP_LABEL_LC: Record<GroupMode, string> = {
-  theme: "themes", industry: "industries", sector: "sectors",
+  theme: "themes", industry: "industries", sector: "sectors", subIndustry: "sub-industries",
 };
 
 
@@ -376,9 +375,7 @@ export default function ThemeSetupAnalyzer({ universe, isOtcSymbol }: Props) {
 
     const groupOf = (sym: string): string => {
       if (groupMode === "theme") return themeOf.get(sym) ?? "Unassigned";
-      const ind = bySym.get(sym)?.sector ?? null;
-      if (groupMode === "industry") return (ind ?? "").trim() || "Unknown";
-      return gicsForIndustry(ind) ?? (ind ? "Other" : "Unknown");
+      return groupKeyForIndustry(bySym.get(sym)?.sector ?? null, groupMode);
     };
 
     // Universe-wide group sizes so participation stays meaningful.
@@ -512,8 +509,7 @@ export default function ThemeSetupAnalyzer({ universe, isOtcSymbol }: Props) {
       const it = concentrationItems.find(c => c.symbol === sym);
       if (!it) return null;
       if (groupMode === "theme") return it.theme ?? null;
-      if (groupMode === "industry") return it.industry ?? null;
-      return gicsForIndustry(it.industry);
+      return groupKeyForIndustry(it.industry, groupMode);
     };
     const perList = sel.map(id => {
       const counts = new Map<string, number>();
@@ -624,7 +620,7 @@ export default function ThemeSetupAnalyzer({ universe, isOtcSymbol }: Props) {
               items={concentrationItems}
               mode={groupMode}
               onModeChange={setGroupMode}
-              availableModes={["industry", "sector", "theme"]}
+              availableModes={["industry", "subIndustry", "sector", "theme"]}
               height={280}
             />
           </div>
@@ -636,7 +632,7 @@ export default function ThemeSetupAnalyzer({ universe, isOtcSymbol }: Props) {
               items={highLowItems}
               mode={groupMode}
               onModeChange={setGroupMode}
-              availableModes={["industry", "sector", "theme"]}
+              availableModes={["industry", "subIndustry", "sector", "theme"]}
             />
           </div>
 

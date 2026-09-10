@@ -193,7 +193,7 @@ export default function SectorDistributionModal({
             items={panelItems}
             mode={groupMode}
             onModeChange={setGroupMode}
-            availableModes={["sector", "industry", "theme"]}
+            availableModes={["sector", "industry", "subIndustry", "theme"]}
             height={340}
           />
 
