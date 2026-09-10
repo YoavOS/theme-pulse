@@ -28,8 +28,7 @@ interface GroupRow {
 
 function groupKey(it: HighLowItem, mode: GroupMode): string {
   if (mode === "theme") return (it.theme ?? "").trim() || "Unassigned";
-  if (mode === "industry") return (it.industry ?? "").trim() || "Unknown";
-  return gicsForIndustry(it.industry) ?? (it.industry ? "Other" : "Unknown");
+  return groupKeyForIndustry(it.industry, mode);
 }
 
 function rank(items: HighLowItem[], mode: GroupMode, days: number, side: "high" | "low"): GroupRow[] {

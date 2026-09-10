@@ -593,7 +593,7 @@ export default function Index() {
         <div className="mb-4 flex flex-wrap items-center gap-2">
           <span className="text-[11px] uppercase tracking-wide text-muted-foreground">Group by</span>
           <div className="inline-flex items-center gap-0.5 rounded-md border border-border bg-muted/20 p-0.5">
-            {(["theme", "industry", "sector"] as GroupMode[]).map(m => (
+            {(["theme", "industry", "subIndustry", "sector"] as GroupMode[]).map(m => (
               <button
                 key={m}
                 onClick={() => setGroupMode(m)}
