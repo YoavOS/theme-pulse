@@ -55,6 +55,8 @@ export function useFiftyTwoWeekHighs(symbols: string[], enabled = true) {
       }
     }
     setMap(fresh);
+    const valid = need.filter(s => /^[A-Z][A-Z0-9.-]{0,9}$/.test(String(s ?? "").toUpperCase().trim()));
+    need.length = 0; need.push(...valid);
     if (need.length === 0) return;
 
     need.forEach(s => inflight.current.add(s));
