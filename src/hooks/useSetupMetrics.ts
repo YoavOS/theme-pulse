@@ -143,6 +143,7 @@ export function useSetupMetrics() {
    */
   const load = useCallback(async (symbols: string[], cfg: CoilConfig = DEFAULT_COIL_CONFIG) => {
     const next = new Map<string, SetupMetrics>();
+    symbols = Array.from(new Set(symbols.map(s => String(s ?? "").toUpperCase().trim()).filter(s => /^[A-Z][A-Z0-9.-]{0,9}$/.test(s))));
     if (inflight.current || symbols.length === 0) return next;
     inflight.current = true;
     setLoading(true);

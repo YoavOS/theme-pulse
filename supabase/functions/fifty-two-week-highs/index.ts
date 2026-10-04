@@ -232,7 +232,8 @@ Deno.serve(async (req) => {
     const body = await req.json().catch(() => ({}));
     const symbols = sanitize(body?.symbols);
     const coil = parseCoilConfig(body as Record<string, unknown>);
-    if (symbols.length === 0) return json({ error: "symbols[] required", rows: [] }, 400);
+    // No valid symbols (e.g. all filtered by sanitize) → empty result, not an error.
+    if (symbols.length === 0) return json({ total: 0, coil, cacheHits: 0, fetched: 0, computed: 0, partial: false, rows: [] });
 
     const SB_URL = Deno.env.get("SUPABASE_URL");
     const SB_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
