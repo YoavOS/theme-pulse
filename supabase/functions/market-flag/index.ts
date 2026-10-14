@@ -10,6 +10,7 @@ const GROQ_API_KEY = Deno.env.get("GROQ_API_KEY");
  * Everything is cached in memory for 6h (manual `force` bypasses).
  * --------------------------------------------------------------*/
 
+// Build marker (Claude deploy test): returned as the X-TP-Build response header.
 const TTL = 6 * 60 * 60 * 1000;
 let cache: { ts: number; payload: unknown } | null = null;
 
@@ -82,7 +83,7 @@ const clampScore = (n: number) => Math.max(-2, Math.min(2, n));
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   const json = (b: unknown, status = 200) =>
-    new Response(JSON.stringify(b), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    new Response(JSON.stringify(b), { status, headers: { ...corsHeaders, "Content-Type": "application/json", "X-TP-Build": "claude-test-1" } });
 
   try {
     const body = await req.json().catch(() => ({})) as { force?: boolean };

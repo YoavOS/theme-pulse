@@ -279,6 +279,7 @@ export default function Index() {
               <h1 className="text-xl sm:text-2xl font-extrabold tracking-tight text-foreground">
                 Best Performing Themes{" "}
                 <span className="text-primary">{formatDate(lastFetched)}</span>
+                <span className="ml-1 align-middle text-[10px] font-medium text-muted-foreground">v2</span>
               </h1>
             </div>
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
