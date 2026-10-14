@@ -25,7 +25,7 @@ const FMP_DAILY_CAP = 150;   // FMP free = 250/day; leave room for earnings feat
 const AV_DAILY_CAP = 24;     // Alpha Vantage free = 25/day
 const AV_PER_RUN = 5;        // Alpha Vantage free = 5/min → one run uses at most 5
 const AV_GAP_MS = 12_500;    // spacing between AV calls (keeps us under 5/min)
-const BATCH = 32;            // pending tickers per run
+const BATCH = 60;            // pending tickers per run (≈30–45s)
 const PARALLEL = 4;
 const GROQ_BATCH = 25;
 const DEADLINE_MS = 105_000; // edge functions allow ~150s; keep headroom
