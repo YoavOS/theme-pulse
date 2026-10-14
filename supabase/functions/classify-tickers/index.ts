@@ -276,7 +276,8 @@ async function resolveFree(row: Row, fmp: { left: number; blocked: boolean }): P
 
 // ── Stage 2: Alpha Vantage (leftovers, daily-capped) ─────────────
 async function runAlphaVantage(db: SupabaseClient, deadline: number) {
-  const out = { calls: 0, done: 0, toAi: 0, limited: false };
+  const out: { calls: number; done: number; toAi: number; limited: boolean; message?: string } =
+    { calls: 0, done: 0, toAi: 0, limited: false };
   if (!AV_KEY) {
     // No Alpha Vantage key configured → skip straight to the AI step.
     const { data } = await db.from("ticker_classification").select("symbol").eq("status", "needs_av").limit(500);
@@ -304,12 +305,27 @@ async function runAlphaVantage(db: SupabaseClient, deadline: number) {
       const res = await fetch(`https://www.alphavantage.co/query?function=OVERVIEW&symbol=${encodeURIComponent(row.symbol)}&apikey=${AV_KEY}`);
       j = res.ok ? await res.json() : null;
     } catch { j = null; }
-    if (j && (j.Note || j.Information)) {
-      // Rate limit / daily limit reached — stop for today, leave the row queued.
-      const msg = `${j.Note ?? ""} ${j.Information ?? ""}`.toLowerCase();
-      if (msg.includes("per day") || msg.includes("daily")) await setUsage(db, "alphavantage", AV_DAILY_CAP);
-      out.limited = true;
-      break;
+    if (j && (j.Note || j.Information || j["Error Message"])) {
+      const raw = `${j.Note ?? ""} ${j.Information ?? ""} ${j["Error Message"] ?? ""}`.trim();
+      const msg = raw.toLowerCase();
+      out.message = raw.slice(0, 300);
+      if (msg.includes("per day") || msg.includes("daily") || msg.includes("premium")) {
+        // Daily allowance used up (or key not allowed) — stop for today.
+        await setUsage(db, "alphavantage", AV_DAILY_CAP);
+        out.limited = true;
+        break;
+      }
+      if (msg.includes("per second") || msg.includes("per minute") || msg.includes("rate limit") || msg.includes("sparingly")) {
+        // Burst limit — leave the row queued and stop this run.
+        out.limited = true;
+        break;
+      }
+      // Any other answer (e.g. unknown symbol) → Alpha Vantage can't help this ticker; hand it to the AI step.
+      await db.from("ticker_classification").upsert({
+        ...row, tried: [...(row.tried ?? []), "alphavantage"], status: "needs_ai", updated_at: new Date().toISOString(),
+      });
+      out.toAi++;
+      continue;
     }
     let next: Row = { ...row, tried: [...(row.tried ?? []), "alphavantage"] };
     if (j?.Name && !next.company_name) next.company_name = j.Name;

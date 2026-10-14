@@ -32,7 +32,7 @@ export interface ClassifierResponse {
   };
 }
 
-export const UNIVERSE_SECTORS_CACHE_KEY = "universe_sectors_v4";
+export const UNIVERSE_SECTORS_CACHE_KEY = "universe_sectors_v5";
 const AUTO_RUN_DAY_KEY = "classify_auto_day_v1";
 const STATUS_EVENT = "classification-status";
 
@@ -70,6 +70,7 @@ export async function retryFailedClassifications(): Promise<ClassifierResponse> 
 /** Is there anything a run can do right now? */
 export function hasRunnableWork(s: ClassificationStatus | undefined): boolean {
   if (!s) return true; // unknown → let the server decide (it also discovers new tickers)
+  if (s.total === 0) return true; // nothing discovered yet — the first run finds all tickers
   if (s.pending > 0 || s.needs_ai > 0) return true;
   if (s.needs_av > 0 && (!s.avKeyConfigured || s.avUsedToday < s.avDailyCap)) return true;
   return false;
@@ -120,8 +121,12 @@ export async function autoRunClassificationOncePerDay() {
   const day = new Date().toISOString().slice(0, 10);
   try {
     if (localStorage.getItem(AUTO_RUN_DAY_KEY) === day) return;
-    localStorage.setItem(AUTO_RUN_DAY_KEY, day);
   } catch { /* storage blocked → still run once this session */ }
   // Always run once: it also picks up tickers added since yesterday.
-  await runClassification(8);
+  const r = await runClassification(8);
+  // Only mark today as done if the classifier actually answered
+  // (e.g. not before it is deployed), so a failed attempt is retried next visit.
+  if (r.ok) {
+    try { localStorage.setItem(AUTO_RUN_DAY_KEY, day); } catch { /* ignore */ }
+  }
 }
