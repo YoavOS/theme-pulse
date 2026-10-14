@@ -177,8 +177,17 @@ Deno.serve(async (req) => {
 
     // --- RESULTS: Return all completed ticker data (for dashboard) ---
     if (action === "results") {
-      const { data: allPerf } = await sb.from("ticker_performance").select("*").eq("status", "done");
-      return new Response(JSON.stringify({ tickers: allPerf || [] }), {
+      // Paginate: the API returns at most 1,000 rows per request.
+      const allPerf: Record<string, unknown>[] = [];
+      for (let from = 0; ; from += 1000) {
+        const { data, error } = await sb.from("ticker_performance").select("*").eq("status", "done")
+          .order("symbol").range(from, from + 999);
+        if (error) throw error;
+        if (!data?.length) break;
+        allPerf.push(...data);
+        if (data.length < 1000) break;
+      }
+      return new Response(JSON.stringify({ tickers: allPerf }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
@@ -188,7 +197,21 @@ Deno.serve(async (req) => {
       const { data: dbTickers } = await sb.from("theme_tickers").select("ticker_symbol");
       if (!dbTickers) throw new Error("Failed to read tickers");
 
-      const uniqueSymbols = [...new Set(dbTickers.map(t => t.ticker_symbol))];
+      // Also scan every stock in the qualified stock list, so the Dashboard's
+      // Industry / Sub-Industry / Sector views get their own fresh numbers
+      // (independent of RS Alpha's calculations). Only the symbol list is read.
+      const universeSymbols: string[] = [];
+      for (let from = 0; ; from += 1000) {
+        const { data, error } = await sb.from("qualified_rs_universe").select("symbol").order("symbol").range(from, from + 999);
+        if (error || !data?.length) break;
+        universeSymbols.push(...data.map((r: { symbol: string }) => r.symbol));
+        if (data.length < 1000) break;
+      }
+
+      const uniqueSymbols = [...new Set([
+        ...dbTickers.map(t => t.ticker_symbol),
+        ...universeSymbols,
+      ].map(s => String(s).toUpperCase().trim()).filter(Boolean))];
       
       // Always include SPY as benchmark
       if (!uniqueSymbols.includes("SPY")) uniqueSymbols.push("SPY");
