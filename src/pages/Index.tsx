@@ -35,10 +35,13 @@ import { useFundamentals } from "@/hooks/useFundamentals";
 import NewsPanel from "@/components/NewsPanel";
 import { useUniverseSectors } from "@/hooks/useUniverseSectors";
 import ClassificationCoverage from "@/components/dashboard/ClassificationCoverage";
-import { buildGroupedThemes } from "@/lib/groupThemes";
+import { buildGroupedThemes, buildUniverseGroups } from "@/lib/groupThemes";
 import { GROUP_MODE_LABEL, type GroupMode } from "@/lib/groupColors";
 
 const TIMEFRAMES = ["Today", "1W", "1M", "3M", "Overall"] as const;
+const GROUP_MODE_PLURAL: Record<GroupMode, string> = {
+  theme: "themes", industry: "industries", subIndustry: "sub-industries", sector: "sectors",
+};
 const DASHBOARD_WEIGHTS_KEY = "dashboard_overall_weights_v1";
 
 function formatDate(d: Date) {
@@ -179,7 +182,7 @@ export default function Index() {
   }, [allThemes, showPlaceholders]);
 
   // ── Theme / Industry / Sector grouping ──────────────────────────
-  const { rows: sectorRows, extra: sectorExtra, loading: sectorsLoading, load: loadSectors } = useUniverseSectors();
+  const { rows: sectorRows, extra: sectorExtra, asOf: sectorsAsOf, loading: sectorsLoading, load: loadSectors } = useUniverseSectors();
   useEffect(() => { if (groupMode !== "theme") loadSectors(); }, [groupMode, loadSectors]);
 
   const industryBySymbol = useMemo(() => {
@@ -190,9 +193,17 @@ export default function Index() {
     return m;
   }, [sectorRows, sectorExtra]);
 
+  // Industry / Sub-Industry / Sector use the whole qualified RS universe.
+  // Falls back to theme tickers only if the universe can't be loaded (e.g. demo mode).
+  const usingUniverse = groupMode !== "theme" && sectorRows.length > 0;
   const themes = useMemo(
-    () => buildGroupedThemes(baseThemes, industryBySymbol, groupMode),
-    [baseThemes, industryBySymbol, groupMode],
+    () =>
+      groupMode === "theme"
+        ? baseThemes
+        : usingUniverse
+          ? buildUniverseGroups(sectorRows, groupMode, activeTimeframe)
+          : buildGroupedThemes(baseThemes, industryBySymbol, groupMode),
+    [baseThemes, industryBySymbol, groupMode, usingUniverse, sectorRows, activeTimeframe],
   );
 
   // Prefetch news for the top 5 most-moving themes
@@ -330,7 +341,7 @@ export default function Index() {
                 </TooltipProvider>
               )}
               <span className="hidden sm:inline">· {formatTime(lastFetched)}</span>
-              <span className="hidden sm:inline">· {themes.length} {GROUP_MODE_LABEL[groupMode].toLowerCase()}s</span>
+              <span className="hidden sm:inline">· {themes.length} {GROUP_MODE_PLURAL[groupMode]}</span>
               {isLive && <span className="hidden sm:inline">· {symbolsFetched} symbols</span>}
               {scanProgress && scanProgress.failed > 0 && (
                 <span className="text-[10px] text-destructive">⚠ {scanProgress.failed} unavailable</span>
@@ -612,6 +623,12 @@ export default function Index() {
             {sectorsLoading && groupMode !== "theme"
               ? "Loading industry data…"
               : `${themes.length} ${GROUP_MODE_LABEL[groupMode].toLowerCase()} groups`}
+            {usingUniverse && (
+              <span title="Industry, Sub-Industry and Sector views use the whole RS universe. Returns come from the latest 'Recalculate RS Scores' run (Today = last 1-day return).">
+                {` · ${sectorRows.length.toLocaleString("en-US")} stocks (RS universe)`}
+                {sectorsAsOf && ` · as of ${new Date(sectorsAsOf).toLocaleString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}`}
+              </span>
+            )}
           </span>
           {groupMode !== "theme" && <ClassificationCoverage onUpdated={() => loadSectors(true)} />}
         </div>
