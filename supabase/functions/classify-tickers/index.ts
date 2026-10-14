@@ -309,8 +309,18 @@ async function runAlphaVantage(db: SupabaseClient, deadline: number) {
       const raw = `${j.Note ?? ""} ${j.Information ?? ""} ${j["Error Message"] ?? ""}`.trim();
       const msg = raw.toLowerCase();
       out.message = raw.slice(0, 300);
-      if (msg.includes("per day") || msg.includes("daily") || msg.includes("premium")) {
-        // Daily allowance used up (or key not allowed) — stop for today.
+      if (msg.includes("premium")) {
+        // Company OVERVIEW is premium-only on this key → Alpha Vantage can't classify
+        // anything. Hand every waiting ticker to the AI step instead of retrying daily.
+        await setUsage(db, "alphavantage", AV_DAILY_CAP);
+        await db.from("ticker_classification")
+          .update({ status: "needs_ai", updated_at: new Date().toISOString() })
+          .eq("status", "needs_av");
+        out.limited = true;
+        break;
+      }
+      if (msg.includes("per day") || msg.includes("daily")) {
+        // Daily allowance used up — stop for today.
         await setUsage(db, "alphavantage", AV_DAILY_CAP);
         out.limited = true;
         break;
