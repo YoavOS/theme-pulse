@@ -83,7 +83,7 @@ const clampScore = (n: number) => Math.max(-2, Math.min(2, n));
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   const json = (b: unknown, status = 200) =>
-    new Response(JSON.stringify(b), { status, headers: { ...corsHeaders, "Content-Type": "application/json", "X-TP-Build": "claude-test-1" } });
+    new Response(JSON.stringify(b), { status, headers: { ...corsHeaders, "Content-Type": "application/json", "X-TP-Build": "claude-test-2", "Access-Control-Expose-Headers": "X-TP-Build" } });
 
   try {
     const body = await req.json().catch(() => ({})) as { force?: boolean };
