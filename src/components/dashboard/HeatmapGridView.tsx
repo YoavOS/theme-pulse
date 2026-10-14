@@ -23,9 +23,7 @@ function getHeatColor(pct: number): string {
 }
 
 function truncateThemeName(name: string): string {
-  const words = name.split(/\s+/);
-  if (words.length <= 2) return name;
-  return words.slice(0, 2).join(" ");
+  return name.length > 28 ? name.slice(0, 27).trimEnd() + "…" : name;
 }
 
 function getPerfColor(pct: number) {
@@ -179,7 +177,7 @@ export default function HeatmapGridView({
               onMouseLeave={handleMouseLeave}
             >
               <div className="flex flex-col items-center justify-center h-full p-1.5 text-center">
-                <span className="text-[10px] font-medium text-white/70 leading-tight line-clamp-1">
+                <span className="text-[10px] font-medium text-white/70 leading-tight line-clamp-2" title={t.theme_name}>
                   {truncateThemeName(t.theme_name)}
                 </span>
                 <span
