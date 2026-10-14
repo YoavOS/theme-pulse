@@ -8,6 +8,7 @@
 //
 // Everything is resolved locally from this static map, so classification costs
 // zero API calls and is stable across the whole app.
+import { classifyLabel } from "@/lib/gicsTaxonomy";
 
 export const SECTOR_HIERARCHY: Record<string, Record<string, string[]>> = {
   "Energy": {
@@ -137,6 +138,8 @@ export interface Classification {
 export function classifyIndustry(raw: string | null | undefined): Classification {
   const label = (raw ?? "").trim();
   if (!label) return { sector: "Unknown", industry: "Unknown", subIndustry: "Unknown" };
+  const g = classifyLabel(label);
+  if (g.sector !== "Other") return g;
   const node = LABEL_TO_NODE.get(norm(label));
   if (!node) return { sector: "Other", industry: "Other", subIndustry: label };
   return { sector: node.sector, industry: node.industry, subIndustry: label };
@@ -145,13 +148,15 @@ export function classifyIndustry(raw: string | null | undefined): Classification
 /** Broad GICS sector for a raw label (legacy helper). */
 export function gicsForIndustry(industry: string | null | undefined): string | null {
   if (!industry) return null;
-  return LABEL_TO_NODE.get(norm(industry))?.sector ?? null;
+  const s = classifyIndustry(industry).sector;
+  return s === "Other" || s === "Unknown" ? null : s;
 }
 
 /** Mid-level industry for a raw label. */
 export function industryForLabel(industry: string | null | undefined): string | null {
   if (!industry) return null;
-  return LABEL_TO_NODE.get(norm(industry))?.industry ?? null;
+  const i = classifyIndustry(industry).industry;
+  return i === "Other" || i === "Unknown" ? null : i;
 }
 
 /** Expand a set of selected labels (mix of sectors, industries and raw labels) to raw labels. */
