@@ -32,7 +32,7 @@ export interface ClassifierResponse {
   };
 }
 
-export const UNIVERSE_SECTORS_CACHE_KEY = "universe_sectors_v4";
+export const UNIVERSE_SECTORS_CACHE_KEY = "universe_sectors_v5";
 const AUTO_RUN_DAY_KEY = "classify_auto_day_v1";
 const STATUS_EVENT = "classification-status";
 
