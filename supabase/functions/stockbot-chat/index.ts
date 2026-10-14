@@ -58,7 +58,7 @@ async function toolQuote(symbol: string) {
     const closes: number[] = (res?.indicators?.quote?.[0]?.close ?? []).filter((x: any) => x != null);
     const last = closes.at(-1) ?? meta.regularMarketPrice ?? null;
     const prev = meta.chartPreviousClose ?? closes.at(-2) ?? null;
-    const ret = (a: number, b: number) => (a != null && b != null && b !== 0) ? ((a - b) / b) * 100 : null;
+    const ret = (a: number | null, b: number | null) => (a != null && b != null && b !== 0) ? ((a - b) / b) * 100 : null;
     return {
       symbol, price: last, previousClose: prev, currency: meta.currency,
       changePct: ret(last, prev),

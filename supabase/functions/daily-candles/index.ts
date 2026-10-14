@@ -54,7 +54,7 @@ Deno.serve(async (req) => {
     const body = await req.json().catch(() => ({}));
     const symbols: string[] = Array.isArray(body.symbols)
       ? Array.from(
-          new Set(
+          new Set<string>(
             body.symbols
               .map((s: unknown) => String(s ?? "").trim().toUpperCase())
               .filter(Boolean),
