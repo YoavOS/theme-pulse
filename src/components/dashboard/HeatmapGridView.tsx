@@ -22,8 +22,9 @@ function getHeatColor(pct: number): string {
   return "hsl(0, 70%, 35%)";
 }
 
+/** Full names wrap onto up to 3 lines; only very long names are shortened. */
 function truncateThemeName(name: string): string {
-  return name.length > 28 ? name.slice(0, 27).trimEnd() + "…" : name;
+  return name.length > 48 ? name.slice(0, 47).trimEnd() + "…" : name;
 }
 
 function getPerfColor(pct: number) {
@@ -137,7 +138,11 @@ export default function HeatmapGridView({
       </div>
 
       {/* Grid */}
-      <div className="grid gap-1" style={{ gridTemplateColumns: "repeat(8, 1fr)" }}>
+      <div
+        className="grid gap-1"
+        // 8 columns on wide screens; fewer, wider tiles on narrow ones so names stay readable.
+        style={{ gridTemplateColumns: "repeat(auto-fill, minmax(max(104px, calc((100% - 28px) / 8)), 1fr))" }}
+      >
         {sorted.map((t) => {
           const isDimmed = dimmedThemes ? !dimmedThemes.has(t.theme_name.toLowerCase()) : false;
           const isHovered = hoveredTheme === t.theme_name;
@@ -177,7 +182,7 @@ export default function HeatmapGridView({
               onMouseLeave={handleMouseLeave}
             >
               <div className="flex flex-col items-center justify-center h-full p-1.5 text-center">
-                <span className="text-[10px] font-medium text-white/70 leading-tight line-clamp-2" title={t.theme_name}>
+                <span className="text-[10px] font-medium text-white/70 leading-tight line-clamp-3 [overflow-wrap:anywhere]" title={t.theme_name}>
                   {truncateThemeName(t.theme_name)}
                 </span>
                 <span
