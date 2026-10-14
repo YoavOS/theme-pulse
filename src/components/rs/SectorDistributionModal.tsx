@@ -6,7 +6,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Input } from "@/components/ui/input";
 import { RsStock } from "@/hooks/useRsAlpha";
-import { ALL_GICS_SECTORS, GICS_SECTORS, buildGroupExcluder, gicsForIndustry } from "@/lib/sectorTaxonomy";
+import { ALL_GICS_SECTORS, GICS_SECTORS, expandSelectedToIndustries, gicsForIndustry } from "@/lib/sectorTaxonomy";
 import GroupConcentrationPanel, { type ConcentrationItem } from "@/components/shared/GroupConcentrationPanel";
 import type { GroupMode } from "@/lib/groupColors";
 import { useCuratedThemes } from "@/hooks/useCuratedThemes";
@@ -104,7 +104,7 @@ export default function SectorDistributionModal({
     });
   };
 
-  const expandedExclusions = useMemo(() => buildGroupExcluder(excludedSectors), [excludedSectors]);
+  const expandedExclusions = useMemo(() => expandSelectedToIndustries(excludedSectors), [excludedSectors]);
 
   // Apply filters → sorted list (by RS desc) → top N
   const filteredStocks = useMemo(() => {
@@ -117,7 +117,7 @@ export default function SectorDistributionModal({
         if (s.rs1m === null || s.rs3m === null || !(s.rs1m > s.rs3m)) return false;
       }
       if (excludeSectorsOn && excludedSectors.size > 0) {
-        if (s.sector && expandedExclusions(s.sector)) return false;
+        if (s.sector && expandedExclusions.has(s.sector.toLowerCase().trim())) return false;
       }
       return true;
     });

@@ -1,8 +1,8 @@
 // ─────────────────────────────────────────────────────────────
 // GICS-style taxonomy + provider-label normalization.
 // PURE module (no imports) — an identical copy lives in
-// supabase/functions/_shared/gicsTaxonomy.ts (used by classify-tickers) so the
-// browser and the classifier always agree on names. Edit both together.
+// supabase/functions/_shared/gicsTaxonomy.ts so the browser and the
+// classification worker always agree on names. Edit both together.
 // ─────────────────────────────────────────────────────────────
 
 /** Sector → Industry → Sub-Industries (canonical GICS-style names). */
@@ -208,13 +208,13 @@ const RAW_ALIASES: Record<string, string> = {
   "Software": "Application Software", "Communication Equipment": "Communications Equipment", "Computer Hardware": "Technology Hardware, Storage & Peripherals",
   "Hardware, Equipment & Parts": "Electronic Components", "Electronic Equipment, Instruments & Components": "Electronic Components",
   "Electronics & Computer Distribution": "Technology Distributors", "Scientific & Technical Instruments": "Electronic Equipment & Instruments",
-  "Semiconductor Equipment & Materials": "Semiconductor Materials & Equipment", "Data Storage": "Technology Hardware, Storage & Peripherals", "Semiconductors & Semiconductor Equipment": "Semiconductors",
+  "Semiconductor Equipment & Materials": "Semiconductor Materials & Equipment", "Semiconductors & Semiconductor Equipment": "Semiconductors",
   // Communication
   "Telecom Services": "Integrated Telecommunication Services", "Telecommunications Services": "Integrated Telecommunication Services",
   "Telecommunication": "Integrated Telecommunication Services", "Communications": "Integrated Telecommunication Services",
   "Diversified Telecommunication Services": "Integrated Telecommunication Services", "Advertising Agencies": "Advertising",
   "Entertainment": "Movies & Entertainment", "Media & Entertainment": "Movies & Entertainment", "Media": "Movies & Entertainment",
-  "Internet Content & Information": "Interactive Media & Services", "Pay TV": "Cable & Satellite", "Electronic Gaming & Multimedia": "Interactive Home Entertainment",
+  "Internet Content & Information": "Interactive Media & Services", "Electronic Gaming & Multimedia": "Interactive Home Entertainment",
   // Utilities
   "Utilities - Independent Power Producers": "Independent Power Producers & Energy Traders", "Independent Power Producers": "Independent Power Producers & Energy Traders",
   "Independent Power and Renewable Electricity Producers": "Renewable Electricity", "Utilities - Renewable": "Renewable Electricity",
