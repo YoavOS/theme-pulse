@@ -14,24 +14,6 @@ export type Database = {
   }
   public: {
     Tables: {
-      classification_usage: {
-        Row: {
-          calls: number
-          day: string
-          source: string
-        }
-        Insert: {
-          calls?: number
-          day: string
-          source: string
-        }
-        Update: {
-          calls?: number
-          day?: string
-          source?: string
-        }
-        Relationships: []
-      }
       full_update_progress: {
         Row: {
           id: string
@@ -691,51 +673,6 @@ export type Database = {
         }
         Relationships: []
       }
-      ticker_classification: {
-        Row: {
-          company_name: string | null
-          description: string | null
-          industry: string | null
-          quality: string | null
-          raw_label: string | null
-          sector: string | null
-          source: string | null
-          status: string
-          sub_industry: string | null
-          symbol: string
-          tried: string[]
-          updated_at: string
-        }
-        Insert: {
-          company_name?: string | null
-          description?: string | null
-          industry?: string | null
-          quality?: string | null
-          raw_label?: string | null
-          sector?: string | null
-          source?: string | null
-          status?: string
-          sub_industry?: string | null
-          symbol: string
-          tried?: string[]
-          updated_at?: string
-        }
-        Update: {
-          company_name?: string | null
-          description?: string | null
-          industry?: string | null
-          quality?: string | null
-          raw_label?: string | null
-          sector?: string | null
-          source?: string | null
-          status?: string
-          sub_industry?: string | null
-          symbol?: string
-          tried?: string[]
-          updated_at?: string
-        }
-        Relationships: []
-      }
       ticker_performance: {
         Row: {
           last_scanned: string | null
@@ -876,7 +813,6 @@ export type Database = {
         Returns: undefined
       }
       swap_qualified_rs_universe: { Args: never; Returns: number }
-      sync_universe_classification: { Args: never; Returns: number }
       trim_yahoo_cache: {
         Args: never
         Returns: {
