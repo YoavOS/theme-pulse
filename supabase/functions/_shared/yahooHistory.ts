@@ -7,7 +7,7 @@
 // Yahoo is the default source for ALL historical / multi-timeframe data
 // because Finnhub's free tier no longer returns /stock/candle (HTTP 403).
 
-import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
 
 export type YahooPeriod = "1d" | "5d" | "1mo" | "3mo" | "6mo" | "1y" | "ytd";
 

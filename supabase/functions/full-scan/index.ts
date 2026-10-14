@@ -4,7 +4,7 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
 import { getHistoricalData } from "../_shared/yahooHistory.ts";
 
 const FINNHUB_KEY = Deno.env.get("FINNHUB_API_KEY") || "";
