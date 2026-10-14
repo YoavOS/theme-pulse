@@ -7,7 +7,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Slider } from "@/components/ui/slider";
 import { Checkbox } from "@/components/ui/checkbox";
 import { RsStock } from "@/hooks/useRsAlpha";
-import { ALL_GICS_SECTORS, GICS_SECTORS, buildGroupExcluder } from "@/lib/sectorTaxonomy";
+import { ALL_GICS_SECTORS, GICS_SECTORS, expandSelectedToIndustries } from "@/lib/sectorTaxonomy";
 import type { StockFundamentals } from "@/hooks/useStockFundamentalsMap";
 import {
   DEFAULT_GROWTH_FILTERS,
@@ -381,7 +381,7 @@ export default function CustomTradingViewListModal({
     });
   };
 
-  const expandedExclusions = useMemo(() => buildGroupExcluder(excludedSectorsSet), [excludedSectorsSet]);
+  const expandedExclusions = useMemo(() => expandSelectedToIndustries(excludedSectorsSet), [excludedSectorsSet]);
 
   const baseFiltered = useMemo(() => {
     return stocks.filter((s) => {
@@ -401,7 +401,7 @@ export default function CustomTradingViewListModal({
         if (s.rs1m === null || s.rs3m === null || !(s.rs1m > s.rs3m)) return false;
       }
       if (state.excludeSectorsOn && excludedSectorsSet.size > 0) {
-        if (s.sector && expandedExclusions(s.sector)) return false;
+        if (s.sector && expandedExclusions.has(s.sector.toLowerCase().trim())) return false;
       }
       if (growthActive) {
         const f = fundamentalsMap?.get(s.symbol);

@@ -8,7 +8,6 @@
 //              avg_iv, sentiment, unusual_activity, expiration }
 
 import { getHistoricalData, makeServiceClient, type YahooPeriod } from "../_shared/yahooHistory.ts";
-import { classifyLabel } from "../_shared/gicsTaxonomy.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -326,10 +325,6 @@ const SECTOR_ETF_MAP: Array<{ etf: string; name: string; keywords: string[] }> =
 
 function resolveSectorEtf(sector: string | null | undefined): { etf: string; name: string } | null {
   if (!sector) return null;
-  // Canonical GICS labels (from classify-tickers) resolve exactly; raw provider labels fall back to keywords.
-  const gics = classifyLabel(sector).sector;
-  const exact = SECTOR_ETF_MAP.find((m) => m.name === gics);
-  if (exact) return { etf: exact.etf, name: exact.name };
   const s = sector.toLowerCase();
   for (const m of SECTOR_ETF_MAP) {
     if (m.keywords.some((k) => s.includes(k))) return { etf: m.etf, name: m.name };

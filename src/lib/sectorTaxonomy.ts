@@ -1,21 +1,16 @@
 // GICS-style hierarchical taxonomy: Sector → Industry → Sub-Industry.
 //
-// The canonical names live in "@/lib/gicsTaxonomy" (GICS). Each stock's label
-// (qualified_rs_universe.sector) is either a canonical sub-industry written by
-// the `classify-tickers` function, or — until a stock is classified — the raw
-// provider label (Finnhub industry). Both resolve through classifyIndustry().
+// The raw labels below are the granular classification strings the data
+// providers return (Finnhub `finnhubIndustry`, with FMP/Yahoo fallbacks stored
+// in qualified_rs_universe.sector). Those raw labels are treated as the
+// SUB-INDUSTRY level. Each one rolls up to a mid-level INDUSTRY, and each
+// industry rolls up to a broad GICS SECTOR.
 //
-// Everything is resolved locally, so classification costs zero API calls here.
-import { GICS, classifyLabel } from "@/lib/gicsTaxonomy";
+// Everything is resolved locally from this static map, so classification costs
+// zero API calls and is stable across the whole app.
+import { classifyLabel } from "@/lib/gicsTaxonomy";
 
-/** Canonical hierarchy (re-exported under the old name for existing imports). */
-export const SECTOR_HIERARCHY: Record<string, Record<string, string[]>> = GICS;
-
-/**
- * LEGACY provider-label map (Finnhub-era). Only used as a last-resort fallback to
- * find the SECTOR of an old raw label that the GICS module does not know.
- */
-const LEGACY_LABELS: Record<string, Record<string, string[]>> = {
+export const SECTOR_HIERARCHY: Record<string, Record<string, string[]>> = {
   "Energy": {
     "Oil, Gas & Consumable Fuels": ["Energy", "Oil, Gas & Consumable Fuels", "Oil & Gas", "Coal", "Uranium"],
     "Energy Equipment & Services": ["Energy Equipment & Services", "Oil & Gas Services"],
@@ -106,7 +101,7 @@ const LEGACY_LABELS: Record<string, Record<string, string[]>> = {
   },
 };
 
-/** Flat sector → all canonical sub-industries. */
+/** Flat sector → all raw sub-industry labels (kept for backward compatibility). */
 export const GICS_SECTORS: Record<string, string[]> = Object.fromEntries(
   Object.entries(SECTOR_HIERARCHY).map(([sector, groups]) => [sector, Object.values(groups).flat()]),
 );
@@ -122,18 +117,12 @@ export const ALL_INDUSTRIES = Object.values(INDUSTRIES_BY_SECTOR).flat();
 
 const norm = (v: string | null | undefined) => (v ?? "").toLowerCase().trim();
 
-const LEGACY_NODE = (() => {
+const LABEL_TO_NODE = (() => {
   const map = new Map<string, { sector: string; industry: string }>();
-  for (const [sector, groups] of Object.entries(LEGACY_LABELS)) {
-    const canonical = new Set((INDUSTRIES_BY_SECTOR[sector] ?? []).map(norm));
-    for (const [legacyIndustry, labels] of Object.entries(groups)) {
-      // Keep the legacy industry only when it is also a canonical GICS industry name.
-      const industry = canonical.has(norm(legacyIndustry))
-        ? INDUSTRIES_BY_SECTOR[sector].find((i) => norm(i) === norm(legacyIndustry))!
-        : "Other";
-      const node = { sector, industry };
-      if (!map.has(norm(legacyIndustry))) map.set(norm(legacyIndustry), node);
-      for (const l of labels) if (!map.has(norm(l))) map.set(norm(l), node);
+  for (const [sector, groups] of Object.entries(SECTOR_HIERARCHY)) {
+    for (const [industry, labels] of Object.entries(groups)) {
+      map.set(norm(industry), { sector, industry });
+      for (const l of labels) if (!map.has(norm(l))) map.set(norm(l), { sector, industry });
     }
   }
   return map;
@@ -145,50 +134,45 @@ export interface Classification {
   subIndustry: string;
 }
 
-/** Resolve a stock label into the full Sector → Industry → Sub-Industry chain. */
+/** Resolve a raw provider label into the full Sector → Industry → Sub-Industry chain. */
 export function classifyIndustry(raw: string | null | undefined): Classification {
   const label = (raw ?? "").trim();
   if (!label) return { sector: "Unknown", industry: "Unknown", subIndustry: "Unknown" };
   const g = classifyLabel(label);
   if (g.sector !== "Other") return g;
-  // Not yet classified, broad provider label (e.g. "Technology"): best-effort
-  // sector (and industry when it is a canonical name); the classifier fixes it later.
-  const node = LEGACY_NODE.get(norm(label));
-  if (node) return { sector: node.sector, industry: node.industry, subIndustry: label };
-  return { sector: "Other", industry: "Other", subIndustry: label };
+  const node = LABEL_TO_NODE.get(norm(label));
+  if (!node) return { sector: "Other", industry: "Other", subIndustry: label };
+  return { sector: node.sector, industry: node.industry, subIndustry: label };
 }
 
-/** Broad GICS sector for a label (legacy helper). */
+/** Broad GICS sector for a raw label (legacy helper). */
 export function gicsForIndustry(industry: string | null | undefined): string | null {
   if (!industry) return null;
   const s = classifyIndustry(industry).sector;
   return s === "Other" || s === "Unknown" ? null : s;
 }
 
-/** Mid-level industry for a label. */
+/** Mid-level industry for a raw label. */
 export function industryForLabel(industry: string | null | undefined): string | null {
   if (!industry) return null;
   const i = classifyIndustry(industry).industry;
   return i === "Other" || i === "Unknown" ? null : i;
 }
 
-/**
- * Build a matcher for "exclude sectors" filters. The selection may contain
- * sector names, industry names, sub-industry names or old raw provider labels
- * (from saved settings); a stock is excluded if any level of its label matches.
- */
-export function buildGroupExcluder(selected: Set<string>): (label: string | null | undefined) => boolean {
-  const sel = new Set([...selected].map(norm));
-  if (sel.size === 0) return () => false;
-  const cache = new Map<string, boolean>();
-  return (label) => {
-    const key = norm(label);
-    if (!key) return false;
-    const hit = cache.get(key);
-    if (hit !== undefined) return hit;
-    const c = classifyIndustry(label);
-    const out = sel.has(key) || sel.has(norm(c.sector)) || sel.has(norm(c.industry)) || sel.has(norm(c.subIndustry));
-    cache.set(key, out);
-    return out;
-  };
+/** Expand a set of selected labels (mix of sectors, industries and raw labels) to raw labels. */
+export function expandSelectedToIndustries(selected: Set<string>): Set<string> {
+  const out = new Set<string>();
+  for (const item of selected) {
+    if (SECTOR_HIERARCHY[item]) {
+      for (const ind of Object.values(SECTOR_HIERARCHY[item]).flat()) out.add(norm(ind));
+    } else {
+      const sectorOfIndustry = Object.entries(SECTOR_HIERARCHY).find(([, g]) => g[item]);
+      if (sectorOfIndustry) {
+        for (const l of sectorOfIndustry[1][item]) out.add(norm(l));
+      } else {
+        out.add(norm(item));
+      }
+    }
+  }
+  return out;
 }

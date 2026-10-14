@@ -101,6 +101,3 @@ verify_jwt = false
 
 [functions.clean-21-ema-scan]
 verify_jwt = false
-
-[functions.classify-tickers]
-verify_jwt = false
