@@ -8,7 +8,7 @@
 // Both paths derive everything from a single Yahoo 6mo daily-OHLC pull per symbol
 // and also persist today_vol/avg_20d/avg_10d/avg_3m into ticker_volume_cache.
 
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -65,7 +65,7 @@ function periodBaseline(period: Period, avg10: number, avg20: number, avg3m: num
 }
 
 async function computeForSymbol(
-  sb: ReturnType<typeof createClient>,
+  sb: SupabaseClient,
   symbol: string,
   period: Period,
 ) {

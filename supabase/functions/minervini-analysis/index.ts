@@ -720,7 +720,7 @@ function statusFrom(value: number | null, pass: boolean, fail: boolean): "pass" 
   return "neutral";
 }
 
-function computeCoverage(quarters: QuarterTrend[], annual: AnnualTrend[]): DataQuality["coverage"] {
+function computeCoverage(quarters: QuarterTrend[], annual: AnnualTrend[]): NonNullable<DataQuality["coverage"]> {
   const qTrend = quarters.slice(0, TARGET_QUARTER_TREND_COUNT);
   const aTrend = annual.slice(0, TARGET_ANNUAL_TREND_COUNT);
   return {
