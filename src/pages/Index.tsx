@@ -36,6 +36,7 @@ import NewsPanel from "@/components/NewsPanel";
 import { useUniverseSectors } from "@/hooks/useUniverseSectors";
 import ClassificationCoverage from "@/components/dashboard/ClassificationCoverage";
 import { buildGroupedThemes, buildUniverseGroups } from "@/lib/groupThemes";
+import type { PerfCache } from "@/hooks/useFullScan";
 import { GROUP_MODE_LABEL, type GroupMode } from "@/lib/groupColors";
 
 const TIMEFRAMES = ["Today", "1W", "1M", "3M", "Overall"] as const;
@@ -135,6 +136,8 @@ export default function Index() {
     startFullScan,
     clearProgress,
     loadTimeframe,
+    loadPerfMap,
+    scanCompletedAt,
   } = useFullScan(handleScanComplete);
 
   const prevTimeframe = useRef(activeTimeframe);
@@ -182,7 +185,7 @@ export default function Index() {
   }, [allThemes, showPlaceholders]);
 
   // ── Theme / Industry / Sector grouping ──────────────────────────
-  const { rows: sectorRows, extra: sectorExtra, asOf: sectorsAsOf, loading: sectorsLoading, load: loadSectors } = useUniverseSectors();
+  const { rows: sectorRows, extra: sectorExtra, loading: sectorsLoading, load: loadSectors } = useUniverseSectors();
   useEffect(() => { if (groupMode !== "theme") loadSectors(); }, [groupMode, loadSectors]);
 
   const industryBySymbol = useMemo(() => {
@@ -193,17 +196,41 @@ export default function Index() {
     return m;
   }, [sectorRows, sectorExtra]);
 
-  // Industry / Sub-Industry / Sector use the whole qualified RS universe.
-  // Falls back to theme tickers only if the universe can't be loaded (e.g. demo mode).
-  const usingUniverse = groupMode !== "theme" && sectorRows.length > 0;
+  // Industry / Sub-Industry / Sector cover the whole stock list, with numbers from
+  // the Dashboard's own Full Scan (independent of RS Alpha's calculations).
+  const [scanPerf, setScanPerf] = useState<PerfCache | null>(null);
+  useEffect(() => {
+    if (groupMode === "theme") return;
+    let cancelled = false;
+    loadPerfMap().then((p) => { if (!cancelled) setScanPerf(p); });
+    return () => { cancelled = true; };
+  }, [groupMode, loadPerfMap, scanCompletedAt]);
+
+  const universeList = useMemo(() => {
+    // Stock list + theme tickers outside it (both scanned by Full Scan).
+    const seen = new Set<string>();
+    const list: { symbol: string; sector: string | null; name?: string | null }[] = [];
+    for (const r of sectorRows) { const s = r.symbol.toUpperCase(); if (!seen.has(s)) { seen.add(s); list.push(r); } }
+    for (const t of baseThemes) for (const tk of t.tickers) {
+      const s = tk.symbol.toUpperCase();
+      if (!seen.has(s)) { seen.add(s); list.push({ symbol: s, sector: industryBySymbol.get(s) ?? null, name: tk.name }); }
+    }
+    return list;
+  }, [sectorRows, baseThemes, industryBySymbol]);
+
+  const usingUniverse = groupMode !== "theme" && sectorRows.length > 0 && !!scanPerf;
+  const scannedInList = useMemo(
+    () => (scanPerf ? universeList.filter(r => scanPerf.tickers[r.symbol.toUpperCase()]).length : 0),
+    [scanPerf, universeList],
+  );
   const themes = useMemo(
     () =>
       groupMode === "theme"
         ? baseThemes
         : usingUniverse
-          ? buildUniverseGroups(sectorRows, groupMode, activeTimeframe)
+          ? buildUniverseGroups(universeList, scanPerf!.tickers, groupMode, activeTimeframe, overallWeights)
           : buildGroupedThemes(baseThemes, industryBySymbol, groupMode),
-    [baseThemes, industryBySymbol, groupMode, usingUniverse, sectorRows, activeTimeframe],
+    [baseThemes, industryBySymbol, groupMode, usingUniverse, universeList, scanPerf, activeTimeframe, overallWeights],
   );
 
   // Prefetch news for the top 5 most-moving themes
@@ -624,9 +651,10 @@ export default function Index() {
               ? "Loading industry data…"
               : `${themes.length} ${GROUP_MODE_LABEL[groupMode].toLowerCase()} groups`}
             {usingUniverse && (
-              <span title="Industry, Sub-Industry and Sector views use the whole RS universe. Returns come from the latest 'Recalculate RS Scores' run (Today = last 1-day return).">
-                {` · ${sectorRows.length.toLocaleString("en-US")} stocks (RS universe)`}
-                {sectorsAsOf && ` · as of ${new Date(sectorsAsOf).toLocaleString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}`}
+              <span title="Industry, Sub-Industry and Sector views cover the whole stock list (RS universe list + theme tickers). Numbers come from this Dashboard's own Full Scan — press Full Scan to refresh them.">
+                {` · ${scannedInList.toLocaleString("en-US")}/${universeList.length.toLocaleString("en-US")} stocks scanned`}
+                {scanPerf?.scannedAt && ` · Full Scan ${new Date(scanPerf.scannedAt).toLocaleString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}`}
+                {scannedInList < universeList.length * 0.9 && " · run Full Scan to include all"}
               </span>
             )}
           </span>

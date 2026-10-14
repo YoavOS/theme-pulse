@@ -61,52 +61,58 @@ export function buildGroupedThemes(
   return out;
 }
 
-/** Universe row shape needed for Industry / Sub-Industry / Sector grouping. */
+/** Stock-list row needed for Industry / Sub-Industry / Sector grouping (labels only). */
 export interface UniverseGroupRow {
   symbol: string;
   sector: string | null;
   name?: string | null;
-  r1d?: number | null;
-  r1w?: number | null;
-  r1m?: number | null;
-  r3m?: number | null;
 }
 
+/** Per-ticker numbers from the Dashboard's own Full Scan (percent). */
+export type ScanPerfMap = Record<string, { perf_1d: number; perf_1w: number; perf_1m: number; perf_3m: number }>;
+
+export type OverallWeights = { w1d: number; w1w: number; w1m: number; w3m: number };
+
 /**
- * Builds Industry / Sub-Industry / Sector "themes" from the whole qualified RS
- * universe (not just theme tickers). Returns come from the latest
- * "Recalculate RS Scores" run; "Today" uses the 1-day return.
+ * Builds Industry / Sub-Industry / Sector "themes" from the whole stock list,
+ * using performance from the Dashboard's own Full Scan (not RS Alpha).
+ * Stocks the scan hasn't covered yet are kept as "no data".
  */
 export function buildUniverseGroups(
   rows: UniverseGroupRow[],
+  perf: ScanPerfMap,
   mode: GroupMode,
   timeframe: string,
+  overallWeights?: OverallWeights,
 ): ThemeData[] {
-  const pick = (r: UniverseGroupRow): number | null => {
+  const wRaw = overallWeights ?? { w1d: 0, w1w: 0, w1m: 60, w3m: 40 };
+  const blend = (p: ScanPerfMap[string]) => {
+    let num = 0, den = 0;
+    const add = (v: number, w: number) => { if (w > 0 && Number.isFinite(v)) { num += w * v; den += w; } };
+    add(p.perf_1d, wRaw.w1d); add(p.perf_1w, wRaw.w1w); add(p.perf_1m, wRaw.w1m); add(p.perf_3m, wRaw.w3m);
+    return den > 0 ? Math.round((num / den) * 100) / 100 : 0;
+  };
+  const pick = (p: ScanPerfMap[string]): number => {
     switch (timeframe) {
-      case "1W": return r.r1w ?? null;
-      case "1M": return r.r1m ?? null;
-      case "3M": return r.r3m ?? null;
-      default: return r.r1d ?? null; // Today / Overall headline
+      case "1W": return p.perf_1w;
+      case "1M": return p.perf_1m;
+      case "3M": return p.perf_3m;
+      case "Overall": return blend(p);
+      default: return p.perf_1d; // Today = 1-day change at scan time
     }
   };
 
   const buckets = new Map<string, Ticker[]>();
   for (const r of rows) {
+    const sym = r.symbol.toUpperCase();
+    const p = perf[sym];
     const key = groupKeyForIndustry(r.sector, mode);
-    const pct = pick(r);
-    const tk: Ticker = {
-      symbol: r.symbol.toUpperCase(),
-      name: r.name ?? undefined,
-      pct: pct ?? 0,
-      skipped: pct === null,
-      skipReason: pct === null ? "No return data from the last RS scan" : undefined,
-      pct_today: r.r1d ?? undefined,
-      pct_1d: r.r1d ?? undefined,
-      pct_1w: r.r1w ?? undefined,
-      pct_1m: r.r1m ?? undefined,
-      pct_3m: r.r3m ?? undefined,
-    };
+    const tk: Ticker = p
+      ? {
+          symbol: sym, name: r.name ?? undefined, pct: pick(p) ?? 0,
+          pct_today: p.perf_1d, pct_1d: p.perf_1d, pct_1w: p.perf_1w, pct_1m: p.perf_1m, pct_3m: p.perf_3m,
+        }
+      : { symbol: sym, name: r.name ?? undefined, pct: 0, skipped: true, skipReason: "Not in the last Full Scan" };
     const arr = buckets.get(key) ?? [];
     arr.push(tk);
     buckets.set(key, arr);
@@ -114,25 +120,26 @@ export function buildUniverseGroups(
 
   const avg = (vals: number[]) => (vals.length ? vals.reduce((s, v) => s + v, 0) / vals.length : 0);
   const field = (list: Ticker[], k: keyof Ticker) =>
-    avg(list.map(t => t[k]).filter((v): v is number => typeof v === "number" && Number.isFinite(v)));
+    Math.round(avg(list.map(t => t[k]).filter((v): v is number => typeof v === "number" && Number.isFinite(v))) * 100) / 100;
 
   const out: ThemeData[] = [];
   buckets.forEach((list, name) => {
     const valid = list.filter(t => !t.skipped);
+    if (valid.length === 0) return; // nothing scanned in this group yet
     out.push({
       theme_name: name,
-      performance_pct: Number(avg(valid.map(t => t.pct)).toFixed(2)),
+      performance_pct: Math.round(avg(valid.map(t => t.pct)) * 100) / 100,
       up_count: valid.filter(t => t.pct > 0).length,
-      down_count: valid.filter(t => t.pct < 0).length,
+      down_count: valid.filter(t => t.pct <= 0).length,
       na_count: list.length - valid.length,
       valid_count: valid.length,
-      tickers: [...list].sort((a, b) => (b.skipped ? -999 : b.pct) - (a.skipped ? -999 : a.pct)),
+      tickers: [...valid].sort((a, b) => b.pct - a.pct).concat(list.filter(t => t.skipped)),
       dataSource: "real",
       perf_today: field(valid, "pct_today"),
       perf_1d: field(valid, "pct_1d"),
-      perf_1w: field(list, "pct_1w"),
-      perf_1m: field(list, "pct_1m"),
-      perf_3m: field(list, "pct_3m"),
+      perf_1w: field(valid, "pct_1w"),
+      perf_1m: field(valid, "pct_1m"),
+      perf_3m: field(valid, "pct_3m"),
     });
   });
 

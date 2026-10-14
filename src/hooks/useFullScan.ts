@@ -15,9 +15,10 @@ export interface ScanProgress {
 const PERF_CACHE_KEY = "ticker_perf_cache";
 const PERF_CACHE_MAX_AGE = 4 * 60 * 60 * 1000;
 
-interface PerfCache {
+export interface PerfCache {
   tickers: Record<string, { perf_1d: number; perf_1w: number; perf_1m: number; perf_3m: number; perf_ytd: number; price: number }>;
   fetchedAt: string;
+  scannedAt?: string; // when the scan itself last ran
 }
 
 function savePerfCache(data: PerfCache) {
@@ -57,6 +58,29 @@ export function useFullScan(onComplete: (themes: ThemeData[], timeframe: string)
   }, [supabaseUrl, anonKey]);
 
   // Build theme data from a freshly-completed scan + theme_tickers.
+  /** Per-ticker results of the last Full Scan (localStorage cache → server). */
+  const loadPerfMap = useCallback(async (): Promise<PerfCache | null> => {
+    const cached = loadPerfCache();
+    if (cached) return cached;
+    try {
+      const res = await fetch(`${supabaseUrl}/functions/v1/full-scan?action=results`, { headers });
+      const data = await res.json();
+      if (!data.tickers) return null;
+      const tickers: PerfCache["tickers"] = {};
+      for (const t of data.tickers) {
+        tickers[String(t.symbol).toUpperCase()] = {
+          perf_1d: t.perf_1d, perf_1w: t.perf_1w, perf_1m: t.perf_1m,
+          perf_3m: t.perf_3m, perf_ytd: t.perf_ytd, price: t.price,
+        };
+      }
+      const latest = (data.tickers as { last_scanned?: string }[])
+        .map(t => t.last_scanned ?? "").sort().pop();
+      const out: PerfCache = { tickers, fetchedAt: new Date().toISOString(), scannedAt: latest || undefined };
+      savePerfCache(out);
+      return out;
+    } catch { return null; }
+  }, [supabaseUrl, anonKey]);
+
   // No EOD/history reads — historical timeframes use the perf fields
   // returned by the scan itself.
   const buildThemesFromPerf = useCallback(async (
@@ -68,26 +92,9 @@ export function useFullScan(onComplete: (themes: ThemeData[], timeframe: string)
 
     if (!dbThemes || !dbTickers) return [];
 
-    let perfMap: Record<string, { perf_1d: number; perf_1w: number; perf_1m: number; perf_3m: number; perf_ytd: number; price: number }> = {};
-
-    const cached = loadPerfCache();
-    if (cached) {
-      perfMap = cached.tickers;
-    } else {
-      try {
-        const res = await fetch(`${supabaseUrl}/functions/v1/full-scan?action=results`, { headers });
-        const data = await res.json();
-        if (data.tickers) {
-          for (const t of data.tickers) {
-            perfMap[t.symbol] = {
-              perf_1d: t.perf_1d, perf_1w: t.perf_1w, perf_1m: t.perf_1m,
-              perf_3m: t.perf_3m, perf_ytd: t.perf_ytd, price: t.price,
-            };
-          }
-          savePerfCache({ tickers: perfMap, fetchedAt: new Date().toISOString() });
-        }
-      } catch { return []; }
-    }
+    const perfCache = await loadPerfMap();
+    if (!perfCache) return [];
+    const perfMap = perfCache.tickers;
 
     if (Object.keys(perfMap).length === 0) return [];
 
@@ -129,7 +136,7 @@ export function useFullScan(onComplete: (themes: ThemeData[], timeframe: string)
       if (entry.symbols.length === 0) continue;
 
       const tickers = entry.symbols.map(s => {
-        const perf = perfMap[s];
+        const perf = perfMap[s.toUpperCase()] ?? perfMap[s];
         if (!perf) return { symbol: s, pct: 0, skipped: true, skipReason: "no_data" } as any;
         if (isOverall) {
           return {
@@ -175,7 +182,7 @@ export function useFullScan(onComplete: (themes: ThemeData[], timeframe: string)
     }
 
     return themes;
-  }, [supabaseUrl, anonKey]);
+  }, [loadPerfMap]);
 
   const clearProgress = useCallback(async () => {
     await fetch(`${supabaseUrl}/functions/v1/full-scan?action=reset`, { headers });
@@ -293,5 +300,6 @@ export function useFullScan(onComplete: (themes: ThemeData[], timeframe: string)
     clearProgress,
     loadTimeframe,
     buildThemesFromPerf,
+    loadPerfMap,
   };
 }

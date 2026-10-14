@@ -7,10 +7,6 @@ export interface UniverseSectorRow {
   sector: string | null;   // canonical sub-industry once classified, else raw provider label
   ret: number | null;      // 1M return (kept for existing callers)
   name?: string | null;
-  r1d?: number | null;     // returns in %, from the latest "Recalculate RS Scores" run
-  r1w?: number | null;
-  r1m?: number | null;
-  r3m?: number | null;
 }
 
 const PAGE = 1000;
@@ -19,37 +15,23 @@ const TTL_MS = 12 * 60 * 60 * 1000;
 
 interface CachePayload {
   ts: number;
-  asOf: string | null;
   rows: UniverseSectorRow[];
   extra?: UniverseSectorRow[];
-}
-
-/** Timestamp of the latest RS calculation (one tiny query) — used to invalidate the cache. */
-async function latestRsCalc(): Promise<string | null> {
-  const { data } = await supabase
-    .from("qualified_rs_universe")
-    .select("rs_calculated_at")
-    .not("rs_calculated_at", "is", null)
-    .order("rs_calculated_at", { ascending: false })
-    .limit(1);
-  return data?.[0]?.rs_calculated_at ?? null;
 }
 
 const num = (v: unknown) => (v === null || v === undefined || !Number.isFinite(Number(v)) ? null : Number(v));
 
 /**
- * Loads the qualified RS universe with industry labels and returns
- * (1D/1W/1M/3M), plus the permanent classification of tickers outside it
- * (e.g. theme tickers) as `extra`.
+ * Loads the stock list (qualified universe: symbol, name, industry label) plus
+ * the permanent classification of tickers outside it (e.g. theme tickers) as
+ * `extra`. Labels only — performance numbers come from the Dashboard's own
+ * Full Scan, not from RS Alpha.
  *
- * Cached in localStorage; the cache is reused until a newer RS scan exists
- * (checked with one tiny query) or 12h pass, and is cleared after a
- * classification run.
+ * Cached in localStorage for 12h; cleared after a classification run.
  */
 export function useUniverseSectors() {
   const [rows, setRows] = useState<UniverseSectorRow[]>([]);
   const [extra, setExtra] = useState<UniverseSectorRow[]>([]);
-  const [asOf, setAsOf] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [loaded, setLoaded] = useState(false);
 
@@ -57,18 +39,15 @@ export function useUniverseSectors() {
     if (loading || (loaded && !force)) return;
     setLoading(true);
     try {
-      const latest = await latestRsCalc().catch(() => null);
-
       if (!force) {
         try {
           const raw = localStorage.getItem(CACHE_KEY);
           if (raw) {
             const parsed = JSON.parse(raw) as CachePayload;
-            const fresh = Date.now() - parsed.ts < TTL_MS && parsed.asOf === latest;
+            const fresh = Date.now() - parsed.ts < TTL_MS;
             if (fresh && Array.isArray(parsed.rows) && parsed.rows.length) {
               setRows(parsed.rows);
               setExtra(Array.isArray(parsed.extra) ? parsed.extra : []);
-              setAsOf(parsed.asOf);
               setLoaded(true);
               return;
             }
@@ -80,7 +59,7 @@ export function useUniverseSectors() {
       for (let from = 0; ; from += PAGE) {
         const { data, error } = await supabase
           .from("qualified_rs_universe")
-          .select("symbol, sector, company_name, return_1d, return_1w, return_1m, return_3m")
+          .select("symbol, sector, company_name, return_1m")
           .range(from, from + PAGE - 1);
         if (error) throw error;
         if (!data || data.length === 0) break;
@@ -89,11 +68,7 @@ export function useUniverseSectors() {
             symbol: r.symbol,
             sector: r.sector ?? null,
             name: r.company_name ?? null,
-            ret: num(r.return_1m),
-            r1d: num(r.return_1d),
-            r1w: num(r.return_1w),
-            r1m: num(r.return_1m),
-            r3m: num(r.return_3m),
+            ret: num(r.return_1m), // only used by the existing concentration panel
           });
         }
         if (data.length < PAGE) break;
@@ -123,10 +98,9 @@ export function useUniverseSectors() {
 
       setRows(all);
       setExtra(extraRows);
-      setAsOf(latest);
       setLoaded(true);
       try {
-        const payload: CachePayload = { ts: Date.now(), asOf: latest, rows: all, extra: extraRows };
+        const payload: CachePayload = { ts: Date.now(), rows: all, extra: extraRows };
         localStorage.setItem(CACHE_KEY, JSON.stringify(payload));
       } catch { /* quota */ }
     } catch (e) {
@@ -136,5 +110,5 @@ export function useUniverseSectors() {
     }
   }, [loading, loaded]);
 
-  return { rows, extra, asOf, loading, loaded, load };
+  return { rows, extra, loading, loaded, load };
 }
