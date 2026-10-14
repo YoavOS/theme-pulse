@@ -125,6 +125,9 @@ Deno.serve(async (req) => {
           console.log(`Swap complete: published ${swapped} symbols to live universe`);
           // Wipe staging so we never keep a "previous universe" snapshot.
           try { await supabase.rpc("truncate_qualified_rs_staging"); } catch (e) { console.error("truncate staging error:", e); }
+          // Re-apply the permanent industry classification to the fresh universe
+          // (the swap brings back raw Finnhub labels). Harmless if the table is missing.
+          try { await supabase.rpc("sync_universe_classification"); } catch (e) { console.warn("sync classification skipped:", e); }
           (async () => {
             try {
               let offset = 0;

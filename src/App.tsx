@@ -17,8 +17,19 @@ import MarketFlag from "./pages/MarketFlag";
 import StorageManager from "./pages/StorageManager";
 import MinerviniChecker from "./pages/MinerviniChecker";
 import NotFound from "./pages/NotFound";
+import { useEffect } from "react";
+import { autoRunClassificationOncePerDay } from "@/lib/classification";
 
 const queryClient = new QueryClient();
+
+/** Once a day, quietly continue the industry-classification queue (see classify-tickers). */
+function ClassificationAutoRunner() {
+  useEffect(() => {
+    const t = window.setTimeout(() => { autoRunClassificationOncePerDay().catch(() => undefined); }, 15_000);
+    return () => window.clearTimeout(t);
+  }, []);
+  return null;
+}
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
@@ -26,6 +37,7 @@ const App = () => (
       <TooltipProvider>
         <Toaster />
         <Sonner />
+        <ClassificationAutoRunner />
         <BrowserRouter>
           <Routes>
             <Route path="/" element={<Index />} />

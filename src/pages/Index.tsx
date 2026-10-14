@@ -34,6 +34,7 @@ import { useThemeNews } from "@/hooks/useThemeNews";
 import { useFundamentals } from "@/hooks/useFundamentals";
 import NewsPanel from "@/components/NewsPanel";
 import { useUniverseSectors } from "@/hooks/useUniverseSectors";
+import ClassificationCoverage from "@/components/dashboard/ClassificationCoverage";
 import { buildGroupedThemes } from "@/lib/groupThemes";
 import { GROUP_MODE_LABEL, type GroupMode } from "@/lib/groupColors";
 
@@ -178,14 +179,16 @@ export default function Index() {
   }, [allThemes, showPlaceholders]);
 
   // ── Theme / Industry / Sector grouping ──────────────────────────
-  const { rows: sectorRows, loading: sectorsLoading, load: loadSectors } = useUniverseSectors();
+  const { rows: sectorRows, extra: sectorExtra, loading: sectorsLoading, load: loadSectors } = useUniverseSectors();
   useEffect(() => { if (groupMode !== "theme") loadSectors(); }, [groupMode, loadSectors]);
 
   const industryBySymbol = useMemo(() => {
     const m = new Map<string, string | null>();
+    // Theme tickers outside the RS universe still get their permanent classification.
+    for (const r of sectorExtra) m.set(r.symbol.toUpperCase(), r.sector);
     for (const r of sectorRows) m.set(r.symbol.toUpperCase(), r.sector);
     return m;
-  }, [sectorRows]);
+  }, [sectorRows, sectorExtra]);
 
   const themes = useMemo(
     () => buildGroupedThemes(baseThemes, industryBySymbol, groupMode),
@@ -279,7 +282,6 @@ export default function Index() {
               <h1 className="text-xl sm:text-2xl font-extrabold tracking-tight text-foreground">
                 Best Performing Themes{" "}
                 <span className="text-primary">{formatDate(lastFetched)}</span>
-                <span className="ml-1 align-middle text-[10px] font-medium text-muted-foreground">v2</span>
               </h1>
             </div>
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -611,6 +613,7 @@ export default function Index() {
               ? "Loading industry data…"
               : `${themes.length} ${GROUP_MODE_LABEL[groupMode].toLowerCase()} groups`}
           </span>
+          {groupMode !== "theme" && <ClassificationCoverage onUpdated={() => loadSectors(true)} />}
         </div>
 
         {activeTimeframe === "Overall" ? (
