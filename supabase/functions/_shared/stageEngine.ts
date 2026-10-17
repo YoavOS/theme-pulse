@@ -31,7 +31,7 @@ export interface StageResult {
   confidence: number;         // 0–100
   quality: "HIGH" | "MIXED" | "LOW" | null; // upside-transition quality for fresh Stage 2 (2A)
   event: string | null;       // last confirmed change, e.g. "1→2"
-  eventKind: string | null;   // BREAKOUT | BREAKDOWN | RESUMPTION | FAILED_BASE | TREND | RANGE
+  eventKind: string | null;   // BREAKOUT | BREAKDOWN | RESUMPTION | CONTINUATION | FAILED_BASE | TREND | RANGE
   eventWeeksAgo: number | null;
   weeksInStage: number;
   lastDirectional: 2 | 4 | null;
@@ -47,11 +47,20 @@ export interface StageResult {
     rpSlope13: number | null;
     mrs52: number | null;
     pctFrom52wHigh: number;
+    /** Current base/top range (Stage 1, 3, transition only; null otherwise). */
+    rangeHigh: number | null;
+    rangeLow: number | null;
+    /** % the close must rise to clear the range high (≤0 = already above). */
+    pctToRangeHigh: number | null;
+    rangeWeeks: number | null;
   };
   reasons: string[];          // short human-readable reasons
 }
 
 const DAY = 86400;
+/** First week the engine can evaluate: MA30 exists from index 29 and the
+ *  10-week persistence window needs MA30 at i−9 (and i−10 for crosses). */
+const START = 39;
 
 /** Drop the current, still-forming week (official labels use completed weeks only). */
 export function completedWeeks(bars: WeeklyBar[], nowSec = Date.now() / 1000): WeeklyBar[] {
@@ -62,8 +71,8 @@ export function completedWeeks(bars: WeeklyBar[], nowSec = Date.now() / 1000): W
   const out = [...byWeek.values()].sort((a, b) => a.t - b.t);
   if (out.length) {
     const last = out[out.length - 1];
-    // A week is complete after Friday's close (~Fri 21:00 UTC = Monday 00:00 ET + ~4d 21h).
-    if (nowSec < weekStart(last.t) + 4 * DAY + 21 * 3600) out.pop();
+    // A week is complete after Friday's close (20:00–21:00 UTC); 22:00 UTC leaves a margin.
+    if (nowSec < weekStart(last.t) + 4 * DAY + 22 * 3600) out.pop();
   }
   return out;
 }
@@ -118,7 +127,7 @@ export function classifyStage(
 ): StageResult | null {
   const bars = barsIn;
   const n = bars.length;
-  if (n < 40) return null; // need MA30 + 5w slope + some state history
+  if (n < START + 6) return null; // need MA30 + persistence window + a few weeks of state history
 
   const c = bars.map((b) => b.c), h = bars.map((b) => b.h), l = bars.map((b) => b.l), v = bars.map((b) => b.v || 0);
 
@@ -135,7 +144,7 @@ export function classifyStage(
 
   const ma: number[] = c.map((_, i) => sma(c, i, 30));
   const feat: (WeekFeat | null)[] = bars.map((_, i) => {
-    if (i < 34) return null;
+    if (i < START) return null;
     const m = ma[i];
     const atr = sma(tr, i, 20);
     const slope5 = m / ma[i - 5] - 1;
@@ -184,7 +193,7 @@ export function classifyStage(
   let pendingCount = 0;
   let conflictWeeks = 0;
   let segStart = -1;                       // start of the current neutral (Stage 1/3/T) segment
-  let stageSince = 34;
+  let stageSince = START;
   let event = null as string | null, eventKind = null as string | null, eventIdx = -1;
   let rvolAtEvent = null as number | null;
   const confirmed: Stage[] = new Array(n).fill(0);
@@ -194,7 +203,7 @@ export function classifyStage(
     const from = stage;
     stage = to;
     stageSince = i;
-    event = from === 0 && i === 34 ? null : `${from === 0 ? "T" : from}→${to === 0 ? "T" : to}`;
+    event = from === 0 && i === START ? null : `${from === 0 ? "T" : from}→${to === 0 ? "T" : to}`;
     eventKind = kind;
     eventIdx = i;
     rvolAtEvent = feat[i]?.rvol4 ?? null;
@@ -203,7 +212,7 @@ export function classifyStage(
     pending = null; pendingCount = 0;
   };
 
-  for (let i = 34; i < n; i++) {
+  for (let i = START; i < n; i++) {
     const f = feat[i]!;
     // range boundaries of the current neutral segment (exclude this week)
     const segFrom = segStart >= 0 && i - segStart >= 4 ? segStart : Math.max(0, i - 13);
@@ -212,7 +221,7 @@ export function classifyStage(
     const buf = Math.max(0.005 * c[i], 0.1 * f.atr);
 
     // initial state
-    if (i === 34) {
+    if (i === START) {
       const ret26 = c[i] / c[i - 26] - 1;
       if (f.up) setStage(2, i, "TREND");
       else if (f.down) setStage(4, i, "TREND");
@@ -228,8 +237,10 @@ export function classifyStage(
     const resumption = stage === 3 && c[i] > res + buf && c[i] > f.ma && (f.rising || f.slope5 > (feat[i - 1]?.slope5 ?? 0));
     const failedBase = stage === 1 && c[i] < sup - buf && c[i] < f.ma && f.falling;
 
-    if (breakout) { setStage(2, i, "BREAKOUT"); conflictWeeks = 0; }
-    else if (breakdown) { setStage(4, i, "BREAKDOWN"); conflictWeeks = 0; }
+    // A range break out of a "transition" period that followed the same trend is a
+    // continuation, not a fresh 1→2 breakout / 3→4 breakdown (2A / 4A are reserved for those).
+    if (breakout) { setStage(2, i, stage === 0 && lastDir === 2 ? "CONTINUATION" : "BREAKOUT"); conflictWeeks = 0; }
+    else if (breakdown) { setStage(4, i, stage === 0 && lastDir === 4 ? "CONTINUATION" : "BREAKDOWN"); conflictWeeks = 0; }
     else if (resumption) { setStage(2, i, "RESUMPTION"); conflictWeeks = 0; }
     else if (failedBase) { setStage(4, i, "FAILED_BASE"); conflictWeeks = 0; }
     else {
@@ -285,6 +296,14 @@ export function classifyStage(
   const ll26 = Math.min(...l.slice(n - 26)), hh26 = Math.max(...h.slice(n - 26));
   const rangePos26 = hh26 > ll26 ? (c[i] - ll26) / (hh26 - ll26) : 0.5;
   const pctFrom52wHigh = (c[i] / hh52 - 1) * 100;
+  // Range boundaries of the current base / top (the breakout and breakdown levels to watch).
+  let rangeHigh: number | null = null, rangeLow: number | null = null, rangeWeeks: number | null = null;
+  if ((stage === 1 || stage === 3 || stage === 0) && segStart >= 0 && i - segStart >= 4) {
+    rangeHigh = Math.max(...h.slice(segStart, i));
+    rangeLow = Math.min(...l.slice(segStart, i));
+    rangeWeeks = i - segStart;
+  }
+  const pctToRangeHigh = rangeHigh !== null ? (rangeHigh / c[i] - 1) * 100 : null;
   const reasons: string[] = [];
 
   // substage (§9.6)
@@ -305,7 +324,7 @@ export function classifyStage(
     const rpDiv = c[i] >= 0.97 * hh26 && f.rp !== null && Number.isFinite(rpHigh26) && f.rp < 0.95 * rpHigh26;
     const extended = c[i] - f.ma > 3 * f.atr;
     const lateCount = [decel, maTests, rpDiv, extended].filter(Boolean).length;
-    if (recentEvent(["BREAKOUT", "RESUMPTION"])) sub = "2A";
+    if (recentEvent(["BREAKOUT"])) sub = "2A"; // fresh breakout from a base (research §4.3)
     else if (lateCount >= 2) sub = "2B";
     else sub = "2";
     if (decel) reasons.push("MA slope slowing");
@@ -374,8 +393,9 @@ export function classifyStage(
   if ((f.rpSlope13 ?? 0) < 0 && stage === 2) reasons.push("RP weakening");
   if ((f.rpSlope13 ?? 0) > 0 && (stage === 1 || stage === 4)) reasons.push("RP improving");
   if (sub === "4B-") reasons.push("No new low 8w · above 10w MA");
+  if (stage === 1 && pctToRangeHigh !== null && rangeWeeks !== null) reasons.push(`${pctToRangeHigh.toFixed(1)}% below ${rangeWeeks}w range high`);
 
-  const hist = confirmed.slice(Math.max(34, n - 52)).map((s) => (s === 0 ? "T" : String(s))).join("");
+  const hist = confirmed.slice(Math.max(START, n - 52)).map((s) => (s === 0 ? "T" : String(s))).join("");
   const asOfDate = new Date((weekStart(bars[i].t) + 4 * DAY) * 1000).toISOString().slice(0, 10);
 
   return {
@@ -400,9 +420,14 @@ export function classifyStage(
       rpSlope13: f.rpSlope13 === null ? null : round(f.rpSlope13, 4),
       mrs52: f.mrs52 === null ? null : round(f.mrs52, 2),
       pctFrom52wHigh: round(pctFrom52wHigh, 1),
+      rangeHigh: rangeHigh === null ? null : round(rangeHigh, 4),
+      rangeLow: rangeLow === null ? null : round(rangeLow, 4),
+      pctToRangeHigh: pctToRangeHigh === null ? null : round(pctToRangeHigh, 1),
+      rangeWeeks,
     },
     reasons: reasons.slice(0, 4),
   };
 }
 
 const round = (x: number, d: number) => Math.round(x * 10 ** d) / 10 ** d;
+
