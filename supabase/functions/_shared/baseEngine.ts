@@ -109,6 +109,7 @@ export interface BaseFeatures {
   stageNow: Stage | null;     // the stock's own Weinstein stage at scan time
   dataNote: string | null;    // e.g. "no recent daily bars — weekly trigger only"
   gateFails: string[];        // generic base gates this base misses (shown as warnings)
+  chart: { c: number[]; h: number[]; l: number[]; ma: (number | null)[]; from: number; end: string };
   gatesOk: boolean;           // passed the generic Stage-2 base gates (before the RS percentile)
 }
 
@@ -202,7 +203,7 @@ interface WindowEval {
   end: number;
   partial: number;   // score without the RS percentile (max 92)
   fails: string[];   // generic gates this window misses (diagnostics)
-  f: Omit<BaseFeatures, "trigger" | "baseCount" | "baseCountCapped" | "dataNote" | "latestClose" | "latestDate" | "distToPivotPct" | "marketStage" | "stageNow" | "gatesOk" | "gateFails">;
+  f: Omit<BaseFeatures, "trigger" | "baseCount" | "baseCountCapped" | "dataNote" | "latestClose" | "latestDate" | "distToPivotPct" | "marketStage" | "stageNow" | "gatesOk" | "gateFails" | "chart">;
   gatesOk: boolean;
 }
 
@@ -715,7 +716,21 @@ export function detectBase(input: BaseInput, debug?: string[]): BaseFeatures | n
 
 
   const distToPivotPct = r1((f.pivot / latestClose - 1) * 100);
+
+  // Compact weekly chart (last 52 weeks + 30-week MA) so the app can draw the base without
+  // another data call. ~1 KB per base.
+  const CH = Math.min(52, n);
+  const sig = (x: number) => Number(x.toPrecision(5));
+  const k0 = n - CH;
+  const chart = {
+    c: c.slice(k0).map(sig), h: h.slice(k0).map(sig), l: l.slice(k0).map(sig),
+    ma: c.slice(k0).map((_, k) => { const m = sma(c, k0 + k, 30); return Number.isFinite(m) ? sig(m) : null; }),
+    from: Math.max(0, bars.findIndex((b) => isoWeekEnd(b.t) === f.baseStart) - k0),
+    end: isoWeekEnd(bars[i].t),
+  };
+
   return {
+    chart,
     ...f,
     labels,
     latestClose: r4(latestClose),

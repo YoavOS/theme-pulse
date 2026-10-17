@@ -382,7 +382,7 @@ function BaseDetail({ r }: { r: StockBase }) {
   return (
     <tr className="border-b border-border/40 bg-background/40">
       <td colSpan={16} className="px-4 py-3">
-        <div className="grid gap-5 md:grid-cols-3">
+        <div className="sticky left-4 grid w-[calc(100vw-5rem)] max-w-[1180px] gap-5 md:grid-cols-3">
           <div>
             <h4 className="mb-2 text-xs font-semibold">Score breakdown · {r.score} / 100 · <span className="capitalize">{r.band}</span></h4>
             {BREAKDOWN_PARTS.map((p) => {
@@ -406,6 +406,7 @@ function BaseDetail({ r }: { r: StockBase }) {
             </div>
           </div>
           <div>
+            {f.chart && f.chart.c.length > 5 && <BaseChart r={r} />}
             <h4 className="mb-2 text-xs font-semibold">Manual chart check · {LABEL_NAMES[lb]}</h4>
             <ul className="list-disc space-y-1 pl-4 text-[11px] text-foreground/85">
               {CHART_CHECKS[lb].map((c) => <li key={c}>{c}</li>)}
@@ -417,5 +418,41 @@ function BaseDetail({ r }: { r: StockBase }) {
         </div>
       </td>
     </tr>
+  );
+}
+
+/** Weekly mini chart from the scan's own bars: base window shaded, pivot (amber) and stop (pink). */
+function BaseChart({ r }: { r: StockBase }) {
+  const ch = r.features.chart!;
+  const n = ch.c.length;
+  const W = 300, H = 120, PAD = 4;
+  const piv = r.pivot ?? r.features.pivot, sup = r.support ?? r.features.support;
+  const vals = [...ch.h, ...ch.l, piv, sup].filter((x) => Number.isFinite(x) && x > 0);
+  const hi = Math.max(...vals), lo = Math.min(...vals);
+  const y = (p: number) => PAD + (1 - (Math.log(p) - Math.log(lo)) / (Math.log(hi) - Math.log(lo) || 1)) * (H - 2 * PAD);
+  const step = (W - 2 * PAD) / n;
+  const x = (k: number) => PAD + k * step + step / 2;
+  const maPts = ch.ma.map((m, k) => (m ? `${x(k).toFixed(1)},${y(m).toFixed(1)}` : null)).filter(Boolean).join(" ");
+  const closePts = ch.c.map((c, k) => `${x(k).toFixed(1)},${y(c).toFixed(1)}`).join(" ");
+  return (
+    <div className="mb-3">
+      <svg viewBox={`0 0 ${W} ${H}`} className="h-[120px] w-full rounded bg-background/60" role="img" aria-label={`${r.symbol} weekly chart, last ${n} weeks`}>
+        <rect x={PAD + ch.from * step} y={PAD} width={Math.max(step, (n - ch.from) * step)} height={H - 2 * PAD} fill="hsl(var(--primary) / 0.08)" />
+        {ch.h.map((h, k) => (
+          <line key={k} x1={x(k)} x2={x(k)} y1={y(h)} y2={y(ch.l[k])} stroke={k > 0 && ch.c[k] < ch.c[k - 1] ? "hsl(344,70%,60%)" : "hsl(160,60%,50%)"} strokeWidth={Math.max(1, step * 0.45)} strokeOpacity={0.55} />
+        ))}
+        <polyline points={closePts} fill="none" stroke="hsl(var(--foreground) / 0.8)" strokeWidth={1} />
+        {maPts && <polyline points={maPts} fill="none" stroke="hsl(222,82%,64%)" strokeWidth={1.2} />}
+        <line x1={PAD + ch.from * step} x2={W - PAD} y1={y(piv)} y2={y(piv)} stroke="hsl(40,95%,55%)" strokeDasharray="3 2" />
+        <line x1={PAD + ch.from * step} x2={W - PAD} y1={y(sup)} y2={y(sup)} stroke="hsl(344,80%,65%)" strokeDasharray="2 3" />
+      </svg>
+      <div className="mt-1 flex flex-wrap gap-x-3 text-[10px] text-muted-foreground">
+        <span>weekly · {n}w to {ch.end}</span>
+        <span className="text-[hsl(40,95%,55%)]">— pivot</span>
+        <span className="text-[hsl(344,80%,65%)]">— stop</span>
+        <span className="text-[hsl(222,82%,64%)]">— 30w MA</span>
+        <span>shaded = base</span>
+      </div>
+    </div>
   );
 }
