@@ -94,7 +94,7 @@ const TRANSITION_GROUPS: { key: string; label: string; color: StageNum; match: (
 
 export default function StageAnalysis() {
   const { rows, loading, error, reload } = useStockStages(true);
-  const { rows: uni, extra, load: loadUni } = useUniverseSectors();
+  const { rows: uni, extra, load: loadUni, loaded: uniLoaded } = useUniverseSectors();
   const [mode, setMode] = useState<GroupMode>(() => {
     try { return (localStorage.getItem(MODE_KEY) as GroupMode) || "industry"; } catch { return "industry"; }
   });
@@ -172,6 +172,7 @@ export default function StageAnalysis() {
   const series = useMemo(() => breadthSeries(aligned), [aligned]);
 
   const groups: GroupRow[] = useMemo(() => {
+    if (mode !== "theme" && !uniLoaded) return []; // don't show everything as "Unknown" while labels load
     const m = new Map<string, StockStage[]>();
     for (const r of stocks) for (const g of groupsOf(r.symbol)) m.set(g, [...(m.get(g) ?? []), r]);
     const out: GroupRow[] = [];
@@ -207,7 +208,7 @@ export default function StageAnalysis() {
     });
     return out;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stocks, mode, labelBySymbol, themeMap, sortCol, minGroupSize, asOf]);
+  }, [stocks, mode, labelBySymbol, themeMap, sortCol, minGroupSize, asOf, uniLoaded]);
 
   // ★ Best candidates: early-stage strength (fresh 2A with acceptable quality, or late-base 1B)
   // with decent confidence, strong relative strength, in an industry where ≥35% of stocks are Stage 2
@@ -451,7 +452,9 @@ export default function StageAnalysis() {
                     </button>
                   ))}
                 </div>
-                <span className="text-[11px] text-muted-foreground">{groups.length} groups · click a row for its stocks</span>
+                <span className="text-[11px] text-muted-foreground">
+                  {mode !== "theme" && !uniLoaded ? "Loading industries…" : `${groups.length} groups · click a row for its stocks`}
+                </span>
                 <label className="ml-auto flex items-center gap-1.5 text-[11px] text-muted-foreground" title="Groups with very few stocks swing between 0% and 100% — hide them for a fair ranking">
                   Min stocks
                   <select value={minGroupSize} onChange={(e) => setMinGroupSize(Number(e.target.value))} className="h-6 rounded border border-border bg-background px-1 text-[11px]">

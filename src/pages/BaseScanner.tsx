@@ -40,7 +40,7 @@ export default function BaseScanner() {
   });
   const [stateF, setStateF] = useState<BaseState | "all">("all");
   const [labelF, setLabelF] = useState<BaseLabel | "all">("all");
-  const [minScore, setMinScore] = useState(65);
+  const [minScore, setMinScore] = useState(55);
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState<SortKey>("score");
   const [open, setOpen] = useState<string | null>(null);
@@ -370,7 +370,7 @@ function BaseDetail({ r }: { r: StockBase }) {
     ["Volume dry-up · down/up volume", `${f.dryUp ?? "—"} · ${f.downUpVol ?? "—"}`],
     ["RS line vs 52w high", f.rsHighDistPct === null ? "—" : f.rsHighDistPct <= 0.5 ? "at a new high" : `−${f.rsHighDistPct.toFixed(1)}%`],
     ["From 52w high · above 10w MA", `${f.pctFrom52wHigh.toFixed(0)}% · ${f.ext10wPct >= 0 ? "+" : ""}${f.ext10wPct.toFixed(0)}%`],
-    ["Base count (this Stage 2)", `${f.baseCount}${f.baseCountCapped ? "+ (Stage 2 began before the 2-year history)" : ""}`],
+    ["Base count (this Stage 2)", `${f.baseCount}${f.baseCountCapped ? "+ (counted over the last 2 years)" : ""}`],
     ["Earnings", r.earnings_date ?? "none in the next 30 days"],
   ];
   if (t.status !== "none") {
