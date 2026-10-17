@@ -104,3 +104,6 @@ verify_jwt = false
 
 [functions.classify-tickers]
 verify_jwt = false
+
+[functions.stage-scan]
+verify_jwt = false

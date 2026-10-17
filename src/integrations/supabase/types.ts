@@ -611,6 +611,60 @@ export type Database = {
         }
         Relationships: []
       }
+      stock_stages: {
+        Row: {
+          as_of: string
+          confidence: number
+          event: string | null
+          event_kind: string | null
+          event_weeks_ago: number | null
+          features: Json | null
+          history: string | null
+          last_directional: number | null
+          quality: string | null
+          reasons: string[] | null
+          stage: number
+          substage: string
+          symbol: string
+          updated_at: string
+          weeks_in_stage: number | null
+        }
+        Insert: {
+          as_of: string
+          confidence: number
+          event?: string | null
+          event_kind?: string | null
+          event_weeks_ago?: number | null
+          features?: Json | null
+          history?: string | null
+          last_directional?: number | null
+          quality?: string | null
+          reasons?: string[] | null
+          stage: number
+          substage: string
+          symbol: string
+          updated_at?: string
+          weeks_in_stage?: number | null
+        }
+        Update: {
+          as_of?: string
+          confidence?: number
+          event?: string | null
+          event_kind?: string | null
+          event_weeks_ago?: number | null
+          features?: Json | null
+          history?: string | null
+          last_directional?: number | null
+          quality?: string | null
+          reasons?: string[] | null
+          stage?: number
+          substage?: string
+          symbol?: string
+          updated_at?: string
+          weeks_in_stage?: number | null
+        }
+        Relationships: []
+      }
       superperformance_stocks: {
         Row: {
           current_score: number | null

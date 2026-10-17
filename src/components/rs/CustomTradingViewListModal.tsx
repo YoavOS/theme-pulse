@@ -1,4 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
+import StageFilterBlock from "@/components/stages/StageFilterBlock";
+import { useStockStages } from "@/hooks/useStockStages";
+import { passesStageFilter, type StageFilterMode } from "@/lib/stageAnalysis";
 import { Copy, Download, Settings2, X, Check, ChevronDown, Sparkles, Save, Trash2 } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Input } from "@/components/ui/input";
@@ -94,7 +97,8 @@ interface FilterState {
   maxCoilWeekly: number;
   coilMonthlyOn: boolean;
   maxCoilMonthly: number;
-
+  stageFilter?: StageFilterMode;
+  minStageConf?: number;
 }
 
 interface ScannerProfile {
@@ -281,6 +285,9 @@ export default function CustomTradingViewListModal({
   const excludedSectorsSet = useMemo(() => new Set(state.excludedSectors), [state.excludedSectors]);
 
   const growthActive = anyActive(state.growthFilters);
+  const { bySymbol: stageMap, rows: stageRows } = useStockStages(open);
+  const stageMode: StageFilterMode = state.stageFilter ?? "any";
+  const stageMinConf = state.minStageConf ?? 0;
   const fundamentalsAvailable = (fundamentalsMap?.size ?? 0) > 0;
   const coilAvailable = (coilScores?.size ?? 0) > 0;
   const emaAvailable = (emaDistances?.size ?? 0) > 0;
@@ -321,6 +328,8 @@ export default function CustomTradingViewListModal({
         maxEma9wAbs: state.maxEma9wAbs,
         relVsQqqOn: state.relVsQqqOn,
         minRelVsQqq: state.minRelVsQqq,
+        stageFilter: state.stageFilter,
+        minStageConf: state.minStageConf,
       },
     };
     const next = [...userProfiles, profile];
@@ -403,6 +412,7 @@ export default function CustomTradingViewListModal({
       if (state.excludeSectorsOn && excludedSectorsSet.size > 0) {
         if (s.sector && expandedExclusions(s.sector)) return false;
       }
+      if ((stageMode !== "any" || stageMinConf > 0) && !passesStageFilter(stageMap.get(s.symbol.toUpperCase()), stageMode, stageMinConf)) return false;
       if (growthActive) {
         const f = fundamentalsMap?.get(s.symbol);
         if (!passesAllActiveFilters(state.growthFilters, f)) return false;
@@ -452,7 +462,7 @@ export default function CustomTradingViewListModal({
       }
       return true;
     });
-  }, [stocks, ratingMap, state, excludedSectorsSet, expandedExclusions, growthActive, fundamentalsMap, coilScores, emaDistances, qqqPctChange, qqqAvailable, isOtcSymbol, superperfFilters, superperfSets]);
+  }, [stocks, ratingMap, state, stageMap, stageMode, stageMinConf, excludedSectorsSet, expandedExclusions, growthActive, fundamentalsMap, coilScores, emaDistances, qqqPctChange, qqqAvailable, isOtcSymbol, superperfFilters, superperfSets]);
 
   const near52wSymbols = useMemo(
     () => state.near52wOn ? baseFiltered.map((s) => s.symbol) : [],
@@ -881,6 +891,16 @@ export default function CustomTradingViewListModal({
             </p>
           </div>
 
+
+          {/* Weinstein Stage filter */}
+          <StageFilterBlock
+            mode={stageMode}
+            minConfidence={stageMinConf}
+            onMode={(m) => set("stageFilter", m)}
+            onMinConfidence={(n) => set("minStageConf", n)}
+            available={stageRows.length > 0}
+            asOf={stageRows[0]?.as_of ?? null}
+          />
 
           {/* Tight Range / Coil Score filter */}
           <div className="space-y-2 rounded-md border border-border bg-muted/20 px-3 py-2.5">
