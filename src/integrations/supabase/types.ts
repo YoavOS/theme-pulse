@@ -479,6 +479,69 @@ export type Database = {
         }
         Relationships: []
       }
+      stock_bases: {
+        Row: {
+          as_of: string
+          band: string | null
+          breakdown: Json | null
+          dist_to_pivot: number | null
+          earnings_date: string | null
+          features: Json
+          labels: string[] | null
+          pivot: number | null
+          primary_label: string | null
+          rs_pct: number | null
+          score: number | null
+          state: string | null
+          stop_risk: number | null
+          support: number | null
+          symbol: string
+          tier: number | null
+          updated_at: string
+          warnings: string[] | null
+        }
+        Insert: {
+          as_of: string
+          band?: string | null
+          breakdown?: Json | null
+          dist_to_pivot?: number | null
+          earnings_date?: string | null
+          features: Json
+          labels?: string[] | null
+          pivot?: number | null
+          primary_label?: string | null
+          rs_pct?: number | null
+          score?: number | null
+          state?: string | null
+          stop_risk?: number | null
+          support?: number | null
+          symbol: string
+          tier?: number | null
+          updated_at?: string
+          warnings?: string[] | null
+        }
+        Update: {
+          as_of?: string
+          band?: string | null
+          breakdown?: Json | null
+          dist_to_pivot?: number | null
+          earnings_date?: string | null
+          features?: Json
+          labels?: string[] | null
+          pivot?: number | null
+          primary_label?: string | null
+          rs_pct?: number | null
+          score?: number | null
+          state?: string | null
+          stop_risk?: number | null
+          support?: number | null
+          symbol?: string
+          tier?: number | null
+          updated_at?: string
+          warnings?: string[] | null
+        }
+        Relationships: []
+      }
       stock_fundamentals: {
         Row: {
           company_name: string | null

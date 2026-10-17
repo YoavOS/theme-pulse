@@ -7,9 +7,10 @@ import {
   RefreshCw, Download, Wifi, WifiOff, Loader2, Settings, ScanLine, X,
   ShieldCheck, Brain, ChevronDown, LayoutDashboard, AlertTriangle,
   BarChart3, Zap, Activity, DollarSign, Sun, Database, Trophy,
-  Share2, Flag, Layers,
+  Share2, Flag, Layers, Boxes,
 } from "lucide-react";
 import HeatmapGridView from "@/components/dashboard/HeatmapGridView";
+import ThemeTracker from "@/components/dashboard/ThemeTracker";
 import DashboardConcentrationPanel from "@/components/dashboard/DashboardConcentrationPanel";
 
 import OverallBestThemesList from "@/components/dashboard/OverallBestThemesList";
@@ -69,6 +70,12 @@ export default function Index() {
   useEffect(() => {
     try { localStorage.setItem("dashboard_group_mode_v1", groupMode); } catch { /* ignore */ }
   }, [groupMode]);
+  const [dashView, setDashView] = useState<"heatmap" | "tracker">(() => {
+    try { return localStorage.getItem("dashboard_view_v1") === "tracker" ? "tracker" : "heatmap"; } catch { return "heatmap"; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem("dashboard_view_v1", dashView); } catch { /* ignore */ }
+  }, [dashView]);
 
   const [overallWeights, setOverallWeights] = useState<DashboardWeights>(() => {
     if (typeof window === "undefined") return { ...DEFAULT_DASHBOARD_WEIGHTS };
@@ -291,6 +298,7 @@ export default function Index() {
     { to: "/intelligence", label: "Intelligence", icon: <Brain size={14} />, active: false, color: "text-primary" },
     { to: "/rs-alpha", label: "RS Alpha", icon: <Zap size={14} />, active: false, color: "text-[hsl(280,70%,60%)]" },
     { to: "/stages", label: "Stages", icon: <Layers size={14} />, active: false, color: "text-[hsl(222,82%,64%)]" },
+    { to: "/bases", label: "Bases", icon: <Boxes size={14} />, active: false, color: "text-[hsl(174,70%,50%)]" },
     { to: "/live", label: "Live Execution", icon: <Activity size={14} />, active: false, color: "text-[hsl(160,80%,45%)]" },
     { to: "/market-drivers", label: "Market Drivers", icon: <BarChart3 size={14} />, active: false, color: "text-[hsl(200,80%,55%)]" },
     { to: "/earnings", label: "Earnings", icon: <DollarSign size={14} />, active: false, color: "text-[hsl(40,90%,55%)]" },
@@ -633,6 +641,21 @@ export default function Index() {
         )}
 
         <div className="mb-4 flex flex-wrap items-center gap-2">
+          <span className="text-[11px] uppercase tracking-wide text-muted-foreground">View</span>
+          <div className="inline-flex items-center gap-0.5 rounded-md border border-border bg-muted/20 p-0.5">
+            {(["heatmap", "tracker"] as const).map(v => (
+              <button
+                key={v}
+                onClick={() => setDashView(v)}
+                title={v === "tracker" ? "Every group as one bar, strongest first — with a live 'Since Open' view" : "Heatmap cards"}
+                className={`rounded px-3 py-1 text-[11px] font-medium capitalize transition ${
+                  dashView === v ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {v}
+              </button>
+            ))}
+          </div>
           <span className="text-[11px] uppercase tracking-wide text-muted-foreground">Group by</span>
           <div className="inline-flex items-center gap-0.5 rounded-md border border-border bg-muted/20 p-0.5">
             {(["theme", "industry", "subIndustry", "sector"] as GroupMode[]).map(m => (
@@ -662,7 +685,17 @@ export default function Index() {
           {groupMode !== "theme" && <ClassificationCoverage onUpdated={() => loadSectors(true)} />}
         </div>
 
-        {activeTimeframe === "Overall" ? (
+        {dashView === "tracker" ? (
+          <ThemeTracker
+            groupMode={groupMode}
+            baseThemes={baseThemes}
+            universeList={universeList}
+            industryBySymbol={industryBySymbol}
+            loadPerfMap={loadPerfMap}
+            scanCompletedAt={scanCompletedAt}
+            onOpen={setDrilldownTheme}
+          />
+        ) : activeTimeframe === "Overall" ? (
           <OverallBestThemesList
             themes={groupMode === "theme" && searchMatchSet ? themes.filter(t => searchMatchSet.has(t.theme_name.toLowerCase())) : themes}
             weights={overallWeights}

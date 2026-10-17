@@ -1,5 +1,8 @@
 import { useMemo, useRef, useState, useEffect, useCallback } from "react";
 import StageFilterBlock from "@/components/stages/StageFilterBlock";
+import BaseFilterBlock from "@/components/stages/BaseFilterBlock";
+import { useStockBases } from "@/hooks/useStockBases";
+import { DEFAULT_BASE_FILTER, isBaseFilterActive, passesBaseFilter, type BaseFilter } from "@/lib/bases";
 import { useStockStages } from "@/hooks/useStockStages";
 import { passesStageFilter, type StageFilterMode } from "@/lib/stageAnalysis";
 import { Copy, Download, ExternalLink, ListChecks, Sparkles, Upload, FileText, X, Loader2 } from "lucide-react";
@@ -189,6 +192,8 @@ export default function CustomListAnalyzerModal({
   const [stageFilter, setStageFilter] = useState<StageFilterMode>("any");
   const [minStageConf, setMinStageConf] = useState<number>(0);
   const { bySymbol: stageMap, rows: stageRows } = useStockStages(open);
+  const [baseFilter, setBaseFilter] = useState<BaseFilter>(DEFAULT_BASE_FILTER);
+  const { bySymbol: baseMap, rows: baseRows } = useStockBases(open);
   const [coilFilterOn, setCoilFilterOn] = useState<boolean>(false);
   const [maxCoil, setMaxCoil] = useState<number>(0.85);
 
@@ -330,6 +335,7 @@ export default function CustomListAnalyzerModal({
       if (minAdr > 0 && (s.adrPercent === null || s.adrPercent < minAdr)) return false;
       if (minMcapM > 0 && (s.marketCap === null || s.marketCap < minMcapM)) return false;
       if ((stageFilter !== "any" || minStageConf > 0) && !passesStageFilter(stageMap.get(s.symbol.toUpperCase()), stageFilter, minStageConf)) return false;
+      if (isBaseFilterActive(baseFilter) && !passesBaseFilter(baseMap.get(s.symbol.toUpperCase()), baseFilter)) return false;
       if (growthActive) {
         const f = fundamentalsMap?.get(s.symbol);
         if (!passesAllActiveFilters(growthFilters, f)) return false;
@@ -415,7 +421,7 @@ export default function CustomListAnalyzerModal({
     activeEmaFilters, ema9dFilterOn, ema21dFilterOn, ema9wFilterOn,
     maxEma9dAbs, maxEma21dAbs, maxEma9wAbs, emaFilterMode, emaMap, sortBy,
     priceVs9dOn, priceVs9dDir, priceVs21dOn, priceVs21dDir, priceVs9wOn, priceVs9wDir,
-    candleMap, superperfFilters, superperfSets, stageFilter, minStageConf, stageMap,
+    candleMap, superperfFilters, superperfSets, stageFilter, minStageConf, stageMap, baseFilter, baseMap,
   ]);
 
   const visibleMissing = hideMissing ? [] : missing;
@@ -667,6 +673,9 @@ export default function CustomListAnalyzerModal({
                   available={stageRows.length > 0}
                   asOf={stageRows[0]?.as_of ?? null}
                 />
+              </div>
+              <div className="md:col-span-2">
+                <BaseFilterBlock value={baseFilter} onChange={setBaseFilter} available={baseRows.length > 0} />
               </div>
               <div className="md:col-span-2">
                 <div className="flex items-center justify-between">

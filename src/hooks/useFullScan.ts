@@ -256,10 +256,10 @@ export function useFullScan(onComplete: (themes: ThemeData[], timeframe: string)
 
       setScanCompletedAt(new Date());
 
-      // Full Scan also refreshes Weinstein stages (Stage Analysis tab + stage filters).
+      // Full Scan also refreshes Weinstein stages and the Base Scanner (after the daily bars above are cached).
       try {
-        setStatusText(`Updating stages…`);
-        const st = await runStageScan((d, t) => setStatusText(`Updating stages: ${d}/${t}`));
+        setStatusText(`Updating stages & bases…`);
+        const st = await runStageScan((d, t) => setStatusText(`Updating stages & bases: ${d}/${t}`));
         summaryParts.push(`stages ${st.processed}`);
       } catch (e) {
         console.warn("Stage scan after Full Scan failed", e);

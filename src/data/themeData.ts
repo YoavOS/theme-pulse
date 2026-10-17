@@ -6,6 +6,7 @@ export interface Ticker {
   name?: string;
   skipped?: boolean;
   skipReason?: string;
+  pct_open?: number | null; // change from today's open (live "Today" fetch)
   // Populated only when timeframe="Overall"
   pct_today?: number;
   pct_1d?: number;
@@ -33,6 +34,7 @@ export interface ThemeData {
   perf_1w?: number;
   perf_1m?: number;
   perf_3m?: number;
+  perf_open?: number;       // average change from today's open (live "Today" fetch)
 }
 
 
