@@ -94,6 +94,7 @@ export interface BaseFeatures {
   stageNow?: number | null;
   dataNote: string | null;
   gateFails?: string[];
+  chart?: { c: number[]; h: number[]; l: number[]; ma: (number | null)[]; from: number; end: string };
   gatesOk: boolean;
 }
 

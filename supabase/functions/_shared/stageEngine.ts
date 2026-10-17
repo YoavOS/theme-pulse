@@ -63,7 +63,9 @@ export interface StageResult {
 const DAY = 86400;
 /** First week the engine can evaluate: MA30 exists from index 29 and the
  *  10-week persistence window needs MA30 at i−9 (and i−10 for crosses). */
-const START = 39;
+const START_FULL = 39;
+/** Young listings (25–44 completed weeks) are classified with a shorter MA instead of not at all. */
+const MIN_WEEKS = 25;
 
 /** Drop the current, still-forming week (official labels use completed weeks only). */
 export function completedWeeks(bars: WeeklyBar[], nowSec = Date.now() / 1000): WeeklyBar[] {
@@ -138,7 +140,12 @@ export function classifyStage(
 ): StageResult | null {
   const bars = barsIn;
   const n = bars.length;
-  if (n < START + 6) return null; // need MA30 + persistence window + a few weeks of state history
+  if (n < MIN_WEEKS) return null;
+  // MA length: 30 weeks normally; a young listing uses what its history allows (≥ 10 weeks),
+  // flagged in the reasons and with capped confidence.
+  const L = n >= START_FULL + 6 ? 30 : Math.max(10, n - 15);
+  const START = L + 9;
+  const young = L < 30;
 
   const c = bars.map((b) => b.c), h = bars.map((b) => b.h), l = bars.map((b) => b.l), v = bars.map((b) => b.v || 0);
 
@@ -153,7 +160,7 @@ export function classifyStage(
     return bc && bc > 0 ? b.c / bc : null;
   });
 
-  const ma: number[] = c.map((_, i) => sma(c, i, 30));
+  const ma: number[] = c.map((_, i) => sma(c, i, L));
   const feat: (WeekFeat | null)[] = bars.map((_, i) => {
     if (i < START) return null;
     const m = ma[i];
@@ -235,7 +242,7 @@ export function classifyStage(
 
     // initial state
     if (i === START) {
-      const ret26 = c[i] / c[i - 26] - 1;
+      const ret26 = c[i] / c[Math.max(0, i - 26)] - 1;
       if (f.up) setStage(2, i, "TREND");
       else if (f.down) setStage(4, i, "TREND");
       else if (f.neutral) { lastDir = ret26 > 0 ? 2 : 4; setStage(ret26 > 0.2 ? 3 : ret26 < -0.2 ? 1 : 0, i, "RANGE"); }
@@ -248,7 +255,9 @@ export function classifyStage(
     // A neutral segment must be a real range before a break out of it counts.
     const segLen = segStart >= 0 ? i - segStart : 0;
     const fromNeutral = stage === 1 || stage === 3 || (stage === 0 && segLen >= 6);
-    const breakout = (stage === 1 || (stage === 0 && fromNeutral)) && c[i] > res + buf && c[i] > f.ma && !f.falling;
+    // A Stage 2 breakout needs a real base (≥ 6 weeks) and an MA that has stopped falling —
+    // a V-shaped rebound through a short range under a declining MA is still Stage 1.
+    const breakout = (stage === 1 || stage === 0) && segLen >= 6 && c[i] > res + buf && c[i] > f.ma && f.slope5 > -0.005;
     const breakdown = (stage === 3 || (stage === 0 && fromNeutral)) && c[i] < sup - buf && c[i] < f.ma && !f.rising;
     const resumption = stage === 3 && c[i] > res + buf && c[i] > f.ma && (f.rising || f.slope5 > (feat[i - 1]?.slope5 ?? 0));
     // A close below the base's support is a failed base (Stage 4) unless the MA is still rising.
@@ -300,7 +309,7 @@ export function classifyStage(
       else if (f.neutral && stage === 2) cand = noNewHigh ? 3 : 2;
       else if (f.neutral && stage === 4) cand = noNewLow ? 1 : 4;
       else if (f.neutral && (stage === 1 || stage === 3)) cand = stage; // a flat MA is the base / top itself
-      else if (f.neutral) cand = lastDir === 4 ? 1 : lastDir === 2 ? 3 : (c[i] / c[i - 26] - 1 > 0.2 ? 3 : c[i] / c[i - 26] - 1 < -0.2 ? 1 : 0);
+      else if (f.neutral) cand = lastDir === 4 ? 1 : lastDir === 2 ? 3 : (c[i] / c[Math.max(0, i - 26)] - 1 > 0.2 ? 3 : c[i] / c[Math.max(0, i - 26)] - 1 < -0.2 ? 1 : 0);
       else if (stage === 1 || stage === 3) cand = stage; // inside a base / top, mixed weeks are normal
       else cand = null; // conflicting signals
       // A breakdown from a top that is reclaimed within ~10 weeks was a failed breakdown —
@@ -341,7 +350,7 @@ export function classifyStage(
   const weeksInStage = i - stageSince + 1;
   const eventWeeksAgo = eventIdx >= 0 && event ? i - eventIdx : null;
   const hh52 = Math.max(...h.slice(Math.max(0, n - 52)));
-  const ll26 = Math.min(...l.slice(n - 26)), hh26 = Math.max(...h.slice(n - 26));
+  const ll26 = Math.min(...l.slice(Math.max(0, n - 26))), hh26 = Math.max(...h.slice(Math.max(0, n - 26)));
   const rangePos26 = hh26 > ll26 ? (c[i] - ll26) / (hh26 - ll26) : 0.5;
   const pctFrom52wHigh = (c[i] / hh52 - 1) * 100;
   // Range boundaries of the current base / top (the breakout and breakdown levels to watch).
@@ -376,7 +385,7 @@ export function classifyStage(
     for (let k = Math.max(stageSince, i - 25); k <= i; k++) maxSlope = Math.max(maxSlope, feat[k]?.slope5 ?? 0);
     const decel = maxSlope > 0 && f.slope5 < 0.5 * maxSlope;
     const maTests = f.crosses10 >= 2;
-    const rpHigh26 = Math.max(...(rp.slice(n - 26).filter((x) => x !== null) as number[]));
+    const rpHigh26 = Math.max(...(rp.slice(Math.max(0, n - 26)).filter((x) => x !== null) as number[]));
     const rpDiv = c[i] >= 0.97 * hh26 && f.rp !== null && Number.isFinite(rpHigh26) && f.rp < 0.95 * rpHigh26;
     const extended = c[i] - f.ma > 3 * f.atr;
     const lateCount = [decel, maTests, rpDiv, extended].filter(Boolean).length;
@@ -387,12 +396,12 @@ export function classifyStage(
     if (extended) reasons.push("Extended far above MA");
     if (rpDiv) reasons.push("RP not confirming new highs");
   } else if (stage === 3) {
-    const prevHigh = Math.max(...h.slice(n - 26, n - 13)), lastHigh = Math.max(...h.slice(n - 13));
+    const prevHigh = Math.max(...h.slice(Math.max(0, n - 26), n - 13)), lastHigh = Math.max(...h.slice(n - 13));
     if (weeksInStage <= 8) sub = "3A";
     else if (c[i] < f.ma && lastHigh < prevHigh && (f.rpSlope13 ?? 0) < 0) sub = "3B";
     else sub = "3";
   } else if (stage === 4) {
-    const newLowRecent = Math.min(...l.slice(n - 8)) <= Math.min(...l.slice(n - 26));
+    const newLowRecent = Math.min(...l.slice(n - 8)) <= Math.min(...l.slice(Math.max(0, n - 26)));
     const slopeImproving = f.slope5 > (feat[i - 8]?.slope5 ?? f.slope5);
     const mature = weeksInStage > 13;
     if (recentEvent(["BREAKDOWN", "FAILED_BASE"])) sub = "4A";
@@ -428,6 +437,7 @@ export function classifyStage(
   } else {
     conf = 30;
   }
+  if (young) conf = Math.min(conf, 60); // short history: provisional
   conf = Math.max(0, Math.min(100, Math.round(conf)));
 
   // upside-transition quality for fresh Stage 2 (volume asymmetry: only upside needs volume)
@@ -440,10 +450,11 @@ export function classifyStage(
 
   // core reasons
   const maTxt = f.rising ? "rising" : f.falling ? "falling" : "flat";
-  if (stage === 2) reasons.unshift(`Above ${maTxt} 30w MA`);
-  else if (stage === 4) reasons.unshift(`Below ${maTxt} 30w MA`);
-  else if (stage === 1 || stage === 3) reasons.unshift(`Sideways around ${maTxt} 30w MA · after Stage ${lastDir ?? "?"}`);
+  if (stage === 2) reasons.unshift(`Above ${maTxt} ${L}w MA`);
+  else if (stage === 4) reasons.unshift(`Below ${maTxt} ${L}w MA`);
+  else if (stage === 1 || stage === 3) reasons.unshift(`Sideways around ${maTxt} ${L}w MA · after Stage ${lastDir ?? "?"}`);
   else reasons.unshift("Conflicting signals");
+  if (young) reasons.splice(1, 0, `Young listing (${n} weeks) — provisional, ${L}-week MA`);
   if (eventKind === "BREAKOUT" && eventWeeksAgo !== null && eventWeeksAgo < 13 && rvolEv !== null) reasons.push(`Breakout RVOL ${rvolEv.toFixed(1)}×`);
   if ((f.mrs52 ?? 0) > 0 && stage === 2) reasons.push("Outperforming SPY (MRS > 0)");
   if ((f.rpSlope13 ?? 0) < 0 && stage === 2) reasons.push("RP weakening");
