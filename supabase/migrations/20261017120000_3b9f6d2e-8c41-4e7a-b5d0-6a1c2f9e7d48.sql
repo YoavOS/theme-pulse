@@ -26,14 +26,16 @@ CREATE TABLE IF NOT EXISTS public.stock_stages (
   updated_at        timestamptz NOT NULL DEFAULT now()
 );
 
-CREATE INDEX IF NOT EXISTS stock_stages_stage_idx ON public.stock_stages (stage);
+-- 1. Privileges: the app reads; only the edge function (service role) writes.
+GRANT SELECT ON public.stock_stages TO anon, authenticated;
+GRANT ALL ON public.stock_stages TO service_role;
 
+-- 2. Row level security
 ALTER TABLE public.stock_stages ENABLE ROW LEVEL SECURITY;
 
--- Read-only for the app; only the edge function (service role) writes.
+-- 3. Policies: read-only for the app.
 DROP POLICY IF EXISTS "Read stock stages" ON public.stock_stages;
 CREATE POLICY "Read stock stages" ON public.stock_stages FOR SELECT USING (true);
 
--- Explicit privileges: the app reads (RLS above limits it to SELECT); the edge function writes.
-GRANT SELECT ON public.stock_stages TO anon, authenticated;
-GRANT ALL ON public.stock_stages TO service_role;
+-- 4. Index
+CREATE INDEX IF NOT EXISTS stock_stages_stage_idx ON public.stock_stages (stage);

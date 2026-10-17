@@ -29,14 +29,16 @@ CREATE TABLE IF NOT EXISTS public.stock_bases (
   updated_at      timestamptz NOT NULL DEFAULT now()
 );
 
-CREATE INDEX IF NOT EXISTS stock_bases_score_idx ON public.stock_bases (score DESC);
+-- 1. Privileges: the app reads; only the edge function (service role) writes.
+GRANT SELECT ON public.stock_bases TO anon, authenticated;
+GRANT ALL ON public.stock_bases TO service_role;
 
+-- 2. Row level security
 ALTER TABLE public.stock_bases ENABLE ROW LEVEL SECURITY;
 
--- Read-only for the app; only the edge function (service role) writes.
+-- 3. Policies: read-only for the app.
 DROP POLICY IF EXISTS "Read stock bases" ON public.stock_bases;
 CREATE POLICY "Read stock bases" ON public.stock_bases FOR SELECT USING (true);
 
--- Explicit privileges: the app reads (RLS above limits it to SELECT); the edge function writes.
-GRANT SELECT ON public.stock_bases TO anon, authenticated;
-GRANT ALL ON public.stock_bases TO service_role;
+-- 4. Index
+CREATE INDEX IF NOT EXISTS stock_bases_score_idx ON public.stock_bases (score DESC);
