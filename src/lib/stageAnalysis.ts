@@ -130,8 +130,8 @@ export const isStageScanRunning = () => running !== null;
 export function runStageScan(onProgress?: (done: number, total: number) => void): Promise<{ processed: number; failed: number }> {
   if (running) return running;
   running = (async () => {
-    const startedAt = new Date().toISOString();
-    const { symbols } = await invoke<{ symbols: string[] }>({ action: "symbols" });
+    const { symbols, serverTime } = await invoke<{ symbols: string[]; serverTime: string }>({ action: "symbols" });
+    const startedAt = serverTime; // server clock — see stage-scan "symbols"
     // Benchmark first so the market stage is computed once.
     const list = ["SPY", ...symbols.filter((s) => s !== "SPY")];
     const CHUNK = 60;
@@ -156,7 +156,8 @@ export function runStageScan(onProgress?: (done: number, total: number) => void)
       }
     };
     await Promise.all([lane(), lane()]);
-    if (processed > 0) await invoke({ action: "finalize", startedAt });
+    // Prune stocks that left the list — only after a clearly successful scan.
+    if (processed > 0 && processed >= list.length * 0.8) await invoke({ action: "finalize", startedAt });
     try { localStorage.removeItem(CACHE_KEY); } catch { /* ignore */ }
     window.dispatchEvent(new Event(EVENT));
     return { processed, failed };

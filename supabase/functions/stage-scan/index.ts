@@ -54,8 +54,9 @@ async function getBench() {
   const raw = await fetchWeekly(BENCH);
   const bars = raw ? completedWeeks(raw) : [];
   const r = bars.length ? classifyStage(bars, null, null) : null;
-  benchCache = { at: Date.now(), bars, stage: r?.stage ?? null, substage: r?.substage ?? null };
-  return benchCache;
+  const out = { at: Date.now(), bars, stage: r?.stage ?? null, substage: r?.substage ?? null };
+  if (bars.length) benchCache = out; // never cache a failed benchmark fetch
+  return out;
 }
 
 async function fetchAll<T>(db: SupabaseClient, table: string, cols: string): Promise<T[]> {
@@ -91,7 +92,9 @@ Deno.serve(async (req) => {
       const set = new Set<string>([BENCH]);
       for (const r of universe) if (r.symbol) set.add(r.symbol.toUpperCase().trim());
       for (const r of themed) if (r.ticker_symbol) set.add(r.ticker_symbol.toUpperCase().trim());
-      return json({ ok: true, symbols: [...set].sort() });
+      // serverTime: the scan's start mark for "finalize" (server clock, so a wrong
+      // computer clock can never make fresh rows look stale).
+      return json({ ok: true, symbols: [...set].sort(), serverTime: new Date().toISOString() });
     }
 
     if (action === "chunk") {
@@ -126,6 +129,7 @@ Deno.serve(async (req) => {
     if (action === "finalize") {
       const startedAt = body.startedAt;
       if (!startedAt) return json({ ok: false, error: "startedAt required" }, 400);
+      if (Date.parse(startedAt) > Date.now()) return json({ ok: false, error: "startedAt is in the future" }, 400);
       const { count: fresh } = await db.from("stock_stages").select("symbol", { count: "exact", head: true }).gte("updated_at", startedAt);
       const { count: stale } = await db.from("stock_stages").select("symbol", { count: "exact", head: true }).lt("updated_at", startedAt);
       // Safety: only prune when this scan clearly completed (never wipe on a failed scan).

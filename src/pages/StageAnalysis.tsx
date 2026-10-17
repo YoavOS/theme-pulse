@@ -139,7 +139,22 @@ export default function StageAnalysis() {
 
   const stocks = useMemo(() => rows.filter((r) => r.symbol !== "SPY"), [rows]);
   const market = useMemo(() => rows.find((r) => r.symbol === "SPY") ?? null, [rows]);
-  const asOf = rows[0]?.as_of ?? null;
+  const asOf = useMemo(() => rows.reduce<string | null>((m, r) => (!m || r.as_of > m ? r.as_of : m), null), [rows]);
+  // Histories line up week-by-week only for stocks classified up to the latest week
+  // (a halted / stale stock would shift the chart), so the chart and 4-week changes use these.
+  const aligned = useMemo(() => stocks.filter((r) => r.as_of === asOf), [stocks, asOf]);
+
+  // RS rank 1–99 from the stage scan's own relative performance vs SPY (Mansfield-style, 52w).
+  const rsRank = useMemo(() => {
+    const vals = stocks.map((r) => ({ s: r.symbol, v: r.features?.mrs52 ?? null })).filter((x) => x.v !== null) as { s: string; v: number }[];
+    vals.sort((a, b) => a.v - b.v);
+    const m = new Map<string, number>();
+    vals.forEach((x, i) => m.set(x.s, Math.max(1, Math.min(99, Math.round(((i + 1) / vals.length) * 99)))));
+    return m;
+  }, [stocks]);
+  const rsOf = (sym: string) => rsRank.get(sym) ?? null;
+  const nameBySymbol = useMemo(() => new Map(uni.map((r) => [r.symbol.toUpperCase(), r.name ?? null])), [uni]);
+  const nameOf = (sym: string) => nameBySymbol.get(sym) ?? null;
 
   const groupsOf = (sym: string): string[] => {
     if (mode === "theme") return themeMap.get(sym) ?? [];
@@ -154,7 +169,7 @@ export default function StageAnalysis() {
     return { n, classified };
   }, [stocks]);
 
-  const series = useMemo(() => breadthSeries(stocks), [stocks]);
+  const series = useMemo(() => breadthSeries(aligned), [aligned]);
 
   const groups: GroupRow[] = useMemo(() => {
     const m = new Map<string, StockStage[]>();
@@ -165,7 +180,7 @@ export default function StageAnalysis() {
       let prevS2 = 0, prevTot = 0;
       for (const r of members) {
         n[r.stage as StageNum]++;
-        const p = stageWeeksAgo(r, 4);
+        const p = r.as_of === asOf ? stageWeeksAgo(r, 4) : null;
         if (p !== null && p !== 0) { prevTot++; if (p === 2) prevS2++; }
       }
       const tot = n[1] + n[2] + n[3] + n[4];
@@ -192,7 +207,27 @@ export default function StageAnalysis() {
     });
     return out;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stocks, mode, labelBySymbol, themeMap, sortCol, minGroupSize]);
+  }, [stocks, mode, labelBySymbol, themeMap, sortCol, minGroupSize, asOf]);
+
+  // ★ Best candidates: early-stage strength (fresh 2A with acceptable quality, or late-base 1B)
+  // with decent confidence, strong relative strength, in an industry where ≥35% of stocks are Stage 2
+  // — the research's "stock + group + RS alignment".
+  const bestCandidates = useMemo(() => {
+    const ind = new Map<string, { s2: number; tot: number }>();
+    for (const r of stocks) {
+      if (r.stage === 0) continue;
+      const g = groupKeyForIndustry(labelBySymbol.get(r.symbol) ?? null, "industry");
+      const e = ind.get(g) ?? { s2: 0, tot: 0 };
+      e.tot++; if (r.stage === 2) e.s2++;
+      ind.set(g, e);
+    }
+    return stocks.filter((r) => {
+      const early = (r.substage === "2A" && r.quality !== "LOW") || r.substage === "1B";
+      if (!early || r.confidence < 70 || (rsRank.get(r.symbol) ?? 0) < 70) return false;
+      const g = ind.get(groupKeyForIndustry(labelBySymbol.get(r.symbol) ?? null, "industry"));
+      return !!g && g.tot >= 3 && g.s2 / g.tot >= 0.35;
+    }).sort((a, b) => (rsRank.get(b.symbol) ?? 0) - (rsRank.get(a.symbol) ?? 0));
+  }, [stocks, labelBySymbol, rsRank]);
 
   const transitions = useMemo(
     () => TRANSITION_GROUPS.map((g) => ({
@@ -346,6 +381,22 @@ export default function StageAnalysis() {
                 <span className="text-[11px] text-muted-foreground">· click to open the list</span>
               </div>
               <div className="flex flex-wrap gap-2">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      disabled={!bestCandidates.length}
+                      onClick={() => { setSubFilter(null); setMinConf(0); setSearch(""); setList({ title: "★ Best candidates", rows: bestCandidates }); }}
+                      className="flex items-center gap-2 rounded-md border border-primary/40 bg-primary/10 px-2.5 py-1.5 text-left text-[11px] text-primary hover:bg-primary/20 disabled:opacity-40"
+                    >
+                      ★ Best candidates <span className="font-mono font-semibold">{bestCandidates.length}</span>
+                      {bestCandidates.slice(0, 3).map((r) => <span key={r.symbol} className="font-mono opacity-80">{r.symbol}</span>)}
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent className="max-w-xs text-xs">
+                    Fresh Stage 2A breakouts (not weak-volume) or late-base 1B, confidence ≥ 70, RS rank ≥ 70 vs SPY,
+                    in an industry with ≥ 35% of its stocks in Stage 2. A watchlist — not a buy signal; always check the chart.
+                  </TooltipContent>
+                </Tooltip>
                 {transitions.map((t) => (
                   <button
                     key={t.key}
@@ -432,7 +483,7 @@ export default function StageAnalysis() {
                           {open && (
                             <tr className="border-b border-border/40 bg-background/40">
                               <td colSpan={8} className="px-4 py-3">
-                                <StageStockTable rows={g.members} exportName={`Stages_${g.name}`} maxHeight={360} />
+                                <StageStockTable rows={g.members} exportName={`Stages_${g.name}`} rsOf={rsOf} nameOf={nameOf} maxHeight={360} />
                               </td>
                             </tr>
                           )}
@@ -483,7 +534,7 @@ export default function StageAnalysis() {
               className="h-7 w-44 rounded border border-border bg-background px-2 text-xs"
             />
           </div>
-          <StageStockTable rows={listRows} exportName={list?.title ?? "Stages"} groupOf={firstGroup} maxHeight={480} />
+          <StageStockTable rows={listRows} exportName={(list?.title ?? "Stages").replace("★", "Best")} groupOf={firstGroup} rsOf={rsOf} nameOf={nameOf} maxHeight={480} />
         </DialogContent>
       </Dialog>
     </div>

@@ -13,7 +13,7 @@ export function StageBadge({ r, compact = false }: { r: Pick<StockStage, "stage"
     <Tooltip>
       <TooltipTrigger asChild>
         <span
-          className="inline-block rounded px-1.5 py-[1px] font-mono text-[10px] font-medium"
+          className="inline-block whitespace-nowrap rounded px-1.5 py-[1px] font-mono text-[10px] font-medium"
           style={{ background: `${color.replace(")", ", 0.2)").replace("hsl(", "hsla(")}`, color }}
         >
           {label}
@@ -27,23 +27,26 @@ export function StageBadge({ r, compact = false }: { r: Pick<StockStage, "stage"
 const eventLabel = (r: StockStage) => {
   if (!r.event) return "—";
   const kind = r.event_kind === "BREAKOUT" ? "breakout" : r.event_kind === "BREAKDOWN" ? "breakdown"
-    : r.event_kind === "RESUMPTION" ? "resumption" : r.event_kind === "FAILED_BASE" ? "failed base" : "";
+    : r.event_kind === "RESUMPTION" ? "resumption" : r.event_kind === "CONTINUATION" ? "continuation" : r.event_kind === "FAILED_BASE" ? "failed base" : "";
   const when = r.event_weeks_ago === 0 ? "this week" : r.event_weeks_ago === 1 ? "1w ago" : `${r.event_weeks_ago}w ago`;
   return `${r.event.replace("T→", "→")}${kind ? ` ${kind}` : ""} · ${when}`;
 };
 
-type SortKey = "stage" | "confidence" | "symbol" | "weeks" | "high";
+type SortKey = "stage" | "confidence" | "symbol" | "weeks" | "high" | "rs";
 
 /**
  * Stock list with stage details + TradingView export.
  * `groupOf` optionally shows each stock's group (industry, etc.).
  */
 export default function StageStockTable({
-  rows, exportName, groupOf, maxHeight = 420,
+  rows, exportName, groupOf, rsOf, nameOf, maxHeight = 420,
 }: {
   rows: StockStage[];
   exportName: string;
   groupOf?: (symbol: string) => string;
+  /** 1–99 relative-strength rank (from the stage scan's own RS vs SPY). */
+  rsOf?: (symbol: string) => number | null;
+  nameOf?: (symbol: string) => string | null | undefined;
   maxHeight?: number;
 }) {
   const [sort, setSort] = useState<SortKey>("stage");
@@ -56,11 +59,12 @@ export default function StageStockTable({
         case "confidence": return b.confidence - a.confidence;
         case "weeks": return (a.weeks_in_stage ?? 999) - (b.weeks_in_stage ?? 999);
         case "high": return (b.features?.pctFrom52wHigh ?? -999) - (a.features?.pctFrom52wHigh ?? -999);
+        case "rs": return (rsOf?.(b.symbol) ?? -1) - (rsOf?.(a.symbol) ?? -1);
         default: return order(a.stage) - order(b.stage) || a.substage.localeCompare(b.substage) || b.confidence - a.confidence;
       }
     });
     return out;
-  }, [rows, sort]);
+  }, [rows, sort, rsOf]);
 
   const symbols = sorted.map((r) => r.symbol);
   const th = (key: SortKey, label: string, align = "text-right") => (
@@ -100,6 +104,7 @@ export default function StageStockTable({
               {th("symbol", "Ticker", "text-left")}
               {th("stage", "Stage", "text-left")}
               {th("confidence", "Conf.")}
+              {rsOf && th("rs", "RS")}
               {th("weeks", "Weeks")}
               {th("high", "From 52w high")}
               <th className="px-2 py-1.5 text-left text-[10px] font-medium text-muted-foreground">Last change</th>
@@ -110,8 +115,17 @@ export default function StageStockTable({
           <tbody>
             {sorted.map((r) => (
               <tr key={r.symbol} className="border-b border-border/30 hover:bg-accent/30">
-                <td className="px-2 py-1 font-mono font-medium">{r.symbol}</td>
-                <td className="px-2 py-1">
+                <td className="px-2 py-1 font-mono font-medium">
+                  <a
+                    href={`https://www.tradingview.com/chart/?symbol=${encodeURIComponent(r.symbol)}`}
+                    target="_blank" rel="noopener noreferrer"
+                    className="hover:text-primary hover:underline"
+                    title={`${nameOf?.(r.symbol) ?? r.symbol} — open chart in TradingView`}
+                  >
+                    {r.symbol}
+                  </a>
+                </td>
+                <td className="whitespace-nowrap px-2 py-1">
                   <span className="inline-flex items-center gap-1">
                     <StageBadge r={r} />
                     {r.quality && (
@@ -119,12 +133,16 @@ export default function StageStockTable({
                         className={`text-[9px] ${r.quality === "HIGH" ? "text-gain-medium" : r.quality === "LOW" ? "text-amber-400" : "text-muted-foreground"}`}
                         title="Breakout quality: volume (≥2× avg), relative strength and nearby overhead supply"
                       >
-                        {r.quality === "HIGH" ? "● quality" : r.quality === "LOW" ? "⚠ weak" : "◐ mixed"}
+                        {r.quality === "HIGH" ? "★ quality" : r.quality === "LOW" ? "⚠ low quality" : "mixed"}
                       </span>
                     )}
                   </span>
                 </td>
                 <td className="px-2 py-1 text-right font-mono">{r.confidence}</td>
+                {rsOf && (() => {
+                  const v = rsOf(r.symbol);
+                  return <td className={`px-2 py-1 text-right font-mono ${v !== null && v >= 80 ? "text-gain-medium" : v !== null && v < 30 ? "text-loss-strong" : ""}`}>{v ?? "—"}</td>;
+                })()}
                 <td className="px-2 py-1 text-right font-mono">{r.weeks_in_stage ?? "—"}</td>
                 <td className="px-2 py-1 text-right font-mono">{r.features ? `${r.features.pctFrom52wHigh.toFixed(0)}%` : "—"}</td>
                 <td className="whitespace-nowrap px-2 py-1 text-[11px] text-muted-foreground">{eventLabel(r)}</td>
@@ -135,7 +153,7 @@ export default function StageStockTable({
               </tr>
             ))}
             {!sorted.length && (
-              <tr><td colSpan={8} className="px-2 py-6 text-center text-muted-foreground">No stocks match.</td></tr>
+              <tr><td colSpan={9} className="px-2 py-6 text-center text-muted-foreground">No stocks match.</td></tr>
             )}
           </tbody>
         </table>
