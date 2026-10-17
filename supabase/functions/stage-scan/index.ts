@@ -12,6 +12,7 @@ import { detectBase, finalizeBase, type BaseFeatures, type DailyBar } from "../_
  *   { action: "finalize", startedAt, prune }    → RS percentiles, earnings, final base scores;
  *                                                 drop rows not refreshed (only when prune)
  *   { action: "status" }                        → row counts + last week classified
+ *   { action: "chart", symbol }                 → last 2 years of weekly bars + 30w MA (app charts)
  *
  * One Yahoo call per stock (5 years of weekly bars — long warm-up for the stage state machine). Benchmark = SPY.
  * Daily bars for breakout timing are read from the Full Scan's cache
@@ -89,7 +90,7 @@ Deno.serve(async (req) => {
   const db = createClient(SUPABASE_URL, SERVICE_KEY);
 
   try {
-    const body = await req.json().catch(() => ({})) as { action?: string; symbols?: string[]; startedAt?: string; prune?: boolean };
+    const body = await req.json().catch(() => ({})) as { action?: string; symbols?: string[]; symbol?: string; startedAt?: string; prune?: boolean };
     const action = body.action ?? "status";
 
     if (action === "symbols") {
@@ -175,6 +176,26 @@ Deno.serve(async (req) => {
         if (error && !isMissingTable(error)) console.warn("stock_bases cleanup failed", error.message);
       }
       return json({ ok: true, processed: rows.length, bases: basesStored, failed, market: { stage: bench.stage, substage: bench.substage } });
+    }
+
+    if (action === "chart") {
+      // Weekly bars for one stock (the app's stage / base charts) — last 2 years + 30-week MA.
+      const sym = String(body.symbol ?? "").toUpperCase().trim();
+      if (!/^[A-Z0-9][A-Z0-9.\-]{0,9}$/.test(sym)) return json({ ok: false, error: "bad symbol" }, 400);
+      const raw = await fetchWeekly(sym);
+      const bars = raw ? completedWeeks(raw) : [];
+      if (!bars.length) return json({ ok: false, error: "no data" });
+      const n = bars.length, k0 = Math.max(0, n - 104);
+      const sig = (x: number) => Number(x.toPrecision(5));
+      const ma = bars.slice(k0).map((_, k) => {
+        const j = k0 + k;
+        if (j < 29) return null;
+        let t = 0;
+        for (let q = j - 29; q <= j; q++) t += bars[q].c;
+        return sig(t / 30);
+      });
+      const sl = bars.slice(k0);
+      return json({ ok: true, symbol: sym, t: sl.map((b) => b.t), o: sl.map((b) => sig(b.o)), h: sl.map((b) => sig(b.h)), l: sl.map((b) => sig(b.l)), c: sl.map((b) => sig(b.c)), ma });
     }
 
     if (action === "finalize") {

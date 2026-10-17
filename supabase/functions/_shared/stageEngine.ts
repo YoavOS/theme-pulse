@@ -258,8 +258,17 @@ export function classifyStage(
     // A Stage 2 breakout needs a real base (≥ 6 weeks) and an MA that has stopped falling —
     // a V-shaped rebound through a short range under a declining MA is still Stage 1.
     const breakout = (stage === 1 || stage === 0) && segLen >= 6 && c[i] > res + buf && c[i] > f.ma && f.slope5 > -0.005;
-    const breakdown = (stage === 3 || (stage === 0 && fromNeutral)) && c[i] < sup - buf && c[i] < f.ma && !f.rising;
-    const resumption = stage === 3 && c[i] > res + buf && c[i] > f.ma && (f.rising || f.slope5 > (feat[i - 1]?.slope5 ?? 0));
+    // Drawdown from the 26-week high / rally from the 26-week low (the 30-week MA lags a crash
+    // or a squeeze by months, so price structure has to overrule it at the extremes).
+    const hh26i = Math.max(...h.slice(Math.max(0, i - 25), i + 1)), ll26i = Math.min(...l.slice(Math.max(0, i - 25), i + 1));
+    const ddHigh = c[i] / hh26i - 1, upLow = c[i] / ll26i - 1;
+    const ma10Falling = f.ma10 < (feat[i - 3]?.ma10 ?? f.ma10);
+    const crash = ddHigh <= -0.35 && c[i] < f.ma - f.atr && ma10Falling;
+    const breakdown = (stage === 3 || (stage === 0 && fromNeutral)) && c[i] < sup - buf && c[i] < f.ma && (!f.rising || crash);
+    // Resuming Stage 2 means clearing the top area — after a crash the stage-3 range starts
+    // well below the old highs, so price must also be back within 15% of the 26-week high.
+    const resumption = stage === 3 && c[i] > res + buf && c[i] > f.ma && ddHigh > -0.15 &&
+      (f.rising || f.slope5 > (feat[i - 1]?.slope5 ?? 0));
     // A close below the base's support is a failed base (Stage 4) unless the MA is still rising.
     const failedBase = stage === 1 && segLen >= 4 && c[i] < sup - buf && c[i] < f.ma && !f.rising;
 
@@ -273,14 +282,16 @@ export function classifyStage(
       // Stage 2 stays Stage 2 while the 30-week MA still rises and price holds above it — or
       // only dips under it (≤ 1.5 ATR): that is a pullback / MA test, the classic Stage 2
       // buy area, not a top. The mirror holds for Stage 4 rallies into a falling MA.
-      const holdingUp = stage === 2 && f.slope5 > 0 &&
-        (c[i] > f.ma ? f.aboveFrac10 >= 0.5 : c[i] >= f.ma - 1.5 * f.atr);
-      const holdingDown = stage === 4 && f.slope5 < 0 &&
-        (c[i] < f.ma ? f.aboveFrac10 <= 0.5 : c[i] <= f.ma + 1.5 * f.atr);
+      // The dip allowance is capped at 8% under the MA (a crash inflates the ATR), and a 35%+
+      // drop from the 26-week high is never "holding" (mirror: a 50%+ rally off the low).
+      const holdingUp = stage === 2 && f.slope5 > 0 && ddHigh > -0.35 &&
+        (c[i] > f.ma ? f.aboveFrac10 >= 0.5 : c[i] >= f.ma - Math.min(1.5 * f.atr, 0.08 * f.ma));
+      const holdingDown = stage === 4 && f.slope5 < 0 && upLow < 0.5 &&
+        (c[i] < f.ma ? f.aboveFrac10 <= 0.5 : c[i] <= f.ma + Math.min(1.5 * f.atr, 0.08 * f.ma));
       // Losing / reclaiming the MA decisively starts the top (3) / base (1) — never a jump
       // straight to the opposite trend: that needs a range break (breakdown / breakout).
-      const losingUp = stage === 2 && !holdingUp && c[i] < f.ma;
-      const reclaimingDown = stage === 4 && !holdingDown && c[i] > f.ma;
+      const losingUp = stage === 2 && !holdingUp && (c[i] < f.ma || ddHigh <= -0.35);
+      const reclaimingDown = stage === 4 && !holdingDown && (c[i] > f.ma || upLow >= 0.5);
       // Early Stage 1 / Stage 3 (§3.2, §5.3, §8): the 30-week MA lags, so a base can form while
       // the MA is still falling (and a top while it is still rising). Recognise the stabilisation:
       // no new low (high) for 10 weeks, lateral price, MA slope decelerating, price near the MA.
@@ -331,7 +342,11 @@ export function classifyStage(
           // Two weekly confirmations; leaving a base/top back the way it came needs three
           // (avoids 4→1→4 flip-flops while the 30-week MA is still catching up).
           const backtrack = (stage === 1 && cand === 4) || (stage === 3 && cand === 2);
-          if (pendingCount >= (backtrack ? 3 : 2)) {
+          // A decisive exit from a trend (≥ 40% off the 26-week high, or 2 ATR through the MA
+          // the wrong way) confirms in one week.
+          const decisive = (stage === 2 && cand === 3 && (ddHigh <= -0.4 || c[i] < f.ma - 2 * f.atr)) ||
+            (stage === 4 && cand === 1 && (upLow >= 0.6 || c[i] > f.ma + 2 * f.atr));
+          if (pendingCount >= (backtrack ? 3 : decisive ? 1 : 2)) {
             const failed = (stage === 4 && cand === 3) || (stage === 2 && cand === 1);
             setStage(cand, i, failed ? (cand === 3 ? "FAILED_BREAKDOWN" : "FAILED_BREAKOUT") : cand === 2 || cand === 4 ? "TREND" : "RANGE");
             // back in the top / base: the trend before it is still the one that counts

@@ -207,6 +207,20 @@ export function stageWeeksAgo(r: StockStage, weeks: number): StageNum | null {
   return ch === "T" ? 0 : (Number(ch) as StageNum);
 }
 
+export interface StageChartData { t: number[]; o: number[]; h: number[]; l: number[]; c: number[]; ma: (number | null)[] }
+const chartCache = new Map<string, Promise<StageChartData>>();
+/** Weekly bars for one stock's chart (fetched on demand by the stage-scan function; memoised per session). */
+export function loadStageChart(symbol: string): Promise<StageChartData> {
+  const key = symbol.toUpperCase();
+  let p = chartCache.get(key);
+  if (!p) {
+    p = invoke<StageChartData>({ action: "chart", symbol: key });
+    p.catch(() => chartCache.delete(key));
+    chartCache.set(key, p);
+  }
+  return p;
+}
+
 /** One ticker per line — the format TradingView's "Import list" accepts. */
 export function downloadTradingViewList(symbols: string[], name: string) {
   const blob = new Blob([symbols.join("\n")], { type: "text/plain;charset=utf-8" });
