@@ -31,7 +31,7 @@ export interface StageResult {
   confidence: number;         // 0–100
   quality: "HIGH" | "MIXED" | "LOW" | null; // upside-transition quality for fresh Stage 2 (2A)
   event: string | null;       // last confirmed change, e.g. "1→2"
-  eventKind: string | null;   // BREAKOUT | BREAKDOWN | RESUMPTION | CONTINUATION | FAILED_BASE | TREND | RANGE
+  eventKind: string | null;   // BREAKOUT | BREAKDOWN | RESUMPTION | CONTINUATION | FAILED_BASE | FAILED_BREAKOUT | FAILED_BREAKDOWN | TREND | RANGE
   eventWeeksAgo: number | null;
   weeksInStage: number;
   lastDirectional: 2 | 4 | null;
@@ -68,9 +68,17 @@ const START = 39;
 /** Drop the current, still-forming week (official labels use completed weeks only). */
 export function completedWeeks(bars: WeeklyBar[], nowSec = Date.now() / 1000): WeeklyBar[] {
   const clean = bars.filter((b) => Number.isFinite(b.c) && b.c > 0 && Number.isFinite(b.h) && Number.isFinite(b.l));
-  // de-duplicate by week (Yahoo sometimes appends a live bar inside the last week)
+  // De-duplicate by week. Yahoo appends the latest DAILY candle as an extra "live" bar inside
+  // the last week (e.g. Friday 20:00 next to the Monday-stamped weekly bar). Keeping only that
+  // bar would replace the week's open/high/low/volume with one day's — merge instead.
   const byWeek = new Map<number, WeeklyBar>();
-  for (const b of clean) byWeek.set(weekKey(b.t), b);
+  for (const b of [...clean].sort((x, y) => x.t - y.t)) {
+    const k = weekKey(b.t);
+    const prev = byWeek.get(k);
+    byWeek.set(k, prev
+      ? { t: prev.t, o: prev.o, h: Math.max(prev.h, b.h), l: Math.min(prev.l, b.l), c: b.c, v: Math.max(prev.v || 0, b.v || 0) }
+      : b);
+  }
   const out = [...byWeek.values()].sort((a, b) => a.t - b.t);
   if (out.length) {
     const last = out[out.length - 1];
@@ -197,6 +205,7 @@ export function classifyStage(
   let conflictWeeks = 0;
   let segStart = -1;                       // start of the current neutral (Stage 1/3/T) segment
   let stageSince = START;
+  let prevStage = 0 as Stage;             // the stage before the current one
   let event = null as string | null, eventKind = null as string | null, eventIdx = -1;
   let rvolAtEvent = null as number | null;
   const confirmed: Stage[] = new Array(n).fill(0);
@@ -204,6 +213,7 @@ export function classifyStage(
   const setStage = (to: Stage, i: number, kind: string) => {
     if (to === stage) return;
     const from = stage;
+    prevStage = from;
     stage = to;
     stageSince = i;
     event = from === 0 && i === START ? null : `${from === 0 ? "T" : from}→${to === 0 ? "T" : to}`;
@@ -235,10 +245,14 @@ export function classifyStage(
       continue;
     }
 
-    const breakout = (stage === 1 || stage === 0) && c[i] > res + buf && c[i] > f.ma && !f.falling;
-    const breakdown = (stage === 3 || stage === 0) && c[i] < sup - buf && c[i] < f.ma && !f.rising;
+    // A neutral segment must be a real range before a break out of it counts.
+    const segLen = segStart >= 0 ? i - segStart : 0;
+    const fromNeutral = stage === 1 || stage === 3 || (stage === 0 && segLen >= 6);
+    const breakout = (stage === 1 || (stage === 0 && fromNeutral)) && c[i] > res + buf && c[i] > f.ma && !f.falling;
+    const breakdown = (stage === 3 || (stage === 0 && fromNeutral)) && c[i] < sup - buf && c[i] < f.ma && !f.rising;
     const resumption = stage === 3 && c[i] > res + buf && c[i] > f.ma && (f.rising || f.slope5 > (feat[i - 1]?.slope5 ?? 0));
-    const failedBase = stage === 1 && c[i] < sup - buf && c[i] < f.ma && f.falling;
+    // A close below the base's support is a failed base (Stage 4) unless the MA is still rising.
+    const failedBase = stage === 1 && segLen >= 4 && c[i] < sup - buf && c[i] < f.ma && !f.rising;
 
     // A range break out of a "transition" period that followed the same trend is a
     // continuation, not a fresh 1→2 breakout / 3→4 breakdown (2A / 4A are reserved for those).
@@ -247,10 +261,17 @@ export function classifyStage(
     else if (resumption) { setStage(2, i, "RESUMPTION"); conflictWeeks = 0; }
     else if (failedBase) { setStage(4, i, "FAILED_BASE"); conflictWeeks = 0; }
     else {
-      // A Stage 2 stock pausing above a still-rising MA is a continuation base, not a top
-      // (and the mirror for Stage 4) — keep the stage instead of calling it a conflict.
-      const holdingUp = stage === 2 && f.rising && c[i] > f.ma && f.aboveFrac10 >= 0.6;
-      const holdingDown = stage === 4 && f.falling && c[i] < f.ma && f.aboveFrac10 <= 0.4;
+      // Stage 2 stays Stage 2 while the 30-week MA still rises and price holds above it — or
+      // only dips under it (≤ 1.5 ATR): that is a pullback / MA test, the classic Stage 2
+      // buy area, not a top. The mirror holds for Stage 4 rallies into a falling MA.
+      const holdingUp = stage === 2 && f.slope5 > 0 &&
+        (c[i] > f.ma ? f.aboveFrac10 >= 0.5 : c[i] >= f.ma - 1.5 * f.atr);
+      const holdingDown = stage === 4 && f.slope5 < 0 &&
+        (c[i] < f.ma ? f.aboveFrac10 <= 0.5 : c[i] <= f.ma + 1.5 * f.atr);
+      // Losing / reclaiming the MA decisively starts the top (3) / base (1) — never a jump
+      // straight to the opposite trend: that needs a range break (breakdown / breakout).
+      const losingUp = stage === 2 && !holdingUp && c[i] < f.ma;
+      const reclaimingDown = stage === 4 && !holdingDown && c[i] > f.ma;
       // Early Stage 1 / Stage 3 (§3.2, §5.3, §8): the 30-week MA lags, so a base can form while
       // the MA is still falling (and a top while it is still rising). Recognise the stabilisation:
       // no new low (high) for 10 weeks, lateral price, MA slope decelerating, price near the MA.
@@ -260,20 +281,39 @@ export function classifyStage(
       const noNewLow = Math.min(...l.slice(i - 9, i + 1)) > Math.min(...l.slice(Math.max(0, i - 25), i - 9));
       const noNewHigh = Math.max(...h.slice(i - 9, i + 1)) < Math.max(...h.slice(Math.max(0, i - 25), i - 9));
       const stabilising = stage === 4 && !f.down && noNewLow && lateral && f.slope5 > slopeAgo && near;
-      const toppingOut = stage === 2 && !f.up && noNewHigh && lateral && f.slope5 < slopeAgo &&
+      // A top needs the MA to stop rising — a sideways pause above a rising MA is a Stage 2 base.
+      const toppingOut = stage === 2 && !f.up && !f.rising && noNewHigh && lateral && f.slope5 < slopeAgo &&
         (f.crosses10 >= 1 || Math.abs(c[i] - f.ma) <= f.atr);
       let cand: Stage | null;
       if (stabilising) cand = 1;
       else if (toppingOut) cand = 3;
-      else if (f.up || holdingUp) cand = 2;
-      else if (f.down || holdingDown) cand = 4;
+      // The cycle runs 1→2→3→4→1: a Stage 2 stock that turns down tops out first (3), a
+      // Stage 4 stock that turns up bases first (1) — no direct 2↔4 flips on a trend signal.
+      // Going back the way it came (base → 4, top → 2) takes a break of the range itself
+      // (failedBase / resumption above), not just a trend reading inside it.
+      else if (f.up || holdingUp) cand = stage === 4 ? 1 : stage === 3 ? 3 : 2;
+      else if (f.down || holdingDown) cand = stage === 2 ? 3 : stage === 1 ? 1 : 4;
+      else if (losingUp) cand = 3;
+      else if (reclaimingDown) cand = 1;
+      // A flat MA alone doesn't end a trend: Stage 2 → 3 needs the highs to stop rising,
+      // Stage 4 → 1 needs the lows to stop falling (the MA lags a fresh move by weeks).
+      else if (f.neutral && stage === 2) cand = noNewHigh ? 3 : 2;
+      else if (f.neutral && stage === 4) cand = noNewLow ? 1 : 4;
+      else if (f.neutral && (stage === 1 || stage === 3)) cand = stage; // a flat MA is the base / top itself
       else if (f.neutral) cand = lastDir === 4 ? 1 : lastDir === 2 ? 3 : (c[i] / c[i - 26] - 1 > 0.2 ? 3 : c[i] / c[i - 26] - 1 < -0.2 ? 1 : 0);
+      else if (stage === 1 || stage === 3) cand = stage; // inside a base / top, mixed weeks are normal
       else cand = null; // conflicting signals
+      // A breakdown from a top that is reclaimed within ~10 weeks was a failed breakdown —
+      // the stock is back in its top area (3), not in a new base after a decline (1).
+      // Mirror: a fresh breakout that falls back into its base is Stage 1 again, not a top.
+      const young = i - stageSince < 10;
+      if (cand === 1 && stage === 4 && young && prevStage === 3) cand = 3;
+      else if (cand === 3 && stage === 2 && young && prevStage === 1) cand = 1;
 
       if (cand === null) {
         conflictWeeks++;
         // Keep the last confirmed state through short ambiguity; only long conflict → transition.
-        if (conflictWeeks >= 4 && stage !== 0) setStage(0, i, "RANGE");
+        if (conflictWeeks >= 6 && stage !== 0) setStage(0, i, "RANGE");
       } else {
         conflictWeeks = 0;
         if (cand === stage) { pending = null; pendingCount = 0; }
@@ -282,7 +322,12 @@ export function classifyStage(
           // Two weekly confirmations; leaving a base/top back the way it came needs three
           // (avoids 4→1→4 flip-flops while the 30-week MA is still catching up).
           const backtrack = (stage === 1 && cand === 4) || (stage === 3 && cand === 2);
-          if (pendingCount >= (backtrack ? 3 : 2)) setStage(cand, i, cand === 2 || cand === 4 ? "TREND" : "RANGE");
+          if (pendingCount >= (backtrack ? 3 : 2)) {
+            const failed = (stage === 4 && cand === 3) || (stage === 2 && cand === 1);
+            setStage(cand, i, failed ? (cand === 3 ? "FAILED_BREAKDOWN" : "FAILED_BREAKOUT") : cand === 2 || cand === 4 ? "TREND" : "RANGE");
+            // back in the top / base: the trend before it is still the one that counts
+            if (failed) lastDir = cand === 3 ? 2 : 4;
+          }
         }
       }
     }

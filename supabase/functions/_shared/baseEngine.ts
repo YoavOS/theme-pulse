@@ -41,11 +41,11 @@ export const LABEL_NAMES: Record<BaseLabel, string> = {
 
 /** Minimum 26-week RS percentile per label (balanced presets in the research). */
 export const LABEL_MIN_RS: Record<BaseLabel, number> = {
-  htf: 95, cup: 80, double_bottom: 75, ascending: 90, vcp: 80, flat: 80, box: 75, generic: 75,
+  htf: 85, cup: 60, double_bottom: 55, ascending: 70, vcp: 60, flat: 60, box: 50, generic: 50,
 };
 
 // When a base carries several labels, the most specific evidence wins the "primary" slot.
-const LABEL_PRIORITY: BaseLabel[] = ["htf", "vcp", "cup", "double_bottom", "ascending", "flat", "box", "generic"];
+const LABEL_PRIORITY: BaseLabel[] = ["htf", "cup", "double_bottom", "vcp", "ascending", "flat", "box", "generic"];
 
 export interface BaseFeatures {
   weeks: number;
@@ -108,6 +108,7 @@ export interface BaseFeatures {
   marketStage: Stage | null;
   stageNow: Stage | null;     // the stock's own Weinstein stage at scan time
   dataNote: string | null;    // e.g. "no recent daily bars — weekly trigger only"
+  gateFails: string[];        // generic base gates this base misses (shown as warnings)
   gatesOk: boolean;           // passed the generic Stage-2 base gates (before the RS percentile)
 }
 
@@ -200,7 +201,8 @@ interface WindowEval {
   start: number;
   end: number;
   partial: number;   // score without the RS percentile (max 92)
-  f: Omit<BaseFeatures, "trigger" | "baseCount" | "baseCountCapped" | "dataNote" | "latestClose" | "latestDate" | "distToPivotPct" | "marketStage" | "stageNow" | "gatesOk">;
+  fails: string[];   // generic gates this window misses (diagnostics)
+  f: Omit<BaseFeatures, "trigger" | "baseCount" | "baseCountCapped" | "dataNote" | "latestClose" | "latestDate" | "distToPivotPct" | "marketStage" | "stageNow" | "gatesOk" | "gateFails">;
   gatesOk: boolean;
 }
 
@@ -213,6 +215,13 @@ export function detectBase(input: BaseInput, debug?: string[]): BaseFeatures | n
   const tr = bars.map((b, i) => i === 0 ? b.h - b.l : Math.max(b.h - b.l, Math.abs(b.h - c[i - 1]), Math.abs(b.l - c[i - 1])));
   const atr10 = (i: number) => sma(tr, i, 10);
   const atrPctSeries = c.map((_, i) => (i >= 10 ? atr10(i) / c[i] : NaN));
+  // A price pinned in a ~2% band for 5 weeks is a pending deal (acquisition), not a base.
+  {
+    const k0 = n - 5;
+    const spanPct = Math.max(...h.slice(k0)) / Math.min(...l.slice(k0)) - 1;
+    const trMed = median(tr.slice(k0).map((x, k) => x / c[k0 + k]));
+    if (spanPct < 0.03 && trMed < 0.02) return null;
+  }
 
   // RS line vs benchmark (aligned by week)
   const wk = (t: number) => isoWeekEnd(t);
@@ -383,11 +392,20 @@ export function detectBase(input: BaseInput, debug?: string[]): BaseFeatures | n
     const partial = trend + rsPart + geometry + contraction + volume + pivotRisk + marketPts;
 
     // Generic hard gates (balanced)
-    const gatesOk = imp >= 30 && ctx.aboveSma30 && ctx.sma30Slope8Pct >= -0.5 && ctx.pctFrom52wHigh >= -25 &&
-      W >= 5 && W <= 52 && depth <= 0.40 && giveback <= 0.75 && rangePos >= 0.65 && stopRiskPct <= 15;
+    const fails: string[] = [];
+    if (!(imp >= 30)) fails.push("impulse");
+    if (!ctx.aboveSma30) fails.push("belowMA30");
+    if (!(ctx.sma30Slope8Pct >= -0.5)) fails.push("maSlope");
+    if (!(ctx.pctFrom52wHigh >= -25)) fails.push("farFromHigh");
+    if (!(W >= 5 && W <= 52)) fails.push("weeks");
+    if (!(depth <= 0.40)) fails.push("depth");
+    if (!(giveback <= 0.75)) fails.push("giveback");
+    if (!(rangePos >= 0.65)) fails.push("rangePos");
+    if (!(stopRiskPct <= 15)) fails.push("stopRisk");
+    const gatesOk = fails.length === 0;
 
     return {
-      W, start, end, partial, gatesOk,
+      W, start, end, partial, gatesOk, fails,
       f: {
         weeks: W, baseStart: isoWeekEnd(bars[start].t), baseHigh: r4(baseHigh), baseLow: r4(baseLow), depthPct: r1(depth * 100),
         rangePos: r2(rangePos), priorImpulsePct: r1(imp), giveback: r2(giveback),
@@ -424,7 +442,7 @@ export function detectBase(input: BaseInput, debug?: string[]): BaseFeatures | n
       if (!isPeak) continue;
       const e = evalWindow(k, end, false);
       if (!e) continue;
-      debug?.push(`win end=${end} start=${k} W=${e.W} ok=${e.gatesOk} partial=${e.partial.toFixed(1)} depth=${e.f.depthPct} pos=${e.f.rangePos} imp=${e.f.priorImpulsePct} gb=${e.f.giveback} risk=${e.f.stopRiskPct}`);
+      debug?.push(`win end=${end} start=${k} W=${e.W} ok=${e.gatesOk} fails=${e.fails.join(",")} partial=${e.partial.toFixed(1)} depth=${e.f.depthPct} pos=${e.f.rangePos} imp=${e.f.priorImpulsePct} gb=${e.f.giveback} risk=${e.f.stopRiskPct}`);
       if (e.gatesOk && !longestOk) longestOk = e;          // k ascends → first ok is the longest
       if (!bestAny || e.partial > bestAny.partial) bestAny = e;
     }
@@ -463,20 +481,18 @@ export function detectBase(input: BaseInput, debug?: string[]): BaseFeatures | n
     const slopeChange = Math.abs(olsSlope(closes) * (W - 1));
     const height = f.baseHigh - f.baseLow;
     const span3 = (Math.max(c[e], c[e - 1], c[e - 2]) / Math.min(c[e], c[e - 1], c[e - 2]) - 1) * 100;
-    if (f.priorImpulsePct >= 30 && ctx.aboveSma10 && ctx.aboveSma30 && ctx.sma30Slope8Pct > 0 && f.pctFrom52wHigh >= -15 &&
-      W >= 5 && W <= 26 && f.depthPct <= 15 && slopeChange <= 0.4 * height && f.pivotContacts >= 2 && f.rangePos >= 0.80 &&
-      span3 <= 3 && (f.dryUp === null || f.dryUp <= 0.9) && distNow <= 7 && f.stopRiskPct <= 10) labels.push("flat");
+    if (f.priorImpulsePct >= 25 && ctx.sma30Slope8Pct > 0 && f.pctFrom52wHigh >= -20 &&
+      W >= 5 && W <= 26 && f.depthPct <= 15 && slopeChange <= 0.4 * height && f.pivotContacts >= 2 && span3 <= 6) labels.push("flat");
   }
   // VCP
   {
     const d = f.pullbacks.map((x) => x / 100);
     const pairs = d.slice(1).map((x, k) => x / d[k]);
-    if (f.priorImpulsePct >= 30 && ctx.aboveSma10 && ctx.aboveSma30 && ctx.sma30Slope8Pct > 0 && ctx.sma10Rising && f.pctFrom52wHigh >= -20 &&
-      d.length >= 2 && d.length <= 6 && (f.contractingFrac ?? 0) >= 0.7 && (f.medianDepthRatio ?? 9) <= 0.8 &&
-      Math.max(...pairs) <= 1.1 && (f.finalContractionPct <= 12 || f.finalContractionAtr <= 3) &&
-      (f.rangeContraction === null || f.rangeContraction <= 0.8) && (f.dryUp === null || f.dryUp <= 0.9) &&
-      f.depthPct >= 8 && f.depthPct <= 35 && W >= 3 && W <= 26 && distNow <= 8 && f.stopRiskPct <= 12 &&
-      (f.rsSlope13 ?? 0) > 0 && (f.rsHighDistPct ?? 99) <= 5) labels.push("vcp");
+    if (f.priorImpulsePct >= 25 && ctx.sma30Slope8Pct > 0 && f.pctFrom52wHigh >= -25 &&
+      d.length >= 2 && d.length <= 6 && (f.contractingFrac ?? 0) >= 0.66 && (f.medianDepthRatio ?? 9) <= 0.8 &&
+      Math.max(...pairs) <= 1.15 && d[d.length - 1] <= 0.6 * d[0] && d[d.length - 1] <= 0.12 &&
+      (f.finalContractionPct <= 10 || (f.finalContractionAtr <= 2.5 && f.finalContractionPct <= 15)) &&
+      f.depthPct >= 6 && f.depthPct <= 35 && W >= 5 && W <= 30) labels.push("vcp");
   }
   // Cup with handle (cup from base start to the right rim; handle = the last 1–5 weeks)
   {
@@ -535,7 +551,7 @@ export function detectBase(input: BaseInput, debug?: string[]): BaseFeatures | n
         const dist = (h[m] / latestClose - 1) * 100;
         if (f.priorImpulsePct >= 30 && f.depthPct >= 15 && f.depthPct <= 40 && m > t1 && m < t2 &&
           (rebound >= 0.10 || h[m] - l[t1] >= 2 * atrAbs) && rel >= -0.07 && rel <= 0.05 && reclaimed &&
-          pos >= 0.70 && dist <= 8 && dist >= -5 && ctx.aboveSma10 && latestClose >= 0.97 * sma30) {
+          pos >= 0.5 && dist >= -5 && latestClose >= 0.95 * sma30) {
           labels.push("double_bottom");
           if (!labels.includes("cup")) f.pivot = r4(h[m]);
         }
@@ -562,8 +578,8 @@ export function detectBase(input: BaseInput, debug?: string[]): BaseFeatures | n
       const top = Math.max(...h.slice(sa, i + 1)), bot = Math.min(...l.slice(sa, i + 1));
       const pos = (latestClose - bot) / (top - bot);
       const dist = (top / latestClose - 1) * 100;
-      if (okDepth && higherLows && highsUp && noBlowout && imp >= 50 && ctx.aboveSma10 && ctx.aboveSma30 && ctx.aboveSma40 &&
-        ctx.sma30Slope8Pct > 0 && ctx.ext10wPct <= 15 && ctx.ext30wPct <= 35 && pos >= 0.80 && dist <= 8) labels.push("ascending");
+      if (okDepth && higherLows && highsUp && noBlowout && imp >= 50 && ctx.aboveSma30 && ctx.aboveSma40 &&
+        ctx.sma30Slope8Pct > 0 && ctx.ext30wPct <= 35 && pos >= 0.6) labels.push("ascending");
     }
   }
   // Box / rectangle (Darvas)
@@ -617,7 +633,12 @@ export function detectBase(input: BaseInput, debug?: string[]): BaseFeatures | n
       }
     }
   }
-  if (!labels.length && !base.gatesOk) return null;   // nothing worth showing
+  // Structural minimum for any base candidate (developing ones included): a real prior
+  // advance, still near the highs, not a collapse, MA30 not falling hard, not in Stage 4.
+  // The generic gates then decide how far along it is (state), not whether it exists.
+  const structOk = f.priorImpulsePct >= 20 && f.pctFrom52wHigh >= -35 && f.depthPct <= 50 && W >= 3 &&
+    latestClose >= 0.9 * sma30 && ctx.sma30Slope8Pct >= -1 && input.stage?.stage !== 4;
+  if (!base.gatesOk && !structOk) return null;   // nothing worth showing
 
   // A pattern-specific pivot (cup handle high, double-bottom middle peak, flag high) can differ
   // from the generic one — the breakout is judged against the final pivot.
@@ -673,18 +694,25 @@ export function detectBase(input: BaseInput, debug?: string[]): BaseFeatures | n
   }
   if (!labels.length) labels.push("generic");
 
-  // ── base count (Stage 2 only): pullbacks ≥ max(8%, 1.5 ATR) that later made a new high ──
+  // ── base count (Stage 2 only): earlier bases in this advance = corrections of ≥ max(10%, 1.5 ATR)
+  // lasting ≥ 5 weeks (high to new high) that the stock then climbed out of. A correction of
+  // 40%+ resets the count (O'Neil) — the advance after it is a new cycle.
   let baseCount = 1, capped = false;
   if (input.stage && input.stage.stage === 2) {
-    const since = Math.max(26, i - input.stage.weeksInStage + 1);
-    capped = i - input.stage.weeksInStage + 1 < 26;
-    const thrBC = Math.max(0.08, 1.5 * (atrPctSeries[i] || 0.05));
+    // counted over at most the last two years of the advance
+    const since = Math.max(26, i - input.stage.weeksInStage + 1, i - 104);
+    capped = i - input.stage.weeksInStage + 1 < Math.max(26, i - 104);
+    const thrBC = Math.max(0.10, 1.5 * (atrPctSeries[i] || 0.05));
     const zz = zigzagPullbacks(h, l, since, Math.max(since + 1, s - 1), thrBC);
     for (const p of zz.pullbacks) {
-      const after = Math.max(...h.slice(p.loIdx, s));
-      if (after > h[p.hiIdx]) baseCount++;
+      let r = -1;
+      for (let k = p.loIdx + 1; k < s; k++) if (h[k] > h[p.hiIdx]) { r = k; break; }
+      if (r < 0) continue;                       // never cleared that high before this base
+      if (p.depth >= 0.40) { baseCount = 1; continue; }
+      if (r - p.hiIdx >= 5) baseCount++;
     }
   }
+
 
   const distToPivotPct = r1((f.pivot / latestClose - 1) * 100);
   return {
@@ -700,6 +728,7 @@ export function detectBase(input: BaseInput, debug?: string[]): BaseFeatures | n
     stageNow: input.stage?.stage ?? null,
     dataNote: dailyFresh ? null : "No recent daily bars (run Full Scan) — breakout timing uses weekly closes",
     gatesOk: base.gatesOk,
+    gateFails: base.fails,
   };
 }
 
@@ -713,9 +742,12 @@ export function finalizeBase(f: BaseFeatures, rsPct: number | null, earningsInDa
   // RS-percentile gates per label (generic needs ≥ 75)
   let labels = f.labels.filter((lb) => rsPct === null || rsPct >= LABEL_MIN_RS[lb]);
   // A named pattern that misses its stricter RS bar can still be a generic quality base.
-  if (!labels.length && f.gatesOk && (rsPct === null || rsPct >= LABEL_MIN_RS.generic)) labels = ["generic"];
+  if (!labels.length && (rsPct === null || rsPct >= LABEL_MIN_RS.generic)) labels = ["generic"];
   if (!labels.length) return null;
-  const primaryLabel = LABEL_PRIORITY.find((lb) => labels.includes(lb)) ?? "generic";
+  // A VCP with 3+ contractions is the most specific description; with only two, a cup or
+  // double bottom shape says more.
+  const primaryLabel = labels.includes("vcp") && !labels.includes("htf") && f.pullbacks.length >= 3
+    ? "vcp" : LABEL_PRIORITY.find((lb) => labels.includes(lb)) ?? "generic";
 
   const band: FinalBase["band"] = score >= 85 ? "prime" : score >= 75 ? "qualified" : score >= 65 ? "developing" : "research";
   let state: FinalBase["state"];
@@ -726,9 +758,17 @@ export function finalizeBase(f: BaseFeatures, rsPct: number | null, earningsInDa
   else if (score >= 75 && f.distToPivotPct <= 10) state = "qualified";
   else if (score >= 65) state = "developing";
   else state = "watch";
+  // A base that misses a generic gate is still forming — never "ready" / "qualified" yet.
+  if (!f.gatesOk && (state === "ready" || state === "qualified")) state = "developing";
 
   const warnings: string[] = [];
-  if (f.depthPct > 33 && primaryLabel !== "double_bottom") warnings.push("Deep base");
+  const GATE_TEXT: Record<string, string> = {
+    belowMA30: "Below 30-week MA", maSlope: "30-week MA falling", farFromHigh: "25%+ below 52w high",
+    depth: "Deep base (>40%)", giveback: "Gave back most of the prior advance", rangePos: "Low in its base — right side not built yet",
+    impulse: "Small prior advance (<30%)", weeks: "Base length outside 5–52 weeks",
+  };
+  for (const g of f.gateFails ?? []) if (GATE_TEXT[g]) warnings.push(GATE_TEXT[g]);
+  if (f.depthPct > 33 && f.depthPct <= 40 && primaryLabel !== "double_bottom") warnings.push("Deep base");
   if (f.stopRiskPct > 10) warnings.push(`Wide stop (${f.stopRiskPct.toFixed(1)}%)`);
   if (f.rangeContraction !== null && f.rangeContraction > 1) warnings.push("Loose right side");
   if (f.baseCount >= 4) warnings.push(`Late-stage base (${f.baseCount}${f.baseCountCapped ? "+" : ""})`);

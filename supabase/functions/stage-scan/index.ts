@@ -13,7 +13,7 @@ import { detectBase, finalizeBase, type BaseFeatures, type DailyBar } from "../_
  *                                                 drop rows not refreshed (only when prune)
  *   { action: "status" }                        → row counts + last week classified
  *
- * One Yahoo call per stock (2 years of weekly bars). Benchmark = SPY.
+ * One Yahoo call per stock (5 years of weekly bars — long warm-up for the stage state machine). Benchmark = SPY.
  * Daily bars for breakout timing are read from the Full Scan's cache
  * (yahoo_history_cache, period 6mo) — no extra API calls.
  * Storage: one row per stock in stock_stages, one per base candidate in
@@ -29,7 +29,7 @@ const BENCH = "SPY";
 const FINNHUB_KEY = Deno.env.get("FINNHUB_API_KEY") ?? "";
 
 async function fetchWeekly(symbol: string): Promise<WeeklyBar[] | null> {
-  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=2y&interval=1wk&includePrePost=false`;
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=5y&interval=1wk&includePrePost=false`;
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
       const res = await fetch(url, { headers: { "User-Agent": UA, Accept: "application/json" } });
@@ -96,8 +96,10 @@ Deno.serve(async (req) => {
       const universe = await fetchAll<{ symbol: string }>(db, "qualified_rs_universe", "symbol");
       const themed = await fetchAll<{ ticker_symbol: string }>(db, "theme_tickers", "ticker_symbol");
       const set = new Set<string>([BENCH]);
-      for (const r of universe) if (r.symbol) set.add(r.symbol.toUpperCase().trim());
-      for (const r of themed) if (r.ticker_symbol) set.add(r.ticker_symbol.toUpperCase().trim());
+      // only well-formed tickers (a mis-pasted row of run-together symbols would be one huge "ticker")
+      const add = (x: string | null) => { const s = (x ?? "").toUpperCase().trim(); if (/^[A-Z0-9][A-Z0-9.\-]{0,9}$/.test(s)) set.add(s); };
+      for (const r of universe) add(r.symbol);
+      for (const r of themed) add(r.ticker_symbol);
       // serverTime: the scan's start mark for "finalize" (server clock, so a wrong
       // computer clock can never make fresh rows look stale).
       return json({ ok: true, symbols: [...set].sort(), serverTime: new Date().toISOString() });

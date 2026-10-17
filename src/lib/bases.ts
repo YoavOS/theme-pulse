@@ -26,7 +26,7 @@ export const STATE_NAMES: Record<BaseState, string> = {
 export const STATE_TIPS: Record<BaseState, string> = {
   ready: "Score ≥ 75, within ~8% below the pivot and stop risk ≤ 12% — the watchlist for a breakout.",
   qualified: "Score ≥ 75 and within 10% of the pivot — not tight or close enough yet.",
-  developing: "Score 65–74 (or still far from the pivot) — an early base or one weak dimension.",
+  developing: "Score 65+ but still forming — far from the pivot, low in its range, a wide stop or below the 30-week MA (see its warnings).",
   watch: "Score below 65 — research only.",
   triggered: "Closed above the pivot (≤ 5% extended). Judge the breakout quality separately.",
   extended: "More than 5% above the pivot — not an orthodox entry any more.",
@@ -93,6 +93,7 @@ export interface BaseFeatures {
   trigger: BaseTrigger;
   stageNow?: number | null;
   dataNote: string | null;
+  gateFails?: string[];
   gatesOk: boolean;
 }
 

@@ -27,7 +27,8 @@ export function StageBadge({ r, compact = false }: { r: Pick<StockStage, "stage"
 const eventLabel = (r: StockStage) => {
   if (!r.event) return "—";
   const kind = r.event_kind === "BREAKOUT" ? "breakout" : r.event_kind === "BREAKDOWN" ? "breakdown"
-    : r.event_kind === "RESUMPTION" ? "resumption" : r.event_kind === "CONTINUATION" ? "continuation" : r.event_kind === "FAILED_BASE" ? "failed base" : "";
+    : r.event_kind === "RESUMPTION" ? "resumption" : r.event_kind === "CONTINUATION" ? "continuation" : r.event_kind === "FAILED_BASE" ? "failed base"
+    : r.event_kind === "FAILED_BREAKDOWN" ? "failed breakdown" : r.event_kind === "FAILED_BREAKOUT" ? "failed breakout" : "";
   const when = r.event_weeks_ago === 0 ? "this week" : r.event_weeks_ago === 1 ? "1w ago" : `${r.event_weeks_ago}w ago`;
   return `${r.event.replace("T→", "→")}${kind ? ` ${kind}` : ""} · ${when}`;
 };
