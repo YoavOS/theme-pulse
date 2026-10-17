@@ -1,4 +1,7 @@
 import { useMemo, useRef, useState, useEffect, useCallback } from "react";
+import StageFilterBlock from "@/components/stages/StageFilterBlock";
+import { useStockStages } from "@/hooks/useStockStages";
+import { passesStageFilter, type StageFilterMode } from "@/lib/stageAnalysis";
 import { Copy, Download, ExternalLink, ListChecks, Sparkles, Upload, FileText, X, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
@@ -183,6 +186,9 @@ export default function CustomListAnalyzerModal({
   const [hideMissing, setHideMissing] = useState<boolean>(false);
   const [superperfFilters, setSuperperfFilters] = useState<Record<"current" | "minervini" | "oneil" | "ryan", boolean>>({ current: false, minervini: false, oneil: false, ryan: false });
   const [growthFilters, setGrowthFilters] = useState<GrowthFiltersState>({ ...DEFAULT_GROWTH_FILTERS });
+  const [stageFilter, setStageFilter] = useState<StageFilterMode>("any");
+  const [minStageConf, setMinStageConf] = useState<number>(0);
+  const { bySymbol: stageMap, rows: stageRows } = useStockStages(open);
   const [coilFilterOn, setCoilFilterOn] = useState<boolean>(false);
   const [maxCoil, setMaxCoil] = useState<number>(0.85);
 
@@ -323,6 +329,7 @@ export default function CustomListAnalyzerModal({
       if (minRating > 0 && (r === null || r === undefined || r < minRating)) return false;
       if (minAdr > 0 && (s.adrPercent === null || s.adrPercent < minAdr)) return false;
       if (minMcapM > 0 && (s.marketCap === null || s.marketCap < minMcapM)) return false;
+      if ((stageFilter !== "any" || minStageConf > 0) && !passesStageFilter(stageMap.get(s.symbol.toUpperCase()), stageFilter, minStageConf)) return false;
       if (growthActive) {
         const f = fundamentalsMap?.get(s.symbol);
         if (!passesAllActiveFilters(growthFilters, f)) return false;
@@ -408,7 +415,7 @@ export default function CustomListAnalyzerModal({
     activeEmaFilters, ema9dFilterOn, ema21dFilterOn, ema9wFilterOn,
     maxEma9dAbs, maxEma21dAbs, maxEma9wAbs, emaFilterMode, emaMap, sortBy,
     priceVs9dOn, priceVs9dDir, priceVs21dOn, priceVs21dDir, priceVs9wOn, priceVs9wDir,
-    candleMap, superperfFilters, superperfSets,
+    candleMap, superperfFilters, superperfSets, stageFilter, minStageConf, stageMap,
   ]);
 
   const visibleMissing = hideMissing ? [] : missing;
@@ -650,6 +657,16 @@ export default function CustomListAnalyzerModal({
                 <label className="flex items-center gap-2 text-xs">
                   <Checkbox checked={growthFilters.oneil} onCheckedChange={(v) => setGrowthFilters({ ...growthFilters, oneil: !!v })} disabled={!fundamentalsAvailable} /> 💎 O'Neil
                 </label>
+              </div>
+              <div className="md:col-span-2">
+                <StageFilterBlock
+                  mode={stageFilter}
+                  minConfidence={minStageConf}
+                  onMode={setStageFilter}
+                  onMinConfidence={setMinStageConf}
+                  available={stageRows.length > 0}
+                  asOf={stageRows[0]?.as_of ?? null}
+                />
               </div>
               <div className="md:col-span-2">
                 <div className="flex items-center justify-between">

@@ -1,0 +1,225 @@
+import { supabase } from "@/integrations/supabase/client";
+
+// Client side of Weinstein Stage Analysis (see supabase/functions/stage-scan
+// and _shared/stageEngine.ts). The engine runs on the server; this file runs
+// scans, loads results and holds the shared display helpers.
+
+export type StageNum = 0 | 1 | 2 | 3 | 4; // 0 = transition / uncertain
+
+export interface StageFeatures {
+  close: number;
+  ma30: number;
+  maSlope5Pct: number;
+  closeVsMaAtr: number;
+  aboveFrac10: number;
+  rvol4AtEvent: number | null;
+  rpSlope13: number | null;
+  mrs52: number | null;
+  pctFrom52wHigh: number;
+}
+
+export interface StockStage {
+  symbol: string;
+  stage: StageNum;
+  substage: string;
+  confidence: number;
+  quality: "HIGH" | "MIXED" | "LOW" | null;
+  event: string | null;
+  event_kind: string | null;
+  event_weeks_ago: number | null;
+  weeks_in_stage: number | null;
+  history: string | null;
+  features: StageFeatures | null;
+  reasons: string[] | null;
+  as_of: string;
+  updated_at: string;
+}
+
+export const STAGE_COLORS: Record<StageNum, string> = {
+  0: "hsl(220, 9%, 32%)",
+  1: "hsl(220, 9%, 46%)",
+  2: "hsl(222, 82%, 64%)",
+  3: "hsl(47, 66%, 50%)",
+  4: "hsl(329, 70%, 60%)",
+};
+
+export const STAGE_NAMES: Record<StageNum, string> = {
+  0: "In transition",
+  1: "Stage 1 · Basing",
+  2: "Stage 2 · Advancing",
+  3: "Stage 3 · Topping",
+  4: "Stage 4 · Declining",
+};
+
+export const STAGE_TIPS: Record<StageNum, string> = {
+  0: "Signals conflict — the engine does not force the stock into a stage (as the research recommends).",
+  1: "After a decline, price moves sideways around a flattening 30-week MA. Watch — avoid tying up capital before the breakout.",
+  2: "Price above a rising 30-week MA with higher highs / higher lows. Preferred long regime; 2A = fresh breakout (best entries), 2B = mature / late.",
+  3: "After an advance, price chops around a flattening 30-week MA, often on heavy volume. Reduce / tighten risk; don't start new longs.",
+  4: "Price below a falling 30-week MA with lower highs / lower lows. Avoid / exit longs. 4B− = likely cycle low, not yet a buy.",
+};
+
+export const SUBSTAGE_TIPS: Record<string, string> = {
+  "1A": "Early base: within ~13 weeks of leaving Stage 4, MA still falling but improving.",
+  "1": "Base: flat MA, price ranging around it.",
+  "1B": "Late base: top of the range, volatility contracting, relative strength improving — watch for the breakout.",
+  "2A": "Fresh breakout (last 13 weeks) above the base with price over a non-declining MA — the classic Weinstein entry zone.",
+  "2": "Established advance above a rising MA.",
+  "2B": "Mature advance: MA slope slowing, MA tests, RS divergence or very extended.",
+  "3A": "Early top: first weeks of chop around a flattening MA after Stage 2.",
+  "3": "Established top: flat MA and a sideways range after Stage 2.",
+  "3B": "Late top: below the MA, lower highs, weak relative strength.",
+  "4A": "Fresh breakdown (last 13 weeks) below support and a non-rising MA.",
+  "4": "Mature decline below a falling MA.",
+  "4B": "Late decline: slope easing, relative strength improving or no new low — still too early to buy.",
+  "4B-": "Likely cycle low: no new low for 8+ weeks and back above the 10-week MA — not yet Stage 1/2.",
+  "T": "Conflicting signals — no stage assigned yet.",
+};
+
+const CACHE_KEY = "stock_stages_v1";
+const CACHE_TTL = 6 * 60 * 60 * 1000;
+const EVENT = "stock-stages-updated";
+
+async function invoke<T>(body: Record<string, unknown>): Promise<T> {
+  const { data, error } = await supabase.functions.invoke("stage-scan", { body });
+  if (error) throw new Error(error.message ?? String(error));
+  const d = data as { ok?: boolean; error?: string; setupNeeded?: boolean };
+  if (d && d.ok === false) throw new Error(d.setupNeeded ? "Stage Analysis isn't set up on the server yet." : d.error ?? "Stage scan failed");
+  return data as T;
+}
+
+/** All stage rows (cached in the browser; cleared after every scan). */
+export async function loadStages(force = false): Promise<StockStage[]> {
+  if (!force) {
+    try {
+      const raw = localStorage.getItem(CACHE_KEY);
+      if (raw) {
+        const p = JSON.parse(raw) as { ts: number; rows: StockStage[] };
+        if (Date.now() - p.ts < CACHE_TTL && Array.isArray(p.rows)) return p.rows;
+      }
+    } catch { /* ignore */ }
+  }
+  const rows: StockStage[] = [];
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await supabase
+      .from("stock_stages")
+      .select("symbol, stage, substage, confidence, quality, event, event_kind, event_weeks_ago, weeks_in_stage, history, features, reasons, as_of, updated_at")
+      .order("symbol")
+      .range(from, from + 999);
+    if (error) throw error;
+    if (!data?.length) break;
+    rows.push(...(data as unknown as StockStage[]));
+    if (data.length < 1000) break;
+  }
+  try { localStorage.setItem(CACHE_KEY, JSON.stringify({ ts: Date.now(), rows })); } catch { /* quota */ }
+  return rows;
+}
+
+export function onStagesUpdated(cb: () => void) {
+  window.addEventListener(EVENT, cb);
+  return () => window.removeEventListener(EVENT, cb);
+}
+
+let running: Promise<{ processed: number; failed: number }> | null = null;
+export const isStageScanRunning = () => running !== null;
+
+/**
+ * Classify the whole stock list. Calls `onProgress(done, total)` as chunks finish.
+ * Only one scan runs at a time (a second caller gets the same promise).
+ */
+export function runStageScan(onProgress?: (done: number, total: number) => void): Promise<{ processed: number; failed: number }> {
+  if (running) return running;
+  running = (async () => {
+    const startedAt = new Date().toISOString();
+    const { symbols } = await invoke<{ symbols: string[] }>({ action: "symbols" });
+    // Benchmark first so the market stage is computed once.
+    const list = ["SPY", ...symbols.filter((s) => s !== "SPY")];
+    const CHUNK = 60;
+    let done = 0, processed = 0, failed = 0;
+    onProgress?.(0, list.length);
+    const chunks: string[][] = [];
+    for (let i = 0; i < list.length; i += CHUNK) chunks.push(list.slice(i, i + CHUNK));
+    // two chunks in flight
+    let next = 0;
+    const lane = async () => {
+      while (next < chunks.length) {
+        const ch = chunks[next++];
+        try {
+          const r = await invoke<{ processed: number; failed: string[] }>({ action: "chunk", symbols: ch });
+          processed += r.processed; failed += r.failed.length;
+        } catch (e) {
+          failed += ch.length;
+          console.warn("stage chunk failed", e);
+        }
+        done += ch.length;
+        onProgress?.(done, list.length);
+      }
+    };
+    await Promise.all([lane(), lane()]);
+    if (processed > 0) await invoke({ action: "finalize", startedAt });
+    try { localStorage.removeItem(CACHE_KEY); } catch { /* ignore */ }
+    window.dispatchEvent(new Event(EVENT));
+    return { processed, failed };
+  })().finally(() => { running = null; });
+  return running;
+}
+
+/** Health label for a group (see the Stage Analysis page legend). */
+export function groupHealth(s2Pct: number, s4Pct: number): { label: string; tone: "strong" | "healthy" | "neutral" | "weak" } {
+  if (s4Pct >= 50) return { label: "Weak", tone: "weak" };
+  if (s2Pct >= 50) return { label: "Strong", tone: "strong" };
+  if (s2Pct >= 35) return { label: "Healthy", tone: "healthy" };
+  return { label: "Neutral", tone: "neutral" };
+}
+
+/** Stage N weeks ago from the history string (null if unknown). */
+export function stageWeeksAgo(r: StockStage, weeks: number): StageNum | null {
+  const h = r.history ?? "";
+  const ch = h[h.length - 1 - weeks];
+  if (!ch) return null;
+  return ch === "T" ? 0 : (Number(ch) as StageNum);
+}
+
+/** One ticker per line — the format TradingView's "Import list" accepts. */
+export function downloadTradingViewList(symbols: string[], name: string) {
+  const blob = new Blob([symbols.join("\n")], { type: "text/plain;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `${name.replace(/[^\w-]+/g, "_")}_${new Date().toISOString().slice(0, 10)}.txt`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+// ── Stage filter shared by lists across the app ──────────────────
+export type StageFilterMode =
+  | "any" | "s2" | "s2a" | "s2_or_1b" | "exclude_34" | "s1" | "s3" | "s4" | "s4bminus";
+
+export const STAGE_FILTER_OPTIONS: { value: StageFilterMode; label: string }[] = [
+  { value: "any", label: "Any stage" },
+  { value: "s2", label: "Only Stage 2" },
+  { value: "s2a", label: "Only 2A (fresh breakouts)" },
+  { value: "s2_or_1b", label: "Stage 2 or 1B (early strength)" },
+  { value: "exclude_34", label: "Exclude Stage 3 & 4" },
+  { value: "s1", label: "Only Stage 1" },
+  { value: "s3", label: "Only Stage 3" },
+  { value: "s4", label: "Only Stage 4" },
+  { value: "s4bminus", label: "Only 4B− (possible cycle lows)" },
+];
+
+export function passesStageFilter(r: StockStage | undefined, mode: StageFilterMode, minConfidence = 0): boolean {
+  if (mode === "any" && minConfidence <= 0) return true;
+  if (!r) return false; // not classified → excluded when a stage filter is active
+  if (r.confidence < minConfidence) return false;
+  switch (mode) {
+    case "any": return true;
+    case "s2": return r.stage === 2;
+    case "s2a": return r.substage === "2A";
+    case "s2_or_1b": return r.stage === 2 || r.substage === "1B";
+    case "exclude_34": return r.stage !== 3 && r.stage !== 4;
+    case "s1": return r.stage === 1;
+    case "s3": return r.stage === 3;
+    case "s4": return r.stage === 4;
+    case "s4bminus": return r.substage === "4B-";
+  }
+}

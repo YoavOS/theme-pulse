@@ -16,6 +16,7 @@ import MorningBrief from "./pages/MorningBrief";
 import MarketFlag from "./pages/MarketFlag";
 import StorageManager from "./pages/StorageManager";
 import MinerviniChecker from "./pages/MinerviniChecker";
+import StageAnalysis from "./pages/StageAnalysis";
 import NotFound from "./pages/NotFound";
 import { useEffect } from "react";
 import { autoRunClassificationOncePerDay } from "@/lib/classification";
@@ -52,6 +53,7 @@ const App = () => (
             <Route path="/market-flag" element={<MarketFlag />} />
             <Route path="/storage" element={<StorageManager />} />
             <Route path="/minervini" element={<MinerviniChecker />} />
+            <Route path="/stages" element={<StageAnalysis />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>

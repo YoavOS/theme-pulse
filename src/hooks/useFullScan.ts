@@ -2,6 +2,7 @@ import { useState, useCallback, useRef, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { ThemeData } from "@/data/themeData";
+import { runStageScan } from "@/lib/stageAnalysis";
 
 export interface ScanProgress {
   total: number;
@@ -253,9 +254,20 @@ export function useFullScan(onComplete: (themes: ThemeData[], timeframe: string)
       const summaryParts = [`${total - failed}/${total} tickers scanned`];
       if (failed > 0) summaryParts.push(`${failed} unavailable`);
 
+      setScanCompletedAt(new Date());
+
+      // Full Scan also refreshes Weinstein stages (Stage Analysis tab + stage filters).
+      try {
+        setStatusText(`Updating stages…`);
+        const st = await runStageScan((d, t) => setStatusText(`Updating stages: ${d}/${t}`));
+        summaryParts.push(`stages ${st.processed}`);
+      } catch (e) {
+        console.warn("Stage scan after Full Scan failed", e);
+        summaryParts.push("stages not updated");
+      }
+
       setStatusText(`✅ ${summaryParts.join(" · ")}`);
       setIsRunning(false);
-      setScanCompletedAt(new Date());
 
       toast({ title: "Full Scan Complete", description: summaryParts.join(". ") });
     } catch (err) {
