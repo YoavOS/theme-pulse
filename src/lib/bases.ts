@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 // Client side of the Base Scanner (engine: supabase/functions/_shared/baseEngine.ts,
 // computed inside the stage-scan function). Loads results and holds display helpers.
@@ -221,7 +222,7 @@ async function loadBasesImpl(force: boolean): Promise<StockBase[]> {
   }
   const rows: StockBase[] = [];
   for (let from = 0; ; from += 1000) {
-    const { data, error } = await supabase
+    const { data, error } = await (supabase as SupabaseClient)
       .from("stock_bases")
       .select("*")
       .not("score", "is", null)

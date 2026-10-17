@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { clearBasesCache } from "@/lib/bases";
 
 // Client side of Weinstein Stage Analysis (see supabase/functions/stage-scan
@@ -118,7 +119,7 @@ async function loadStagesImpl(force: boolean): Promise<StockStage[]> {
   }
   const rows: StockStage[] = [];
   for (let from = 0; ; from += 1000) {
-    const { data, error } = await supabase
+    const { data, error } = await (supabase as SupabaseClient)
       .from("stock_stages")
       .select("symbol, stage, substage, confidence, quality, event, event_kind, event_weeks_ago, weeks_in_stage, history, features, reasons, as_of, updated_at")
       .order("symbol")
