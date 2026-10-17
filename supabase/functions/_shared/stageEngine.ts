@@ -47,6 +47,12 @@ export interface StageResult {
     rpSlope13: number | null;
     mrs52: number | null;
     pctFrom52wHigh: number;
+    /** Current base/top range (Stage 1, 3, transition only; null otherwise). */
+    rangeHigh: number | null;
+    rangeLow: number | null;
+    /** % the close must rise to clear the range high (≤0 = already above). */
+    pctToRangeHigh: number | null;
+    rangeWeeks: number | null;
   };
   reasons: string[];          // short human-readable reasons
 }
@@ -290,6 +296,14 @@ export function classifyStage(
   const ll26 = Math.min(...l.slice(n - 26)), hh26 = Math.max(...h.slice(n - 26));
   const rangePos26 = hh26 > ll26 ? (c[i] - ll26) / (hh26 - ll26) : 0.5;
   const pctFrom52wHigh = (c[i] / hh52 - 1) * 100;
+  // Range boundaries of the current base / top (the breakout and breakdown levels to watch).
+  let rangeHigh: number | null = null, rangeLow: number | null = null, rangeWeeks: number | null = null;
+  if ((stage === 1 || stage === 3 || stage === 0) && segStart >= 0 && i - segStart >= 4) {
+    rangeHigh = Math.max(...h.slice(segStart, i));
+    rangeLow = Math.min(...l.slice(segStart, i));
+    rangeWeeks = i - segStart;
+  }
+  const pctToRangeHigh = rangeHigh !== null ? (rangeHigh / c[i] - 1) * 100 : null;
   const reasons: string[] = [];
 
   // substage (§9.6)
@@ -379,6 +393,7 @@ export function classifyStage(
   if ((f.rpSlope13 ?? 0) < 0 && stage === 2) reasons.push("RP weakening");
   if ((f.rpSlope13 ?? 0) > 0 && (stage === 1 || stage === 4)) reasons.push("RP improving");
   if (sub === "4B-") reasons.push("No new low 8w · above 10w MA");
+  if (stage === 1 && pctToRangeHigh !== null && rangeWeeks !== null) reasons.push(`${pctToRangeHigh.toFixed(1)}% below ${rangeWeeks}w range high`);
 
   const hist = confirmed.slice(Math.max(START, n - 52)).map((s) => (s === 0 ? "T" : String(s))).join("");
   const asOfDate = new Date((weekStart(bars[i].t) + 4 * DAY) * 1000).toISOString().slice(0, 10);
@@ -405,6 +420,10 @@ export function classifyStage(
       rpSlope13: f.rpSlope13 === null ? null : round(f.rpSlope13, 4),
       mrs52: f.mrs52 === null ? null : round(f.mrs52, 2),
       pctFrom52wHigh: round(pctFrom52wHigh, 1),
+      rangeHigh: rangeHigh === null ? null : round(rangeHigh, 4),
+      rangeLow: rangeLow === null ? null : round(rangeLow, 4),
+      pctToRangeHigh: pctToRangeHigh === null ? null : round(pctToRangeHigh, 1),
+      rangeWeeks,
     },
     reasons: reasons.slice(0, 4),
   };

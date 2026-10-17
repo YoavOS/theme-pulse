@@ -16,6 +16,10 @@ export interface StageFeatures {
   rpSlope13: number | null;
   mrs52: number | null;
   pctFrom52wHigh: number;
+  rangeHigh?: number | null;
+  rangeLow?: number | null;
+  pctToRangeHigh?: number | null;
+  rangeWeeks?: number | null;
 }
 
 export interface StockStage {

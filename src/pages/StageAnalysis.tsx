@@ -229,6 +229,13 @@ export default function StageAnalysis() {
     }).sort((a, b) => (rsRank.get(b.symbol) ?? 0) - (rsRank.get(a.symbol) ?? 0));
   }, [stocks, labelBySymbol, rsRank]);
 
+  // Stage 1 bases within 5% of their range high — the breakout watchlist (research §8: 1→2).
+  const nearBreakout = useMemo(
+    () => stocks.filter((r) => r.stage === 1 && r.features?.pctToRangeHigh != null && r.features.pctToRangeHigh >= 0 && r.features.pctToRangeHigh <= 5)
+      .sort((a, b) => (a.features!.pctToRangeHigh ?? 0) - (b.features!.pctToRangeHigh ?? 0)),
+    [stocks],
+  );
+
   const transitions = useMemo(
     () => TRANSITION_GROUPS.map((g) => ({
       ...g,
@@ -395,6 +402,22 @@ export default function StageAnalysis() {
                   <TooltipContent className="max-w-xs text-xs">
                     Fresh Stage 2A breakouts (not weak-volume) or late-base 1B, confidence ≥ 70, RS rank ≥ 70 vs SPY,
                     in an industry with ≥ 35% of its stocks in Stage 2. A watchlist — not a buy signal; always check the chart.
+                  </TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      disabled={!nearBreakout.length}
+                      onClick={() => { setSubFilter(null); setMinConf(0); setSearch(""); setList({ title: "Near breakout (Stage 1 within 5% of range high)", rows: nearBreakout }); }}
+                      className="flex items-center gap-2 rounded-md border border-border bg-background/40 px-2.5 py-1.5 text-left text-[11px] hover:bg-accent/40 disabled:opacity-40"
+                    >
+                      <span className="h-2 w-2 rounded-full" style={{ background: STAGE_COLORS[1] }} />
+                      Near breakout <span className="font-mono font-semibold">{nearBreakout.length}</span>
+                      {nearBreakout.slice(0, 3).map((r) => <span key={r.symbol} className="font-mono text-muted-foreground">{r.symbol}</span>)}
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent className="max-w-xs text-xs">
+                    Stage 1 bases trading within 5% of their range high — the level a 1→2 breakout must clear. Best with volume ≥ 2× on the breakout week.
                   </TooltipContent>
                 </Tooltip>
                 {transitions.map((t) => (
