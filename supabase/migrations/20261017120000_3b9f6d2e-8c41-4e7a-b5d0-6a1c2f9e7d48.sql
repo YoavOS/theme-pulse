@@ -33,3 +33,7 @@ ALTER TABLE public.stock_stages ENABLE ROW LEVEL SECURITY;
 -- Read-only for the app; only the edge function (service role) writes.
 DROP POLICY IF EXISTS "Read stock stages" ON public.stock_stages;
 CREATE POLICY "Read stock stages" ON public.stock_stages FOR SELECT USING (true);
+
+-- Explicit privileges: the app reads (RLS above limits it to SELECT); the edge function writes.
+GRANT SELECT ON public.stock_stages TO anon, authenticated;
+GRANT ALL ON public.stock_stages TO service_role;
