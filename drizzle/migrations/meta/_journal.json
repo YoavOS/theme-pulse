@@ -8,6 +8,20 @@
       "when": 1792008401119,
       "tag": "0000_ticker_classification",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1792236871581,
+      "tag": "0001_stock_stages",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1792236882957,
+      "tag": "0002_stock_bases",
+      "breakpoints": true
     }
   ]
 }

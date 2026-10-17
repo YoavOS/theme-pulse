@@ -479,6 +479,69 @@ export type Database = {
         }
         Relationships: []
       }
+      stock_bases: {
+        Row: {
+          as_of: string
+          band: string | null
+          breakdown: Json | null
+          dist_to_pivot: number | null
+          earnings_date: string | null
+          features: Json
+          labels: string[] | null
+          pivot: number | null
+          primary_label: string | null
+          rs_pct: number | null
+          score: number | null
+          state: string | null
+          stop_risk: number | null
+          support: number | null
+          symbol: string
+          tier: number | null
+          updated_at: string
+          warnings: string[] | null
+        }
+        Insert: {
+          as_of: string
+          band?: string | null
+          breakdown?: Json | null
+          dist_to_pivot?: number | null
+          earnings_date?: string | null
+          features: Json
+          labels?: string[] | null
+          pivot?: number | null
+          primary_label?: string | null
+          rs_pct?: number | null
+          score?: number | null
+          state?: string | null
+          stop_risk?: number | null
+          support?: number | null
+          symbol: string
+          tier?: number | null
+          updated_at?: string
+          warnings?: string[] | null
+        }
+        Update: {
+          as_of?: string
+          band?: string | null
+          breakdown?: Json | null
+          dist_to_pivot?: number | null
+          earnings_date?: string | null
+          features?: Json
+          labels?: string[] | null
+          pivot?: number | null
+          primary_label?: string | null
+          rs_pct?: number | null
+          score?: number | null
+          state?: string | null
+          stop_risk?: number | null
+          support?: number | null
+          symbol?: string
+          tier?: number | null
+          updated_at?: string
+          warnings?: string[] | null
+        }
+        Relationships: []
+      }
       stock_fundamentals: {
         Row: {
           company_name: string | null
@@ -608,6 +671,60 @@ export type Database = {
           processed_at?: string | null
           status?: string
           symbol?: string
+        }
+        Relationships: []
+      }
+      stock_stages: {
+        Row: {
+          as_of: string
+          confidence: number
+          event: string | null
+          event_kind: string | null
+          event_weeks_ago: number | null
+          features: Json | null
+          history: string | null
+          last_directional: number | null
+          quality: string | null
+          reasons: string[] | null
+          stage: number
+          substage: string
+          symbol: string
+          updated_at: string
+          weeks_in_stage: number | null
+        }
+        Insert: {
+          as_of: string
+          confidence: number
+          event?: string | null
+          event_kind?: string | null
+          event_weeks_ago?: number | null
+          features?: Json | null
+          history?: string | null
+          last_directional?: number | null
+          quality?: string | null
+          reasons?: string[] | null
+          stage: number
+          substage: string
+          symbol: string
+          updated_at?: string
+          weeks_in_stage?: number | null
+        }
+        Update: {
+          as_of?: string
+          confidence?: number
+          event?: string | null
+          event_kind?: string | null
+          event_weeks_ago?: number | null
+          features?: Json | null
+          history?: string | null
+          last_directional?: number | null
+          quality?: string | null
+          reasons?: string[] | null
+          stage?: number
+          substage?: string
+          symbol?: string
+          updated_at?: string
+          weeks_in_stage?: number | null
         }
         Relationships: []
       }
