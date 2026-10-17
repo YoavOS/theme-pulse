@@ -795,7 +795,8 @@ export function finalizeBase(f: BaseFeatures, rsPct: number | null, earningsInDa
   if (f.dryUp !== null && f.dryUp <= 0.75 && f.rangePos < 0.5) warnings.push("Volume dry-up while price sags");
   if (earningsInDays !== null && earningsInDays >= 0 && earningsInDays <= 14) warnings.push(`Earnings in ${earningsInDays}d`);
   if (primaryLabel === "htf") warnings.push("HTF: high volatility, size down");
-  if (f.stageNow === 3) warnings.push("Stage 3 — topping risk");
+  if (f.stageNow === 1) warnings.push("Stage 1 — base after a decline, not a Stage 2 continuation");
+  else if (f.stageNow === 3) warnings.push("Stage 3 — topping risk");
   else if (f.stageNow === 4) warnings.push("Stage 4 — downtrend");
 
   const tier: FinalBase["tier"] = state === "ready" || state === "qualified"

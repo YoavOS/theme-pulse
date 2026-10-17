@@ -1,10 +1,11 @@
-import { useMemo, useState } from "react";
-import { Copy, Download } from "lucide-react";
+import { Fragment, useEffect, useMemo, useState } from "react";
+import { ChevronDown, ChevronRight, Copy, Download, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
-  STAGE_COLORS, SUBSTAGE_TIPS, downloadTradingViewList, type StageNum, type StockStage,
+  STAGE_COLORS, SUBSTAGE_TIPS, downloadTradingViewList, loadStageChart, type StageChartData, type StageNum, type StockStage,
 } from "@/lib/stageAnalysis";
+import WeeklyChart from "@/components/stages/WeeklyChart";
 
 export function StageBadge({ r, compact = false }: { r: Pick<StockStage, "stage" | "substage">; compact?: boolean }) {
   const color = STAGE_COLORS[r.stage as StageNum];
@@ -51,6 +52,7 @@ export default function StageStockTable({
   maxHeight?: number;
 }) {
   const [sort, setSort] = useState<SortKey>("stage");
+  const [open, setOpen] = useState<string | null>(null);
   const sorted = useMemo(() => {
     const order = (s: number) => (s === 2 ? 0 : s === 1 ? 1 : s === 3 ? 2 : s === 4 ? 3 : 4);
     const out = [...rows];
@@ -115,9 +117,12 @@ export default function StageStockTable({
           </thead>
           <tbody>
             {sorted.map((r) => (
-              <tr key={r.symbol} className="border-b border-border/30 hover:bg-accent/30">
-                <td className="px-2 py-1 font-mono font-medium">
+              <Fragment key={r.symbol}>
+              <tr onClick={() => setOpen(open === r.symbol ? null : r.symbol)} className="cursor-pointer border-b border-border/30 hover:bg-accent/30" title="Click for the weekly chart">
+                <td className="whitespace-nowrap px-2 py-1 font-mono font-medium">
+                  {open === r.symbol ? <ChevronDown size={10} className="mr-0.5 inline" /> : <ChevronRight size={10} className="mr-0.5 inline text-muted-foreground" />}
                   <a
+                    onClick={(e) => e.stopPropagation()}
                     href={`https://www.tradingview.com/chart/?symbol=${encodeURIComponent(r.symbol)}`}
                     target="_blank" rel="noopener noreferrer"
                     className="hover:text-primary hover:underline"
@@ -152,12 +157,52 @@ export default function StageStockTable({
                   {(r.reasons ?? []).join(" · ")}
                 </td>
               </tr>
+              {open === r.symbol && (
+                <tr className="border-b border-border/30 bg-background/40">
+                  <td colSpan={9} className="px-3 py-2"><StageChartPanel r={r} /></td>
+                </tr>
+              )}
+              </Fragment>
             ))}
             {!sorted.length && (
               <tr><td colSpan={9} className="px-2 py-6 text-center text-muted-foreground">No stocks match.</td></tr>
             )}
           </tbody>
         </table>
+      </div>
+    </div>
+  );
+}
+
+/** Weekly chart for one stock with its confirmed stage history as a colored strip. */
+function StageChartPanel({ r }: { r: StockStage }) {
+  const [data, setData] = useState<StageChartData | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  useEffect(() => {
+    let live = true;
+    setData(null); setErr(null);
+    loadStageChart(r.symbol).then((d) => { if (live) setData(d); }).catch((e) => { if (live) setErr(e instanceof Error ? e.message : String(e)); });
+    return () => { live = false; };
+  }, [r.symbol]);
+  if (err) return <p className="text-[11px] text-muted-foreground">Chart unavailable: {err}</p>;
+  if (!data) return <p className="flex items-center gap-1.5 text-[11px] text-muted-foreground"><Loader2 size={11} className="animate-spin" /> Loading chart…</p>;
+  const f = r.features;
+  const levels = [
+    ...(f?.rangeHigh ? [{ y: f.rangeHigh, color: "hsl(40,95%,55%)" }] : []),
+    ...(f?.rangeLow ? [{ y: f.rangeLow, color: "hsl(344,80%,65%)", dash: "2 3" }] : []),
+  ];
+  // the history strip covers the last ≤52 confirmed weeks of the scan, which ends at r.as_of (a Friday)
+  const friday = (t: number) => new Date((t + 4 * 86400) * 1000).toISOString().slice(0, 10);
+  const stripEnd = data.t.findIndex((t) => friday(t) === r.as_of);
+  return (
+    <div className="max-w-[720px]">
+      <WeeklyChart s={data} strip={r.history} stripEnd={stripEnd} levels={levels} height={150} label={`${r.symbol} weekly chart with stage history`} />
+      <div className="mt-1 flex flex-wrap gap-x-3 text-[10px] text-muted-foreground">
+        <span>weekly · last {data.c.length} weeks</span>
+        <span className="text-[hsl(280,60%,72%)]">— 30w MA</span>
+        {levels.length > 0 && <span><span className="text-[hsl(40,95%,55%)]">— range high</span> · <span className="text-[hsl(344,80%,65%)]">range low</span></span>}
+        <span>strip = stage each week (
+          {([1, 2, 3, 4] as StageNum[]).map((st) => <span key={st} style={{ color: STAGE_COLORS[st] }}> S{st}</span>)} )</span>
       </div>
     </div>
   );
