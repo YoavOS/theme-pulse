@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { clearBasesCache } from "@/lib/bases";
 
 // Client side of Weinstein Stage Analysis (see supabase/functions/stage-scan
 // and _shared/stageEngine.ts). The engine runs on the server; this file runs
@@ -20,6 +21,8 @@ export interface StageFeatures {
   rangeLow?: number | null;
   pctToRangeHigh?: number | null;
   rangeWeeks?: number | null;
+  r26Pct?: number | null;   // 26-week return (%)
+  ytdPct?: number | null;   // since the last weekly close of the previous year (%)
 }
 
 export interface StockStage {
@@ -93,7 +96,17 @@ async function invoke<T>(body: Record<string, unknown>): Promise<T> {
 }
 
 /** All stage rows (cached in the browser; cleared after every scan). */
-export async function loadStages(force = false): Promise<StockStage[]> {
+let loadStagesInflight: Promise<StockStage[]> | null = null;
+/** Concurrent callers (several hooks reloading after a scan) share one network load. */
+export function loadStages(force = false): Promise<StockStage[]> {
+  if (loadStagesInflight) return loadStagesInflight;
+  const p = loadStagesImpl(force);
+  loadStagesInflight = p;
+  p.finally(() => { if (loadStagesInflight === p) loadStagesInflight = null; }).catch(() => { /* handled by the caller */ });
+  return p;
+}
+
+async function loadStagesImpl(force: boolean): Promise<StockStage[]> {
   if (!force) {
     try {
       const raw = localStorage.getItem(CACHE_KEY);
@@ -160,9 +173,17 @@ export function runStageScan(onProgress?: (done: number, total: number) => void)
       }
     };
     await Promise.all([lane(), lane()]);
-    // Prune stocks that left the list — only after a clearly successful scan.
-    if (processed > 0 && processed >= list.length * 0.8) await invoke({ action: "finalize", startedAt });
+    // Finalize: base scores (RS percentiles, earnings) always; pruning of stocks that left
+    // the list only after a clearly successful scan.
+    if (processed > 0) {
+      try {
+        await invoke({ action: "finalize", startedAt, prune: processed >= list.length * 0.8 });
+      } catch (e) {
+        console.warn("stage finalize failed", e);
+      }
+    }
     try { localStorage.removeItem(CACHE_KEY); } catch { /* ignore */ }
+    clearBasesCache();
     window.dispatchEvent(new Event(EVENT));
     return { processed, failed };
   })().finally(() => { running = null; });

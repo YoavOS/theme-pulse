@@ -53,6 +53,9 @@ export interface StageResult {
     /** % the close must rise to clear the range high (≤0 = already above). */
     pctToRangeHigh: number | null;
     rangeWeeks: number | null;
+    /** 26-week and year-to-date price change, % (cross-sectional RS ranks, Theme Tracker YTD). */
+    r26Pct: number | null;
+    ytdPct: number | null;
   };
   reasons: string[];          // short human-readable reasons
 }
@@ -304,6 +307,14 @@ export function classifyStage(
     rangeWeeks = i - segStart;
   }
   const pctToRangeHigh = rangeHigh !== null ? (rangeHigh / c[i] - 1) * 100 : null;
+  const r26Pct = n > 26 ? (c[i] / c[i - 26] - 1) * 100 : null;
+  // YTD: from the last weekly close of the previous calendar year (weeks are dated by their
+  // Friday close — bar timestamps are the week's Monday, which can fall in the old year).
+  const closeYear = (t: number) => new Date((t + 4 * 86400) * 1000).getUTCFullYear();
+  const yr = closeYear(bars[i].t);
+  let ytdBase: number | null = null;
+  for (let k = i; k >= 0; k--) if (closeYear(bars[k].t) < yr) { ytdBase = c[k]; break; }
+  const ytdPct = ytdBase ? (c[i] / ytdBase - 1) * 100 : null;
   const reasons: string[] = [];
 
   // substage (§9.6)
@@ -424,6 +435,8 @@ export function classifyStage(
       rangeLow: rangeLow === null ? null : round(rangeLow, 4),
       pctToRangeHigh: pctToRangeHigh === null ? null : round(pctToRangeHigh, 1),
       rangeWeeks,
+      r26Pct: r26Pct === null ? null : round(r26Pct, 1),
+      ytdPct: ytdPct === null ? null : round(ytdPct, 1),
     },
     reasons: reasons.slice(0, 4),
   };
