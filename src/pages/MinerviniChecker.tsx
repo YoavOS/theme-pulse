@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { BottomLine, Fold, HowItWorks } from "@/components/Explainer";
+import { BottomLine, HowItWorks } from "@/components/Explainer";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useStockStages } from "@/hooks/useStockStages";
 import { useStockBases } from "@/hooks/useStockBases";
 import { useUniverseSectors } from "@/hooks/useUniverseSectors";
@@ -9,7 +10,9 @@ import { computeLeadership, type GroupLead } from "@/lib/leadership";
 import { marketTypeFromCache, rsRanks, sepaPillars, type Mark } from "@/lib/sepa";
 import { EARN_LABELS, type StockBase } from "@/lib/bases";
 import type { StockStage } from "@/lib/stageAnalysis";
-import { ArrowLeft, Loader2, CheckCircle2, XCircle, MinusCircle, Search, Trophy, AlertTriangle } from "lucide-react";
+import { ArrowLeft, Loader2, CheckCircle2, XCircle, MinusCircle, Search, Trophy, AlertTriangle, Info } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { WeekSpark } from "@/components/stages/StageStockTable";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -123,6 +126,66 @@ function VerdictBadge({ verdict, score, label, tone }: { verdict: string; score:
   );
 }
 
+/** Stock title, the three scores as compact pills, and a key-stats strip (the "data panel"). */
+function StockHeader({ multi, header, fromCache, loading, onRefresh }: {
+  multi: MultiReport; header: ProfileReport; fromCache: boolean; loading: boolean; onRefresh: () => void;
+}) {
+  const s = multi.series;
+  const pills: { label: string; score: number; verdict: string; tone: string }[] = [];
+  for (const k of ["momentum", "quality"] as const) {
+    const pr = s?.profiles?.[k];
+    if (pr && pr.score !== null) pills.push({ label: pr.label, score: pr.score, verdict: pr.verdict, tone: pr.verdict === "Strong" ? "PASS" : pr.verdict === "Mixed" ? "BORDERLINE" : pr.verdict === "Weak" ? "FAIL" : "LIMITED" });
+  }
+  const mv = multi.reports.minervini;
+  if (mv) pills.push({ label: "Minervini", score: mv.overallScore, verdict: mv.verdict === "PASS" ? "Pass" : mv.verdict === "FAIL" ? "Fail" : "Borderline", tone: mv.verdict });
+  const flags = s?.profiles?.redFlags?.length ?? null;
+  const earnIn = s?.nextEarnings ? Math.round((Date.parse(s.nextEarnings) - Date.now()) / 86400_000) : null;
+  const stats: [string, string, string?][] = [
+    ["Next earnings", s?.nextEarnings ? `${new Date(s.nextEarnings + "T12:00:00Z").toLocaleDateString("en-US", { month: "short", day: "numeric" })}${earnIn !== null && earnIn >= 0 ? ` · ${earnIn}d` : ""}` : "—", earnIn !== null && earnIn >= 0 && earnIn <= 14 ? "text-[hsl(40,90%,60%)]" : ""],
+    ["ROE", s?.roePct == null ? "—" : `${s.roePct.toFixed(0)}%`],
+    ["Debt / equity", s?.debtToEquity == null ? "—" : `${s.debtToEquity.toFixed(2)}×`],
+    ["Beat rate", s?.beatRate == null ? "—" : `${s.beatRate}%`],
+    ["Institutions", s?.institutionalPct == null ? "—" : `${s.institutionalPct.toFixed(0)}%`],
+    ["Short % float", s?.shortInterest?.shortPctFloat == null ? "—" : `${s.shortInterest.shortPctFloat.toFixed(1)}%`],
+    ["Analysts buy", s?.analystRec?.buyPct == null ? "—" : `${Math.round(s.analystRec.buyPct)}%`],
+    ["Red flags", flags === null ? "—" : String(flags), flags ? "text-loss-medium" : flags === 0 ? "text-gain-medium" : ""],
+  ];
+  return (
+    <Card className="p-5">
+      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+        <div className="min-w-0">
+          <div className="text-xs uppercase tracking-widest text-muted-foreground">{header.sector || "—"}</div>
+          <h2 className="mt-0.5 text-3xl font-extrabold tracking-tight">
+            {header.symbol} <span className="text-base font-medium text-muted-foreground">· {header.companyName}</span>
+          </h2>
+          {fromCache && (
+            <button onClick={onRefresh} disabled={loading} className="mt-1 text-xs text-muted-foreground underline hover:text-foreground">
+              Saved result from the last 24h — refresh
+            </button>
+          )}
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {pills.map((p) => (
+            <div key={p.label} className={`rounded-lg border-2 px-3 py-1.5 text-center ${verdictClasses(p.tone)}`}>
+              <div className="text-2xl font-extrabold tabular-nums leading-none">{p.score}</div>
+              <div className="mt-0.5 text-[10px] uppercase tracking-wider text-muted-foreground">{p.label}</div>
+              <div className="text-[11px] font-bold uppercase tracking-wider">{p.verdict}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+      <div className="mt-4 grid grid-cols-2 gap-x-4 gap-y-2 border-t border-border pt-3 sm:grid-cols-4 lg:grid-cols-8">
+        {stats.map(([k, v, cls]) => (
+          <div key={k}>
+            <div className="text-[10px] uppercase tracking-wide text-muted-foreground">{k}</div>
+            <div className={`font-mono text-sm font-semibold ${cls ?? ""}`}>{v}</div>
+          </div>
+        ))}
+      </div>
+    </Card>
+  );
+}
+
 const CACHE_KEY = (sym: string) => `minervini:v12-evidence:${sym}`;
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 
@@ -221,6 +284,7 @@ export default function MinerviniChecker() {
   const [symbol, setSymbol] = useState("");
   const [loading, setLoading] = useState(false);
   const [multi, setMulti] = useState<MultiReport | null>(null);
+  const [tab, setTab] = useState("overview");
   const [fromCache, setFromCache] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { rows: stages, bySymbol: stageBy } = useStockStages(true);
@@ -269,6 +333,7 @@ export default function MinerviniChecker() {
 
     setLoading(true);
     setMulti(null);
+    setTab("overview");
     setFromCache(false);
     try {
       const { data, error: fnErr } = await supabase.functions.invoke("minervini-analysis", {
@@ -370,63 +435,47 @@ export default function MinerviniChecker() {
 
         {multi && header && (
           <>
-            <Card className="p-6">
-              <div className="flex flex-col items-start gap-4 md:flex-row md:items-center md:justify-between">
-                <div className="min-w-0 flex-1">
-                  <div className="text-xs uppercase tracking-widest text-muted-foreground">{header.sector || "—"}</div>
-                  <h2 className="mt-1 text-3xl font-extrabold tracking-tight">
-                    {header.symbol} <span className="text-base font-medium text-muted-foreground">· {header.companyName}</span>
-                  </h2>
-                  {fromCache && (
-                    <button
-                      onClick={() => runAnalysis(true)}
-                      className="mt-2 text-xs text-muted-foreground underline hover:text-foreground animate-pulse"
-                      disabled={loading}
-                    >
-                      Showing cached result (24h) — click to force refresh
-                    </button>
-                  )}
-                </div>
-                <div className="flex flex-wrap gap-3">
-                  {(["momentum", "quality"] as const).map((k) => {
-                    const pr = multi.series?.profiles?.[k];
-                    if (!pr || pr.score === null) return null;
-                    const tone = pr.verdict === "Strong" ? "PASS" : pr.verdict === "Mixed" ? "BORDERLINE" : pr.verdict === "Weak" ? "FAIL" : "LIMITED";
-                    return <VerdictBadge key={k} verdict={pr.verdict === "Limited data" ? "LIMITED" : pr.verdict.toUpperCase()} tone={tone} score={pr.score} label={pr.label} />;
-                  })}
-                  {multi.reports.minervini && <VerdictBadge verdict={multi.reports.minervini.verdict} score={multi.reports.minervini.overallScore} label="Minervini" />}
-                </div>
-              </div>
-            </Card>
+            <StockHeader multi={multi} header={header} fromCache={fromCache} loading={loading} onRefresh={() => runAnalysis(true)} />
 
             <SummaryLine p={multi.series?.profiles ?? null} sepa={sepaSummary(sepaProps)} base={sepaProps.base} />
 
-            {multi.series?.profiles?.momentum && <ProfileCards p={multi.series.profiles} />}
+            <Tabs value={tab} onValueChange={setTab}>
+              <TabsList className="h-auto flex-wrap justify-start gap-1 bg-muted/30 p-1">
+                <TabsTrigger value="overview" className="text-xs">Overview</TabsTrigger>
+                <TabsTrigger value="earnings" className="text-xs">Earnings &amp; sales</TabsTrigger>
+                <TabsTrigger value="history" className="text-xs">Long history</TabsTrigger>
+                <TabsTrigger value="checklist" className="text-xs">Minervini checklist{multi.reports.minervini ? ` · ${multi.reports.minervini.overallScore}` : ""}</TabsTrigger>
+                <TabsTrigger value="data" className="text-xs">Data{multi.dataQuality?.warnings?.length ? ` · ${multi.dataQuality.warnings.length} note${multi.dataQuality.warnings.length === 1 ? "" : "s"}` : ""}</TabsTrigger>
+              </TabsList>
 
-            <SepaCard {...sepaProps} />
+              <TabsContent value="overview" className="mt-4 space-y-6">
+                {multi.series?.profiles?.momentum && <ProfileCards p={multi.series.profiles} />}
+                <SepaCard {...sepaProps} />
+              </TabsContent>
 
-            {multi.series?.history && <HistoryCard h={multi.series.history} />}
-            {multi.series && multi.series.quarters.length > 0 && <QuarterTable s={multi.series} />}
-            {multi.series && <ExtrasCard s={multi.series} />}
+              <TabsContent value="earnings" className="mt-4 space-y-6">
+                {multi.series && multi.series.quarters.length > 0 && <QuarterTable s={multi.series} />}
+                {multi.series && <ExtrasCard s={multi.series} />}
+              </TabsContent>
 
-            {multi.reports.minervini && (
-              <Fold
-                title="Minervini's fundamental checklist"
-                hint={`· ${multi.reports.minervini.overallScore}/100 ${multi.reports.minervini.verdict} · ${multi.reports.minervini.criteria.length} checks, bull & bear case`}
-              >
-                <div className="space-y-4">
+              <TabsContent value="history" className="mt-4 space-y-6">
+                {multi.series?.history ? <HistoryCard h={multi.series.history} /> : <Card className="p-5 text-sm text-muted-foreground">No filing history for this stock.</Card>}
+              </TabsContent>
+
+              <TabsContent value="checklist" className="mt-4">
+                {multi.reports.minervini ? (
+                  <Card className="p-5">
+                    <div className="space-y-4">
                   {multi.series && <ScoreBuild s={multi.series} />}
                   <ProfileReportCard report={multi.reports.minervini} />
                 </div>
-              </Fold>
-            )}
+                  </Card>
+                ) : <Card className="p-5 text-sm text-muted-foreground">No Minervini report.</Card>}
+              </TabsContent>
 
-            {(multi.dataQuality?.coverage || !!multi.dataQuality?.warnings?.length) && (
-              <Fold
-                title="Data sources & notes"
-                hint={`· ${Object.values(multi.dataQuality?.sourceStatus ?? {}).filter((v) => v.startsWith("ok")).length} sources ok${multi.dataQuality?.warnings?.length ? ` · ${multi.dataQuality.warnings.length} note${multi.dataQuality.warnings.length === 1 ? "" : "s"}` : ""}`}
-              >
-                <div className="space-y-3 text-xs">
+              <TabsContent value="data" className="mt-4">
+                <Card className="p-5">
+                  <div className="space-y-3 text-xs">
                   {!!multi.dataQuality?.warnings?.length && (
                     <ul className="list-disc space-y-0.5 pl-4 text-muted-foreground">{multi.dataQuality.warnings.map((w) => <li key={w}>{w}</li>)}</ul>
                   )}
@@ -446,8 +495,9 @@ export default function MinerviniChecker() {
                     Used: {(multi.dataQuality?.sources ?? []).join(" + ") || "cache"} · Calls: FMP {multi.dataQuality?.fmpCalls ?? 0} · Yahoo {multi.dataQuality?.yahooCalls ?? 0} · Finnhub {multi.dataQuality?.finnhubCalls ?? 0}
                   </div>
                 </div>
-              </Fold>
-            )}
+                </Card>
+              </TabsContent>
+            </Tabs>
           </>
         )}
       </main>
@@ -524,12 +574,15 @@ function QuarterTable({ s }: { s: Series }) {
   const q = s.quarters;
   const big = (x: number | null) => (x === null ? "—" : Intl.NumberFormat("en", { notation: "compact", maximumFractionDigits: 1 }).format(x));
   const pctCell = (x: number | null) => (x === null ? "—" : `${x >= 0 ? "+" : ""}${x.toFixed(0)}%`);
-  const tone = (x: number | null) => (x === null ? "" : x >= 25 ? "text-gain-medium" : x < 0 ? "text-loss-medium" : "");
+  const tone = (x: number | null) => (x === null ? "" : x >= 25 ? "font-semibold text-gain-medium" : x < 0 ? "text-loss-medium" : "");
+  // ▲ / ▼ = growth faster / slower than the quarter before by 5+ points (acceleration is what Minervini and O'Neil look for)
+  const accel = (now: number | null, prev: number | null | undefined) =>
+    now === null || prev === null || prev === undefined ? null : now - prev >= 5 ? <span className="ml-0.5 text-gain-medium">▲</span> : prev - now >= 5 ? <span className="ml-0.5 text-loss-medium">▼</span> : null;
   return (
     <Card className="p-5">
       <div className="mb-2 flex flex-wrap items-center gap-2">
         <h3 className="text-sm font-semibold">Quarter by quarter</h3>
-        <span className="text-[11px] text-muted-foreground">· newest first · growth vs the same quarter a year earlier</span>
+        <span className="text-[11px] text-muted-foreground">· newest first · growth vs the same quarter a year earlier · <span className="text-gain-medium">green</span> = 25%+ · ▲▼ = faster / slower than the quarter before</span>
         {s.code33 && <span className="ml-auto text-[11px]">Code 33: EPS {s.code33.eps ? "✓" : "✗"} · sales {s.code33.sales ? "✓" : "✗"} · margin {s.code33.margin ? "✓" : "✗"}</span>}
       </div>
       <div className="overflow-x-auto">
@@ -545,24 +598,20 @@ function QuarterTable({ s }: { s: Series }) {
             </tr>
           </thead>
           <tbody>
-            {q.map((r) => (
+            {q.map((r, i) => (
               <tr key={r.date} className="border-b border-border/30">
                 <td className="px-2 py-1 font-mono">{r.date}</td>
                 <td className="px-2 py-1 text-right font-mono">{big(r.revenue)}</td>
-                <td className={`px-2 py-1 text-right font-mono ${tone(r.revenueYoY)}`}>{pctCell(r.revenueYoY)}</td>
+                <td className={`px-2 py-1 text-right font-mono ${tone(r.revenueYoY)}`}>{pctCell(r.revenueYoY)}{accel(r.revenueYoY, q[i + 1]?.revenueYoY)}</td>
                 <td className="px-2 py-1 text-right font-mono">{r.eps === null ? "—" : r.eps.toFixed(2)}</td>
-                <td className={`px-2 py-1 text-right font-mono ${tone(r.epsYoY)}`}>{r.turnaround ? <span className="text-gain-medium">turnaround</span> : pctCell(r.epsYoY)}</td>
+                <td className={`px-2 py-1 text-right font-mono ${tone(r.epsYoY)}`}>{r.turnaround ? <span className="text-gain-medium">turnaround</span> : <>{pctCell(r.epsYoY)}{accel(r.epsYoY, q[i + 1]?.epsYoY)}</>}</td>
                 <td className="px-2 py-1 text-right font-mono">{r.margin === null ? "—" : `${r.margin.toFixed(1)}%`}</td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
-      <p className="mt-2 text-[10.5px] text-muted-foreground">
-        ROE {s.roePct === null ? "—" : `${s.roePct.toFixed(1)}%`} · debt/equity {s.debtToEquity === null ? "—" : `${s.debtToEquity.toFixed(2)}×`} ·
-        beat rate {s.beatRate === null ? "—" : `${s.beatRate}%`}{s.surprises.length ? ` (last surprises ${s.surprises.slice(0, 4).map((x) => `${x >= 0 ? "+" : ""}${x.toFixed(0)}%`).join(", ")})` : ""} ·
-        institutions {s.institutionalPct === null ? "—" : `${s.institutionalPct.toFixed(0)}%`}. A profit after a year-ago loss shows as "turnaround" instead of a misleading growth %.
-      </p>
+      <p className="mt-2 text-[10.5px] text-muted-foreground">A profit after a year-ago loss shows as "turnaround" instead of a misleading growth %.</p>
     </Card>
   );
 }
@@ -591,6 +640,7 @@ function SepaCandidates({ items, leadBy, onPick, loading, collapsed }: {
               <thead className="sticky top-0 bg-card">
                 <tr className="border-b border-border text-[10.5px] text-muted-foreground">
                   <th className="px-2 py-1.5 text-left font-medium">Ticker</th>
+                  <th className="px-2 py-1.5 text-left font-medium">40 weeks</th>
                   <th className="px-2 py-1.5 text-right font-medium">RS</th>
                   <th className="px-2 py-1.5 text-left font-medium">Stage</th>
                   <th className="px-2 py-1.5 text-left font-medium">Base</th>
@@ -607,6 +657,7 @@ function SepaCandidates({ items, leadBy, onPick, loading, collapsed }: {
                   return (
                     <tr key={r.symbol} className="cursor-pointer border-b border-border/30 hover:bg-accent/30" onClick={() => !loading && onPick(r.symbol)}>
                       <td className="px-2 py-1 font-mono font-semibold">{r.symbol}</td>
+                      <td className="px-2 py-1"><WeekSpark r={r} /></td>
                       <td className="px-2 py-1 text-right font-mono">{rs}</td>
                       <td className="px-2 py-1 font-mono">{r.substage}</td>
                       <td className="px-2 py-1">{b ? `${b.state ?? "—"} · ${b.primary_label ?? "base"}${b.features.daily?.contracting ? " · tight" : ""}` : <span className="text-muted-foreground">—</span>}</td>
@@ -722,9 +773,9 @@ function combinedRead(m: HProfile | undefined, q: HProfile | undefined, flags: R
   if (!m || m.score === null || m.verdict === "Limited data") return null;
   const qs = q && q.verdict !== "Limited data" ? q.score : null;
   if (flags.length >= 3) return { tone: "bad", text: `${flags.length} red flags. In testing, stocks with 3+ flags lagged SPY by a median 16 pts over 26 weeks, and 39% lagged by 25+ pts.` };
-  if (m.score >= 70 && qs !== null && qs >= 55) return { tone: "good", text: "Rising earnings on a solid business — the best combination in testing: a median 0 vs SPY over 26 weeks (all stocks −4), and only 13% lagged by 25+ pts (all stocks 22%)." };
-  if (m.score >= 70 && qs !== null && qs < 40) return { tone: "neutral", text: "Earnings are rising, but the business is low quality. In testing this mix had more big losses: 28% lagged SPY by 25+ pts over 26 weeks. Size the position for it." };
-  if (m.score < 40 && qs !== null && qs < 40) return { tone: "bad", text: "Earnings fading and low quality — the weakest group in testing: a median −9 vs SPY over 26 weeks, 31% lagged by 25+ pts." };
+  if (m.score >= 70 && qs !== null && qs >= 55) return { tone: "good", text: "In testing this was the best combination: a median 0 vs SPY over 26 weeks (all stocks −4), and only 13% lagged SPY by 25+ points (all stocks 22%)." };
+  if (m.score >= 70 && qs !== null && qs < 40) return { tone: "neutral", text: "In testing this mix had more big losses: 28% lagged SPY by 25+ points over 26 weeks (all stocks 22%). Size the position for it." };
+  if (m.score < 40 && qs !== null && qs < 40) return { tone: "bad", text: "The weakest group in testing: a median −9 vs SPY over 26 weeks, and 31% lagged by 25+ points." };
   return null;
 }
 
@@ -796,7 +847,12 @@ function ProfileCards({ p }: { p: Profiles }) {
                 ))}
               </div>
             )}
-            <p className="mt-auto pt-3 text-[10.5px] leading-relaxed text-muted-foreground">{EVIDENCE[h.key as "momentum" | "quality"]}</p>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span className="mt-auto inline-flex cursor-help items-center gap-1 self-start pt-3 text-[11px] text-muted-foreground"><Info size={12} /> {h.key === "momentum" ? "Backtested: predicted returns 3–12 months out" : "Backtested: fewer big losses, not more return"}</span>
+              </TooltipTrigger>
+              <TooltipContent className="max-w-sm text-xs leading-relaxed">{EVIDENCE[h.key as "momentum" | "quality"]}</TooltipContent>
+            </Tooltip>
           </Card>
         ))}
         <Card className="flex flex-col p-4">
@@ -819,7 +875,12 @@ function ProfileCards({ p }: { p: Profiles }) {
             ))}
             {!flags.length && <div className="text-muted-foreground">None of the tested warning signs: price above 20× sales, assets up 50%+, shares up 10%+, losses with cash burn, or years of 25%+ growth already priced in.</div>}
           </div>
-          <p className="mt-auto pt-3 text-[10.5px] leading-relaxed text-muted-foreground">{EVIDENCE.flags}</p>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className="mt-auto inline-flex cursor-help items-center gap-1 self-start pt-3 text-[11px] text-muted-foreground"><Info size={12} /> Backtested: each flag raised the odds of a big loss</span>
+            </TooltipTrigger>
+            <TooltipContent className="max-w-sm text-xs leading-relaxed">{EVIDENCE.flags}</TooltipContent>
+          </Tooltip>
         </Card>
       </div>
       <HowItWorks title="How these scores were tested">

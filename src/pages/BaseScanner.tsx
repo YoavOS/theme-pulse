@@ -4,7 +4,6 @@ import { Link } from "react-router-dom";
 import { ArrowLeft, Boxes, ChevronDown, ChevronRight, Copy, Download, Info, Loader2, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { Slider } from "@/components/ui/slider";
 import { useStockBases } from "@/hooks/useStockBases";
 import { useStockStages } from "@/hooks/useStockStages";
 import { useUniverseSectors } from "@/hooks/useUniverseSectors";
@@ -12,15 +11,47 @@ import { groupKeyForIndustry } from "@/lib/groupColors";
 import { StageBadge } from "@/components/stages/StageStockTable";
 import TrackRecord from "@/components/stages/TrackRecord";
 import WeeklyChart from "@/components/stages/WeeklyChart";
-import { RegimeBadge } from "@/components/stages/RegimePanel";
 import { BottomLine, HowItWorks } from "@/components/Explainer";
 import { downloadTradingViewList, isStageScanRunning, regimeSeries, runStageScan } from "@/lib/stageAnalysis";
 import {
-  ALL_LABELS, ALL_STATES, BREAKDOWN_PARTS, CHART_CHECKS, EARN_LABELS, LABEL_NAMES, STATE_NAMES, STATE_TIPS,
+  ALL_LABELS, ALL_STATES, BREAKDOWN_PARTS, CHART_CHECKS, EARN_LABELS, LABEL_NAMES, STATE_NAMES,
   passesStrict, tighteningGrade, type BaseLabel, type BaseState, type StockBase,
 } from "@/lib/bases";
 
 const PRESET_KEY = "base_scanner_preset_v1";
+type ViewKey = "buy" | "breakouts" | "building" | "all";
+const VIEWS: { key: ViewKey; label: string; hint: string }[] = [
+  { key: "buy", label: "Buy zone", hint: "Ready to break out: score 75+, within ~8% of the pivot, stop ≤ 12% — plus every Tier 1." },
+  { key: "breakouts", label: "Just broke out", hint: "Closed above the pivot in the last 10 days. Inside the buy zone up to 5% above the pivot; beyond that it's extended." },
+  { key: "building", label: "Building", hint: "Good bases still forming — too far from the pivot, too loose, or too low in the range to buy yet. Watch them tighten." },
+  { key: "all", label: "All", hint: "Every base that passes the score filter, including failed and watch-only ones." },
+];
+const inView = (r: StockBase, v: ViewKey) => {
+  const age = daysSince(r.features.trigger.date) ?? 99;
+  switch (v) {
+    case "buy": return r.state === "ready" || r.tier === 1;
+    case "breakouts": return (r.state === "triggered" || r.state === "extended") && age <= 10;
+    case "building": return r.state === "developing" || r.state === "qualified";
+    default: return true;
+  }
+};
+/** 30-week mini chart of the base with the pivot (dashed) and the stop level. */
+function MiniChart({ r }: { r: StockBase }) {
+  const c = (r.features.chart?.c ?? []).slice(-30);
+  if (c.length < 8) return <span className="text-muted-foreground">—</span>;
+  const pivot = r.pivot ?? r.features.pivot, stop = r.support ?? r.features.support;
+  const lo = Math.min(...c, stop), hi = Math.max(...c, pivot);
+  const W = 96, H = 26, y = (v: number) => H - 2 - ((v - lo) / (hi - lo || 1)) * (H - 4);
+  const d = c.map((v, k) => `${k ? "L" : "M"}${((k / (c.length - 1)) * W).toFixed(1)},${y(v).toFixed(1)}`).join("");
+  const up = c[c.length - 1] >= pivot;
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} className="h-[26px] w-24" aria-label="Last 30 weeks with pivot and stop">
+      <line x1={0} x2={W} y1={y(pivot)} y2={y(pivot)} stroke="hsl(var(--primary))" strokeDasharray="3 2" strokeWidth={0.8} opacity={0.8} />
+      <line x1={0} x2={W} y1={y(stop)} y2={y(stop)} stroke="hsl(329,70%,60%)" strokeDasharray="1 2" strokeWidth={0.8} opacity={0.6} />
+      <path d={d} fill="none" stroke={up ? "hsl(150,65%,50%)" : "hsl(var(--foreground))"} strokeWidth={1.3} />
+    </svg>
+  );
+}
 type SortKey = "score" | "dist" | "risk" | "rs" | "depth" | "weeks" | "symbol";
 
 const STATE_STYLE: Record<BaseState, string> = {
@@ -44,6 +75,8 @@ export default function BaseScanner() {
     try { return (localStorage.getItem(PRESET_KEY) as "balanced" | "strict") || "balanced"; } catch { return "balanced"; }
   });
   const [stateF, setStateF] = useState<BaseState | "all">("all");
+  const [view, setView] = useState<ViewKey>(() => { try { return (localStorage.getItem("bases_view_v1") as ViewKey) || "buy"; } catch { return "buy"; } });
+  useEffect(() => { try { localStorage.setItem("bases_view_v1", view); } catch { /* ignore */ } }, [view]);
   const [labelF, setLabelF] = useState<BaseLabel | "all">("all");
   const [minScore, setMinScore] = useState(55);
   const [search, setSearch] = useState("");
@@ -67,7 +100,6 @@ export default function BaseScanner() {
     return (sym: string) => m.get(sym) ?? null;
   }, [uni]);
 
-  const market = stageBy.get("SPY") ?? null;
   // regime from the stocks classified up to the latest week (+ SPY for the index trend)
   const regimeRows = useMemo(() => {
     const latest = stageRows.reduce<string | null>((m, r) => (!m || r.as_of > m ? r.as_of : m), null);
@@ -93,6 +125,7 @@ export default function BaseScanner() {
   const visible = useMemo(() => {
     const q = search.trim().toUpperCase();
     const out = scoreRows.filter((r) =>
+      inView(r, view) &&
       (stateF === "all" || r.state === stateF) &&
       (labelF === "all" || (r.labels ?? []).includes(labelF)) &&
       (!q || r.symbol.includes(q) || groupOf(r.symbol).toUpperCase().includes(q)));
@@ -109,7 +142,7 @@ export default function BaseScanner() {
       }
     });
     return out;
-  }, [scoreRows, stateF, labelF, search, sort, groupOf]);
+  }, [scoreRows, stateF, labelF, search, sort, groupOf, view]);
 
   const cards = useMemo(() => {
     const prime = presetRows.filter((r) => r.band === "prime");
@@ -220,69 +253,53 @@ export default function BaseScanner() {
               />
             )}
 
-            <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
-              <div className="rounded-lg border border-border bg-card p-3">
-                <div className="text-[11px] text-muted-foreground">Prime (85+)</div>
-                <div className="mt-1 font-mono text-xl text-primary">{cards.prime}</div>
-                <div className="text-[11px] text-muted-foreground">Tier 1: {cards.tier1} (85+, ≤3% from pivot, no critical warning)</div>
-              </div>
-              <div className="rounded-lg border border-border bg-card p-3">
-                <div className="text-[11px] text-muted-foreground">Ready</div>
-                <div className="mt-1 font-mono text-xl">{cards.ready}</div>
-                <div className="text-[11px] text-muted-foreground">score ≥75 · ≤8% below pivot · stop ≤12%</div>
-              </div>
-              <div className="rounded-lg border border-border bg-card p-3">
-                <div className="text-[11px] text-muted-foreground">Breakouts (last 7 days)</div>
-                <div className="mt-1 font-mono text-xl text-emerald-400">{cards.trig.length}</div>
-                <div className="text-[11px] text-muted-foreground">{cards.trig.filter((r) => r.features.trigger.exceptional).length} with exceptional volume (≥2.5×)</div>
-              </div>
-              <div className="rounded-lg border border-border bg-card p-3">
-                <div className="text-[11px] text-muted-foreground">Breadth of your list <Link to="/stages" className="underline">(details)</Link></div>
-                <div className="mt-2 text-sm"><RegimeBadge rows={regimeRows} compact /></div>
-                <div className="mt-0.5 flex items-center gap-1.5 text-[11px] text-muted-foreground">SPY {market ? <StageBadge r={market} compact /> : "—"} · breadth of your whole list</div>
-              </div>
+            {/* Views */}
+            <div className="flex flex-wrap items-stretch gap-2">
+              {VIEWS.map((v) => {
+                const n = scoreRows.filter((r) => inView(r, v.key)).length;
+                const on = view === v.key;
+                return (
+                  <button key={v.key} onClick={() => { setView(v.key); setStateF("all"); }}
+                    className={`min-w-[120px] flex-1 rounded-lg border px-3 py-2 text-left transition ${on ? "border-primary bg-primary/10" : "border-border bg-card hover:bg-accent/40"}`}>
+                    <div className={`text-xs ${on ? "text-primary" : "text-muted-foreground"}`}>{v.label}</div>
+                    <div className="font-mono text-xl font-semibold">{n}</div>
+                  </button>
+                );
+              })}
             </div>
+            <p className="-mt-1 px-1 text-xs text-muted-foreground">{VIEWS.find((v) => v.key === view)?.hint}</p>
 
+            {/* Toolbar */}
             <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-card px-3 py-2">
-              <span className="text-[11px] text-muted-foreground">State</span>
-              <button onClick={() => setStateF("all")} className={`rounded-full border px-2 py-0.5 text-[11px] ${stateF === "all" ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground"}`}>All</button>
-              {ALL_STATES.filter((s) => s !== "watch" || minScore < 65).map((s) => (
-                <Tooltip key={s}>
-                  <TooltipTrigger asChild>
-                    <button onClick={() => setStateF(stateF === s ? "all" : s)} className={`rounded-full border px-2 py-0.5 text-[11px] ${stateF === s ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground"}`}>
-                      {STATE_NAMES[s]} <span className="font-mono opacity-70">{stateCounts.get(s) ?? 0}</span>
-                    </button>
-                  </TooltipTrigger>
-                  <TooltipContent className="max-w-xs text-xs">{STATE_TIPS[s]}</TooltipContent>
-                </Tooltip>
-              ))}
-              <span className="mx-1 h-4 w-px bg-border" />
-              <span className="text-[11px] text-muted-foreground">Pattern</span>
-              {ALL_LABELS.map((lb) => (
-                <button key={lb} onClick={() => setLabelF(labelF === lb ? "all" : lb)} className={`rounded-full border px-2 py-0.5 text-[11px] ${labelF === lb ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground"}`}>
-                  {LABEL_NAMES[lb]} <span className="font-mono opacity-70">{labelCounts.get(lb) ?? 0}</span>
-                </button>
-              ))}
-              <span className="mx-1 h-4 w-px bg-border" />
-              <span className="text-[11px] text-muted-foreground">Min score</span>
-              <Slider value={[minScore]} min={0} max={95} step={5} onValueChange={(v) => setMinScore(v[0])} className="w-24" />
-              <span className="w-6 font-mono text-[11px] text-primary">{minScore}</span>
-              <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Ticker or industry…" className="h-7 w-40 rounded border border-border bg-background px-2 text-xs" />
+              <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Ticker or industry…" className="h-8 w-44 rounded border border-border bg-background px-2 text-xs" />
+              <select value={labelF} onChange={(e) => setLabelF(e.target.value as BaseLabel | "all")} className="h-8 rounded border border-border bg-background px-2 text-xs" title="Pattern">
+                <option value="all">All patterns</option>
+                {ALL_LABELS.filter((lb) => labelCounts.get(lb)).map((lb) => <option key={lb} value={lb}>{LABEL_NAMES[lb]} ({labelCounts.get(lb)})</option>)}
+              </select>
+              <select value={minScore} onChange={(e) => setMinScore(Number(e.target.value))} className="h-8 rounded border border-border bg-background px-2 text-xs" title="Minimum base score">
+                {[55, 65, 75, 85].map((v) => <option key={v} value={v}>Score {v}+</option>)}
+              </select>
+              {view === "all" && (
+                <select value={stateF} onChange={(e) => setStateF(e.target.value as BaseState | "all")} className="h-8 rounded border border-border bg-background px-2 text-xs" title="State">
+                  <option value="all">All states</option>
+                  {ALL_STATES.map((st) => <option key={st} value={st}>{STATE_NAMES[st]} ({stateCounts.get(st) ?? 0})</option>)}
+                </select>
+              )}
               <div className="ml-auto flex items-center gap-1.5">
                 <span className="text-[11px] text-muted-foreground">{visible.length} stocks</span>
-                <button onClick={() => setWide(!wide)} className="rounded border border-border px-2 py-1 text-[10px] text-muted-foreground hover:bg-accent" title="Show base depth, length, prior move, tightness, volume dry-up and industry">
+                <button onClick={() => setWide(!wide)} className="h-8 rounded border border-border px-2 text-[11px] text-muted-foreground hover:bg-accent" title="Show base depth, length, prior move, tightness, volume dry-up and industry">
                   {wide ? "Fewer columns" : "More columns"}
                 </button>
                 <button
                   onClick={() => { navigator.clipboard.writeText(symbols.join(",")); toast.success(`${symbols.length} symbols copied.`); }}
-                  disabled={!symbols.length}
-                  className="inline-flex items-center gap-1 rounded border border-border px-2 py-1 text-[10px] hover:bg-accent disabled:opacity-40"
-                ><Copy size={10} /> Copy</button>
+                  disabled={!symbols.length} title="Copy symbols"
+                  className="inline-flex h-8 items-center gap-1 rounded border border-border px-2 text-[11px] hover:bg-accent disabled:opacity-40"
+                ><Copy size={11} /></button>
                 <button
-                  onClick={() => { downloadTradingViewList(symbols, `Bases_${preset}${labelF !== "all" ? "_" + labelF : ""}${stateF !== "all" ? "_" + stateF : ""}`); toast.success(`Downloaded ${symbols.length} symbols.`, { description: "One ticker per line — ready for TradingView import." }); }}
-                  disabled={!symbols.length}
-                  className="inline-flex items-center gap-1 rounded border border-primary/40 bg-primary/10 px-2 py-1 text-[10px] font-medium text-primary hover:bg-primary/20 disabled:opacity-40"
-                ><Download size={10} /> TradingView .txt</button>
+                  onClick={() => { downloadTradingViewList(symbols, `Bases_${view}${labelF !== "all" ? "_" + labelF : ""}`); toast.success(`Downloaded ${symbols.length} symbols.`, { description: "One ticker per line — ready for TradingView import." }); }}
+                  disabled={!symbols.length} title="Download a TradingView watchlist"
+                  className="inline-flex h-8 items-center gap-1 rounded border border-primary/40 bg-primary/10 px-2 text-[11px] font-medium text-primary hover:bg-primary/20 disabled:opacity-40"
+                ><Download size={11} /> TradingView</button>
               </div>
             </div>
 
@@ -290,22 +307,22 @@ export default function BaseScanner() {
               <table className="w-full border-collapse text-xs">
                 <thead className="bg-muted/20">
                   <tr className="border-b border-border">
-                    {th("symbol", "Ticker", "text-left")}
+                    {th("symbol", "Stock", "text-left")}
+                    {th(null, "30 weeks", "text-left", "Weekly closes; dashed = pivot (buy point), dotted = stop")}
                     {th(null, "Pattern", "text-left")}
-                    {th("score", "Score")}
+                    {th("score", "Score", "text-right", "0–100 base quality. 85+ did best in the backtest; below that it separated winners only weakly.")}
                     {th(null, "State", "text-left")}
-                    {th(null, "Pivot")}
                     {th("dist", "To pivot", "text-right", "How far the latest close is below the pivot (↑ = above it)")}
-                    {th("risk", "Stop risk", "text-right", "Pivot to support (final contraction low)")}
+                    {th("risk", "Stop risk", "text-right", "Pivot to support (final contraction low) — your loss if the stop is hit right after buying at the pivot")}
+                    {th("rs", "RS", "text-right", "26-week return percentile across your whole stock list (1–99)")}
+                    {th(null, "Stage", "text-left")}
                     {wide && th("depth", "Depth")}
                     {wide && th("weeks", "Weeks")}
                     {wide && th(null, "Prior move")}
                     {wide && th(null, "Tight", "text-right", "Tightening grade from the contraction score (A best)")}
                     {wide && th(null, "Dry-up", "text-right", "Last 3 weeks' median volume ÷ earlier base volume (lower = quieter)")}
-                    {th("rs", "RS %ile", "text-right", "26-week return percentile across your whole stock list")}
-                    {th(null, "Stage", "text-left")}
                     {wide && th(null, "Industry", "text-left")}
-                    {th(null, "Notes", "text-left")}
+                    {th(null, "", "text-left")}
                   </tr>
                 </thead>
                 <tbody>
@@ -315,59 +332,65 @@ export default function BaseScanner() {
                     const stage = stageBy.get(r.symbol);
                     const grade = tighteningGrade(r);
                     const dist = r.dist_to_pivot ?? f.distToPivotPct;
+                    const warn = r.warnings ?? [];
+                    const earnIn = r.earnings_date ? Math.round((Date.parse(r.earnings_date) - Date.now()) / 86400_000) : null;
+                    const extra = (r.labels ?? []).filter((lb) => lb !== r.primary_label);
                     return (
                       <Fragment key={r.symbol}>
-                        <tr onClick={() => setOpen(isOpen ? null : r.symbol)} className="cursor-pointer border-b border-border/40 hover:bg-accent/30">
-                          <td className="whitespace-nowrap px-2 py-1.5 font-mono font-medium">
-                            <span className="inline-flex items-center gap-1">
+                        <tr onClick={() => setOpen(isOpen ? null : r.symbol)} className={`cursor-pointer border-b border-border/40 hover:bg-accent/30 ${isOpen ? "bg-accent/20" : ""}`}>
+                          <td className="whitespace-nowrap px-2 py-1.5">
+                            <div className="flex items-center gap-1">
                               {isOpen ? <ChevronDown size={11} /> : <ChevronRight size={11} className="text-muted-foreground" />}
                               <a href={`https://www.tradingview.com/chart/?symbol=${encodeURIComponent(r.symbol)}`} target="_blank" rel="noopener noreferrer"
-                                onClick={(e) => e.stopPropagation()} className="hover:text-primary hover:underline" title={`${nameOf(r.symbol) ?? r.symbol} — open TradingView chart`}>
+                                onClick={(e) => e.stopPropagation()} className="font-mono font-semibold hover:text-primary hover:underline" title="Open TradingView chart">
                                 {r.symbol}
                               </a>
-                              {r.tier === 1 && <span className="text-[9px] text-primary" title="Tier 1: score 85+, within 3% of the pivot, no critical warning">T1</span>}
-                            </span>
+                              {r.tier === 1 && <span className="rounded bg-primary/15 px-1 text-[9px] text-primary" title="Tier 1: score 85+, within 3% of the pivot, no critical warning">T1</span>}
+                              {f.trigger.exceptional && <span className="text-[10px] text-primary" title="Breakout-day volume ≥ 2.5× the 50-day average">★</span>}
+                            </div>
+                            <div className="max-w-[150px] truncate pl-4 text-[10px] text-muted-foreground">{nameOf(r.symbol) ?? ""}</div>
                           </td>
+                          <td className="px-2 py-1"><MiniChart r={r} /></td>
                           <td className="whitespace-nowrap px-2 py-1.5">
-                            {(r.labels ?? []).map((lb) => (
-                              <span key={lb} className={`mr-1 inline-block rounded px-1.5 py-[1px] text-[10px] ${lb === r.primary_label ? "bg-primary/15 text-primary" : "bg-muted text-muted-foreground"}`}>{LABEL_NAMES[lb]}</span>
-                            ))}
-                            {f.threeWeeksTight && <span className="inline-block rounded bg-muted px-1.5 py-[1px] text-[10px] text-muted-foreground" title="Three weekly closes within ~1.5% of each other">3WT</span>}
-                            {f.daily?.contracting && <span className="ml-1 inline-block rounded bg-emerald-500/15 px-1.5 py-[1px] text-[10px] text-emerald-400" title={`Contracting on daily swings: ${f.daily.pullbacks.map((p) => p.toFixed(0) + "%").join(" → ")}. In the walk-forward test (Mar 2025–Jul 2026) this was the strongest base feature.`}>tightening</span>}
-                            {f.earn && f.earn.sessionsAgo <= 45 && EARN_LABELS[f.earn.label].tone !== "flat" && (
-                              <span className={`ml-1 inline-block rounded px-1.5 py-[1px] text-[10px] ${EARN_LABELS[f.earn.label].tone === "good" ? "bg-sky-500/15 text-sky-300" : "bg-pink-500/15 text-pink-300"}`}
-                                title={`Last report ${f.earn.date}: ${f.earn.ear >= 0 ? "+" : ""}${f.earn.ear.toFixed(1)}% vs SPY over days −1…+1${f.earn.fuel !== undefined ? ` · fuel ${f.earn.fuel}/100` : ""}. The market's reaction is the strongest free earnings signal; classic post-earnings drift has weakened in large, liquid stocks.`}>
-                                {EARN_LABELS[f.earn.label].text}
-                              </span>
-                            )}
+                            {r.primary_label && <span className="rounded bg-primary/15 px-1.5 py-[1px] text-[10px] text-primary">{LABEL_NAMES[r.primary_label]}</span>}
+                            {extra.length > 0 && <span className="ml-1 text-[10px] text-muted-foreground" title={extra.map((lb) => LABEL_NAMES[lb]).join(", ")}>+{extra.length}</span>}
+                            {f.daily?.contracting && <span className="ml-1 rounded bg-emerald-500/15 px-1.5 py-[1px] text-[10px] text-emerald-400" title={`Contracting on daily swings: ${f.daily.pullbacks.map((p) => p.toFixed(0) + "%").join(" → ")}. In the walk-forward test this was the strongest base feature.`}>tight</span>}
                           </td>
                           <td className="whitespace-nowrap px-2 py-1.5 text-right font-mono">
                             <span className="inline-flex items-center gap-1.5">
                               {r.score}
-                              <span className="inline-block h-1.5 w-10 overflow-hidden rounded bg-muted"><span className="block h-full" style={{ width: `${r.score}%`, background: scoreColor(r.score ?? 0) }} /></span>
+                              <span className="inline-block h-1.5 w-8 overflow-hidden rounded bg-muted"><span className="block h-full" style={{ width: `${r.score}%`, background: scoreColor(r.score ?? 0) }} /></span>
                             </span>
                           </td>
-                          <td className="px-2 py-1.5">
-                            {r.state && <span className={`rounded px-1.5 py-[1px] text-[10px] ${STATE_STYLE[r.state]}`}>{STATE_NAMES[r.state]}</span>}
-                          </td>
-                          <td className="whitespace-nowrap px-2 py-1.5 text-right font-mono">{(r.pivot ?? f.pivot).toFixed(2)}</td>
+                          <td className="px-2 py-1.5">{r.state && <span className={`rounded px-1.5 py-[1px] text-[10px] ${STATE_STYLE[r.state]}`}>{STATE_NAMES[r.state]}</span>}</td>
                           <td className={`whitespace-nowrap px-2 py-1.5 text-right font-mono ${dist < 0 ? "text-emerald-400" : dist <= 5 ? "text-primary" : ""}`}>
                             {dist < 0 ? `+${Math.abs(dist).toFixed(1)}% ↑` : `${dist.toFixed(1)}%`}
                           </td>
                           <td className={`whitespace-nowrap px-2 py-1.5 text-right font-mono ${(r.stop_risk ?? 0) > 12 ? "text-amber-400" : ""}`}>{fmtPct(r.stop_risk)}</td>
+                          <td className={`whitespace-nowrap px-2 py-1.5 text-right font-mono ${(r.rs_pct ?? 0) >= 90 ? "text-emerald-400" : ""}`}>{r.rs_pct ?? "—"}</td>
+                          <td className="px-2 py-1.5">{stage ? <StageBadge r={stage} compact /> : <span className="text-muted-foreground">—</span>}</td>
                           {wide && <>
                             <td className="whitespace-nowrap px-2 py-1.5 text-right font-mono">{fmtPct(f.depthPct, 0)}</td>
                             <td className="whitespace-nowrap px-2 py-1.5 text-right font-mono">{f.weeks}</td>
                             <td className="whitespace-nowrap px-2 py-1.5 text-right font-mono">+{f.priorImpulsePct.toFixed(0)}%</td>
                             <td className={`whitespace-nowrap px-2 py-1.5 text-right font-mono ${grade === "A" ? "text-emerald-400" : grade === "B" ? "text-[hsl(222,82%,74%)]" : grade === "C" ? "text-amber-300" : "text-pink-300"}`}>{grade}</td>
                             <td className="whitespace-nowrap px-2 py-1.5 text-right font-mono">{f.dryUp === null ? "—" : f.dryUp.toFixed(2)}</td>
+                            <td className="max-w-[160px] truncate px-2 py-1.5 text-[11px] text-muted-foreground">{groupOf(r.symbol)}</td>
                           </>}
-                          <td className={`whitespace-nowrap px-2 py-1.5 text-right font-mono ${(r.rs_pct ?? 0) >= 90 ? "text-emerald-400" : ""}`}>{r.rs_pct ?? "—"}</td>
-                          <td className="px-2 py-1.5">{stage ? <StageBadge r={stage} compact /> : <span className="text-muted-foreground">—</span>}</td>
-                          {wide && <td className="max-w-[160px] truncate px-2 py-1.5 text-[11px] text-muted-foreground">{groupOf(r.symbol)}</td>}
-                          <td className="max-w-[220px] truncate px-2 py-1.5 text-[11px] text-amber-300" title={(r.warnings ?? []).join(" · ")}>
-                            {f.trigger.exceptional && <span className="mr-1 text-primary" title="Breakout-day volume ≥ 2.5× the 50-day average">★</span>}
-                            {(r.warnings ?? []).join(" · ")}
+                          <td className="whitespace-nowrap px-2 py-1.5 text-[11px]">
+                            {earnIn !== null && earnIn >= 0 && earnIn <= 21 && (
+                              <span className={`mr-1.5 rounded px-1 py-[1px] text-[10px] ${earnIn <= 7 ? "bg-amber-400/15 text-amber-300" : "bg-muted text-muted-foreground"}`} title={`Earnings report ${r.earnings_date}`}>E {earnIn}d</span>
+                            )}
+                            {f.earn && f.earn.sessionsAgo <= 45 && EARN_LABELS[f.earn.label].tone !== "flat" && (
+                              <span className={`mr-1.5 rounded px-1 py-[1px] text-[10px] ${EARN_LABELS[f.earn.label].tone === "good" ? "bg-sky-500/15 text-sky-300" : "bg-pink-500/15 text-pink-300"}`}
+                                title={`Last report ${f.earn.date}: ${f.earn.ear >= 0 ? "+" : ""}${f.earn.ear.toFixed(1)}% vs SPY over days −1…+1`}>{EARN_LABELS[f.earn.label].text}</span>
+                            )}
+                            {warn.length > 0 && (
+                              <Tooltip>
+                                <TooltipTrigger asChild><span className="cursor-help rounded bg-amber-400/10 px-1 py-[1px] text-[10px] text-amber-300">⚠ {warn.length}</span></TooltipTrigger>
+                                <TooltipContent className="max-w-xs text-xs"><ul className="list-disc pl-4">{warn.map((w) => <li key={w}>{w}</li>)}</ul></TooltipContent>
+                              </Tooltip>
+                            )}
                           </td>
                         </tr>
                         {isOpen && <BaseDetail r={r} />}
@@ -375,7 +398,7 @@ export default function BaseScanner() {
                     );
                   })}
                   {!visible.length && (
-                    <tr><td colSpan={wide ? 16 : 10} className="px-2 py-8 text-center text-muted-foreground">No bases match these filters.</td></tr>
+                    <tr><td colSpan={wide ? 16 : 10} className="px-2 py-8 text-center text-muted-foreground">No bases in this view{minScore > 55 || labelF !== "all" || search ? " with these filters" : ""}.</td></tr>
                   )}
                 </tbody>
               </table>
