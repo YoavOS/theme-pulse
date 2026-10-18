@@ -64,7 +64,7 @@ export const STAGE_TIPS: Record<StageNum, string> = {
   1: "After a decline, price moves sideways around a flattening 30-week MA. Watch — avoid tying up capital before the breakout.",
   2: "Price above a rising 30-week MA with higher highs / higher lows. Preferred long regime; 2A = fresh breakout (best entries), 2B = mature / late.",
   3: "After an advance, price chops around a flattening 30-week MA, often on heavy volume. Reduce / tighten risk; don't start new longs.",
-  4: "Price below a falling 30-week MA with lower highs / lower lows. Avoid / exit longs. 4B− = likely cycle low, not yet a buy.",
+  4: "Price below a falling 30-week MA with lower highs / lower lows. Avoid / exit longs. 4B− = first bounce off a low — often a bear-market rally, not a buy.",
 };
 
 export const SUBSTAGE_TIPS: Record<string, string> = {
@@ -80,7 +80,7 @@ export const SUBSTAGE_TIPS: Record<string, string> = {
   "4A": "Fresh breakdown (last 13 weeks) below support and a non-rising MA.",
   "4": "Mature decline below a falling MA.",
   "4B": "Late decline: slope easing, relative strength improving or no new low — still too early to buy.",
-  "4B-": "Likely cycle low: no new low for 8+ weeks and back above the 10-week MA — not yet Stage 1/2.",
+  "4B-": "First bounce: no new low for 8+ weeks and back above the 10-week MA. In this app's 2023–26 backtest it had the weakest follow-through of all substages (often a bear-market rally) — wait for a Stage 1 base and a Stage 2 breakout.",
   "T": "Conflicting signals — no stage assigned yet.",
 };
 
@@ -245,7 +245,7 @@ export const STAGE_FILTER_OPTIONS: { value: StageFilterMode; label: string }[] =
   { value: "s1", label: "Only Stage 1" },
   { value: "s3", label: "Only Stage 3" },
   { value: "s4", label: "Only Stage 4" },
-  { value: "s4bminus", label: "Only 4B− (possible cycle lows)" },
+  { value: "s4bminus", label: "Only 4B− (first bounce off a low)" },
 ];
 
 export function passesStageFilter(r: StockStage | undefined, mode: StageFilterMode, minConfidence = 0): boolean {

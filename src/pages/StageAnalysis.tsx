@@ -31,7 +31,7 @@ interface GroupRow {
   members: StockStage[];
 }
 
-/** Market-wide stage share for each of the last ≤52 weeks, from each stock's history string. */
+/** Market-wide stage share for each of the last ≤104 weeks, from each stock's history string. */
 function breadthSeries(rows: StockStage[]) {
   const len = Math.max(0, ...rows.map((r) => r.history?.length ?? 0));
   const out: Record<StageNum, number[]> = { 0: [], 1: [], 2: [], 3: [], 4: [] };
@@ -170,6 +170,14 @@ export default function StageAnalysis() {
   }, [stocks]);
 
   const series = useMemo(() => breadthSeries(aligned), [aligned]);
+  // This week's Stage 2 share vs its own history (percentile).
+  const breadth = useMemo(() => {
+    const s2 = series[2];
+    if (s2.length < 12) return null;
+    const now = s2[s2.length - 1];
+    const below = s2.filter((v) => v < now).length;
+    return { now, pct: Math.round((below / (s2.length - 1)) * 100), lo: Math.min(...s2), hi: Math.max(...s2), weeks: s2.length };
+  }, [series]);
 
   const groups: GroupRow[] = useMemo(() => {
     if (mode !== "theme" && !uniLoaded) return []; // don't show everything as "Unknown" while labels load
@@ -368,7 +376,13 @@ export default function StageAnalysis() {
                   <div className="mt-0.5 font-mono text-[11px] text-muted-foreground">{totals.n[0].toLocaleString("en-US")}</div>
                 </button>
               </div>
-              <div className="mt-3 flex flex-wrap justify-end gap-3 text-[10px] text-muted-foreground">
+              <div className="mt-3 flex flex-wrap items-center justify-end gap-3 text-[10px] text-muted-foreground">
+                {breadth && (
+                  <span className="mr-auto" title="Where this week's Stage 2 share sits within the chart's history. Very low readings (washouts) have tended to come before the strongest rebounds in leaders; very high readings mean a crowded, extended market — context, not a timing signal.">
+                    Stage 2 share <b className="text-foreground">{breadth.now.toFixed(0)}%</b> · {breadth.pct}th percentile of the last {breadth.weeks} weeks (range {breadth.lo.toFixed(0)}–{breadth.hi.toFixed(0)}%)
+                    {breadth.pct <= 10 ? " · washout zone" : breadth.pct >= 90 ? " · crowded zone" : ""}
+                  </span>
+                )}
                 {STAGES.map((k) => <span key={k} className="inline-flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full" style={{ background: STAGE_COLORS[k] }} />S{k}</span>)}
                 <span>· % of classified stocks, weekly</span>
               </div>
@@ -523,8 +537,13 @@ export default function StageAnalysis() {
 
             <p className="px-1 text-[11px] leading-relaxed text-muted-foreground">
               <b className="text-foreground/80">Reading it:</b> leadership shows up as a rising share of a group's stocks in Stage 2 and new 2A breakouts together;
-              a group whose Stage 2 share keeps shrinking while Stage 3 grows is rolling over. Best long candidates: Stage 2A with “quality” (≥2× volume,
-              rising relative strength, little overhead supply) in a Strong / improving group — and avoid buying Stage 4 just because it looks cheap.
+              a group whose Stage 2 share keeps shrinking while Stage 3 grows is rolling over. Best long candidates: fresh Stage 2A breakouts in a
+              Strong / improving group — and avoid buying Stage 4 (or a 4B− bounce) just because it looks cheap.
+            </p>
+            <p className="px-1 text-[11px] leading-relaxed text-muted-foreground">
+              <b className="text-foreground/80">Backtest (your list, May 2023 – Jul 2026, 13 weeks ahead vs SPY, median):</b> Stage 2 −0.7%,
+              Stage 3 −1.5%, Stage 1 −2.5%, Stage 4 −3.4%; 2A was the best substage (+0.1%) and 4B− the worst (−5.3%). Stage 2 beat Stage 4
+              in every year. Today's list only, so all numbers flatter the past (survivorship) — the ordering is what matters.
             </p>
           </>
         )}

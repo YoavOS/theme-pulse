@@ -35,7 +35,7 @@ export interface StageResult {
   eventWeeksAgo: number | null;
   weeksInStage: number;
   lastDirectional: 2 | 4 | null;
-  history: string;            // confirmed stage for the last ≤52 completed weeks, oldest→newest ("1".."4","T")
+  history: string;            // confirmed stage for the last ≤104 completed weeks, oldest→newest ("1".."4","T")
   asOf: string;               // ISO date of the last completed week (Friday)
   features: {
     close: number;
@@ -477,7 +477,7 @@ export function classifyStage(
   if (sub === "4B-") reasons.push("No new low 8w · above 10w MA");
   if (stage === 1 && pctToRangeHigh !== null && rangeWeeks !== null) reasons.push(`${pctToRangeHigh.toFixed(1)}% below ${rangeWeeks}w range high`);
 
-  const hist = confirmed.slice(Math.max(START, n - 52)).map((s) => (s === 0 ? "T" : String(s))).join("");
+  const hist = confirmed.slice(Math.max(START, n - 104)).map((s) => (s === 0 ? "T" : String(s))).join("");
   const asOfDate = new Date((weekStart(bars[i].t) + 4 * DAY) * 1000).toISOString().slice(0, 10);
 
   return {
