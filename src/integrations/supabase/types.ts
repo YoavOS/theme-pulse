@@ -479,6 +479,114 @@ export type Database = {
         }
         Relationships: []
       }
+      signal_log: {
+        Row: {
+          base_label: string | null
+          base_labels: string[] | null
+          base_score: number | null
+          base_state: string | null
+          base_tight: boolean | null
+          close: number | null
+          confidence: number | null
+          created_at: string
+          earn_fuel: number | null
+          earn_label: string | null
+          event_kind: string | null
+          fwd13: number | null
+          fwd4: number | null
+          fwd8: number | null
+          gone: boolean | null
+          hl: number | null
+          mrs52: number | null
+          p200: number | null
+          p50: number | null
+          pivot: number | null
+          regime: string | null
+          rs_pct: number | null
+          spy_close: number | null
+          spy13: number | null
+          spy4: number | null
+          spy8: number | null
+          stage: number | null
+          substage: string | null
+          symbol: string
+          trigger_rvol: number | null
+          tt: boolean | null
+          vol_score: number | null
+          week: string
+        }
+        Insert: {
+          base_label?: string | null
+          base_labels?: string[] | null
+          base_score?: number | null
+          base_state?: string | null
+          base_tight?: boolean | null
+          close?: number | null
+          confidence?: number | null
+          created_at?: string
+          earn_fuel?: number | null
+          earn_label?: string | null
+          event_kind?: string | null
+          fwd13?: number | null
+          fwd4?: number | null
+          fwd8?: number | null
+          gone?: boolean | null
+          hl?: number | null
+          mrs52?: number | null
+          p200?: number | null
+          p50?: number | null
+          pivot?: number | null
+          regime?: string | null
+          rs_pct?: number | null
+          spy_close?: number | null
+          spy13?: number | null
+          spy4?: number | null
+          spy8?: number | null
+          stage?: number | null
+          substage?: string | null
+          symbol: string
+          trigger_rvol?: number | null
+          tt?: boolean | null
+          vol_score?: number | null
+          week: string
+        }
+        Update: {
+          base_label?: string | null
+          base_labels?: string[] | null
+          base_score?: number | null
+          base_state?: string | null
+          base_tight?: boolean | null
+          close?: number | null
+          confidence?: number | null
+          created_at?: string
+          earn_fuel?: number | null
+          earn_label?: string | null
+          event_kind?: string | null
+          fwd13?: number | null
+          fwd4?: number | null
+          fwd8?: number | null
+          gone?: boolean | null
+          hl?: number | null
+          mrs52?: number | null
+          p200?: number | null
+          p50?: number | null
+          pivot?: number | null
+          regime?: string | null
+          rs_pct?: number | null
+          spy_close?: number | null
+          spy13?: number | null
+          spy4?: number | null
+          spy8?: number | null
+          stage?: number | null
+          substage?: string | null
+          symbol?: string
+          trigger_rvol?: number | null
+          tt?: boolean | null
+          vol_score?: number | null
+          week?: string
+        }
+        Relationships: []
+      }
       stock_bases: {
         Row: {
           as_of: string
