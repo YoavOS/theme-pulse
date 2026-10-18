@@ -2,6 +2,7 @@ import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supa
 import { corsHeaders } from "../_shared/cors.ts";
 import { classifyStage, completedWeeks, type Stage, type WeeklyBar } from "../_shared/stageEngine.ts";
 import { detectBase, finalizeBase, type BaseFeatures, type DailyBar } from "../_shared/baseEngine.ts";
+import { logSignals, type BaseLogInfo } from "../_shared/signalLog.ts";
 
 /** ---------------------------------------------------------------
  * stage-scan — Weinstein Stage Analysis + Base Scanner for the whole stock list.
@@ -10,7 +11,8 @@ import { detectBase, finalizeBase, type BaseFeatures, type DailyBar } from "../_
  *   { action: "symbols" }                       → stock list (RS universe + theme tickers)
  *   { action: "chunk", symbols: [...] }         → stages + base candidates for ≤80 symbols
  *   { action: "finalize", startedAt, prune }    → RS percentiles, earnings, final base scores;
- *                                                 drop rows not refreshed (only when prune)
+ *                                                 drop rows not refreshed (only when prune);
+ *                                                 signal log snapshot + 4/8/13-week outcomes
  *   { action: "status" }                        → row counts + last week classified
  *   { action: "chart", symbol }                 → last 2 years of weekly bars + 30w MA (app charts)
  *
@@ -216,6 +218,8 @@ Deno.serve(async (req) => {
 
       // 2. Bases: cross-sectional 26-week RS percentile over the whole stock list.
       const bases = { finalized: 0, dropped: 0, pruned: 0, error: null as string | null };
+      let rsPctOf: (x: number | null | undefined) => number | null = () => null;
+      const baseBy = new Map<string, BaseLogInfo>();
       try {
         const stageRows = await fetchAll<{ symbol: string; r26: number | null }>(db, "stock_stages", "symbol, r26:features->r26Pct");
         const vals = stageRows.map((r) => Number(r.r26)).filter((x) => Number.isFinite(x)).sort((a, b) => a - b);
@@ -226,6 +230,7 @@ Deno.serve(async (req) => {
           while (lo < hi) { const m = (lo + hi) >> 1; if (vals[m] <= Number(x)) lo = m + 1; else hi = m; }
           return Math.max(1, Math.min(99, Math.round((lo / vals.length) * 100)));
         };
+        rsPctOf = pctOf;
 
         // Upcoming earnings (one Finnhub call for the next 30 days)
         const earnings = new Map<string, string>();
@@ -259,6 +264,10 @@ Deno.serve(async (req) => {
           const inDays = ed ? Math.round((Date.parse(ed) - todayMs) / 86400_000) : null;
           const fin = finalizeBase(f, rsPct, inDays);
           if (!fin) { drop.push(row.symbol); continue; }
+          baseBy.set(row.symbol, {
+            score: fin.score, state: fin.state, label: fin.primaryLabel, labels: fin.labels,
+            tight: !!f.daily?.contracting, pivot: f.pivot, rvol: f.trigger?.rvol ?? null,
+          });
           updates.push({
             symbol: row.symbol, features: f, as_of: row.as_of,
             score: fin.score, band: fin.band, state: fin.state, primary_label: fin.primaryLabel, labels: fin.labels,
@@ -289,7 +298,17 @@ Deno.serve(async (req) => {
         console.warn("base finalize failed", e);
       }
 
-      return json({ ok: true, fresh: fresh ?? 0, removed, bases });
+      // 3. Signal log: this week's snapshot + outcomes of earlier weeks (the app's own track record)
+      let signals: Record<string, unknown> = {};
+      try {
+        const rowsForLog = await fetchAll<Parameters<typeof logSignals>[1][number]>(db, "stock_stages", "symbol, stage, substage, confidence, event_kind, as_of, features");
+        signals = await logSignals(db, rowsForLog, rsPctOf, baseBy, fetchWeekly);
+      } catch (e) {
+        signals = { error: isMissingTable(e) ? "signal_log table not created yet" : e instanceof Error ? e.message : String(e) };
+        console.warn("signal log failed", e);
+      }
+
+      return json({ ok: true, fresh: fresh ?? 0, removed, bases, signals });
     }
 
     // status

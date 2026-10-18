@@ -4,7 +4,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 // Client side of the Base Scanner (engine: supabase/functions/_shared/baseEngine.ts,
 // computed inside the stage-scan function). Loads results and holds display helpers.
 
-export type BaseLabel = "htf" | "cup" | "double_bottom" | "ascending" | "vcp" | "flat" | "box" | "generic";
+export type BaseLabel = "htf" | "cup" | "double_bottom" | "ascending" | "vcp" | "flat" | "box" | "ipo" | "generic";
 export type BaseState = "ready" | "qualified" | "developing" | "watch" | "triggered" | "extended" | "failed";
 
 export const LABEL_NAMES: Record<BaseLabel, string> = {
@@ -15,9 +15,10 @@ export const LABEL_NAMES: Record<BaseLabel, string> = {
   ascending: "Ascending base",
   flat: "Flat base",
   box: "Box",
+  ipo: "IPO base",
   generic: "Base",
 };
-export const ALL_LABELS: BaseLabel[] = ["vcp", "flat", "cup", "double_bottom", "ascending", "htf", "box", "generic"];
+export const ALL_LABELS: BaseLabel[] = ["vcp", "flat", "cup", "double_bottom", "ascending", "htf", "box", "ipo", "generic"];
 
 export const STATE_NAMES: Record<BaseState, string> = {
   ready: "Ready", qualified: "Qualified", developing: "Developing", watch: "Watch",
@@ -99,6 +100,7 @@ export interface BaseFeatures {
   stageNow?: number | null;
   dataNote: string | null;
   gateFails?: string[];
+  daily?: { dryUp5: number; tightRank: number; pullbacks: number[]; covered: boolean; sessions: number; contracting?: boolean; vcpFromDaily?: boolean } | null;
   chart?: { c: number[]; h: number[]; l: number[]; ma: (number | null)[]; from: number; end: string };
   gatesOk: boolean;
 }
@@ -140,6 +142,13 @@ export const BREAKDOWN_PARTS: { key: keyof Breakdown; label: string; max: number
 
 /** Manual chart checks from the research, per pattern (shown in the detail panel). */
 export const CHART_CHECKS: Record<BaseLabel, string[]> = {
+  ipo: [
+    "Did the stock hold most of its post-listing run, or is the 'base' really a fading IPO pop?",
+    "Is the lock-up expiry (usually ~6 months after listing) still ahead? It can flood supply.",
+    "Is there real volume and institutional sponsorship, not a thin float swinging on a few trades?",
+    "Is the right side quieter than the left, with the pivot at the post-listing high?",
+    "Is there an earnings report soon? Young companies gap hard on their first few.",
+  ],
   vcp: [
     "Do the contractions look like natural waves, not noise the swing detector created?",
     "Are lows holding higher (apart from an intentional shakeout)?",

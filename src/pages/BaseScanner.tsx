@@ -9,6 +9,7 @@ import { useStockStages } from "@/hooks/useStockStages";
 import { useUniverseSectors } from "@/hooks/useUniverseSectors";
 import { groupKeyForIndustry } from "@/lib/groupColors";
 import { StageBadge } from "@/components/stages/StageStockTable";
+import TrackRecord from "@/components/stages/TrackRecord";
 import WeeklyChart from "@/components/stages/WeeklyChart";
 import { RegimeBadge } from "@/components/stages/RegimePanel";
 import { downloadTradingViewList, isStageScanRunning, runStageScan } from "@/lib/stageAnalysis";
@@ -307,6 +308,7 @@ export default function BaseScanner() {
                               <span key={lb} className={`mr-1 inline-block rounded px-1.5 py-[1px] text-[10px] ${lb === r.primary_label ? "bg-primary/15 text-primary" : "bg-muted text-muted-foreground"}`}>{LABEL_NAMES[lb]}</span>
                             ))}
                             {f.threeWeeksTight && <span className="inline-block rounded bg-muted px-1.5 py-[1px] text-[10px] text-muted-foreground" title="Three weekly closes within ~1.5% of each other">3WT</span>}
+                            {f.daily?.contracting && <span className="ml-1 inline-block rounded bg-emerald-500/15 px-1.5 py-[1px] text-[10px] text-emerald-400" title={`Contracting on daily swings: ${f.daily.pullbacks.map((p) => p.toFixed(0) + "%").join(" → ")}. In the walk-forward test (Mar 2025–Jul 2026) this was the strongest base feature.`}>tightening</span>}
                           </td>
                           <td className="whitespace-nowrap px-2 py-1.5 text-right font-mono">
                             <span className="inline-flex items-center gap-1.5">
@@ -351,6 +353,7 @@ export default function BaseScanner() {
               Patterns are labels on top of the score and a stock can carry several. Breakout volume ≥ 2.5× is “exceptional participation” —
               research shows it raises the average payoff, <i>not</i> the hit rate, so keep the stop. Thresholds are the research's starting
               values, not proven cut-offs; the chart check in each row is part of the method.
+              Stocks listed less than ~14 months get a separate <i>IPO base</i> model (base from the post-listing high, pivot = that high) — it has no backtest yet.
             </p>
             <p className="px-1 text-[11px] leading-relaxed text-muted-foreground">
               <b className="text-foreground/80">Backtest (your list, weekly data, May 2023 – Jul 2026, 13 weeks ahead vs SPY):</b> Stage 2 stocks in a
@@ -358,6 +361,7 @@ export default function BaseScanner() {
               (+1.4%, 52%). Below 85 the score barely separated winners from losers, and no single pattern stood out — the market
               regime mattered more than any setup detail. The list is today's stocks, so the past looks better than it was (survivorship).
             </p>
+            <TrackRecord mode="bases" />
           </>
         )}
       </main>
@@ -376,7 +380,11 @@ function BaseDetail({ r }: { r: StockBase }) {
     ["Base", `${f.weeks}w from ${f.baseStart} · ${f.depthPct.toFixed(0)}% deep`],
     ["Prior move · giveback", `+${f.priorImpulsePct.toFixed(0)}% · ${f.giveback.toFixed(2)}`],
     ["Range position", f.rangePos.toFixed(2)],
-    ["Pullbacks (oldest → newest)", f.pullbacks.length ? f.pullbacks.map((p) => `${p.toFixed(0)}%`).join(" → ") : "—"],
+    ["Pullbacks, weekly (oldest → newest)", f.pullbacks.length ? f.pullbacks.map((p) => `${p.toFixed(0)}%`).join(" → ") : "—"],
+    ...(f.daily ? ([
+      ["Pullbacks, daily swings", `${f.daily.pullbacks.length ? f.daily.pullbacks.map((p) => `${p.toFixed(0)}%`).join(" → ") : "—"}${f.daily.contracting ? " · contracting ✓" : ""}${f.daily.covered ? "" : " (base older than the daily data)"}`],
+      ["Daily: 5-day volume · tightness rank", `${f.daily.dryUp5.toFixed(2)}× the prior 50 · ${f.daily.tightRank} (0 = tightest in 6 months)`],
+    ] as [string, string][]) : []),
     ["Range / ATR contraction", `${f.rangeContraction ?? "—"} / ${f.atrContraction ?? "—"}`],
     ["Volume dry-up · down/up volume", `${f.dryUp ?? "—"} · ${f.downUpVol ?? "—"}`],
     ["RS line vs 52w high", f.rsHighDistPct === null ? "—" : f.rsHighDistPct <= 0.5 ? "at a new high" : `−${f.rsHighDistPct.toFixed(1)}%`],
