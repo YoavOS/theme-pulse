@@ -48,6 +48,7 @@ export interface BaseTrigger {
   acceptSessions?: number;
   minClosePct?: number;
   retest?: boolean;
+  vol?: { pct: number; accel: number | null; preDry: number | null; udr50: number | null; dirVol20: number | null; score: number; weakClose: boolean };
 }
 
 export interface BaseFeatures {
@@ -100,10 +101,29 @@ export interface BaseFeatures {
   stageNow?: number | null;
   dataNote: string | null;
   gateFails?: string[];
-  daily?: { dryUp5: number; tightRank: number; pullbacks: number[]; covered: boolean; sessions: number; contracting?: boolean; vcpFromDaily?: boolean } | null;
+  daily?: { dryUp5: number; tightRank: number; pullbacks: number[]; covered: boolean; sessions: number; contracting?: boolean; vcpFromDaily?: boolean; udr50?: number | null; dirVol20?: number | null } | null;
+  earn?: EarnInfo | null;
   chart?: { c: number[]; h: number[]; l: number[]; ma: (number | null)[]; from: number; end: string };
   gatesOk: boolean;
 }
+
+export interface EarnInfo {
+  date: string; day0: string; sessionsAgo: number; epsActual: number | null; epsEstimate: number | null;
+  surprisePx: number | null; revSurprisePct: number | null; ear: number; gap: number | null; volX: number | null; drift: number | null;
+  label: "beat_bought" | "beat_sold" | "beat_flat" | "miss_bought" | "miss_sold" | "reaction_up" | "reaction_down" | "inline";
+  fuel?: number; earPct?: number; surprisePct?: number;
+}
+
+export const EARN_LABELS: Record<EarnInfo["label"], { text: string; tone: "good" | "bad" | "flat" }> = {
+  beat_bought: { text: "Beat & bought", tone: "good" },
+  miss_bought: { text: "Missed, still bought", tone: "good" },
+  reaction_up: { text: "Bought on earnings", tone: "good" },
+  beat_flat: { text: "Beat, no reaction", tone: "flat" },
+  inline: { text: "In line", tone: "flat" },
+  beat_sold: { text: "Beat but sold", tone: "bad" },
+  miss_sold: { text: "Missed & sold", tone: "bad" },
+  reaction_down: { text: "Sold on earnings", tone: "bad" },
+};
 
 export interface Breakdown {
   trend: number; rs: number; geometry: number; contraction: number; volume: number; pivotRisk: number; market: number;

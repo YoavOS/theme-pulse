@@ -7,7 +7,7 @@ import {
   RefreshCw, Download, Wifi, WifiOff, Loader2, Settings, ScanLine, X,
   ShieldCheck, Brain, ChevronDown, LayoutDashboard, AlertTriangle,
   BarChart3, Zap, Activity, DollarSign, Sun, Database, Trophy,
-  Share2, Flag, Layers, Boxes,
+  Share2, Flag, Layers, Boxes, Briefcase,
 } from "lucide-react";
 import HeatmapGridView from "@/components/dashboard/HeatmapGridView";
 import ThemeTracker from "@/components/dashboard/ThemeTracker";
@@ -299,6 +299,7 @@ export default function Index() {
     { to: "/rs-alpha", label: "RS Alpha", icon: <Zap size={14} />, active: false, color: "text-[hsl(280,70%,60%)]" },
     { to: "/stages", label: "Stages", icon: <Layers size={14} />, active: false, color: "text-[hsl(222,82%,64%)]" },
     { to: "/bases", label: "Bases", icon: <Boxes size={14} />, active: false, color: "text-[hsl(174,70%,50%)]" },
+    { to: "/trades", label: "Trade Desk", icon: <Briefcase size={14} />, active: false, color: "text-[hsl(200,80%,62%)]" },
     { to: "/live", label: "Live Execution", icon: <Activity size={14} />, active: false, color: "text-[hsl(160,80%,45%)]" },
     { to: "/market-drivers", label: "Market Drivers", icon: <BarChart3 size={14} />, active: false, color: "text-[hsl(200,80%,55%)]" },
     { to: "/earnings", label: "Earnings", icon: <DollarSign size={14} />, active: false, color: "text-[hsl(40,90%,55%)]" },

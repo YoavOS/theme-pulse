@@ -16,6 +16,7 @@
 // ─────────────────────────────────────────────────────────────
 
 import type { Stage, WeeklyBar } from "./stageEngine.ts";
+import type { EarnInfo } from "./earningsFuel.ts";
 
 export interface DailyBar {
   ts: number;
@@ -107,6 +108,7 @@ export interface BaseFeatures {
     acceptSessions?: number;    // sessions available (≤ 5)
     minClosePct?: number;       // lowest close vs pivot in the first 5 sessions (%)
     retest?: boolean;           // latest close slightly under the pivot (≤ 3%)
+    vol?: VolumeCheck;          // breakout-day volume confirmation (daily bars)
   };
   parts: {                    // score components before the RS percentile
     trend: number; rs: number; geometry: number; contraction: number; volume: number; pivotRisk: number; market: number;
@@ -117,9 +119,10 @@ export interface BaseFeatures {
   gateFails: string[];        // generic base gates this base misses (shown as warnings)
   /** Daily-bar view of the base (null without fresh daily bars): 5-day volume vs the prior 50,
    *  15-day ATR rank in the last ~6 months (0 = tightest), contractions on daily swings. */
-  daily: { dryUp5: number; tightRank: number; pullbacks: number[]; covered: boolean; sessions: number; contracting?: boolean; vcpFromDaily?: boolean } | null;
+  daily: { dryUp5: number; tightRank: number; pullbacks: number[]; covered: boolean; sessions: number; contracting?: boolean; vcpFromDaily?: boolean; udr50?: number | null; dirVol20?: number | null } | null;
   chart: { c: number[]; h: number[]; l: number[]; ma: (number | null)[]; from: number; end: string };
   gatesOk: boolean;           // passed the generic Stage-2 base gates (before the RS percentile)
+  earn?: EarnInfo | null;     // latest earnings report (set in finalize)
 }
 
 export interface FinalBase {
@@ -194,6 +197,50 @@ function zigzagPullbacks(h: number[], l: number[], from: number, to: number, thr
   const finalDepth = 1 - l[lastLo] / h[hiIdx];
   const filtered = pullbacks.filter((p) => p.depth >= thr * 0.8);
   return { pullbacks: filtered, finalDepth, finalHiIdx: hiIdx, finalLoIdx: lastLo };
+}
+
+/** Volume around a breakout (daily bars). Research: abnormal volume helps only together with what price
+ *  does with it, and very heavy volume also brings more retests. Tested on your list (3,390 breakouts above
+ *  a 40-day high in Stage-2-like trends, Oct 2024–Jul 2026, 60 sessions later vs SPY): only two volume
+ *  features separated outcomes — a quiet week before the breakout (5-day volume < 75% of the 50-day median:
+ *  +2.0 vs +0.1 pts, 55% vs 50%) and more volume on up days than down days over 50 sessions (+0.9 vs −1.4).
+ *  Breakout-day RVOL, close location and a weak high-volume close did not. `score` counts the two
+ *  supported features (0–2); the rest is shown for context. */
+export interface VolumeCheck { pct: number; accel: number | null; preDry: number | null; udr50: number | null; dirVol20: number | null; score: number; weakClose: boolean }
+type VBar = { high: number; low: number; close: number; volume: number };
+export function udRatio(d: VBar[], end: number, n: number): number | null {
+  let up = 0, dn = 0;
+  for (let j = Math.max(1, end - n + 1); j <= end; j++) { if (d[j].close > d[j - 1].close) up += d[j].volume; else if (d[j].close < d[j - 1].close) dn += d[j].volume; }
+  return dn > 0 ? Math.round((up / dn) * 100) / 100 : null;
+}
+export function dirVolume(d: VBar[], end: number, n: number): number | null {
+  let a = 0, b = 0;
+  for (let j = Math.max(0, end - n + 1); j <= end; j++) {
+    const x = d[j];
+    const clv = x.high > x.low ? (2 * x.close - x.high - x.low) / (x.high - x.low) : 0;
+    a += clv * x.volume; b += x.volume;
+  }
+  return b > 0 ? Math.round((a / b) * 100) / 100 : null;
+}
+function volumeCheck(d: VBar[], k: number, pivot: number, latestClose: number): VolumeCheck | null {
+  if (k < 25) return null;
+  const v = d[k].volume;
+  const hist = d.slice(Math.max(0, k - 120), k).map((x) => x.volume).filter((x) => x > 0);
+  if (hist.length < 20 || !(v > 0)) return null;
+  const pct = Math.round((hist.filter((x) => x < v).length / hist.length) * 100);
+  const med = (a: number[]) => { const q = [...a].sort((x, y) => x - y); return q.length ? q[q.length >> 1] : NaN; };
+  const m50 = med(d.slice(Math.max(0, k - 55), k - 5).map((x) => x.volume));
+  const pre5 = d.slice(k - 5, k).reduce((t, x) => t + x.volume, 0) / 5;
+  const preDry = m50 > 0 ? Math.round((pre5 / m50) * 100) / 100 : null;
+  const a3 = med(d.slice(k - 3, k).map((x) => x.volume)), a17 = med(d.slice(Math.max(0, k - 20), k - 3).map((x) => x.volume));
+  const accel = a17 > 0 ? Math.round((a3 / a17) * 100) / 100 : null;
+  const udr50 = udRatio(d, k - 1, 50), dirVol20 = dirVolume(d, k - 1, 20);
+  const x = d[k];
+  const cl = x.high > x.low ? (x.close - x.low) / (x.high - x.low) : 0.5;
+  void latestClose;
+  const score = (preDry !== null && preDry < 0.75 ? 1 : 0) + (udr50 !== null && udr50 > 1 ? 1 : 0);
+  const weakClose = pct >= 80 && (cl < 0.5 || x.close < pivot);
+  return { pct, accel, preDry, udr50, dirVol20, score, weakClose };
 }
 
 // ── main ─────────────────────────────────────────────────────────
@@ -536,6 +583,7 @@ export function detectBase(input: BaseInput, debug?: string[]): BaseFeatures | n
     dailyView = {
       dryUp5: r2(dry5), tightRank, pullbacks: dPull.map((x) => r1(x * 100)), covered: dCovered,
       sessions: k0 >= 0 ? D - k0 : 0,
+      udr50: udRatio(daily, D - 1, 50), dirVol20: dirVolume(daily, D - 1, 20),
     };
     // Daily contraction sequence: 2–6 swings, each no deeper than ~the one before, the last ≤ half
     // the first and ≤ 10%. Walk-forward (Mar 2025–Jul 2026, your list): Stage 2 bases with it beat
@@ -745,6 +793,7 @@ export function detectBase(input: BaseInput, debug?: string[]): BaseFeatures | n
       trigger.acceptDays = firstFive.filter((d) => d.close > piv).length;
       trigger.acceptSessions = firstFive.length;
       trigger.minClosePct = r1((Math.min(...firstFive.map((d) => d.close)) / piv - 1) * 100);
+      trigger.vol = volumeCheck(daily, k, piv, latestClose) ?? undefined;
       for (let j = k + 1; j <= Math.min(daily.length - 1, k + 10); j++) if (daily[j].close < piv * 0.97) { trigger.status = "failed"; break; }
     } else if (latestClose <= buffer(piv)) {
       // the daily closes never cleared this pivot — no breakout
@@ -965,6 +1014,7 @@ function detectIpoBase(input: BaseInput): BaseFeatures | null {
       trigger.acceptDays = firstFive.filter((x) => x.close > pivot).length;
       trigger.acceptSessions = firstFive.length;
       trigger.minClosePct = r1((Math.min(...firstFive.map((x) => x.close)) / pivot - 1) * 100);
+      trigger.vol = volumeCheck(daily, k, pivot, latestClose) ?? undefined;
       for (let j = k + 1; j <= Math.min(daily.length - 1, k + 10); j++) if (daily[j].close < pivot * 0.97) { trigger.status = "failed"; break; }
     }
   }
@@ -1065,6 +1115,7 @@ export function finalizeBase(f: BaseFeatures, rsPct: number | null, earningsInDa
   if (!f.aboveSma10) warnings.push("Below 10-week MA");
   if (f.dryUp !== null && f.dryUp <= 0.75 && f.rangePos < 0.5) warnings.push("Volume dry-up while price sags");
   if (earningsInDays !== null && earningsInDays >= 0 && earningsInDays <= 14) warnings.push(`Earnings in ${earningsInDays}d`);
+  if (f.earn && f.earn.sessionsAgo <= 45 && f.earn.ear <= -5) warnings.push(`Latest earnings sold off (${f.earn.ear.toFixed(0)}% vs SPY)`);
   if (primaryLabel === "htf") warnings.push("HTF: high volatility, size down");
   if (primaryLabel === "ipo") warnings.push("Recent IPO: thin history, wider swings — size down");
   if (f.stageNow === 1 && primaryLabel !== "ipo") warnings.push("Stage 1 — base after a decline, not a Stage 2 continuation");

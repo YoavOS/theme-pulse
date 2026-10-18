@@ -63,6 +63,9 @@ export interface StageResult {
     /** Minervini Trend Template, weekly proxies (50/150/200-day ≈ 10/30/40-week MAs); the 8th rule,
      *  RS rank ≥ 70, is cross-sectional and applied in the app. */
     tt: { pass: boolean; count: number; failed: string[] } | null;
+    /** Last ≤40 completed weekly closes (5 significant digits), oldest → newest — theme/group
+     *  relative strength and position correlations in the app. */
+    wc?: number[];
   };
   reasons: string[];          // short human-readable reasons
 }
@@ -556,6 +559,7 @@ export function classifyStage(
       ytdPct: ytdPct === null ? null : round(ytdPct, 1),
       flags,
       tt,
+      wc: c.slice(Math.max(0, n - 40), i + 1).map((x) => Number(x.toPrecision(5))),
     },
     reasons: reasons.slice(0, 4),
   };

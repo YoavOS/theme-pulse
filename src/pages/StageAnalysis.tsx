@@ -11,6 +11,7 @@ import { useUniverseSectors } from "@/hooks/useUniverseSectors";
 import { groupKeyForIndustry, GROUP_MODE_LABEL, type GroupMode } from "@/lib/groupColors";
 import RegimePanel from "@/components/stages/RegimePanel";
 import TrackRecord from "@/components/stages/TrackRecord";
+import LeadershipPanel from "@/components/stages/LeadershipPanel";
 import StageStockTable, { StageBadge } from "@/components/stages/StageStockTable";
 import {
   STAGE_COLORS, STAGE_NAMES, STAGE_TIPS, groupHealth, isStageScanRunning, runStageScan, stageWeeksAgo,
@@ -460,6 +461,8 @@ export default function StageAnalysis() {
                 ))}
               </div>
             </section>
+
+            <LeadershipPanel groups={groups} spy={market} asOf={asOf} modeLabel={GROUP_MODE_LABEL[mode]} minMembers={minGroupSize} />
 
             {/* Groups */}
             <section className="overflow-hidden rounded-lg border border-border bg-card">

@@ -14,7 +14,7 @@ import WeeklyChart from "@/components/stages/WeeklyChart";
 import { RegimeBadge } from "@/components/stages/RegimePanel";
 import { downloadTradingViewList, isStageScanRunning, runStageScan } from "@/lib/stageAnalysis";
 import {
-  ALL_LABELS, ALL_STATES, BREAKDOWN_PARTS, CHART_CHECKS, LABEL_NAMES, STATE_NAMES, STATE_TIPS,
+  ALL_LABELS, ALL_STATES, BREAKDOWN_PARTS, CHART_CHECKS, EARN_LABELS, LABEL_NAMES, STATE_NAMES, STATE_TIPS,
   passesStrict, tighteningGrade, type BaseLabel, type BaseState, type StockBase,
 } from "@/lib/bases";
 
@@ -309,6 +309,12 @@ export default function BaseScanner() {
                             ))}
                             {f.threeWeeksTight && <span className="inline-block rounded bg-muted px-1.5 py-[1px] text-[10px] text-muted-foreground" title="Three weekly closes within ~1.5% of each other">3WT</span>}
                             {f.daily?.contracting && <span className="ml-1 inline-block rounded bg-emerald-500/15 px-1.5 py-[1px] text-[10px] text-emerald-400" title={`Contracting on daily swings: ${f.daily.pullbacks.map((p) => p.toFixed(0) + "%").join(" → ")}. In the walk-forward test (Mar 2025–Jul 2026) this was the strongest base feature.`}>tightening</span>}
+                            {f.earn && f.earn.sessionsAgo <= 45 && EARN_LABELS[f.earn.label].tone !== "flat" && (
+                              <span className={`ml-1 inline-block rounded px-1.5 py-[1px] text-[10px] ${EARN_LABELS[f.earn.label].tone === "good" ? "bg-sky-500/15 text-sky-300" : "bg-pink-500/15 text-pink-300"}`}
+                                title={`Last report ${f.earn.date}: ${f.earn.ear >= 0 ? "+" : ""}${f.earn.ear.toFixed(1)}% vs SPY over days −1…+1${f.earn.fuel !== undefined ? ` · fuel ${f.earn.fuel}/100` : ""}. The market's reaction is the strongest free earnings signal; classic post-earnings drift has weakened in large, liquid stocks.`}>
+                                {EARN_LABELS[f.earn.label].text}
+                              </span>
+                            )}
                           </td>
                           <td className="whitespace-nowrap px-2 py-1.5 text-right font-mono">
                             <span className="inline-flex items-center gap-1.5">
@@ -384,19 +390,27 @@ function BaseDetail({ r }: { r: StockBase }) {
     ...(f.daily ? ([
       ["Pullbacks, daily swings", `${f.daily.pullbacks.length ? f.daily.pullbacks.map((p) => `${p.toFixed(0)}%`).join(" → ") : "—"}${f.daily.contracting ? " · contracting ✓" : ""}${f.daily.covered ? "" : " (base older than the daily data)"}`],
       ["Daily: 5-day volume · tightness rank", `${f.daily.dryUp5.toFixed(2)}× the prior 50 · ${f.daily.tightRank} (0 = tightest in 6 months)`],
+      ["Daily: up/down volume (50d) · close-weighted volume (20d)", `${f.daily.udr50 ?? "—"} · ${f.daily.dirVol20 ?? "—"}`],
     ] as [string, string][]) : []),
     ["Range / ATR contraction", `${f.rangeContraction ?? "—"} / ${f.atrContraction ?? "—"}`],
     ["Volume dry-up · down/up volume", `${f.dryUp ?? "—"} · ${f.downUpVol ?? "—"}`],
     ["RS line vs 52w high", f.rsHighDistPct === null ? "—" : f.rsHighDistPct <= 0.5 ? "at a new high" : `−${f.rsHighDistPct.toFixed(1)}%`],
     ["From 52w high · above 10w MA", `${f.pctFrom52wHigh.toFixed(0)}% · ${f.ext10wPct >= 0 ? "+" : ""}${f.ext10wPct.toFixed(0)}%`],
     ["IBD base stage · base #", `${f.baseCount}${f.baseCountCapped ? "+" : ""} · #${f.baseNumber ?? f.baseCount}${f.baseCountCapped ? " (last 2 years)" : ""}`],
-    ["Earnings", r.earnings_date ?? "none in the next 30 days"],
+    ["Next earnings", r.earnings_date ?? "none in the next 30 days"],
+    ...(f.earn ? ([
+      ["Last report", `${f.earn.date} · ${EARN_LABELS[f.earn.label].text} · ${f.earn.sessionsAgo} sessions ago`],
+      ["Reaction (days −1…+1 vs SPY) · gap · volume", `${f.earn.ear >= 0 ? "+" : ""}${f.earn.ear.toFixed(1)}% · ${f.earn.gap !== null ? `${f.earn.gap >= 0 ? "+" : ""}${f.earn.gap.toFixed(1)}%` : "—"} · ${f.earn.volX !== null ? `${f.earn.volX.toFixed(1)}×` : "—"}`],
+      ["EPS actual / estimate · revenue surprise", `${f.earn.epsActual ?? "—"} / ${f.earn.epsEstimate ?? "—"} · ${f.earn.revSurprisePct !== null ? `${f.earn.revSurprisePct >= 0 ? "+" : ""}${f.earn.revSurprisePct.toFixed(1)}%` : "—"}`],
+      ["Since the reaction (vs SPY) · fuel score", `${f.earn.drift !== null ? `${f.earn.drift >= 0 ? "+" : ""}${f.earn.drift.toFixed(1)}%` : "—"} · ${f.earn.fuel ?? "—"}/100`],
+    ] as [string, string][]) : []),
   ];
   if (t.status !== "none") {
     kv.splice(3, 0, [
       "Breakout",
       `${t.date ?? "—"}${t.rvol !== null ? ` · ${t.rvol.toFixed(1)}× vol` : ""}${t.closeLocation !== null ? ` · close loc ${t.closeLocation.toFixed(2)}` : ""}${t.rangeExpansion !== null ? ` · range ${t.rangeExpansion.toFixed(1)}×` : ""}${t.extensionPct !== null ? ` · ${t.extensionPct >= 0 ? "+" : ""}${t.extensionPct.toFixed(1)}% vs pivot` : ""}`,
     ]);
+    if (t.vol) kv.splice(4, 0, ["Breakout volume", `${t.vol.pct}th pct of its own history · week before ${t.vol.preDry !== null ? `${t.vol.preDry.toFixed(2)}× normal${t.vol.preDry < 0.75 ? " (quiet ✓)" : ""}` : "—"} · up/down vol ${t.vol.udr50 ?? "—"}${t.vol.udr50 !== null && t.vol.udr50 > 1 ? " ✓" : ""}`]);
     if (t.acceptSessions) kv.splice(4, 0, ["First 5 sessions", `${t.acceptDays}/${t.acceptSessions} closes above pivot · lowest ${t.minClosePct !== undefined && t.minClosePct >= 0 ? "+" : ""}${t.minClosePct ?? "—"}%${t.retest ? " · retesting" : ""}`]);
   }
   return (

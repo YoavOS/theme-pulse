@@ -10,6 +10,7 @@ import { completedWeeks, weekKey, type WeeklyBar } from "./stageEngine.ts";
 
 export interface BaseLogInfo {
   score: number; state: string; label: string; labels: string[]; tight: boolean; pivot: number; rvol: number | null;
+  earnFuel?: number | null; earnLabel?: string | null; volScore?: number | null;
 }
 
 interface StageRowLite {
@@ -78,6 +79,7 @@ export async function logSignals(
       rs_pct: rsPctOf(r.features?.r26Pct), mrs52: r.features?.mrs52 ?? null,
       base_score: b?.score ?? null, base_state: b?.state ?? null, base_label: b?.label ?? null, base_labels: b?.labels ?? null,
       base_tight: b ? b.tight : null, pivot: b?.pivot ?? null, trigger_rvol: b?.rvol ?? null,
+      earn_fuel: b?.earnFuel ?? null, earn_label: b?.earnLabel ?? null, vol_score: b?.volScore ?? null,
       regime: reg.regime, p50: reg.p50, p200: reg.p200, hl: reg.hl, spy_close: spyClose,
     };
   });
