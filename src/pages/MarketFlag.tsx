@@ -1,50 +1,87 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { ArrowLeft, RefreshCw, Flag, Loader2, Info, Sparkles } from "lucide-react";
+import { ArrowLeft, RefreshCw, Flag, Loader2, Info, Sparkles, BookOpen, CalendarClock, Scale } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+  HISTORY, HISTORY_ALL, PLAYBOOK, REFERENCES, STRENGTH_STYLE, TYPE_INFO, nextFomc, overlays, volTargetExposure,
+  type FearGreed, type FlagMetrics, type MarketTypeKey, type Tip,
+} from "@/lib/marketPlaybook";
 
-const CACHE_KEY = "market_flag_cache_v1";
-const CACHE_TTL = 12 * 60 * 60 * 1000;
+const CACHE_KEY = "market_flag_cache_v2";
+const CACHE_TTL = 30 * 60 * 1000;
+const FNG_KEY = "market_fng_cache_v1";
 
 interface Factor {
-  key: string;
-  label: string;
-  weight: number;
-  value: string;
-  score: number;
-  note: string;
+  key: string; label: string; weight: number; value: string; score: number; note: string;
   tooltip: { meaning: string; market: string; trader: string };
 }
-
 interface FlagPayload {
-  state: string;
-  color: string;
-  stance: string;
-  composite: number;
-  weighted: number;
-  summary: string;
-  factors: Factor[];
-  generatedAt: string;
+  version?: number;
+  type?: { key: MarketTypeKey; name: string };
+  state: string; color: string; composite: number; weighted: number;
+  summary: string; summaryError?: string | null;
+  factors: Factor[]; metrics?: FlagMetrics; generatedAt: string;
 }
 
-const FLAG_STYLES: Record<string, { bg: string; text: string; ring: string }> = {
-  green:         { bg: "hsl(150,70%,40%)", text: "hsl(150,80%,92%)", ring: "hsl(150,70%,40%)" },
-  "light-green": { bg: "hsl(120,55%,42%)", text: "hsl(120,70%,94%)", ring: "hsl(120,55%,42%)" },
-  yellow:        { bg: "hsl(48,90%,50%)",  text: "hsl(48,90%,10%)",  ring: "hsl(48,90%,50%)" },
-  orange:        { bg: "hsl(28,90%,52%)",  text: "hsl(28,90%,10%)",  ring: "hsl(28,90%,52%)" },
-  red:           { bg: "hsl(0,72%,48%)",   text: "hsl(0,80%,95%)",   ring: "hsl(0,72%,48%)" },
+const TONE: Record<"go" | "caution" | "stop", { bar: string; text: string; bg: string }> = {
+  go: { bar: "hsl(150,65%,42%)", text: "hsl(150,70%,55%)", bg: "hsl(150,60%,40%,0.10)" },
+  caution: { bar: "hsl(42,90%,52%)", text: "hsl(42,95%,60%)", bg: "hsl(42,90%,50%,0.10)" },
+  stop: { bar: "hsl(0,72%,52%)", text: "hsl(0,80%,66%)", bg: "hsl(0,72%,50%,0.10)" },
 };
-
 const scoreColor = (s: number) =>
   s >= 1 ? "hsl(150,70%,45%)" : s > 0 ? "hsl(120,50%,50%)" : s === 0 ? "hsl(48,80%,55%)" : s > -1 ? "hsl(28,85%,55%)" : "hsl(0,72%,55%)";
+const fngColor = (x: number) => (x <= 25 ? "hsl(0,72%,55%)" : x <= 45 ? "hsl(28,85%,55%)" : x < 55 ? "hsl(48,80%,55%)" : x < 75 ? "hsl(120,50%,50%)" : "hsl(150,70%,45%)");
+const sign = (x: number, d = 1) => `${x >= 0 ? "+" : ""}${x.toFixed(d)}`;
+
+const FNG_LABELS: Record<string, string> = {
+  market_momentum_sp500: "S&P 500 vs 125-day average",
+  stock_price_strength: "52-week highs vs lows",
+  stock_price_breadth: "Up vs down volume (McClellan)",
+  put_call_options: "Put/call ratio",
+  market_volatility_vix: "VIX vs its 50-day average",
+  junk_bond_demand: "Junk vs investment-grade yields",
+  safe_haven_demand: "Stocks vs bonds (20 days)",
+};
+
+/** CNN Fear & Greed — CNN's data endpoint allows browser requests, so it is read here. */
+async function loadFearGreed(force: boolean): Promise<FearGreed | null> {
+  if (!force) {
+    try {
+      const raw = localStorage.getItem(FNG_KEY);
+      if (raw) { const p = JSON.parse(raw) as { at: number; v: FearGreed }; if (Date.now() - p.at < CACHE_TTL) return p.v; }
+    } catch { /* ignore */ }
+  }
+  try {
+    const res = await fetch("https://production.dataviz.cnn.io/index/fearandgreed/graphdata");
+    if (!res.ok) return null;
+    const j = await res.json();
+    const fg = j?.fear_and_greed;
+    if (!fg || typeof fg.score !== "number") return null;
+    const v: FearGreed = {
+      score: fg.score, rating: String(fg.rating ?? ""), timestamp: String(fg.timestamp ?? ""),
+      prevClose: fg.previous_close ?? null, prevWeek: fg.previous_1_week ?? null, prevMonth: fg.previous_1_month ?? null, prevYear: fg.previous_1_year ?? null,
+      history: ((j?.fear_and_greed_historical?.data ?? []) as { x: number; y: number }[]).filter((p) => Number.isFinite(p?.y)).map((p) => ({ x: p.x, y: p.y })),
+      components: Object.entries(FNG_LABELS).filter(([k]) => typeof j?.[k]?.score === "number")
+        .map(([k, label]) => ({ key: k, label, score: j[k].score as number, rating: String(j[k].rating ?? "") })),
+    };
+    try { localStorage.setItem(FNG_KEY, JSON.stringify({ at: Date.now(), v })); } catch { /* quota */ }
+    return v;
+  } catch {
+    return null;
+  }
+}
 
 export default function MarketFlag() {
   const [data, setData] = useState<FlagPayload | null>(null);
+  const [fng, setFng] = useState<FearGreed | null>(null);
+  const [fngState, setFngState] = useState<"loading" | "ok" | "fail">("loading");
   const [loading, setLoading] = useState(false);
 
   const load = useCallback(async (force = false) => {
+    setFngState("loading");
+    loadFearGreed(force).then((v) => { setFng(v); setFngState(v ? "ok" : "fail"); });
     if (!force) {
       try {
         const raw = localStorage.getItem(CACHE_KEY);
@@ -58,9 +95,10 @@ export default function MarketFlag() {
     try {
       const { data: res, error } = await supabase.functions.invoke("market-flag", { body: { force } });
       if (error) throw new Error(error.message);
-      if ((res as any)?.error) throw new Error((res as any).error);
-      setData(res as FlagPayload);
-      try { localStorage.setItem(CACHE_KEY, JSON.stringify({ at: Date.now(), payload: res })); } catch { /* quota */ }
+      const r = res as FlagPayload & { error?: string };
+      if (r?.error) throw new Error(r.error);
+      setData(r);
+      try { localStorage.setItem(CACHE_KEY, JSON.stringify({ at: Date.now(), payload: r })); } catch { /* quota */ }
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Failed to load market flag");
     } finally {
@@ -70,7 +108,14 @@ export default function MarketFlag() {
 
   useEffect(() => { void load(false); }, [load]);
 
-  const style = FLAG_STYLES[data?.color ?? "yellow"] ?? FLAG_STYLES.yellow;
+  const typeKey = data?.type?.key;
+  const m = data?.metrics;
+  const info = typeKey ? TYPE_INFO[typeKey] : null;
+  const tone = info ? TONE[info.tone] : TONE.caution;
+  const extra = typeKey && m ? overlays(typeKey, m, fng) : [];
+  const exposure = volTargetExposure(m?.spy.rv20 ?? null);
+  const fomc = nextFomc();
+  const citeKeys = typeKey ? [...new Set([...PLAYBOOK[typeKey].tips, ...extra].map((t) => t.cite).filter((x): x is string => !!x))] : [];
 
   return (
     <div className="min-h-screen bg-background">
@@ -80,20 +125,12 @@ export default function MarketFlag() {
             <ArrowLeft size={14} />
           </Link>
           <Flag size={16} className="text-[hsl(40,90%,55%)]" />
-          <h1 className="text-sm font-semibold tracking-wide">Market Flag / Bias</h1>
+          <h1 className="text-sm font-semibold tracking-wide">Market Flag</h1>
           <div className="ml-auto flex items-center gap-3">
-            {data && (
-              <span className="text-[11px] text-muted-foreground">
-                Updated {new Date(data.generatedAt).toLocaleString()}
-              </span>
-            )}
-            <button
-              onClick={() => load(true)}
-              disabled={loading}
-              className="flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-xs transition-colors hover:bg-accent disabled:opacity-50"
-            >
-              {loading ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
-              Refresh
+            {data && <span className="hidden text-[11px] text-muted-foreground sm:inline">Updated {new Date(data.generatedAt).toLocaleString()}</span>}
+            <button onClick={() => load(true)} disabled={loading}
+              className="flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-xs transition-colors hover:bg-accent disabled:opacity-50">
+              {loading ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />} Refresh
             </button>
           </div>
         </div>
@@ -106,72 +143,265 @@ export default function MarketFlag() {
           </div>
         )}
 
-        {data && (
+        {data && !data.type && (
+          <div className="rounded-lg border border-border bg-card p-4 text-sm text-muted-foreground">
+            The server is still running the old Market Flag version. Deploy the updated <code>market-flag</code> function to see the market type and playbook.
+          </div>
+        )}
+
+        {data && info && typeKey && m && (
           <>
-            {/* Big flag */}
-            <section
-              className="rounded-xl border p-6 text-center"
-              style={{ background: style.bg, borderColor: style.ring, color: style.text }}
-            >
-              <div className="text-[11px] uppercase tracking-[0.25em] opacity-80">Market State</div>
-              <div className="mt-1 text-4xl font-black tracking-tight">{data.state}</div>
-              <div className="mt-2 text-sm font-medium opacity-90">Composite score {data.composite}/100</div>
+            {/* Market type */}
+            <section className="rounded-xl border p-5" style={{ borderColor: tone.bar, background: tone.bg }}>
+              <div className="flex flex-wrap items-start gap-4">
+                <div className="min-w-[240px] flex-1">
+                  <div className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground">Market type</div>
+                  <div className="mt-1 text-3xl font-black tracking-tight" style={{ color: tone.text }}>{info.name}</div>
+                  <p className="mt-2 max-w-2xl text-sm leading-relaxed text-foreground/85">{info.blurb}</p>
+                </div>
+                <div className="grid grid-cols-2 gap-x-6 gap-y-1.5 text-xs sm:grid-cols-3">
+                  <Stat label="S&P vs 50-day" value={`${sign((m.spy.last / m.spy.ma50 - 1) * 100)}%`} />
+                  <Stat label="S&P vs 200-day" value={`${sign((m.spy.last / m.spy.ma200 - 1) * 100)}%`} />
+                  <Stat label="From 52w high" value={`${m.spy.dd52.toFixed(1)}%`} />
+                  <Stat label="VIX · VIX/VIX3M" value={`${m.vix.last?.toFixed(1) ?? "—"} · ${m.vix.term?.toFixed(2) ?? "—"}`} />
+                  <Stat label="Your list > 40w MA" value={m.breadth ? `${Math.round(m.breadth.p200)}%` : "—"} />
+                  <Stat label="Risk composite" value={`${data.composite}/100`} hint={data.state} />
+                </div>
+              </div>
             </section>
 
-            {/* Trader stance */}
+            {/* Playbook */}
             <section className="rounded-lg border border-border bg-card p-4">
-              <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Trader Stance</div>
-              <p className="mt-1 text-sm font-medium leading-relaxed">{data.stance}</p>
+              <div className="mb-3 flex items-center gap-2">
+                <BookOpen size={14} className="text-[hsl(40,90%,55%)]" />
+                <h2 className="text-sm font-semibold">Playbook for this market</h2>
+                <span className="text-[11px] text-muted-foreground">· each tip shows how strong the evidence behind it is</span>
+              </div>
+              <div className="grid gap-2.5 md:grid-cols-2">
+                {[...extra, ...PLAYBOOK[typeKey].tips].map((t, k) => <TipCard key={k} t={t} highlight={k < extra.length} />)}
+              </div>
+              <div className="mt-3 rounded-md bg-muted/30 px-3 py-2 text-xs">
+                <span className="font-semibold">What would change the type: </span>
+                <span className="text-muted-foreground">{PLAYBOOK[typeKey].watch.join(" · ")}</span>
+              </div>
             </section>
 
-            {/* AI summary */}
-            {data.summary && (
+            <div className="grid gap-4 lg:grid-cols-3">
+              {/* Sizing */}
+              <section className="rounded-lg border border-border bg-card p-4">
+                <div className="mb-2 flex items-center gap-2"><Scale size={14} className="text-sky-300" /><h2 className="text-sm font-semibold">Position sizing</h2></div>
+                {exposure !== null ? (
+                  <>
+                    <div className="text-3xl font-black" style={{ color: exposure >= 90 ? TONE.go.text : exposure >= 60 ? TONE.caution.text : TONE.stop.text }}>{exposure}%</div>
+                    <div className="text-xs text-muted-foreground">of your normal position size</div>
+                    <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
+                      S&P volatility over the last 20 days is {m.spy.rv20?.toFixed(1)}% a year
+                      {m.spy.rvPct !== null ? ` (${m.spy.rvPct}th percentile of 2 years)` : ""}. Scaling exposure to keep volatility near 15% held risk steady and,
+                      in published tests, improved risk-adjusted returns — though how much that holds up out of sample is debated.
+                    </p>
+                    <span className={`mt-2 inline-block rounded px-1.5 py-[1px] text-[10px] ${STRENGTH_STYLE.moderate}`}>moderate evidence</span>
+                  </>
+                ) : <p className="text-xs text-muted-foreground">Not enough data.</p>}
+              </section>
+
+              {/* Calendar */}
+              <section className="rounded-lg border border-border bg-card p-4">
+                <div className="mb-2 flex items-center gap-2"><CalendarClock size={14} className="text-violet-300" /><h2 className="text-sm font-semibold">Calendar</h2></div>
+                {fomc ? (
+                  <>
+                    <div className="text-sm">Next Fed decision: <b>{new Date(fomc.date + "T12:00:00Z").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}</b></div>
+                    <div className="text-xs text-muted-foreground">{fomc.days === 0 ? "today" : `in ${fomc.days} day${fomc.days === 1 ? "" : "s"}`}</div>
+                  </>
+                ) : <div className="text-xs text-muted-foreground">No scheduled meeting in the list.</div>}
+                <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
+                  Fed days bring sharp moves both ways. The famous pre-Fed drift (stocks rising the day before) has largely faded since 2015, so it is not a reason to buy early.
+                </p>
+              </section>
+
+              {/* Sentiment */}
+              <FearGreedCard fng={fng} state={fngState} />
+            </div>
+
+            {/* History by type */}
+            <section className="rounded-lg border border-border bg-card p-4">
+              <div className="mb-2 flex flex-wrap items-center gap-2">
+                <h2 className="text-sm font-semibold">What happened next, by market type</h2>
+                <span className="text-[11px] text-muted-foreground">· S&P 500 daily since 2003, same classification rules</span>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full border-collapse text-xs">
+                  <thead>
+                    <tr className="border-b border-border text-[10.5px] text-muted-foreground">
+                      <th className="px-2 py-1.5 text-left font-medium">Type</th>
+                      <th className="px-2 py-1.5 text-right font-medium">Episodes</th>
+                      <th className="px-2 py-1.5 text-right font-medium">S&P next 3M (median)</th>
+                      <th className="px-2 py-1.5 text-right font-medium">Up after 3M</th>
+                      <th className="px-2 py-1.5 text-right font-medium" title="Median of the worst peak-to-trough dip within the next 3 months">Typical worst dip</th>
+                      <th className="px-2 py-1.5 text-right font-medium">Volatility</th>
+                      <th className="px-2 py-1.5 text-right font-medium" title="Momentum ETF (MTUM) minus S&P over the next 3 months, since 2013">Momentum vs S&P</th>
+                      <th className="px-2 py-1.5 text-right font-medium" title="Russell 2000 (IWM) minus S&P over the next 3 months">Small caps vs S&P</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(Object.keys(HISTORY) as MarketTypeKey[]).map((k) => {
+                      const h = HISTORY[k], cur = k === typeKey;
+                      return (
+                        <tr key={k} className={`border-b border-border/30 ${cur ? "bg-primary/10 font-semibold" : ""}`}>
+                          <td className="px-2 py-1">{TYPE_INFO[k].name}{cur && <span className="ml-1.5 rounded bg-primary/20 px-1 text-[9.5px] text-primary">now</span>}</td>
+                          <td className="px-2 py-1 text-right font-mono text-muted-foreground">{h.episodes}</td>
+                          <td className="px-2 py-1 text-right font-mono">{sign(h.m3)}%</td>
+                          <td className="px-2 py-1 text-right font-mono">{h.up3}%</td>
+                          <td className="px-2 py-1 text-right font-mono text-pink-300">{h.worstDd3.toFixed(1)}%</td>
+                          <td className="px-2 py-1 text-right font-mono">{h.vol.toFixed(0)}%</td>
+                          <td className={`px-2 py-1 text-right font-mono ${h.momVsSpy > 0 ? "text-emerald-400" : "text-pink-300"}`}>{sign(h.momVsSpy)} <span className="text-muted-foreground">({h.momUp}%)</span></td>
+                          <td className={`px-2 py-1 text-right font-mono ${h.smallVsSpy > 0 ? "text-emerald-400" : "text-pink-300"}`}>{sign(h.smallVsSpy)}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              <p className="mt-2 text-[10.5px] leading-relaxed text-muted-foreground">
+                All days: S&P next 3 months median {sign(HISTORY_ALL.m3)}%, up {HISTORY_ALL.up3}% of the time. Windows overlap and some types have few episodes,
+                so read these as tendencies. The index often did <i>better</i> after scary types (mean reversion), but with deeper dips — what changes most from type to type is
+                risk and which stocks lead, not the index's direction. "Narrow" here uses the equal-weight index, as your list's breadth has no long history.
+              </p>
+            </section>
+
+            {/* Factors */}
+            <section>
+              <h2 className="mb-2 px-1 text-sm font-semibold">Risk factors</h2>
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {data.factors.map((f) => (
+                  <div key={f.key} className="rounded-lg border border-border bg-card p-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-xs font-semibold">{f.label}</span>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <button className="text-muted-foreground hover:text-foreground" aria-label={`About ${f.label}`}><Info size={12} /></button>
+                          </TooltipTrigger>
+                          <TooltipContent className="max-w-xs space-y-1.5 text-[11px] leading-relaxed">
+                            <p><span className="font-semibold">What it is: </span>{f.tooltip.meaning}</p>
+                            <p><span className="font-semibold">Why it matters: </span>{f.tooltip.market}</p>
+                            <p><span className="font-semibold">For you: </span>{f.tooltip.trader}</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </div>
+                      <span className="rounded px-1.5 py-0.5 font-mono text-[11px] font-bold" style={{ background: `${scoreColor(f.score)}22`, color: scoreColor(f.score) }}>
+                        {f.score > 0 ? "+" : ""}{f.score.toFixed(1)}
+                      </span>
+                    </div>
+                    <div className="mt-1 text-[13px] font-mono leading-snug">{f.value}</div>
+                    <div className="mt-1 text-[11px] text-muted-foreground">{f.note}</div>
+                    <div className="mt-1 text-[10px] uppercase tracking-wide text-muted-foreground/70">weight {f.weight}</div>
+                  </div>
+                ))}
+              </div>
+            </section>
+
+            {(data.summary || data.summaryError) && (
               <section className="rounded-lg border border-border bg-card p-4">
                 <div className="flex items-center gap-1.5 text-[11px] uppercase tracking-wide text-muted-foreground">
-                  <Sparkles size={12} className="text-[hsl(40,90%,55%)]" /> AI Read
+                  <Sparkles size={12} className="text-[hsl(40,90%,55%)]" /> AI read
                 </div>
-                <p className="mt-2 whitespace-pre-line text-[15px] leading-[1.8]">{data.summary}</p>
+                {data.summary
+                  ? <p className="mt-2 whitespace-pre-line text-sm leading-relaxed">{data.summary}</p>
+                  : <p className="mt-1 text-[11px] text-muted-foreground">{data.summaryError}</p>}
               </section>
             )}
 
-            {/* Factors */}
-            <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {data.factors.map((f) => (
-                <div key={f.key} className="rounded-lg border border-border bg-card p-3">
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-xs font-semibold">{f.label}</span>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <button className="text-muted-foreground hover:text-foreground" aria-label={`About ${f.label}`}>
-                            <Info size={12} />
-                          </button>
-                        </TooltipTrigger>
-                        <TooltipContent className="max-w-xs space-y-1.5 text-[11px] leading-relaxed">
-                          <p><span className="font-semibold">What it means: </span>{f.tooltip.meaning}</p>
-                          <p><span className="font-semibold">Market standpoint: </span>{f.tooltip.market}</p>
-                          <p><span className="font-semibold">Trader standpoint: </span>{f.tooltip.trader}</p>
-                        </TooltipContent>
-                      </Tooltip>
-                    </div>
-                    <span
-                      className="rounded px-1.5 py-0.5 font-mono text-[11px] font-bold"
-                      style={{ background: `${scoreColor(f.score)}22`, color: scoreColor(f.score) }}
-                    >
-                      {f.score > 0 ? "+" : ""}{f.score.toFixed(1)}
-                    </span>
-                  </div>
-                  <div className="mt-1 font-mono text-sm">{f.value}</div>
-                  <div className="mt-1 text-[11px] text-muted-foreground">{f.note}</div>
-                  <div className="mt-1 text-[10px] uppercase tracking-wide text-muted-foreground/70">
-                    {f.weight >= 1.5 ? "High weight" : "Medium weight"}
-                  </div>
-                </div>
-              ))}
-            </section>
+            {citeKeys.length > 0 && (
+              <section className="px-1 text-[10.5px] leading-relaxed text-muted-foreground">
+                <div className="mb-1 font-semibold text-foreground/80">Evidence behind today's tips</div>
+                <ul className="list-disc space-y-0.5 pl-4">{citeKeys.map((k) => <li key={k}>{REFERENCES[k]}</li>)}</ul>
+              </section>
+            )}
           </>
         )}
       </main>
     </div>
+  );
+}
+
+function Stat({ label, value, hint }: { label: string; value: string; hint?: string }) {
+  return (
+    <div>
+      <div className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</div>
+      <div className="font-mono text-sm font-semibold">{value}{hint && <span className="ml-1 text-[10px] font-normal text-muted-foreground">{hint}</span>}</div>
+    </div>
+  );
+}
+
+function TipCard({ t, highlight }: { t: Tip; highlight: boolean }) {
+  const tone = TONE[t.tone ?? "caution"];
+  return (
+    <div className={`rounded-md border p-3 ${highlight ? "border-border bg-muted/30" : "border-border/60"}`} style={{ borderLeft: `3px solid ${tone.bar}` }}>
+      <div className="flex items-start justify-between gap-2">
+        <div className="text-[13px] font-semibold leading-snug">{t.title}</div>
+        <span className={`shrink-0 rounded px-1.5 py-[1px] text-[10px] ${STRENGTH_STYLE[t.strength]}`}
+          title={t.cite ? REFERENCES[t.cite] : t.strength === "weak" ? "Practitioner rule — little formal evidence" : undefined}>
+          {t.strength}
+        </span>
+      </div>
+      <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{t.text}</p>
+      {highlight && <div className="mt-1 text-[10px] uppercase tracking-wide text-muted-foreground/70">today's conditions</div>}
+    </div>
+  );
+}
+
+function FearGreedCard({ fng, state }: { fng: FearGreed | null; state: "loading" | "ok" | "fail" }) {
+  return (
+    <section className="rounded-lg border border-border bg-card p-4">
+      <div className="mb-2 flex items-center gap-2">
+        <h2 className="text-sm font-semibold">Fear &amp; Greed</h2>
+        <span className="text-[11px] text-muted-foreground">· CNN, contrarian read</span>
+      </div>
+      {state === "loading" && <p className="flex items-center gap-1.5 text-xs text-muted-foreground"><Loader2 size={12} className="animate-spin" /> Loading…</p>}
+      {state === "fail" && <p className="text-xs text-muted-foreground">CNN's index couldn't be loaded right now (it may be blocked by your browser or network).</p>}
+      {fng && (
+        <>
+          <div className="flex items-end gap-3">
+            <div className="text-3xl font-black" style={{ color: fngColor(fng.score) }}>{Math.round(fng.score)}</div>
+            <div className="pb-1 text-xs capitalize text-muted-foreground">{fng.rating}</div>
+          </div>
+          <div className="mt-1 text-[11px] text-muted-foreground">
+            {[["prev close", fng.prevClose], ["1 week", fng.prevWeek], ["1 month", fng.prevMonth], ["1 year", fng.prevYear]]
+              .filter(([, v]) => v !== null).map(([l, v]) => `${l} ${Math.round(v as number)}`).join(" · ")}
+          </div>
+          <Spark points={fng.history} />
+          <div className="mt-2 space-y-1">
+            {fng.components.map((c) => (
+              <div key={c.key} className="flex items-center gap-2 text-[11px]">
+                <span className="w-40 shrink-0 truncate text-muted-foreground" title={c.label}>{c.label}</span>
+                <div className="h-1.5 flex-1 overflow-hidden rounded bg-muted">
+                  <div className="h-full rounded" style={{ width: `${Math.max(2, Math.min(100, c.score))}%`, background: fngColor(c.score) }} />
+                </div>
+                <span className="w-6 text-right font-mono">{Math.round(c.score)}</span>
+              </div>
+            ))}
+          </div>
+          <p className="mt-2 text-[10.5px] leading-relaxed text-muted-foreground">
+            Sentiment works at extremes and slowly: washed-out fear has tended to precede better returns, euphoria worse ones — but it is not a timing tool.
+            Kept out of the risk score on purpose.
+          </p>
+        </>
+      )}
+    </section>
+  );
+}
+
+function Spark({ points }: { points: { x: number; y: number }[] }) {
+  if (points.length < 10) return null;
+  const W = 300, Hh = 46;
+  const xs = points.map((p) => p.x), x0 = Math.min(...xs), x1 = Math.max(...xs);
+  const X = (x: number) => ((x - x0) / (x1 - x0 || 1)) * W, Y = (y: number) => Hh - (y / 100) * Hh;
+  const d = points.map((p, k) => `${k ? "L" : "M"}${X(p.x).toFixed(1)},${Y(p.y).toFixed(1)}`).join("");
+  return (
+    <svg viewBox={`0 0 ${W} ${Hh}`} className="mt-2 h-12 w-full" preserveAspectRatio="none" aria-label="Fear & Greed over the last year">
+      <rect x="0" y={Y(100)} width={W} height={Y(75) - Y(100)} fill="hsl(150,60%,40%,0.10)" />
+      <rect x="0" y={Y(25)} width={W} height={Y(0) - Y(25)} fill="hsl(0,70%,50%,0.10)" />
+      <path d={d} fill="none" stroke="hsl(40,90%,60%)" strokeWidth="1.5" vectorEffect="non-scaling-stroke" />
+    </svg>
   );
 }
