@@ -1,6 +1,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
 import { corsHeaders } from "../_shared/cors.ts";
 import { latestRegime } from "../_shared/signalLog.ts";
+const ord = (n: number) => `${n}${n % 100 >= 11 && n % 100 <= 13 ? "th" : ["th", "st", "nd", "rd"][n % 10] ?? "th"}`;
 
 /** ---------------------------------------------------------------
  * Market Flag v2 — market type + risk factors.
@@ -256,7 +257,7 @@ Deno.serve(async (req) => {
       else s = -0.5;
       factors.push({
         key: "vol", label: "Volatility (VIX)", weight: 1.5, score: s,
-        value: `VIX ${r1(vixLast)}${term !== null ? ` · VIX/VIX3M ${r2(term)}` : ""}${vixPct !== null ? ` · ${vixPct}th pct (1y)` : ""}`,
+        value: `VIX ${r1(vixLast)}${term !== null ? ` · VIX/VIX3M ${r2(term)}` : ""}${vixPct !== null ? ` · ${ord(vixPct)} percentile (1y)` : ""}`,
         note: term !== null && term >= 1 ? "Inverted term structure — acute stress" : vixLast >= 25 ? "High volatility" : vixLast < 16 ? "Calm" : vixLast < 20 ? "Normal" : "Elevated",
         tooltip: {
           meaning: "VIX = expected 30-day S&P volatility. VIX/VIX3M compares it with the 3-month expectation: below 1 is normal, above 1 means traders pay up for near-term protection.",
@@ -358,7 +359,7 @@ ${factors.map((f) => `- ${f.label}: ${f.value} (${f.note})`).join("\n")}`;
         const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
           method: "POST",
           headers: { Authorization: `Bearer ${GROQ_API_KEY}`, "Content-Type": "application/json" },
-          body: JSON.stringify({ model: "llama-3.3-70b-versatile", messages: [{ role: "user", content: prompt }], temperature: 0.2, max_tokens: 260 }),
+          body: JSON.stringify({ model: "openai/gpt-oss-120b", reasoning_effort: "low", messages: [{ role: "user", content: prompt }], temperature: 0.2, max_tokens: 960 }),
         });
         if (res.ok) summary = ((await res.json())?.choices?.[0]?.message?.content ?? "").trim();
         else summaryError = `AI read unavailable (Groq ${res.status}: ${(await res.text()).slice(0, 120)})`;

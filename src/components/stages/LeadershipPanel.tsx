@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { LEAD_INFO, computeLeadership, type GroupLead, type LeadState } from "@/lib/leadership";
+import { LEAD_INFO, leadershipForGroups, type GroupLead, type LeadState } from "@/lib/leadership";
+import { HowItWorks } from "@/components/Explainer";
 import type { StockStage } from "@/lib/stageAnalysis";
 
 const sign = (x: number) => `${x >= 0 ? "+" : ""}${x.toFixed(1)}%`;
@@ -24,22 +25,13 @@ export default function LeadershipPanel({ groups, spy, asOf, modeLabel, minMembe
   groups: { name: string; members: StockStage[] }[]; spy: StockStage | null; asOf: string | null; modeLabel: string; minMembers: number;
 }) {
   const [show, setShow] = useState<"leaders" | "all">("leaders");
-  const leads = useMemo(() => {
-    // weekly closes line up only for stocks scanned to the same week — use the most common week
-    const cnt = new Map<string, number>();
-    for (const g of groups) for (const r of g.members) cnt.set(r.as_of, (cnt.get(r.as_of) ?? 0) + 1);
-    const week = [...cnt.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? asOf;
-    const m = new Map<string, StockStage[]>();
-    for (const g of groups) m.set(g.name, g.members.filter((r) => r.as_of === week));
-    m.delete("Unknown"); m.delete("Other");
-    return computeLeadership(m, spy, minMembers);
-  }, [groups, spy, asOf, minMembers]);
+  const leads = useMemo(() => leadershipForGroups(groups, spy, asOf, minMembers), [groups, spy, asOf, minMembers]);
 
   if (!leads.length) {
     return (
       <section className="rounded-lg border border-border bg-card p-4">
         <h2 className="text-sm font-semibold">Group leadership</h2>
-        <p className="mt-1 text-xs text-muted-foreground">Needs weekly price history per stock — available after the next stage scan.</p>
+        <p className="mt-1 text-xs text-muted-foreground">Needs weekly price history per stock — press Scan Stages (or run a Full Scan) to fill it in.</p>
       </section>
     );
   }
@@ -81,8 +73,8 @@ export default function LeadershipPanel({ groups, spy, asOf, modeLabel, minMembe
                 <th className="px-2 py-1.5 text-left font-medium">State</th>
                 <th className="px-2 py-1.5 text-right font-medium" title="Percentile among groups of the 13-week return vs SPY, and its change over 4 weeks">RS rank 13w</th>
                 <th className="px-2 py-1.5 text-right font-medium">vs SPY 4w · 13w · 26w</th>
-                <th className="px-2 py-1.5 text-right font-medium" title="Members above their 10-week line (and the 13-week peak of that share)">&gt; 10w line</th>
-                <th className="px-2 py-1.5 text-right font-medium" title="Members that made a new 52-week high in the last 4 weeks">New highs</th>
+                <th className="px-2 py-1.5 text-right font-medium" title="Members above their 10-week line now (in brackets: the highest share in the last 13 weeks)">Above 10w line (13w peak)</th>
+                <th className="px-2 py-1.5 text-right font-medium" title="Members that made a new 52-week high in the last 4 weeks">New highs 4w</th>
                 <th className="px-2 py-1.5 text-left font-medium">RS line</th>
               </tr>
             </thead>
@@ -114,16 +106,21 @@ export default function LeadershipPanel({ groups, spy, asOf, modeLabel, minMembe
           </table>
         </div>
       )}
-      <div className="space-y-1 border-t border-border px-4 py-2 text-[10.5px] leading-relaxed text-muted-foreground">
-        <p>
-          <b className="text-foreground/80">Tested on your list</b> (sub-industries and themes, weekly, 2022–Oct 2026, groups vs SPY, median): over the next <b>4 weeks</b>,
-          Confirmed and Emerging groups beat SPY by about +1 to +2 pts (55–57% of the time) and Peak-warning groups lagged (−0.7 to −1.3, 45–46%).
-          Over <b>13 weeks</b> the warnings faded and groups that had lost leadership often rebounded — so use the states to choose where to look for
-          setups and to be stricter in the near term, not as sell signals. Today's stocks only (survivorship), and the yearly results swung a lot.
-        </p>
-        <p>
-          Research: industry momentum persists roughly 3–12 months as a group while the weekly #1 churns (Moskowitz &amp; Grinblatt 1999), so states need several weeks of agreement.
-        </p>
+      <div className="border-t border-border px-4 py-2">
+        <HowItWorks title="What the states mean & how they tested">
+          <p>
+            <b className="text-foreground/80">Emerging / Confirmed</b> = the group just started beating SPY with more of its stocks above their 10-week line.
+            <b className="text-foreground/80"> Mature</b> = still leading but for a while. <b className="text-foreground/80">Peak warning</b> = leading but cracking
+            (fewer stocks above trend, RS rank slipping). <b className="text-foreground/80">Leadership lost</b> = no longer beating SPY. Hover a state for the exact reasons.
+          </p>
+          <p>
+            <b className="text-foreground/80">Tested on your list</b> (sub-industries and themes, weekly, 2022–Oct 2026, groups vs SPY, median): over the next 4 weeks,
+            Confirmed and Emerging groups beat SPY by about +1 to +2 pts (55–57% of the time) and Peak-warning groups lagged (−0.7 to −1.3, 45–46%).
+            Over 13 weeks the warnings faded and groups that had lost leadership often rebounded — so use the states to choose where to look for
+            setups and to be stricter in the near term, not as sell signals. Today's stocks only (survivorship), and the yearly results swung a lot.
+          </p>
+          <p>Research: industry momentum persists roughly 3–12 months as a group while the weekly #1 churns (Moskowitz &amp; Grinblatt 1999), so states need several weeks of agreement.</p>
+        </HowItWorks>
       </div>
     </section>
   );

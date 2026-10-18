@@ -1,3 +1,4 @@
+import { ordinal } from "@/lib/utils";
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { ArrowLeft, Layers, Loader2, RefreshCw, Info, ChevronDown, ChevronRight } from "lucide-react";
@@ -10,11 +11,13 @@ import { useStockStages } from "@/hooks/useStockStages";
 import { useUniverseSectors } from "@/hooks/useUniverseSectors";
 import { groupKeyForIndustry, GROUP_MODE_LABEL, type GroupMode } from "@/lib/groupColors";
 import RegimePanel from "@/components/stages/RegimePanel";
+import { BottomLine, HowItWorks } from "@/components/Explainer";
+import { leadershipForGroups } from "@/lib/leadership";
 import TrackRecord from "@/components/stages/TrackRecord";
 import LeadershipPanel from "@/components/stages/LeadershipPanel";
 import StageStockTable, { StageBadge } from "@/components/stages/StageStockTable";
 import {
-  STAGE_COLORS, STAGE_NAMES, STAGE_TIPS, groupHealth, isStageScanRunning, runStageScan, stageWeeksAgo,
+  REGIME_TEXT, STAGE_COLORS, STAGE_NAMES, STAGE_TIPS, groupHealth, isStageScanRunning, regimeSeries, runStageScan, stageWeeksAgo,
   type StageNum, type StockStage,
 } from "@/lib/stageAnalysis";
 
@@ -258,6 +261,13 @@ export default function StageAnalysis() {
     [stocks, transWindow],
   );
 
+  // ----- Bottom line: breadth regime, Stage 2 share, leading groups, watchlist -----
+  const regimeNow = useMemo(() => { const s = regimeSeries(regimeRows); return s[s.length - 1] ?? null; }, [regimeRows]);
+  const leaders = useMemo(
+    () => leadershipForGroups(groups, market, asOf, Math.max(5, minGroupSize)).filter((g) => g.state === "emerging" || g.state === "confirmed" || g.state === "mature"),
+    [groups, market, asOf, minGroupSize],
+  );
+
   const startScan = async () => {
     setScan({ done: 0, total: 0 });
     try {
@@ -349,14 +359,29 @@ export default function StageAnalysis() {
 
         {stocks.length > 0 && (
           <>
-            {/* Market regime (breadth) */}
+            {regimeNow && (
+              <BottomLine
+                tone={regimeNow.color === "green" ? "good" : regimeNow.color === "red" ? "bad" : "warn"}
+                title={<>Breadth is <span className={regimeNow.color === "green" ? "text-gain-medium" : regimeNow.color === "red" ? "text-loss-medium" : "text-[hsl(40,90%,60%)]"}>{REGIME_TEXT[regimeNow.color].label.toLowerCase()}</span> — {REGIME_TEXT[regimeNow.color].short.replace(/^.*? — /, "")}</>}
+                lines={[
+                  breadth ? <>{breadth.now.toFixed(0)}% of your stocks are in Stage 2 ({ordinal(breadth.pct)} percentile of the last {breadth.weeks} weeks{breadth.pct <= 10 ? " — a washout; leaders often rebound hardest from here" : breadth.pct >= 90 ? " — crowded" : ""}).</> : null,
+                  leaders.length
+                    ? <>Leading {GROUP_MODE_LABEL[mode].toLowerCase()} groups: {leaders.slice(0, 4).map((g) => g.name).join(", ")}{leaders.length > 4 ? ` +${leaders.length - 4} more` : ""}. Look for setups here first.</>
+                    : <>No {GROUP_MODE_LABEL[mode].toLowerCase()} group is clearly leading SPY right now.</>,
+                  bestCandidates.length
+                    ? <>{bestCandidates.length} best candidates (fresh Stage 2 breakouts or late bases with strong RS in a healthy group): {bestCandidates.slice(0, 5).map((r) => r.symbol).join(", ")}.</>
+                    : <>No stock meets the best-candidate rules this week.</>,
+                ]}
+              />
+            )}
+
             <RegimePanel rows={regimeRows} />
 
             {/* Market overview */}
             <section className="rounded-lg border border-border bg-card p-4">
               <div className="mb-3 flex flex-wrap items-center gap-2">
-                <h2 className="text-sm font-semibold">Market Overview</h2>
-                <span className="text-[11px] text-muted-foreground">· all stocks in your list · click a stage for its full list</span>
+                <h2 className="text-sm font-semibold">Stages across your list</h2>
+                <span className="text-[11px] text-muted-foreground">· click a stage for its stocks</span>
                 {market && (
                   <span className="ml-auto inline-flex items-center gap-1.5 text-[11px] text-muted-foreground">
                     SPY <StageBadge r={market} />
@@ -386,7 +411,7 @@ export default function StageAnalysis() {
               <div className="mt-3 flex flex-wrap items-center justify-end gap-3 text-[10px] text-muted-foreground">
                 {breadth && (
                   <span className="mr-auto" title="Where this week's Stage 2 share sits within the chart's history. Very low readings (washouts) have tended to come before the strongest rebounds in leaders; very high readings mean a crowded, extended market — context, not a timing signal.">
-                    Stage 2 share <b className="text-foreground">{breadth.now.toFixed(0)}%</b> · {breadth.pct}th percentile of the last {breadth.weeks} weeks (range {breadth.lo.toFixed(0)}–{breadth.hi.toFixed(0)}%)
+                    Stage 2 share <b className="text-foreground">{breadth.now.toFixed(0)}%</b> · {ordinal(breadth.pct)} percentile of the last {breadth.weeks} weeks (range {breadth.lo.toFixed(0)}–{breadth.hi.toFixed(0)}%)
                     {breadth.pct <= 10 ? " · washout zone" : breadth.pct >= 90 ? " · crowded zone" : ""}
                   </span>
                 )}
@@ -493,7 +518,7 @@ export default function StageAnalysis() {
                       <th className="hidden px-2 py-2 text-left text-[11px] font-medium text-muted-foreground md:table-cell">Distribution</th>
                       {colHead(1, "S1")}{colHead(2, "S2")}{colHead(3, "S3")}{colHead(4, "S4")}
                       {colHead("a2", "2A", "Fresh Stage 2 breakouts (last 13 weeks) in the group")}
-                      {colHead("d2", "Health", "Strong: S2 ≥ 50% · Healthy: S2 ≥ 35% · Weak: S4 ≥ 50%. Arrow = change in S2 share vs 4 weeks ago")}
+                      {colHead("d2", "Stage mix", "From the share of the group's stocks in each stage right now — Strong: S2 ≥ 50% · Healthy: S2 ≥ 35% · Weak: S4 ≥ 50%. Arrow = change in the S2 share vs 4 weeks ago. (Group leadership above measures returns vs SPY instead, so the two can differ.)")}
                     </tr>
                   </thead>
                   <tbody>
@@ -544,18 +569,24 @@ export default function StageAnalysis() {
               </div>
             </section>
 
-            <p className="px-1 text-[11px] leading-relaxed text-muted-foreground">
-              <b className="text-foreground/80">Reading it:</b> leadership shows up as a rising share of a group's stocks in Stage 2 and new 2A breakouts together;
-              a group whose Stage 2 share keeps shrinking while Stage 3 grows is rolling over. Best long candidates: fresh Stage 2A breakouts in a
-              Strong / improving group — and avoid buying Stage 4 (or a 4B− bounce) just because it looks cheap.
-            </p>
-            <p className="px-1 text-[11px] leading-relaxed text-muted-foreground">
-              <b className="text-foreground/80">Backtest (your list, May 2023 – Jul 2026, 13 weeks ahead vs SPY, median):</b> Stage 2 −0.7%,
-              Stage 3 −1.5%, Stage 1 −2.5%, Stage 4 −3.4%; 2A was the best substage (+0.1%) and 4B− the worst (−5.3%). Stage 2 beat Stage 4
-              in every year. Today's list only, so all numbers flatter the past (survivorship) — the ordering is what matters.
-              An independent survivorship-free test (S&P 500 members 1992–2026, SSRN 2026) agrees on the core: Stage 2 (rising 30-week MA)
-              carried a small, significant edge, while telling Stage 1 bases from Stage 3 tops added none — and the market regime above matters most.
-            </p>
+            <HowItWorks title="How to read this page & how stages tested">
+              <p>
+                <b className="text-foreground/80">Stages</b> (Stan Weinstein): 1 = basing after a decline, 2 = advancing above a rising 30-week line, 3 = topping, 4 = declining.
+                2A is a fresh Stage 2 breakout. A stage only changes after two weekly confirmations or a clean range break.
+              </p>
+              <p>
+                <b className="text-foreground/80">Reading it:</b> leadership shows up as a rising share of a group's stocks in Stage 2 and new 2A breakouts together;
+                a group whose Stage 2 share keeps shrinking while Stage 3 grows is rolling over. Best long candidates: fresh Stage 2A breakouts in a
+                strong or improving group — and avoid buying Stage 4 (or a 4B− bounce) just because it looks cheap.
+              </p>
+              <p>
+                <b className="text-foreground/80">Backtest (your list, May 2023 – Jul 2026, 13 weeks ahead vs SPY, median):</b> Stage 2 −0.7%,
+                Stage 3 −1.5%, Stage 1 −2.5%, Stage 4 −3.4%; 2A was the best substage (+0.1%) and 4B− the worst (−5.3%). Stage 2 beat Stage 4
+                in every year. Today's list only, so all numbers flatter the past (survivorship) — the ordering is what matters.
+                An independent survivorship-free test (S&amp;P 500 members 1992–2026, SSRN 2026) agrees on the core: Stage 2 (rising 30-week MA)
+                carried a small, significant edge, while telling Stage 1 bases from Stage 3 tops added none — and breadth matters most.
+              </p>
+            </HowItWorks>
             <TrackRecord mode="stages" />
           </>
         )}

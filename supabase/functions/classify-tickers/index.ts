@@ -379,10 +379,10 @@ Return JSON only: {"SYMBOL": "Sub-Industry name", ...}. Use null if you are not 
         method: "POST",
         headers: { Authorization: `Bearer ${GROQ_KEY}`, "Content-Type": "application/json" },
         body: JSON.stringify({
-          model: "llama-3.3-70b-versatile",
+          model: "openai/gpt-oss-120b", reasoning_effort: "low",
           messages: [{ role: "user", content: prompt }],
           temperature: 0,
-          max_tokens: 1200,
+          max_tokens: 1900,
           response_format: { type: "json_object" },
         }),
       });

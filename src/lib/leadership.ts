@@ -142,3 +142,14 @@ export function computeLeadership(groups: Map<string, StockStage[]>, spy: StockS
     return { ...b, state, rank13, rank13Chg4, rank26, reasons };
   }).sort((a, b) => LEAD_INFO[a.state].order - LEAD_INFO[b.state].order || b.rank13 - a.rank13);
 }
+
+/** Leadership for the groups shown on the page (latest common week only; "Unknown"/"Other" left out). */
+export function leadershipForGroups(groups: { name: string; members: StockStage[] }[], spy: StockStage | null, asOf: string | null, minMembers: number): GroupLead[] {
+  const cnt = new Map<string, number>();
+  for (const g of groups) for (const r of g.members) cnt.set(r.as_of, (cnt.get(r.as_of) ?? 0) + 1);
+  const week = [...cnt.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? asOf;
+  const m = new Map<string, StockStage[]>();
+  for (const g of groups) m.set(g.name, g.members.filter((r) => r.as_of === week));
+  m.delete("Unknown"); m.delete("Other");
+  return computeLeadership(m, spy, minMembers);
+}

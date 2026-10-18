@@ -64,8 +64,8 @@ serve(async (req) => {
           Authorization: `Bearer ${GROQ_API_KEY}`,
         },
         body: JSON.stringify({
-          model: "llama-3.3-70b-versatile",
-          max_tokens: 512,
+          model: "openai/gpt-oss-120b", reasoning_effort: "low",
+          max_tokens: 1212,
           temperature: 0.1,
           messages: [
             { role: "system", content: SYSTEM_PROMPT },

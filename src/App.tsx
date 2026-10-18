@@ -14,7 +14,6 @@ import Earnings from "./pages/Earnings";
 import MarketDrivers from "./pages/MarketDrivers";
 import MorningBrief from "./pages/MorningBrief";
 import MarketFlag from "./pages/MarketFlag";
-import TradeDesk from "./pages/TradeDesk";
 import StorageManager from "./pages/StorageManager";
 import MinerviniChecker from "./pages/MinerviniChecker";
 import StageAnalysis from "./pages/StageAnalysis";
@@ -53,7 +52,6 @@ const App = () => (
             <Route path="/market-drivers" element={<MarketDrivers />} />
             <Route path="/morning-brief" element={<MorningBrief />} />
             <Route path="/market-flag" element={<MarketFlag />} />
-            <Route path="/trades" element={<TradeDesk />} />
             <Route path="/storage" element={<StorageManager />} />
             <Route path="/minervini" element={<MinerviniChecker />} />
             <Route path="/stages" element={<StageAnalysis />} />

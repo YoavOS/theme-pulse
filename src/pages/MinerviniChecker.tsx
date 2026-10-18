@@ -1,5 +1,6 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
+import { BottomLine, Fold, HowItWorks } from "@/components/Explainer";
 import { useStockStages } from "@/hooks/useStockStages";
 import { useStockBases } from "@/hooks/useStockBases";
 import { useUniverseSectors } from "@/hooks/useUniverseSectors";
@@ -291,6 +292,12 @@ export default function MinerviniChecker() {
 
 
   const header = multi ? Object.values(multi.reports)[0] : null;
+  const sepaProps: SepaProps = {
+    symbol: header?.symbol ?? "", stage: header ? stageBy.get(header.symbol) ?? null : null, base: header ? baseBy.get(header.symbol) ?? null : null,
+    rs: header ? rs.get(header.symbol) ?? null : null, groupName: header ? industryOf.get(header.symbol) ?? null : null,
+    group: header ? leadBy.get(industryOf.get(header.symbol) ?? "") ?? null : null, market,
+    fundamentalScore: multi?.reports.minervini?.overallScore ?? null, code33: multi?.series?.code33?.count ?? null,
+  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -339,12 +346,11 @@ export default function MinerviniChecker() {
           </div>
 
           <p className="mt-3 text-xs text-muted-foreground">
-            One analysis: SEC filing history (up to 10 years), earnings and estimate data, and your scans — scored only on the checks that held up in our 2021–25 backtest
-            (earnings momentum, quality, red flags), plus Minervini's SEPA fundamentals.
+            Up to 10 years of SEC filings plus earnings and estimate data, scored only on checks that held up in a 2021–25 backtest — then lined up with your scans (Minervini's SEPA).
           </p>
         </Card>
 
-        <SepaCandidates items={candidates} leadBy={leadBy} onPick={(sym) => runAnalysis(false, sym)} loading={loading} />
+        <SepaCandidates items={candidates} leadBy={leadBy} onPick={(sym) => runAnalysis(false, sym)} loading={loading} collapsed={!!multi} />
 
         {error && (
           <Card className="border-loss-medium/40 bg-loss-medium/5 p-4">
@@ -393,55 +399,55 @@ export default function MinerviniChecker() {
               </div>
             </Card>
 
-            <SepaCard
-              symbol={header.symbol}
-              stage={stageBy.get(header.symbol) ?? null}
-              base={baseBy.get(header.symbol) ?? null}
-              rs={rs.get(header.symbol) ?? null}
-              groupName={industryOf.get(header.symbol) ?? null}
-              group={leadBy.get(industryOf.get(header.symbol) ?? "") ?? null}
-              market={market}
-              fundamentalScore={multi.reports.minervini?.overallScore ?? null}
-              code33={multi.series?.code33?.count ?? null}
-            />
+            <SummaryLine p={multi.series?.profiles ?? null} sepa={sepaSummary(sepaProps)} base={sepaProps.base} />
 
             {multi.series?.profiles?.momentum && <ProfileCards p={multi.series.profiles} />}
+
+            <SepaCard {...sepaProps} />
+
             {multi.series?.history && <HistoryCard h={multi.series.history} />}
             {multi.series && multi.series.quarters.length > 0 && <QuarterTable s={multi.series} />}
             {multi.series && <ExtrasCard s={multi.series} />}
 
-            {!!multi.dataQuality?.warnings?.length && (
-              <Card className="border-[hsl(40,90%,55%)]/40 bg-[hsl(40,90%,55%)]/5 p-3 text-xs">
-                <div className="mb-1 font-semibold">Data notes</div>
-                <ul className="list-disc space-y-0.5 pl-4 text-muted-foreground">{multi.dataQuality.warnings.map((w) => <li key={w}>{w}</li>)}</ul>
-              </Card>
+            {multi.reports.minervini && (
+              <Fold
+                title="Minervini's fundamental checklist"
+                hint={`· ${multi.reports.minervini.overallScore}/100 ${multi.reports.minervini.verdict} · ${multi.reports.minervini.criteria.length} checks, bull & bear case`}
+              >
+                <div className="space-y-4">
+                  {multi.series && <ScoreBuild s={multi.series} />}
+                  <ProfileReportCard report={multi.reports.minervini} />
+                </div>
+              </Fold>
             )}
 
-            {multi.dataQuality?.coverage && (
-              <Card className="p-4">
-                <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                  <div>
-                    <div className="text-xs uppercase tracking-widest text-muted-foreground">Historical Coverage</div>
-                    <div className="mt-1 font-mono text-sm font-bold">
+            {(multi.dataQuality?.coverage || !!multi.dataQuality?.warnings?.length) && (
+              <Fold
+                title="Data sources & notes"
+                hint={`· ${Object.values(multi.dataQuality?.sourceStatus ?? {}).filter((v) => v.startsWith("ok")).length} sources ok${multi.dataQuality?.warnings?.length ? ` · ${multi.dataQuality.warnings.length} note${multi.dataQuality.warnings.length === 1 ? "" : "s"}` : ""}`}
+              >
+                <div className="space-y-3 text-xs">
+                  {!!multi.dataQuality?.warnings?.length && (
+                    <ul className="list-disc space-y-0.5 pl-4 text-muted-foreground">{multi.dataQuality.warnings.map((w) => <li key={w}>{w}</li>)}</ul>
+                  )}
+                  {multi.dataQuality?.coverage && (
+                    <div className="font-mono">
                       {multi.dataQuality.coverage.quarterlyRevenueYoY}/{multi.dataQuality.coverage.quarterTarget} quarterly revenue YoY · {multi.dataQuality.coverage.quarterlyEpsYoY}/{multi.dataQuality.coverage.quarterTarget} quarterly EPS YoY · {multi.dataQuality.coverage.annualRevenueYoY}/{multi.dataQuality.coverage.annualTarget} annual revenue
                     </div>
-                  </div>
-                  <div className="text-xs text-muted-foreground md:text-right">
-                    {multi.dataQuality.sourceStatus && (
-                      <div className="mb-1 grid grid-cols-[auto_auto] justify-end gap-x-3 text-left">
-                        {Object.entries(multi.dataQuality.sourceStatus).map(([k, v]) => (
-                          <Fragment key={k}><span>{k}</span><span className={v.startsWith("ok") ? "text-gain-medium" : v.startsWith("skipped") ? "" : "text-[hsl(40,90%,60%)]"}>{v}</span></Fragment>
-                        ))}
-                      </div>
-                    )}
-                    Used: {(multi.dataQuality.sources ?? []).join(" + ") || "cache"}<br />
-                    Calls: FMP {multi.dataQuality.fmpCalls ?? 0} · Yahoo {multi.dataQuality.yahooCalls ?? 0} · Finnhub {multi.dataQuality.finnhubCalls ?? 0}
+                  )}
+                  {multi.dataQuality?.sourceStatus && (
+                    <div className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-0.5">
+                      {Object.entries(multi.dataQuality.sourceStatus).map(([k, v]) => (
+                        <Fragment key={k}><span className="text-muted-foreground">{k}</span><span className={v.startsWith("ok") ? "text-gain-medium" : v.startsWith("skipped") || v.startsWith("estimated") ? "" : "text-[hsl(40,90%,60%)]"}>{v}</span></Fragment>
+                      ))}
+                    </div>
+                  )}
+                  <div className="text-muted-foreground">
+                    Used: {(multi.dataQuality?.sources ?? []).join(" + ") || "cache"} · Calls: FMP {multi.dataQuality?.fmpCalls ?? 0} · Yahoo {multi.dataQuality?.yahooCalls ?? 0} · Finnhub {multi.dataQuality?.finnhubCalls ?? 0}
                   </div>
                 </div>
-              </Card>
+              </Fold>
             )}
-
-            {multi.reports.minervini && <ProfileReportCard report={multi.reports.minervini} />}
           </>
         )}
       </main>
@@ -457,15 +463,24 @@ const MARK_CLS: Record<Mark, string> = {
 };
 const MARK_ICON: Record<Mark, string> = { pass: "✓", partial: "~", fail: "✗", unknown: "?" };
 
-function SepaCard(props: {
+type SepaProps = {
   symbol: string; stage: StockStage | null; base: StockBase | null; rs: number | null; groupName: string | null; group: GroupLead | null;
   market: { key: string; name: string } | null; fundamentalScore: number | null; code33: number | null;
-}) {
+};
+function sepaSummary(props: SepaProps) {
   const pillars = sepaPillars({ ...props, code33Count: props.code33 });
   const known = pillars.filter((p) => p.mark !== "unknown");
   const passes = known.filter((p) => p.mark === "pass").length;
   const fails = known.filter((p) => p.mark === "fail").length;
   const verdict = known.length < 4 ? "Not enough data" : fails === 0 && passes >= known.length - 1 ? "Aligned" : fails <= 1 && passes >= 3 ? "Partly aligned" : "Not aligned";
+  return { pillars, known, passes, fails, verdict };
+}
+
+function SepaCard(props: {
+  symbol: string; stage: StockStage | null; base: StockBase | null; rs: number | null; groupName: string | null; group: GroupLead | null;
+  market: { key: string; name: string } | null; fundamentalScore: number | null; code33: number | null;
+}) {
+  const { pillars, known, passes, verdict } = sepaSummary(props);
   const b = props.base;
   const pivot = b ? (b.pivot ?? b.features.pivot) : null, stop = b ? (b.support ?? b.features.support) : null;
   return (
@@ -478,10 +493,9 @@ function SepaCard(props: {
           </div>
         </div>
         {pivot !== null && stop !== null && stop < pivot && (
-          <Link to={`/trades?symbol=${encodeURIComponent(props.symbol)}&entry=${pivot.toFixed(2)}&stop=${stop.toFixed(2)}`}
-            className="ml-auto rounded-md border border-primary/40 bg-primary/10 px-3 py-1.5 text-xs text-primary hover:bg-primary/20">
-            Size it in Trade Desk → pivot {pivot.toFixed(2)}, stop {stop.toFixed(2)}
-          </Link>
+          <div className="ml-auto rounded-md border border-border bg-muted/20 px-3 py-1.5 text-xs">
+            Buy point <b className="font-mono">{pivot.toFixed(2)}</b> · stop <b className="font-mono">{stop.toFixed(2)}</b> · risk {(((pivot - stop) / pivot) * 100).toFixed(1)}%
+          </div>
         )}
       </div>
       <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
@@ -495,11 +509,13 @@ function SepaCard(props: {
           </div>
         ))}
       </div>
-      <p className="mt-3 text-[11px] leading-relaxed text-muted-foreground">
-        Minervini's SEPA buys leaders only when everything lines up: a Stage 2 trend that passes the Trend Template, strong and accelerating
-        fundamentals, a low-risk setup (VCP) near its pivot, a strong group, and a healthy market. Trend, setup, group and market come from your
-        weekly stage/base scans (as of the last scan), so they cost no extra data calls.
-      </p>
+      <HowItWorks title="What SEPA alignment means" className="mt-3">
+        <p>
+          Minervini's SEPA buys leaders only when everything lines up: a Stage 2 trend that passes the Trend Template, strong and accelerating
+          fundamentals, a low-risk setup (VCP) near its pivot, a strong group, and a healthy market. Trend, setup, group and market come from your
+          weekly stage/base scans (as of the last scan), so they cost no extra data calls.
+        </p>
+      </HowItWorks>
     </Card>
   );
 }
@@ -551,18 +567,19 @@ function QuarterTable({ s }: { s: Series }) {
   );
 }
 
-function SepaCandidates({ items, leadBy, onPick, loading }: {
+function SepaCandidates({ items, leadBy, onPick, loading, collapsed }: {
   items: { r: StockStage; b: StockBase | null; rs: number; g: string | null }[];
-  leadBy: Map<string, GroupLead>; onPick: (sym: string) => void; loading: boolean;
+  leadBy: Map<string, GroupLead>; onPick: (sym: string) => void; loading: boolean; collapsed: boolean;
 }) {
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(!collapsed);
+  useEffect(() => { setOpen(!collapsed); }, [collapsed]);
   const [onlyBases, setOnlyBases] = useState(true);
   const list = (onlyBases ? items.filter((x) => x.b && x.b.state !== "failed" && x.b.state !== "extended") : items).slice(0, 60);
   return (
     <Card className="p-5">
       <div className="flex flex-wrap items-center gap-2">
         <button onClick={() => setOpen(!open)} className="text-sm font-semibold">{open ? "▾" : "▸"} SEPA candidates</button>
-        <span className="text-[11px] text-muted-foreground">· Trend Template ✓ (8/8 incl. RS ≥ 70) and Stage 2, from your last scan — click a ticker to check its fundamentals</span>
+        <span className="text-[11px] text-muted-foreground">· {items.length} stocks pass Minervini's trend rules (Stage 2, Trend Template 8/8) in your last scan — click one to analyze it</span>
         <label className="ml-auto flex items-center gap-1.5 text-[11px] text-muted-foreground">
           <input type="checkbox" checked={onlyBases} onChange={(e) => setOnlyBases(e.target.checked)} /> only with a live base
         </label>
@@ -642,7 +659,7 @@ function ExtrasCard({ s }: { s: Series }) {
         <div>EPS surprises: <span className="font-mono">{s.surprises.length ? s.surprises.slice(0, 6).map((x) => `${x >= 0 ? "+" : ""}${x.toFixed(0)}%`).join(" ") : "—"}</span></div>
         <div className="mt-1">Revenue surprises: <span className="font-mono">{s.revSurprises?.length ? s.revSurprises.slice(0, 6).map((x) => `${x >= 0 ? "+" : ""}${x.toFixed(1)}%`).join(" ") : "—"}</span></div>
         <div className="mt-1">Next report: <b>{s.nextEarnings ?? "—"}</b></div>
-        <p className="mt-2 text-[10.5px] text-muted-foreground">Beats on both EPS and sales have been the more durable kind. Holding through a report is a sizing decision — see the Trade Desk.</p>
+        <p className="mt-2 text-[10.5px] text-muted-foreground">Beats on both EPS and sales have been the more durable kind. Holding through a report is a sizing decision: a gap can jump past your stop.</p>
       </Card>
       <Card className="p-4 text-xs">
         <h3 className="mb-2 text-sm font-semibold">Float &amp; short interest</h3>
@@ -657,20 +674,24 @@ function ExtrasCard({ s }: { s: Series }) {
           </>
         ) : <p className="text-muted-foreground">Unavailable (Yahoo didn't answer).</p>}
       </Card>
-      {s.scoreParts && s.scoreParts.length > 0 && (
-        <Card className="p-4 text-xs lg:col-span-3">
-          <h3 className="mb-2 text-sm font-semibold">How the Minervini score is built <span className="font-normal text-muted-foreground">· only parts with data count · data coverage {s.scoreCoveragePct ?? "—"}%</span></h3>
-          <div className="grid gap-x-6 gap-y-1 sm:grid-cols-2 lg:grid-cols-3">
-            {s.scoreParts.map((p) => (
-              <div key={p.label} className="grid grid-cols-[1fr_80px_40px] items-center gap-2">
-                <span>{p.label}</span>
-                <span className="h-1.5 overflow-hidden rounded bg-muted"><span className="block h-full bg-primary" style={{ width: `${(p.earned / p.max) * 100}%` }} /></span>
-                <span className="text-right font-mono text-muted-foreground">{p.earned}/{p.max}</span>
-              </div>
-            ))}
+    </div>
+  );
+}
+
+function ScoreBuild({ s }: { s: Series }) {
+  if (!s.scoreParts?.length) return null;
+  return (
+    <div className="text-xs">
+      <h3 className="mb-2 text-sm font-semibold">How the score is built <span className="font-normal text-muted-foreground">· only parts with data count · data coverage {s.scoreCoveragePct ?? "—"}%</span></h3>
+      <div className="grid gap-x-6 gap-y-1 sm:grid-cols-2 lg:grid-cols-3">
+        {s.scoreParts.map((p) => (
+          <div key={p.label} className="grid grid-cols-[1fr_80px_40px] items-center gap-2">
+            <span>{p.label}</span>
+            <span className="h-1.5 overflow-hidden rounded bg-muted"><span className="block h-full bg-primary" style={{ width: `${(p.earned / p.max) * 100}%` }} /></span>
+            <span className="text-right font-mono text-muted-foreground">{p.earned}/{p.max}</span>
           </div>
-        </Card>
-      )}
+        ))}
+      </div>
     </div>
   );
 }
@@ -707,16 +728,43 @@ function combinedRead(m: HProfile | undefined, q: HProfile | undefined, flags: R
   return null;
 }
 
+/** Bottom line for one stock: what the tested fundamentals say, the red flags, and whether SEPA lines up. */
+function SummaryLine({ p, sepa, base }: { p: Profiles | null; sepa: ReturnType<typeof sepaSummary>; base: StockBase | null }) {
+  const m = p?.momentum, q = p?.quality, flags = p?.redFlags ?? [];
+  const ms = m && m.verdict !== "Limited data" ? m.score : null, qs = q && q.verdict !== "Limited data" ? q.score : null;
+  const read = combinedRead(m, q, flags);
+  let title: string;
+  if (ms === null) title = "Not enough filing history to judge the fundamentals.";
+  else if (ms >= 70 && qs !== null && qs >= 55) title = "Rising earnings on a solid business.";
+  else if (ms >= 70 && qs !== null && qs < 40) title = "Earnings are rising, but it's a low-quality business.";
+  else if (ms < 40 && qs !== null && qs < 40) title = "Earnings are fading and the business is low quality.";
+  else if (ms >= 70) title = "Earnings are rising strongly.";
+  else if (ms < 40) title = "Earnings momentum is weak.";
+  else title = "Earnings momentum is mixed.";
+  const tone = flags.length >= 3 || (ms !== null && ms < 40) ? "bad" : ms !== null && ms >= 70 && flags.length <= 1 ? "good" : "warn";
+  const failing = sepa.pillars.filter((x) => x.mark === "fail" || x.mark === "partial").map((x) => x.label.toLowerCase());
+  const pivot = base ? (base.pivot ?? base.features.pivot) : null, stop = base ? (base.support ?? base.features.support) : null;
+  return (
+    <BottomLine
+      tone={tone}
+      title={title}
+      lines={[
+        read ? read.text : null,
+        flags.length ? <>{flags.length} red flag{flags.length === 1 ? "" : "s"}: {flags.map((f) => f.label.toLowerCase()).join("; ")}.</> : <>No red flags.</>,
+        sepa.verdict === "Not enough data"
+          ? <>SEPA: this stock isn't in your last stage/base scan, so trend, setup and group can't be checked.</>
+          : <>SEPA: <b className="text-foreground/90">{sepa.verdict.toLowerCase()}</b>{failing.length && sepa.verdict !== "Aligned" ? ` — not there yet on ${failing.join(", ")}` : ""}{pivot !== null && stop !== null && stop < pivot ? `. Buy point ${pivot.toFixed(2)}, stop ${stop.toFixed(2)}.` : "."}</>,
+      ]}
+    />
+  );
+}
+
 function ProfileCards({ p }: { p: Profiles }) {
   const [open, setOpen] = useState<string | null>(null);
   const flags = p.redFlags ?? [];
-  const read = combinedRead(p.momentum, p.quality, flags);
   const cards = [p.momentum, p.quality].filter((x): x is HProfile => !!x);
   return (
     <div className="space-y-3">
-      {read && (
-        <div className={`rounded-lg border px-4 py-2.5 text-sm ${read.tone === "good" ? "border-gain-medium/40 bg-gain-medium/10" : read.tone === "bad" ? "border-loss-medium/40 bg-loss-medium/10" : "border-[hsl(40,90%,55%)]/40 bg-[hsl(40,90%,55%)]/10"}`}>{read.text}</div>
-      )}
       <div className="grid gap-4 lg:grid-cols-3">
         {cards.map((h) => (
           <Card key={h.key} className="flex flex-col p-4">
@@ -774,11 +822,13 @@ function ProfileCards({ p }: { p: Profiles }) {
           <p className="mt-auto pt-3 text-[10.5px] leading-relaxed text-muted-foreground">{EVIDENCE.flags}</p>
         </Card>
       </div>
-      <p className="text-[10.5px] leading-relaxed text-muted-foreground">
+      <HowItWorks title="How these scores were tested">
+        <p>
         Backtest: ~450 US companies from your list, 16 dates (Nov 2021 – Aug 2025), filings as they stood on each date, returns vs SPY.
         Only names on today's list were tested (survivorship bias), so treat the absolute numbers loosely and compare the groups with each other.
         Dropped because they failed the test: sales-growth level and consistency, multi-year growth records, accruals, debt / equity.
       </p>
+      </HowItWorks>
     </div>
   );
 }

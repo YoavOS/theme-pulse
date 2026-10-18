@@ -235,6 +235,19 @@ export const CHART_CHECKS: Record<BaseLabel, string[]> = {
 const CACHE_KEY = "stock_bases_v1";
 const CACHE_TTL = 6 * 60 * 60 * 1000;
 
+/** Newest updated_at on the server (one tiny query); undefined when the check itself fails. */
+async function latestUpdate(): Promise<string | null | undefined> {
+  try {
+    const { data, error } = await (supabase as SupabaseClient).from("stock_bases").select("updated_at").not("score", "is", null).order("updated_at", { ascending: false }).limit(1);
+    if (error) return undefined;
+    return (data?.[0] as { updated_at?: string } | undefined)?.updated_at ?? null;
+  } catch { return undefined; }
+}
+async function cacheStillFresh(v: string | null) {
+  const latest = await latestUpdate();
+  return latest === undefined || latest === v;
+}
+
 /** All base rows (cached in the browser; cleared after every scan — see stageAnalysis.runStageScan). */
 let loadBasesInflight: Promise<StockBase[]> | null = null;
 /** Concurrent callers (several hooks reloading after a scan) share one network load. */
@@ -251,8 +264,9 @@ async function loadBasesImpl(force: boolean): Promise<StockBase[]> {
     try {
       const raw = localStorage.getItem(CACHE_KEY);
       if (raw) {
-        const p = JSON.parse(raw) as { ts: number; rows: StockBase[] };
-        if (Date.now() - p.ts < CACHE_TTL && Array.isArray(p.rows)) return p.rows;
+        const p = JSON.parse(raw) as { ts: number; rows: StockBase[]; v?: string | null };
+        // Use the cache only while the server has nothing newer (a scan from another device or tab).
+        if (Date.now() - p.ts < CACHE_TTL && Array.isArray(p.rows) && await cacheStillFresh(p.v ?? null)) return p.rows;
       }
     } catch { /* ignore */ }
   }
@@ -269,7 +283,8 @@ async function loadBasesImpl(force: boolean): Promise<StockBase[]> {
     rows.push(...(data as unknown as StockBase[]));
     if (data.length < 1000) break;
   }
-  try { localStorage.setItem(CACHE_KEY, JSON.stringify({ ts: Date.now(), rows })); } catch { /* quota */ }
+  const v = rows.reduce<string | null>((m, r) => (r.updated_at && (!m || r.updated_at > m) ? r.updated_at : m), null);
+  try { localStorage.setItem(CACHE_KEY, JSON.stringify({ ts: Date.now(), rows, v })); } catch { /* quota */ }
   return rows;
 }
 

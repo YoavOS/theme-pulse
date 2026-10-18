@@ -393,7 +393,7 @@ async function fetchFinnhubEarningsHistory(symbol: string, quality: DataQuality)
     const today = new Date().toISOString().slice(0, 10);
     const past = rows.filter((x) => x.date < today && x.epsActual !== null).sort((a, b) => b.date.localeCompare(a.date));
     const next = rows.filter((x) => x.date >= today).map((x) => x.date).sort()[0] ?? null;
-    quality.sourceStatus["Finnhub earnings calendar"] = `ok (${past.length} reports)`;
+    quality.sourceStatus["Finnhub earnings calendar"] = `ok (${past.length} past reports${next ? `, next ${next}` : ""})`;
     return { past, next };
   } catch (e) { quality.sourceStatus["Finnhub earnings calendar"] = `error: ${e instanceof Error ? e.message : e}`; return { past: [], next: null }; }
 }
@@ -1026,15 +1026,17 @@ function makeReport(symbol: string, profile: any, derived: any): MinerviniReport
   ];
 
   const bullCase = [
-    revTrend[0] !== null ? `Latest quarterly sales growth is ${fmtPct(revTrend[0])}, with a ${revAccel} multi-quarter profile.` : "Revenue trend data is limited and should be verified against filings.",
-    epsTrend[0] !== null ? `Latest normalized EPS growth is ${fmtPct(epsTrend[0])}, with ${epsAccel} momentum.` : "EPS trend data is limited or distorted by losses/one-time items.",
-    opMarginTrend[0] !== null ? `Operating/non-GAAP margin proxy is ${fmtPct(opMarginTrend[0])}.` : "Margin data is incomplete.",
+    revTrend[0] !== null ? `Latest quarterly sales growth is ${fmtPct(revTrend[0])}; the multi-quarter trend is ${revAccel}.` : "Revenue trend data is limited and should be verified against filings.",
+    epsTrend[0] !== null ? `Latest normalized EPS growth is ${fmtPct(epsTrend[0])}; the trend is ${epsAccel}.` : "EPS trend data is limited or distorted by losses/one-time items.",
+    opMarginTrend[0] !== null ? `Operating margin is ${fmtPct(opMarginTrend[0])}.` : "Margin data is incomplete.",
   ];
   const bearCase = [
-    derived.debtToEquity !== null && derived.debtToEquity > 1.5 ? `Debt/equity is elevated at ${fmtRatio(derived.debtToEquity)}.` : "Debt/equity is not the primary weakness based on available data.",
-    revAccel === "decelerating" || epsAccel === "decelerating" ? "Growth trend is decelerating across recent quarters." : "Main risk is whether current growth consistency can persist.",
-    derived.warnings.length ? `Data caution: ${derived.warnings[0]}` : "No major parser warning triggered, but verify latest filings for final decisions.",
-  ];
+    derived.debtToEquity !== null && derived.debtToEquity > 1.5 ? `Debt/equity is elevated at ${fmtRatio(derived.debtToEquity)}.` : null,
+    revAccel === "decelerating" || epsAccel === "decelerating" ? `Growth is slowing (${revAccel === "decelerating" ? "sales" : ""}${revAccel === "decelerating" && epsAccel === "decelerating" ? " and " : ""}${epsAccel === "decelerating" ? "EPS" : ""}).` : null,
+    opMarginTrend[0] !== null && opMarginTrend[3] !== null && opMarginTrend[3] !== undefined && opMarginTrend[0] < opMarginTrend[3] - 2 ? `Operating margin fell from ${fmtPct(opMarginTrend[3])} to ${fmtPct(opMarginTrend[0])} over three quarters.` : null,
+    derived.warnings.length ? `Data caution: ${derived.warnings[0]}` : null,
+  ].filter((x): x is string => !!x);
+  if (!bearCase.length) bearCase.push("No clear fundamental weakness in the reported numbers — the main risk is that growth this strong slows.");
   const verdict = derived.score >= 80 ? "PASS" : derived.score >= 60 ? "BORDERLINE" : "FAIL";
   return {
     symbol,
@@ -1811,8 +1813,21 @@ async function buildBundle(symbol: string, force: boolean) {
   });
   const fq: FQ[] = sec.quarters.length >= 8 ? sec.quarters.map((q) => ({ ...q })) : quarters.map(toFQ);
   const fa: FQ[] = sec.annual.length >= 4 ? sec.annual.map((q) => ({ ...q })) : annual.map(toFQ);
-  const lastRep = fhHist.past[0];
-  const [stockDaily, spyDaily] = await Promise.all([fetchYahooDaily(symbol, quality), lastRep ? fetchYahooDaily("SPY", quality) : Promise.resolve([] as DBar[])]);
+  const [stockDaily, spyDaily] = await Promise.all([fetchYahooDaily(symbol, quality), fetchYahooDaily("SPY", quality)]);
+  // Latest report: Finnhub's calendar when it has history; otherwise the latest Finnhub surprise
+  // (quarter end + EPS vs estimate) with the report day taken as the heaviest-volume session
+  // 10–80 days after the quarter ended (the reaction day).
+  let lastRep: EarnRow | undefined = fhHist.past[0];
+  if (!lastRep && fhEarn[0]?.period && stockDaily.length) {
+    const pe = Date.parse(fhEarn[0].period) / 1000;
+    const win = stockDaily.filter((b) => b.ts >= pe + 10 * 86400 && b.ts <= pe + 80 * 86400 && b.volume !== null && b.close !== null);
+    const k = stockDaily.length - 1;
+    const spike = win.filter((b) => b.ts < stockDaily[Math.max(0, k - 1)].ts).sort((a, b) => (b.volume ?? 0) - (a.volume ?? 0))[0];
+    if (spike) {
+      lastRep = { date: new Date(spike.ts * 1000).toISOString().slice(0, 10), hour: "bmo", epsActual: fhEarn[0].actual, epsEstimate: fhEarn[0].estimate, revenueActual: null, revenueEstimate: null };
+      quality.sourceStatus["Last report date"] = `estimated from volume (${lastRep.date})`;
+    }
+  }
   let reactionPct: number | null = null;
   if (lastRep) {
     const m = measureEarnings({ symbol, date: lastRep.date, hour: lastRep.hour, epsActual: lastRep.epsActual, epsEstimate: lastRep.epsEstimate, revenueActual: lastRep.revenueActual, revenueEstimate: lastRep.revenueEstimate }, stockDaily, spyDaily);
@@ -1856,7 +1871,7 @@ async function polishWithGroq(report: MinerviniReport, derived: any): Promise<Mi
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${GROQ_KEY}` },
     body: JSON.stringify({
-      model: "llama-3.3-70b-versatile",
+      model: "openai/gpt-oss-120b", reasoning_effort: "low",
       temperature: 0.1,
       response_format: { type: "json_object" },
       messages: [
