@@ -1024,6 +1024,57 @@ export type Database = {
         }
         Relationships: []
       }
+      trade_positions: {
+        Row: {
+          created_at: string
+          entry_date: string
+          entry_price: number
+          exit_date: string | null
+          exit_price: number | null
+          id: string
+          initial_stop: number
+          notes: string | null
+          shares: number
+          status: string
+          stop: number | null
+          symbol: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          entry_date: string
+          entry_price: number
+          exit_date?: string | null
+          exit_price?: number | null
+          id?: string
+          initial_stop: number
+          notes?: string | null
+          shares: number
+          status?: string
+          stop?: number | null
+          symbol: string
+          updated_at?: string
+          user_id?: string
+        }
+        Update: {
+          created_at?: string
+          entry_date?: string
+          entry_price?: number
+          exit_date?: string | null
+          exit_price?: number | null
+          id?: string
+          initial_stop?: number
+          notes?: string | null
+          shares?: number
+          status?: string
+          stop?: number | null
+          symbol?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       yahoo_history_cache: {
         Row: {
           data_points: number | null
