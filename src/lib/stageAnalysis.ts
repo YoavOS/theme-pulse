@@ -28,6 +28,7 @@ export interface StageFeatures {
   flags?: string;
   /** Minervini Trend Template — 7 price rules on weekly proxies (the RS ≥ 70 rule is applied in the app) */
   tt?: { pass: boolean; count: number; failed: string[] } | null;
+  wc?: number[];
 }
 
 export interface StockStage {

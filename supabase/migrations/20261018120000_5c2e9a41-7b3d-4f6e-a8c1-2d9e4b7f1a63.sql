@@ -26,6 +26,9 @@ CREATE TABLE IF NOT EXISTS public.signal_log (
   base_tight    boolean,                    -- contracting on daily swings
   pivot         numeric,
   trigger_rvol  numeric,
+  vol_score     smallint,                   -- breakout volume support 0–2 (quiet before + up/down volume)
+  earn_fuel     smallint,                   -- latest earnings report score 0–100
+  earn_label    text,                       -- beat_bought | beat_sold | …
   regime        text,                       -- green | yellow | red
   p50           numeric,                    -- % of the list above its 10-week MA
   p200          numeric,                    -- % above the 40-week MA

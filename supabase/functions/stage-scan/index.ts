@@ -3,6 +3,7 @@ import { corsHeaders } from "../_shared/cors.ts";
 import { classifyStage, completedWeeks, type Stage, type WeeklyBar } from "../_shared/stageEngine.ts";
 import { detectBase, finalizeBase, type BaseFeatures, type DailyBar } from "../_shared/baseEngine.ts";
 import { logSignals, type BaseLogInfo } from "../_shared/signalLog.ts";
+import { fetchEarningsCalendar, measureEarnings, scoreFuel, type DBar, type EarnEvent, type EarnInfo } from "../_shared/earningsFuel.ts";
 
 /** ---------------------------------------------------------------
  * stage-scan — Weinstein Stage Analysis + Base Scanner for the whole stock list.
@@ -15,6 +16,7 @@ import { logSignals, type BaseLogInfo } from "../_shared/signalLog.ts";
  *                                                 signal log snapshot + 4/8/13-week outcomes
  *   { action: "status" }                        → row counts + last week classified
  *   { action: "chart", symbol }                 → last 2 years of weekly bars + 30w MA (app charts)
+ *   { action: "positions", symbols }            → 1 year of daily bars + next earnings date (Trade Desk, ≤30)
  *
  * One Yahoo call per stock (5 years of weekly bars — long warm-up for the stage state machine). Benchmark = SPY.
  * Daily bars for breakout timing are read from the Full Scan's cache
@@ -47,6 +49,30 @@ async function fetchWeekly(symbol: string): Promise<WeeklyBar[] | null> {
         const c = q.close?.[i], h = q.high?.[i], l = q.low?.[i], o = q.open?.[i];
         if (c == null || h == null || l == null) continue;
         out.push({ t: ts[i], o: o ?? c, h, l, c, v: q.volume?.[i] ?? 0 });
+      }
+      return out;
+    } catch {
+      await new Promise((r) => setTimeout(r, 500));
+    }
+  }
+  return null;
+}
+
+async function fetchDaily(symbol: string, range = "6mo"): Promise<DailyBar[] | null> {
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=${range}&interval=1d&includePrePost=false`;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const res = await fetch(url, { headers: { "User-Agent": UA, Accept: "application/json" } });
+      if (res.status === 429) { await res.body?.cancel(); await new Promise((r) => setTimeout(r, 1500)); continue; }
+      if (!res.ok) { await res.body?.cancel(); return null; }
+      const j = await res.json();
+      const r = j?.chart?.result?.[0];
+      const ts: number[] = r?.timestamp ?? [];
+      const q = r?.indicators?.quote?.[0] ?? {};
+      const out: DailyBar[] = [];
+      for (let i = 0; i < ts.length; i++) {
+        if (q.close?.[i] == null) continue;
+        out.push({ ts: ts[i], open: q.open?.[i] ?? null, high: q.high?.[i] ?? null, low: q.low?.[i] ?? null, close: q.close[i], volume: q.volume?.[i] ?? null });
       }
       return out;
     } catch {
@@ -180,6 +206,37 @@ Deno.serve(async (req) => {
       return json({ ok: true, processed: rows.length, bases: basesStored, failed, market: { stage: bench.stage, substage: bench.substage } });
     }
 
+    if (action === "positions") {
+      // Daily bars (6 months) + next earnings date for the Trade Desk (≤ 30 symbols).
+      const syms = [...new Set((body.symbols ?? []).map((x) => String(x).toUpperCase().trim()).filter((x) => /^[A-Z0-9][A-Z0-9.\-]{0,9}$/.test(x)))].slice(0, 30);
+      const out: Record<string, unknown> = {};
+      const nextEarn = new Map<string, string>();
+      if (FINNHUB_KEY && syms.length) {
+        try {
+          for (const e of await fetchEarningsCalendar(FINNHUB_KEY, 0, 63)) {
+            if (!syms.includes(e.symbol)) continue;
+            const prev = nextEarn.get(e.symbol);
+            if (!prev || e.date < prev) nextEarn.set(e.symbol, e.date);
+          }
+        } catch (e) { console.warn("positions: earnings failed", e); }
+      }
+      let cur = 0;
+      const sig = (x: number | null) => (x === null ? null : Number(x.toPrecision(6)));
+      const worker = async () => {
+        while (cur < syms.length) {
+          const s = syms[cur++];
+          const d = await fetchDaily(s, "1y");
+          if (!d?.length) { out[s] = null; continue; }
+          out[s] = {
+            t: d.map((b) => b.ts), o: d.map((b) => sig(b.open)), h: d.map((b) => sig(b.high)), l: d.map((b) => sig(b.low)),
+            c: d.map((b) => sig(b.close)), v: d.map((b) => b.volume), earnings: nextEarn.get(s) ?? null,
+          };
+        }
+      };
+      await Promise.all(Array.from({ length: Math.min(6, syms.length) }, worker));
+      return json({ ok: true, data: out });
+    }
+
     if (action === "chart") {
       // Weekly bars for one stock (the app's stage / base charts) — last 2 years + 30-week MA.
       const sym = String(body.symbol ?? "").toUpperCase().trim();
@@ -232,26 +289,62 @@ Deno.serve(async (req) => {
         };
         rsPctOf = pctOf;
 
-        // Upcoming earnings (one Finnhub call for the next 30 days)
+        // Earnings: the next report date (warnings) and how the latest report landed (earnings fuel)
         const earnings = new Map<string, string>();
+        const lastReport = new Map<string, EarnEvent>();
         if (FINNHUB_KEY) {
           try {
             const today = new Date().toISOString().slice(0, 10);
-            const to = new Date(Date.now() + 30 * 86400_000).toISOString().slice(0, 10);
-            const res = await fetch(`https://finnhub.io/api/v1/calendar/earnings?from=${today}&to=${to}&token=${FINNHUB_KEY}`);
-            if (res.ok) {
-              const j = await res.json();
-              for (const e of (j?.earningsCalendar ?? []) as { symbol?: string; date?: string }[]) {
-                if (!e.symbol || !e.date) continue;
-                const sym = e.symbol.toUpperCase();
-                const prev = earnings.get(sym);
-                if (!prev || e.date < prev) earnings.set(sym, e.date);
+            for (const e of await fetchEarningsCalendar(FINNHUB_KEY, -75, 31)) {
+              if (e.date >= today) {
+                const prev = earnings.get(e.symbol);
+                if (!prev || e.date < prev) earnings.set(e.symbol, e.date);
+              } else {
+                const prev = lastReport.get(e.symbol);
+                if (!prev || e.date > prev.date) lastReport.set(e.symbol, e);
               }
-            } else await res.body?.cancel();
+            }
           } catch (e) { console.warn("earnings calendar failed", e); }
         }
 
         const baseRows = await fetchAll<{ symbol: string; features: BaseFeatures; as_of: string }>(db, "stock_bases", "symbol, features, as_of");
+        // Earnings fuel for base candidates that reported in the last ~75 days (daily bars from the
+        // Full Scan cache; a few missing ones fetched from Yahoo).
+        const fuelBy = new Map<string, EarnInfo>();
+        try {
+          const want = baseRows.map((r) => r.symbol).filter((x) => lastReport.has(x));
+          if (want.length) {
+            const dailyOf = new Map<string, DBar[]>();
+            for (let k = 0; k < want.length + 1; k += 100) {
+              const syms = [...want.slice(k, k + 100), ...(k === 0 ? [BENCH] : [])];
+              const { data } = await db.from("yahoo_history_cache").select("symbol, period, ohlc").in("symbol", syms).in("period", ["6mo", "1y"]);
+              for (const r of (data ?? []) as { symbol: string; period: string; ohlc: DBar[] | null }[]) {
+                if (!Array.isArray(r.ohlc) || !r.ohlc.length) continue;
+                const cur = dailyOf.get(r.symbol);
+                const lastTs = (a: DBar[]) => a[a.length - 1]?.ts ?? 0;
+                if (!cur || lastTs(r.ohlc) > lastTs(cur)) dailyOf.set(r.symbol, r.ohlc);
+              }
+            }
+            const staleCut = Date.now() / 1000 - 6 * 86400;
+            const isStale = (a?: DBar[]) => !a || !a.length || a[a.length - 1].ts < staleCut;
+            if (isStale(dailyOf.get(BENCH))) { const b = await fetchDaily(BENCH); if (b) dailyOf.set(BENCH, b); }
+            let fetched = 0;
+            for (const sym of want) {
+              if (!isStale(dailyOf.get(sym)) || fetched >= 40) continue;
+              const b = await fetchDaily(sym); fetched++;
+              if (b) dailyOf.set(sym, b);
+            }
+            const spyD = dailyOf.get(BENCH) ?? [];
+            for (const sym of want) {
+              const d = dailyOf.get(sym);
+              if (!d || isStale(d)) continue;
+              const info = measureEarnings(lastReport.get(sym)!, d, spyD);
+              if (info) fuelBy.set(sym, info);
+            }
+            scoreFuel([...fuelBy.values()]);
+          }
+        } catch (e) { console.warn("earnings fuel failed", e); }
+
         const updates: Record<string, unknown>[] = [];
         const drop: string[] = [];
         const todayMs = Date.parse(new Date().toISOString().slice(0, 10));
@@ -262,11 +355,13 @@ Deno.serve(async (req) => {
           const rsPct = pctOf(r26By.get(row.symbol) ?? f.r26Pct);
           const ed = earnings.get(row.symbol) ?? null;
           const inDays = ed ? Math.round((Date.parse(ed) - todayMs) / 86400_000) : null;
+          f.earn = fuelBy.get(row.symbol) ?? null;
           const fin = finalizeBase(f, rsPct, inDays);
           if (!fin) { drop.push(row.symbol); continue; }
           baseBy.set(row.symbol, {
             score: fin.score, state: fin.state, label: fin.primaryLabel, labels: fin.labels,
             tight: !!f.daily?.contracting, pivot: f.pivot, rvol: f.trigger?.rvol ?? null,
+            earnFuel: f.earn?.fuel ?? null, earnLabel: f.earn?.label ?? null, volScore: f.trigger?.vol?.score ?? null,
           });
           updates.push({
             symbol: row.symbol, features: f, as_of: row.as_of,

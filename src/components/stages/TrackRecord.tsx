@@ -11,6 +11,7 @@ import { Loader2 } from "lucide-react";
 interface LogRow {
   week: string; stage: number | null; substage: string | null; tt: boolean | null;
   base_state: string | null; base_label: string | null; base_tight: boolean | null; base_score: number | null; regime: string | null;
+  earn_label: string | null; vol_score: number | null;
   fwd4: number | null; spy4: number | null; fwd8: number | null; spy8: number | null; fwd13: number | null; spy13: number | null;
 }
 type H = 4 | 8 | 13;
@@ -24,7 +25,7 @@ async function loadLog() {
   const rows: LogRow[] = [];
   for (let from = 0; ; from += 1000) {
     const { data, error } = await db.from("signal_log")
-      .select("week, stage, substage, tt, base_state, base_label, base_tight, base_score, regime, fwd4, spy4, fwd8, spy8, fwd13, spy13")
+      .select("week, stage, substage, tt, base_state, base_label, base_tight, base_score, regime, earn_label, vol_score, fwd4, spy4, fwd8, spy8, fwd13, spy13")
       .not("fwd4", "is", null).gte("week", since).range(from, from + 999);
     if (error) throw error;
     if (!data?.length) break;
@@ -67,6 +68,9 @@ export default function TrackRecord({ mode }: { mode: "stages" | "bases" }) {
       ["Tightening (daily)", (r) => !!r.base_tight], ["VCP", (r) => r.base_label === "vcp"], ["Flat base", (r) => r.base_label === "flat"],
       ["Cup w/ handle", (r) => r.base_label === "cup"], ["IPO base", (r) => r.base_label === "ipo"], ["Base · green regime", (r) => !!r.base_state && r.regime === "green"],
       ["Base · red regime", (r) => !!r.base_state && r.regime === "red"],
+      ["Earnings bought (last report)", (r) => ["beat_bought", "miss_bought", "reaction_up"].includes(r.earn_label ?? "")],
+      ["Earnings sold (last report)", (r) => ["beat_sold", "miss_sold", "reaction_down"].includes(r.earn_label ?? "")],
+      ["Breakout volume support 2/2", (r) => r.vol_score === 2],
     ];
     return defs.map(([name, fn]) => {
       const g = rows.filter(fn);
