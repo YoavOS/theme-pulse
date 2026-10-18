@@ -10,6 +10,7 @@ import { useStockStages } from "@/hooks/useStockStages";
 import { useUniverseSectors } from "@/hooks/useUniverseSectors";
 import { groupKeyForIndustry, GROUP_MODE_LABEL, type GroupMode } from "@/lib/groupColors";
 import RegimePanel from "@/components/stages/RegimePanel";
+import TrackRecord from "@/components/stages/TrackRecord";
 import StageStockTable, { StageBadge } from "@/components/stages/StageStockTable";
 import {
   STAGE_COLORS, STAGE_NAMES, STAGE_TIPS, groupHealth, isStageScanRunning, runStageScan, stageWeeksAgo,
@@ -552,6 +553,7 @@ export default function StageAnalysis() {
               An independent survivorship-free test (S&P 500 members 1992–2026, SSRN 2026) agrees on the core: Stage 2 (rising 30-week MA)
               carried a small, significant edge, while telling Stage 1 bases from Stage 3 tops added none — and the market regime above matters most.
             </p>
+            <TrackRecord mode="stages" />
           </>
         )}
       </main>
