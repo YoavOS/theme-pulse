@@ -24,6 +24,10 @@ export interface StageFeatures {
   rangeWeeks?: number | null;
   r26Pct?: number | null;   // 26-week return (%)
   ytdPct?: number | null;   // since the last weekly close of the previous year (%)
+  /** breadth flags per week, base-32 (bit0 >10w MA, bit1 >40w MA, bit2 new 52w high, bit3 new 52w low, bit4 10w>40w) */
+  flags?: string;
+  /** Minervini Trend Template — 7 price rules on weekly proxies (the RS ≥ 70 rule is applied in the app) */
+  tt?: { pass: boolean; count: number; failed: string[] } | null;
 }
 
 export interface StockStage {
@@ -200,6 +204,60 @@ export function groupHealth(s2Pct: number, s4Pct: number): { label: string; tone
 }
 
 /** Stage N weeks ago from the history string (null if unknown). */
+// ── Market regime (breadth) ─────────────────────────────────────
+export type RegimeColor = "green" | "yellow" | "red";
+export interface RegimeWeek { p50: number; p200: number; hl: number; spyUp: boolean | null; color: RegimeColor; n: number }
+
+const flagBits = (ch: string | undefined) => (ch ? parseInt(ch, 32) : NaN);
+
+/**
+ * Weekly market regime from every stock's breadth flags (aligned rows only, newest last).
+ * Thresholds follow the breadth research (StockCharts conventions; composite in the style of
+ * the "% above 50/200-day MA + new highs vs lows + index trend" gate):
+ *   green  = SPY above a rising-aligned 40w MA, ≥ 50% above the 40w (≈200-day), ≥ 60% above the
+ *            10w (≈50-day) and High–Low index ≥ 55
+ *   red    = < 40% above both MAs, or High–Low index < 40 and falling
+ *   yellow = everything else
+ */
+export function regimeSeries(rows: StockStage[]): RegimeWeek[] {
+  const stocks = rows.filter((r) => r.symbol !== "SPY" && r.features?.flags);
+  const spy = rows.find((r) => r.symbol === "SPY")?.features?.flags ?? "";
+  const len = Math.max(0, ...stocks.map((r) => r.features!.flags!.length));
+  const raw: Omit<RegimeWeek, "color" | "hl">[] = [];
+  const rh: number[] = [];
+  for (let ago = len - 1; ago >= 0; ago--) {
+    let n = 0, a10 = 0, a40 = 0, nh = 0, nl = 0;
+    for (const r of stocks) {
+      const f = r.features!.flags!;
+      const b = flagBits(f[f.length - 1 - ago]);
+      if (!Number.isFinite(b)) continue;
+      n++;
+      if (b & 1) a10++;
+      if (b & 2) a40++;
+      if (b & 4) nh++;
+      if (b & 8) nl++;
+    }
+    const sb = flagBits(spy[spy.length - 1 - ago]);
+    raw.push({ p50: n ? (a10 / n) * 100 : 0, p200: n ? (a40 / n) * 100 : 0, spyUp: Number.isFinite(sb) ? (sb & 2) !== 0 && (sb & 16) !== 0 : null, n });
+    rh.push(nh + nl ? (nh / (nh + nl)) * 100 : 50);
+  }
+  // High–Low index: record-high percent smoothed over 2 weeks (≈ the 10-day convention)
+  return raw.map((w, k) => {
+    const hl = k > 0 ? (rh[k] + rh[k - 1]) / 2 : rh[k];
+    const hlPrev = k > 2 ? (rh[k - 2] + rh[k - 3]) / 2 : hl;
+    let color: RegimeColor = "yellow";
+    if ((w.p200 < 40 && w.p50 < 40) || (hl < 40 && hl < hlPrev)) color = "red";
+    else if (w.spyUp !== false && w.p200 >= 50 && w.p50 >= 60 && hl >= 55) color = "green";
+    return { ...w, hl, color };
+  });
+}
+
+export const REGIME_TEXT: Record<RegimeColor, { label: string; tip: string }> = {
+  green: { label: "Breakout-friendly", tip: "Broad participation and a rising market: take qualified breakouts at normal size." },
+  yellow: { label: "Selective", tip: "Mixed breadth: smaller size, only the strongest setups, prefer tight early entries." },
+  red: { label: "Hostile", tip: "Most stocks below their trend: avoid routine breakouts; wait for breadth to repair (a follow-through day or breadth thrust plus improving breadth)." },
+};
+
 export function stageWeeksAgo(r: StockStage, weeks: number): StageNum | null {
   const h = r.history ?? "";
   const ch = h[h.length - 1 - weeks];
@@ -234,13 +292,14 @@ export function downloadTradingViewList(symbols: string[], name: string) {
 
 // ── Stage filter shared by lists across the app ──────────────────
 export type StageFilterMode =
-  | "any" | "s2" | "s2a" | "s2_or_1b" | "exclude_34" | "s1" | "s3" | "s4" | "s4bminus";
+  | "any" | "s2" | "s2a" | "s2_or_1b" | "tt" | "exclude_34" | "s1" | "s3" | "s4" | "s4bminus";
 
 export const STAGE_FILTER_OPTIONS: { value: StageFilterMode; label: string }[] = [
   { value: "any", label: "Any stage" },
   { value: "s2", label: "Only Stage 2" },
   { value: "s2a", label: "Only 2A (fresh breakouts)" },
   { value: "s2_or_1b", label: "Stage 2 or 1B (early strength)" },
+  { value: "tt", label: "Minervini Trend Template (7 price rules)" },
   { value: "exclude_34", label: "Exclude Stage 3 & 4" },
   { value: "s1", label: "Only Stage 1" },
   { value: "s3", label: "Only Stage 3" },
@@ -257,6 +316,7 @@ export function passesStageFilter(r: StockStage | undefined, mode: StageFilterMo
     case "s2": return r.stage === 2;
     case "s2a": return r.substage === "2A";
     case "s2_or_1b": return r.stage === 2 || r.substage === "1B";
+    case "tt": return !!r.features?.tt?.pass;
     case "exclude_34": return r.stage !== 3 && r.stage !== 4;
     case "s1": return r.stage === 1;
     case "s3": return r.stage === 3;

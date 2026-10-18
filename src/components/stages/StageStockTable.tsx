@@ -134,10 +134,13 @@ export default function StageStockTable({
                 <td className="whitespace-nowrap px-2 py-1">
                   <span className="inline-flex items-center gap-1">
                     <StageBadge r={r} />
+                    {r.features?.tt?.pass && (!rsOf || (rsOf(r.symbol) ?? 0) >= 70) && (
+                      <span className="rounded bg-emerald-500/15 px-1 text-[9px] font-medium text-emerald-400" title={`Minervini Trend Template: all 7 price rules${rsOf ? " + RS rank ≥ 70" : " (RS rule not checked here)"} (weekly proxies of the 50/150/200-day MAs)`}>TT</span>
+                    )}
                     {r.quality && (
                       <span
                         className={`text-[9px] ${r.quality === "HIGH" ? "text-gain-medium" : r.quality === "LOW" ? "text-amber-400" : "text-muted-foreground"}`}
-                        title="Breakout profile: volume ≥ 2× average, rising relative strength, within 15% of the 52-week high. Strong volume tends to raise the payoff of the winners, not the share of winners."
+                        title="Breakout checklist (StageAnalysis.net): weekly volume ≥ 2× the prior 4 weeks, RS line above its 52-week average and rising, within 15% of the 52-week high. All four = strong. Strong volume tends to raise the payoff of the winners, not the share of winners."
                       >
                         {r.quality === "HIGH" ? "★ strong volume & RS" : r.quality === "LOW" ? "light volume / weak RS" : "mixed"}
                       </span>

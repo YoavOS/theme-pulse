@@ -10,6 +10,7 @@ import { useUniverseSectors } from "@/hooks/useUniverseSectors";
 import { groupKeyForIndustry } from "@/lib/groupColors";
 import { StageBadge } from "@/components/stages/StageStockTable";
 import WeeklyChart from "@/components/stages/WeeklyChart";
+import { RegimeBadge } from "@/components/stages/RegimePanel";
 import { downloadTradingViewList, isStageScanRunning, runStageScan } from "@/lib/stageAnalysis";
 import {
   ALL_LABELS, ALL_STATES, BREAKDOWN_PARTS, CHART_CHECKS, LABEL_NAMES, STATE_NAMES, STATE_TIPS,
@@ -34,7 +35,7 @@ const daysSince = (iso: string | null) => (iso ? Math.floor((Date.now() - Date.p
 
 export default function BaseScanner() {
   const { rows, loading, error } = useStockBases(true);
-  const { bySymbol: stageBy } = useStockStages(true);
+  const { bySymbol: stageBy, rows: stageRows } = useStockStages(true);
   const { rows: uni, extra, load: loadUni } = useUniverseSectors();
   const [preset, setPreset] = useState<"balanced" | "strict">(() => {
     try { return (localStorage.getItem(PRESET_KEY) as "balanced" | "strict") || "balanced"; } catch { return "balanced"; }
@@ -62,6 +63,11 @@ export default function BaseScanner() {
   }, [uni]);
 
   const market = stageBy.get("SPY") ?? null;
+  // regime from the stocks classified up to the latest week (+ SPY for the index trend)
+  const regimeRows = useMemo(() => {
+    const latest = stageRows.reduce<string | null>((m, r) => (!m || r.as_of > m ? r.as_of : m), null);
+    return stageRows.filter((r) => r.as_of === latest);
+  }, [stageRows]);
   const asOf = rows.reduce<string | null>((m, r) => (!m || r.as_of > m ? r.as_of : m), null);
 
   // Preset first, then counts are computed on the preset set so chips match the table.
@@ -208,11 +214,9 @@ export default function BaseScanner() {
                 <div className="text-[11px] text-muted-foreground">{cards.trig.filter((r) => r.features.trigger.exceptional).length} with exceptional volume (≥2.5×)</div>
               </div>
               <div className="rounded-lg border border-border bg-card p-3">
-                <div className="text-[11px] text-muted-foreground">Market regime</div>
-                <div className="mt-2 flex items-center gap-2 text-sm">SPY {market ? <StageBadge r={market} /> : <span className="text-muted-foreground">—</span>}</div>
-                <div className="text-[11px] text-muted-foreground">
-                  {market?.stage === 2 ? "Confirmed uptrend — bases work best here" : market?.stage === 4 ? "Downtrend — most breakouts fail; be selective" : "Mixed — favour the strongest RS"}
-                </div>
+                <div className="text-[11px] text-muted-foreground">Market regime <Link to="/stages" className="underline">(details)</Link></div>
+                <div className="mt-2 text-sm"><RegimeBadge rows={regimeRows} /></div>
+                <div className="mt-0.5 flex items-center gap-1.5 text-[11px] text-muted-foreground">SPY {market ? <StageBadge r={market} compact /> : "—"} · breadth of your whole list</div>
               </div>
             </div>
 
@@ -327,7 +331,7 @@ export default function BaseScanner() {
                           <td className="px-2 py-1.5">{stage ? <StageBadge r={stage} compact /> : <span className="text-muted-foreground">—</span>}</td>
                           <td className="max-w-[160px] truncate px-2 py-1.5 text-[11px] text-muted-foreground">{groupOf(r.symbol)}</td>
                           <td className="max-w-[220px] truncate px-2 py-1.5 text-[11px] text-amber-300" title={(r.warnings ?? []).join(" · ")}>
-                            {f.trigger.exceptional && <span className="mr-1 text-primary" title="Breakout ≥2.5× volume, strong close, range expansion">★</span>}
+                            {f.trigger.exceptional && <span className="mr-1 text-primary" title="Breakout-day volume ≥ 2.5× the 50-day average">★</span>}
                             {(r.warnings ?? []).join(" · ")}
                           </td>
                         </tr>
@@ -377,7 +381,7 @@ function BaseDetail({ r }: { r: StockBase }) {
     ["Volume dry-up · down/up volume", `${f.dryUp ?? "—"} · ${f.downUpVol ?? "—"}`],
     ["RS line vs 52w high", f.rsHighDistPct === null ? "—" : f.rsHighDistPct <= 0.5 ? "at a new high" : `−${f.rsHighDistPct.toFixed(1)}%`],
     ["From 52w high · above 10w MA", `${f.pctFrom52wHigh.toFixed(0)}% · ${f.ext10wPct >= 0 ? "+" : ""}${f.ext10wPct.toFixed(0)}%`],
-    ["Base count (this Stage 2)", `${f.baseCount}${f.baseCountCapped ? "+ (counted over the last 2 years)" : ""}`],
+    ["IBD base stage · base #", `${f.baseCount}${f.baseCountCapped ? "+" : ""} · #${f.baseNumber ?? f.baseCount}${f.baseCountCapped ? " (last 2 years)" : ""}`],
     ["Earnings", r.earnings_date ?? "none in the next 30 days"],
   ];
   if (t.status !== "none") {
@@ -385,6 +389,7 @@ function BaseDetail({ r }: { r: StockBase }) {
       "Breakout",
       `${t.date ?? "—"}${t.rvol !== null ? ` · ${t.rvol.toFixed(1)}× vol` : ""}${t.closeLocation !== null ? ` · close loc ${t.closeLocation.toFixed(2)}` : ""}${t.rangeExpansion !== null ? ` · range ${t.rangeExpansion.toFixed(1)}×` : ""}${t.extensionPct !== null ? ` · ${t.extensionPct >= 0 ? "+" : ""}${t.extensionPct.toFixed(1)}% vs pivot` : ""}`,
     ]);
+    if (t.acceptSessions) kv.splice(4, 0, ["First 5 sessions", `${t.acceptDays}/${t.acceptSessions} closes above pivot · lowest ${t.minClosePct !== undefined && t.minClosePct >= 0 ? "+" : ""}${t.minClosePct ?? "—"}%${t.retest ? " · retesting" : ""}`]);
   }
   return (
     <tr className="border-b border-border/40 bg-background/40">
