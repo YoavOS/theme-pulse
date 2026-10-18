@@ -91,6 +91,19 @@ export const SUBSTAGE_TIPS: Record<string, string> = {
 
 const CACHE_KEY = "stock_stages_v1";
 const CACHE_TTL = 6 * 60 * 60 * 1000;
+
+/** Newest updated_at on the server (one tiny query); undefined when the check itself fails. */
+async function latestUpdate(): Promise<string | null | undefined> {
+  try {
+    const { data, error } = await (supabase as SupabaseClient).from("stock_stages").select("updated_at").order("updated_at", { ascending: false }).limit(1);
+    if (error) return undefined;
+    return (data?.[0] as { updated_at?: string } | undefined)?.updated_at ?? null;
+  } catch { return undefined; }
+}
+async function cacheStillFresh(v: string | null) {
+  const latest = await latestUpdate();
+  return latest === undefined || latest === v;
+}
 const EVENT = "stock-stages-updated";
 
 async function invoke<T>(body: Record<string, unknown>): Promise<T> {
@@ -117,8 +130,9 @@ async function loadStagesImpl(force: boolean): Promise<StockStage[]> {
     try {
       const raw = localStorage.getItem(CACHE_KEY);
       if (raw) {
-        const p = JSON.parse(raw) as { ts: number; rows: StockStage[] };
-        if (Date.now() - p.ts < CACHE_TTL && Array.isArray(p.rows)) return p.rows;
+        const p = JSON.parse(raw) as { ts: number; rows: StockStage[]; v?: string | null };
+        // Use the cache only while the server has nothing newer (a scan from another device or tab).
+        if (Date.now() - p.ts < CACHE_TTL && Array.isArray(p.rows) && await cacheStillFresh(p.v ?? null)) return p.rows;
       }
     } catch { /* ignore */ }
   }
@@ -134,7 +148,8 @@ async function loadStagesImpl(force: boolean): Promise<StockStage[]> {
     rows.push(...(data as unknown as StockStage[]));
     if (data.length < 1000) break;
   }
-  try { localStorage.setItem(CACHE_KEY, JSON.stringify({ ts: Date.now(), rows })); } catch { /* quota */ }
+  const v = rows.reduce<string | null>((m, r) => (r.updated_at && (!m || r.updated_at > m) ? r.updated_at : m), null);
+  try { localStorage.setItem(CACHE_KEY, JSON.stringify({ ts: Date.now(), rows, v })); } catch { /* quota */ }
   return rows;
 }
 
@@ -253,10 +268,10 @@ export function regimeSeries(rows: StockStage[]): RegimeWeek[] {
   });
 }
 
-export const REGIME_TEXT: Record<RegimeColor, { label: string; tip: string }> = {
-  green: { label: "Breakout-friendly", tip: "Broad participation and a rising market: take qualified breakouts at normal size." },
-  yellow: { label: "Selective", tip: "Mixed breadth: smaller size, only the strongest setups, prefer tight early entries." },
-  red: { label: "Hostile", tip: "Most stocks below their trend: avoid routine breakouts; wait for breadth to repair (a follow-through day or breadth thrust plus improving breadth)." },
+export const REGIME_TEXT: Record<RegimeColor, { label: string; short: string; tip: string }> = {
+  green: { label: "Breakout-friendly", short: "Most of your stocks are in uptrends — breakouts have their best odds.", tip: "Broad participation and a rising market: take qualified breakouts at normal size." },
+  yellow: { label: "Selective", short: "Breadth is mixed — fewer, better setups at smaller size.", tip: "Mixed breadth: smaller size, only the strongest setups, prefer tight early entries." },
+  red: { label: "Hostile", short: "Most of your stocks are below their trend — routine breakouts tend to fail.", tip: "Most stocks below their trend: avoid routine breakouts; wait for breadth to repair (a follow-through day or breadth thrust plus improving breadth)." },
 };
 
 export function stageWeeksAgo(r: StockStage, weeks: number): StageNum | null {

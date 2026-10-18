@@ -62,8 +62,8 @@ No emojis. No disclaimers. Output ONLY the JSON object.`;
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${GROQ}` },
       body: JSON.stringify({
-        model: "llama-3.3-70b-versatile",
-        max_tokens: 900,
+        model: "openai/gpt-oss-120b", reasoning_effort: "low",
+        max_tokens: 1600,
         temperature: 0.4,
         response_format: { type: "json_object" },
         messages: [

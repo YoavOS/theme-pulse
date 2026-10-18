@@ -1,9 +1,11 @@
+import { ordinal } from "@/lib/utils";
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { ArrowLeft, RefreshCw, Flag, Loader2, Info, Sparkles, BookOpen, CalendarClock, Scale } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { BottomLine, Fold, HowItWorks } from "@/components/Explainer";
 import {
   HISTORY, HISTORY_ALL, PLAYBOOK, REFERENCES, STRENGTH_STYLE, TYPE_INFO, nextFomc, overlays, volTargetExposure,
   type FearGreed, type FlagMetrics, type MarketTypeKey, type Tip,
@@ -151,6 +153,17 @@ export default function MarketFlag() {
 
         {data && info && typeKey && m && (
           <>
+            <BottomLine
+              tone={info.tone === "go" ? "good" : info.tone === "stop" ? "bad" : "warn"}
+              title={<><span style={{ color: tone.text }}>{info.name}</span> — {PLAYBOOK[typeKey].tips[0].title.toLowerCase()}.</>}
+              lines={[
+                PLAYBOOK[typeKey].tips.length > 1 ? <>Also: {PLAYBOOK[typeKey].tips.slice(1, 3).map((t) => t.title.toLowerCase()).join(" · ")}.</> : null,
+                exposure !== null ? <>Volatility alone allows {exposure}% of your normal position size{exposure >= 90 && info.tone !== "go" ? " — the market type, not volatility, is the reason to hold back" : ""}.</> : null,
+                extra.length ? <>Today also: {extra.map((t) => t.title.toLowerCase()).join(" · ")}.</> : null,
+                fomc && fomc.days <= 7 ? <>Fed decision {fomc.days === 0 ? "today" : `in ${fomc.days} day${fomc.days === 1 ? "" : "s"}`} — expect sharp moves both ways.</> : null,
+              ]}
+            />
+
             {/* Market type */}
             <section className="rounded-xl border p-5" style={{ borderColor: tone.bar, background: tone.bg }}>
               <div className="flex flex-wrap items-start gap-4">
@@ -165,10 +178,19 @@ export default function MarketFlag() {
                   <Stat label="From 52w high" value={`${m.spy.dd52.toFixed(1)}%`} />
                   <Stat label="VIX · VIX/VIX3M" value={`${m.vix.last?.toFixed(1) ?? "—"} · ${m.vix.term?.toFixed(2) ?? "—"}`} />
                   <Stat label="Your list > 40w MA" value={m.breadth ? `${Math.round(m.breadth.p200)}%` : "—"} />
-                  <Stat label="Risk composite" value={`${data.composite}/100`} hint={data.state} />
+                  <Stat label="Risk score (100 = calm)" value={`${data.composite}/100`} hint={data.composite >= 65 ? "calm" : data.composite >= 45 ? "normal" : data.composite >= 30 ? "elevated" : "high risk"} />
                 </div>
               </div>
             </section>
+
+            {data.summary && (
+              <section className="rounded-lg border border-border bg-card p-4">
+                <div className="flex items-center gap-1.5 text-[11px] uppercase tracking-wide text-muted-foreground">
+                  <Sparkles size={12} className="text-[hsl(40,90%,55%)]" /> AI read
+                </div>
+                <p className="mt-2 whitespace-pre-line text-sm leading-relaxed">{data.summary}</p>
+              </section>
+            )}
 
             {/* Playbook */}
             <section className="rounded-lg border border-border bg-card p-4">
@@ -196,7 +218,7 @@ export default function MarketFlag() {
                     <div className="text-xs text-muted-foreground">of your normal position size</div>
                     <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
                       S&P volatility over the last 20 days is {m.spy.rv20?.toFixed(1)}% a year
-                      {m.spy.rvPct !== null ? ` (${m.spy.rvPct}th percentile of 2 years)` : ""}. Scaling exposure to keep volatility near 15% held risk steady and,
+                      {m.spy.rvPct !== null ? ` (${ordinal(m.spy.rvPct)} percentile of 2 years)` : ""}. Scaling exposure to keep volatility near 15% held risk steady and,
                       in published tests, improved risk-adjusted returns — though how much that holds up out of sample is debated.
                     </p>
                     <span className={`mt-2 inline-block rounded px-1.5 py-[1px] text-[10px] ${STRENGTH_STYLE.moderate}`}>moderate evidence</span>
@@ -223,11 +245,7 @@ export default function MarketFlag() {
             </div>
 
             {/* History by type */}
-            <section className="rounded-lg border border-border bg-card p-4">
-              <div className="mb-2 flex flex-wrap items-center gap-2">
-                <h2 className="text-sm font-semibold">What happened next, by market type</h2>
-                <span className="text-[11px] text-muted-foreground">· S&P 500 daily since 2003, same classification rules</span>
-              </div>
+            <Fold title="What happened next, by market type" hint={`· S&P 500 since 2003 · now: ${info.name}, median ${sign(HISTORY[typeKey].m3)}% over 3 months, up ${HISTORY[typeKey].up3}% of the time`}>
               <div className="overflow-x-auto">
                 <table className="w-full border-collapse text-xs">
                   <thead>
@@ -266,11 +284,10 @@ export default function MarketFlag() {
                 so read these as tendencies. The index often did <i>better</i> after scary types (mean reversion), but with deeper dips — what changes most from type to type is
                 risk and which stocks lead, not the index's direction. "Narrow" here uses the equal-weight index, as your list's breadth has no long history.
               </p>
-            </section>
+            </Fold>
 
             {/* Factors */}
-            <section>
-              <h2 className="mb-2 px-1 text-sm font-semibold">Risk factors</h2>
+            <Fold title="Risk factors behind the score" hint={`· ${data.factors.filter((f) => f.score < -0.5).length} of ${data.factors.length} flashing caution`}>
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 {data.factors.map((f) => (
                   <div key={f.key} className="rounded-lg border border-border bg-card p-3">
@@ -298,24 +315,13 @@ export default function MarketFlag() {
                   </div>
                 ))}
               </div>
-            </section>
+            </Fold>
 
-            {(data.summary || data.summaryError) && (
-              <section className="rounded-lg border border-border bg-card p-4">
-                <div className="flex items-center gap-1.5 text-[11px] uppercase tracking-wide text-muted-foreground">
-                  <Sparkles size={12} className="text-[hsl(40,90%,55%)]" /> AI read
-                </div>
-                {data.summary
-                  ? <p className="mt-2 whitespace-pre-line text-sm leading-relaxed">{data.summary}</p>
-                  : <p className="mt-1 text-[11px] text-muted-foreground">{data.summaryError}</p>}
-              </section>
-            )}
 
             {citeKeys.length > 0 && (
-              <section className="px-1 text-[10.5px] leading-relaxed text-muted-foreground">
-                <div className="mb-1 font-semibold text-foreground/80">Evidence behind today's tips</div>
+              <HowItWorks title="Evidence behind today's tips">
                 <ul className="list-disc space-y-0.5 pl-4">{citeKeys.map((k) => <li key={k}>{REFERENCES[k]}</li>)}</ul>
-              </section>
+              </HowItWorks>
             )}
           </>
         )}
@@ -370,7 +376,9 @@ function FearGreedCard({ fng, state }: { fng: FearGreed | null; state: "loading"
               .filter(([, v]) => v !== null).map(([l, v]) => `${l} ${Math.round(v as number)}`).join(" · ")}
           </div>
           <Spark points={fng.history} />
-          <div className="mt-2 space-y-1">
+          <details className="mt-2">
+            <summary className="cursor-pointer text-[11px] text-muted-foreground hover:text-foreground">The {fng.components.length} parts of the index</summary>
+          <div className="mt-1.5 space-y-1">
             {fng.components.map((c) => (
               <div key={c.key} className="flex items-center gap-2 text-[11px]">
                 <span className="w-40 shrink-0 truncate text-muted-foreground" title={c.label}>{c.label}</span>
@@ -381,6 +389,7 @@ function FearGreedCard({ fng, state }: { fng: FearGreed | null; state: "loading"
               </div>
             ))}
           </div>
+          </details>
           <p className="mt-2 text-[10.5px] leading-relaxed text-muted-foreground">
             Sentiment works at extremes and slowly: washed-out fear has tended to precede better returns, euphoria worse ones — but it is not a timing tool.
             Kept out of the risk score on purpose.

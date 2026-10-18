@@ -1,3 +1,4 @@
+import { ordinal } from "@/lib/utils";
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { ArrowLeft, Boxes, ChevronDown, ChevronRight, Copy, Download, Info, Loader2, RefreshCw } from "lucide-react";
@@ -12,7 +13,8 @@ import { StageBadge } from "@/components/stages/StageStockTable";
 import TrackRecord from "@/components/stages/TrackRecord";
 import WeeklyChart from "@/components/stages/WeeklyChart";
 import { RegimeBadge } from "@/components/stages/RegimePanel";
-import { downloadTradingViewList, isStageScanRunning, runStageScan } from "@/lib/stageAnalysis";
+import { BottomLine, HowItWorks } from "@/components/Explainer";
+import { downloadTradingViewList, isStageScanRunning, regimeSeries, runStageScan } from "@/lib/stageAnalysis";
 import {
   ALL_LABELS, ALL_STATES, BREAKDOWN_PARTS, CHART_CHECKS, EARN_LABELS, LABEL_NAMES, STATE_NAMES, STATE_TIPS,
   passesStrict, tighteningGrade, type BaseLabel, type BaseState, type StockBase,
@@ -47,6 +49,8 @@ export default function BaseScanner() {
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState<SortKey>("score");
   const [open, setOpen] = useState<string | null>(null);
+  const [wide, setWide] = useState<boolean>(() => { try { return localStorage.getItem("bases_wide_v1") === "1"; } catch { return false; } });
+  useEffect(() => { try { localStorage.setItem("bases_wide_v1", wide ? "1" : "0"); } catch { /* ignore */ } }, [wide]);
   const [scan, setScan] = useState<{ done: number; total: number } | null>(isStageScanRunning() ? { done: 0, total: 0 } : null);
 
   useEffect(() => { loadUni(); }, [loadUni]);
@@ -116,6 +120,9 @@ export default function BaseScanner() {
       trig: presetRows.filter((r) => (r.state === "triggered" || r.state === "extended") && (daysSince(r.features.trigger.date) ?? 99) <= 7),
     };
   }, [presetRows]);
+
+  const regimeNow = useMemo(() => { const s = regimeSeries(regimeRows); return s[s.length - 1] ?? null; }, [regimeRows]);
+  const nearPivot = useMemo(() => presetRows.filter((r) => r.state === "ready" || r.tier === 1).sort((a, b) => (b.score ?? 0) - (a.score ?? 0)), [presetRows]);
 
   const startScan = async () => {
     setScan({ done: 0, total: 0 });
@@ -198,6 +205,21 @@ export default function BaseScanner() {
 
         {rows.length > 0 && (
           <>
+            {regimeNow && (
+              <BottomLine
+                tone={regimeNow.color === "green" ? "good" : regimeNow.color === "red" ? "bad" : "warn"}
+                title={regimeNow.color === "green"
+                  ? <>Good conditions for breakouts — {nearPivot.length} setup{nearPivot.length === 1 ? " is" : "s are"} near the buy point.</>
+                  : regimeNow.color === "red"
+                    ? <>Breadth is hostile — most breakouts fail now. If you buy at all, stick to Tier 1 with strong volume.</>
+                    : <>Mixed breadth — be picky: Tier 1 setups at smaller size.</>}
+                lines={[
+                  nearPivot.length ? <>Near the buy point: {nearPivot.slice(0, 6).map((r) => `${r.symbol}${r.tier === 1 ? " (T1)" : ""}`).join(", ")}{nearPivot.length > 6 ? ` +${nearPivot.length - 6} more` : ""}.</> : <>No base is close to its buy point right now.</>,
+                  cards.trig.length ? <>{cards.trig.length} broke out in the last 7 days{cards.trig.filter((r) => r.features.trigger.exceptional).length ? `, ${cards.trig.filter((r) => r.features.trigger.exceptional).length} on exceptional volume` : ", none on exceptional volume"}.</> : null,
+                ]}
+              />
+            )}
+
             <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
               <div className="rounded-lg border border-border bg-card p-3">
                 <div className="text-[11px] text-muted-foreground">Prime (85+)</div>
@@ -215,8 +237,8 @@ export default function BaseScanner() {
                 <div className="text-[11px] text-muted-foreground">{cards.trig.filter((r) => r.features.trigger.exceptional).length} with exceptional volume (≥2.5×)</div>
               </div>
               <div className="rounded-lg border border-border bg-card p-3">
-                <div className="text-[11px] text-muted-foreground">Market regime <Link to="/stages" className="underline">(details)</Link></div>
-                <div className="mt-2 text-sm"><RegimeBadge rows={regimeRows} /></div>
+                <div className="text-[11px] text-muted-foreground">Breadth of your list <Link to="/stages" className="underline">(details)</Link></div>
+                <div className="mt-2 text-sm"><RegimeBadge rows={regimeRows} compact /></div>
                 <div className="mt-0.5 flex items-center gap-1.5 text-[11px] text-muted-foreground">SPY {market ? <StageBadge r={market} compact /> : "—"} · breadth of your whole list</div>
               </div>
             </div>
@@ -248,6 +270,9 @@ export default function BaseScanner() {
               <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Ticker or industry…" className="h-7 w-40 rounded border border-border bg-background px-2 text-xs" />
               <div className="ml-auto flex items-center gap-1.5">
                 <span className="text-[11px] text-muted-foreground">{visible.length} stocks</span>
+                <button onClick={() => setWide(!wide)} className="rounded border border-border px-2 py-1 text-[10px] text-muted-foreground hover:bg-accent" title="Show base depth, length, prior move, tightness, volume dry-up and industry">
+                  {wide ? "Fewer columns" : "More columns"}
+                </button>
                 <button
                   onClick={() => { navigator.clipboard.writeText(symbols.join(",")); toast.success(`${symbols.length} symbols copied.`); }}
                   disabled={!symbols.length}
@@ -272,15 +297,15 @@ export default function BaseScanner() {
                     {th(null, "Pivot")}
                     {th("dist", "To pivot", "text-right", "How far the latest close is below the pivot (↑ = above it)")}
                     {th("risk", "Stop risk", "text-right", "Pivot to support (final contraction low)")}
-                    {th("depth", "Depth")}
-                    {th("weeks", "Weeks")}
-                    {th(null, "Prior move")}
-                    {th(null, "Tight", "text-right", "Tightening grade from the contraction score (A best)")}
-                    {th(null, "Dry-up", "text-right", "Last 3 weeks' median volume ÷ earlier base volume (lower = quieter)")}
+                    {wide && th("depth", "Depth")}
+                    {wide && th("weeks", "Weeks")}
+                    {wide && th(null, "Prior move")}
+                    {wide && th(null, "Tight", "text-right", "Tightening grade from the contraction score (A best)")}
+                    {wide && th(null, "Dry-up", "text-right", "Last 3 weeks' median volume ÷ earlier base volume (lower = quieter)")}
                     {th("rs", "RS %ile", "text-right", "26-week return percentile across your whole stock list")}
                     {th(null, "Stage", "text-left")}
-                    {th(null, "Industry", "text-left")}
-                    {th(null, "⚠", "text-left")}
+                    {wide && th(null, "Industry", "text-left")}
+                    {th(null, "Notes", "text-left")}
                   </tr>
                 </thead>
                 <tbody>
@@ -330,14 +355,16 @@ export default function BaseScanner() {
                             {dist < 0 ? `+${Math.abs(dist).toFixed(1)}% ↑` : `${dist.toFixed(1)}%`}
                           </td>
                           <td className={`whitespace-nowrap px-2 py-1.5 text-right font-mono ${(r.stop_risk ?? 0) > 12 ? "text-amber-400" : ""}`}>{fmtPct(r.stop_risk)}</td>
-                          <td className="whitespace-nowrap px-2 py-1.5 text-right font-mono">{fmtPct(f.depthPct, 0)}</td>
-                          <td className="whitespace-nowrap px-2 py-1.5 text-right font-mono">{f.weeks}</td>
-                          <td className="whitespace-nowrap px-2 py-1.5 text-right font-mono">+{f.priorImpulsePct.toFixed(0)}%</td>
-                          <td className={`whitespace-nowrap px-2 py-1.5 text-right font-mono ${grade === "A" ? "text-emerald-400" : grade === "B" ? "text-[hsl(222,82%,74%)]" : grade === "C" ? "text-amber-300" : "text-pink-300"}`}>{grade}</td>
-                          <td className="whitespace-nowrap px-2 py-1.5 text-right font-mono">{f.dryUp === null ? "—" : f.dryUp.toFixed(2)}</td>
+                          {wide && <>
+                            <td className="whitespace-nowrap px-2 py-1.5 text-right font-mono">{fmtPct(f.depthPct, 0)}</td>
+                            <td className="whitespace-nowrap px-2 py-1.5 text-right font-mono">{f.weeks}</td>
+                            <td className="whitespace-nowrap px-2 py-1.5 text-right font-mono">+{f.priorImpulsePct.toFixed(0)}%</td>
+                            <td className={`whitespace-nowrap px-2 py-1.5 text-right font-mono ${grade === "A" ? "text-emerald-400" : grade === "B" ? "text-[hsl(222,82%,74%)]" : grade === "C" ? "text-amber-300" : "text-pink-300"}`}>{grade}</td>
+                            <td className="whitespace-nowrap px-2 py-1.5 text-right font-mono">{f.dryUp === null ? "—" : f.dryUp.toFixed(2)}</td>
+                          </>}
                           <td className={`whitespace-nowrap px-2 py-1.5 text-right font-mono ${(r.rs_pct ?? 0) >= 90 ? "text-emerald-400" : ""}`}>{r.rs_pct ?? "—"}</td>
                           <td className="px-2 py-1.5">{stage ? <StageBadge r={stage} compact /> : <span className="text-muted-foreground">—</span>}</td>
-                          <td className="max-w-[160px] truncate px-2 py-1.5 text-[11px] text-muted-foreground">{groupOf(r.symbol)}</td>
+                          {wide && <td className="max-w-[160px] truncate px-2 py-1.5 text-[11px] text-muted-foreground">{groupOf(r.symbol)}</td>}
                           <td className="max-w-[220px] truncate px-2 py-1.5 text-[11px] text-amber-300" title={(r.warnings ?? []).join(" · ")}>
                             {f.trigger.exceptional && <span className="mr-1 text-primary" title="Breakout-day volume ≥ 2.5× the 50-day average">★</span>}
                             {(r.warnings ?? []).join(" · ")}
@@ -348,25 +375,28 @@ export default function BaseScanner() {
                     );
                   })}
                   {!visible.length && (
-                    <tr><td colSpan={16} className="px-2 py-8 text-center text-muted-foreground">No bases match these filters.</td></tr>
+                    <tr><td colSpan={wide ? 16 : 10} className="px-2 py-8 text-center text-muted-foreground">No bases match these filters.</td></tr>
                   )}
                 </tbody>
               </table>
             </div>
 
-            <p className="px-1 text-[11px] leading-relaxed text-muted-foreground">
-              <b className="text-foreground/80">How to read it:</b> the score ranks the <i>base</i>; a breakout is judged separately and never changes it.
-              Patterns are labels on top of the score and a stock can carry several. Breakout volume ≥ 2.5× is “exceptional participation” —
-              research shows it raises the average payoff, <i>not</i> the hit rate, so keep the stop. Thresholds are the research's starting
-              values, not proven cut-offs; the chart check in each row is part of the method.
-              Stocks listed less than ~14 months get a separate <i>IPO base</i> model (base from the post-listing high, pivot = that high) — it has no backtest yet.
-            </p>
-            <p className="px-1 text-[11px] leading-relaxed text-muted-foreground">
-              <b className="text-foreground/80">Backtest (your list, weekly data, May 2023 – Jul 2026, 13 weeks ahead vs SPY):</b> Stage 2 stocks in a
-              detected base beat Stage 2 stocks without one (median −0.5% vs −2.0%, 49% vs 46% beating SPY); scores 85+ did best
-              (+1.4%, 52%). Below 85 the score barely separated winners from losers, and no single pattern stood out — the market
-              regime mattered more than any setup detail. The list is today's stocks, so the past looks better than it was (survivorship).
-            </p>
+            <HowItWorks title="How to read the scores & how bases tested">
+              <p>Click any row for the chart and every measurement behind the score. "More columns" adds base depth, length, prior move, tightness, volume dry-up and industry.</p>
+              <p>
+                <b className="text-foreground/80">How to read it:</b> the score ranks the <i>base</i>; a breakout is judged separately and never changes it.
+                Patterns are labels on top of the score and a stock can carry several. Breakout volume ≥ 2.5× is “exceptional participation” —
+                research shows it raises the average payoff, <i>not</i> the hit rate, so keep the stop. Thresholds are the research's starting
+                values, not proven cut-offs; the chart check in each row is part of the method.
+                Stocks listed less than ~14 months get a separate <i>IPO base</i> model (base from the post-listing high, pivot = that high) — it has no backtest yet.
+              </p>
+              <p>
+                <b className="text-foreground/80">Backtest (your list, weekly data, May 2023 – Jul 2026, 13 weeks ahead vs SPY):</b> Stage 2 stocks in a
+                detected base beat Stage 2 stocks without one (median −0.5% vs −2.0%, 49% vs 46% beating SPY); scores 85+ did best
+                (+1.4%, 52%). Below 85 the score barely separated winners from losers, and no single pattern stood out — the market
+                regime mattered more than any setup detail. The list is today's stocks, so the past looks better than it was (survivorship).
+              </p>
+            </HowItWorks>
             <TrackRecord mode="bases" />
           </>
         )}
@@ -410,7 +440,7 @@ function BaseDetail({ r }: { r: StockBase }) {
       "Breakout",
       `${t.date ?? "—"}${t.rvol !== null ? ` · ${t.rvol.toFixed(1)}× vol` : ""}${t.closeLocation !== null ? ` · close loc ${t.closeLocation.toFixed(2)}` : ""}${t.rangeExpansion !== null ? ` · range ${t.rangeExpansion.toFixed(1)}×` : ""}${t.extensionPct !== null ? ` · ${t.extensionPct >= 0 ? "+" : ""}${t.extensionPct.toFixed(1)}% vs pivot` : ""}`,
     ]);
-    if (t.vol) kv.splice(4, 0, ["Breakout volume", `${t.vol.pct}th pct of its own history · week before ${t.vol.preDry !== null ? `${t.vol.preDry.toFixed(2)}× normal${t.vol.preDry < 0.75 ? " (quiet ✓)" : ""}` : "—"} · up/down vol ${t.vol.udr50 ?? "—"}${t.vol.udr50 !== null && t.vol.udr50 > 1 ? " ✓" : ""}`]);
+    if (t.vol) kv.splice(4, 0, ["Breakout volume", `${ordinal(t.vol.pct)} percentile of its own history · week before ${t.vol.preDry !== null ? `${t.vol.preDry.toFixed(2)}× normal${t.vol.preDry < 0.75 ? " (quiet ✓)" : ""}` : "—"} · up/down vol ${t.vol.udr50 ?? "—"}${t.vol.udr50 !== null && t.vol.udr50 > 1 ? " ✓" : ""}`]);
     if (t.acceptSessions) kv.splice(4, 0, ["First 5 sessions", `${t.acceptDays}/${t.acceptSessions} closes above pivot · lowest ${t.minClosePct !== undefined && t.minClosePct >= 0 ? "+" : ""}${t.minClosePct ?? "—"}%${t.retest ? " · retesting" : ""}`]);
   }
   return (

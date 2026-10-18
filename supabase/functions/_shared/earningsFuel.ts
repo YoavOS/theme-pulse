@@ -88,13 +88,14 @@ export function scoreFuel(list: EarnInfo[]) {
   }
 }
 
-/** Finnhub earnings calendar for a date range, split in ~3-week windows (large ranges get truncated). */
+/** Finnhub earnings calendar for a date range, split in 1-week windows (large ranges get truncated). */
 export async function fetchEarningsCalendar(key: string, fromDays: number, toDays: number): Promise<EarnEvent[]> {
   const out: EarnEvent[] = [];
   const DAY = 86_400_000;
-  for (let a = fromDays; a < toDays; a += 21) {
+  // 7-day windows: in earnings season a 3-week window holds thousands of reports and Finnhub truncates it.
+  for (let a = fromDays; a < toDays; a += 7) {
     const from = new Date(Date.now() + a * DAY).toISOString().slice(0, 10);
-    const to = new Date(Date.now() + Math.min(toDays, a + 20) * DAY).toISOString().slice(0, 10);
+    const to = new Date(Date.now() + Math.min(toDays, a + 6) * DAY).toISOString().slice(0, 10);
     try {
       const res = await fetch(`https://finnhub.io/api/v1/calendar/earnings?from=${from}&to=${to}&token=${key}`);
       if (!res.ok) { await res.body?.cancel(); continue; }

@@ -242,7 +242,7 @@ Default symbol for all tool calls: ${symbol}.`;
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${GROQ_KEY}` },
         body: JSON.stringify({
-          model: "llama-3.3-70b-versatile",
+          model: "openai/gpt-oss-120b", reasoning_effort: "low",
           temperature: 0.3,
           messages,
           tools: TOOLS,

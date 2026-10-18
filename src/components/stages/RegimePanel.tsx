@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { REGIME_TEXT, regimeSeries, type RegimeColor, type StockStage } from "@/lib/stageAnalysis";
 
@@ -9,13 +10,14 @@ const REGIME_COLOR: Record<RegimeColor, string> = {
 };
 
 /** Compact regime badge (used on the Bases page). */
-export function RegimeBadge({ rows }: { rows: StockStage[] }) {
+export function RegimeBadge({ rows, compact = false }: { rows: StockStage[]; compact?: boolean }) {
   const s = useMemo(() => regimeSeries(rows), [rows]);
   const w = s[s.length - 1];
   if (!w) return <span className="text-muted-foreground">—</span>;
   return (
     <span className="inline-flex items-center gap-1.5">
       <span className="h-2 w-2 rounded-full" style={{ background: REGIME_COLOR[w.color] }} />
+      {!compact && <span className="text-muted-foreground">List breadth:</span>}
       <span style={{ color: REGIME_COLOR[w.color] }}>{REGIME_TEXT[w.color].label}</span>
       <span className="font-mono text-[10px] text-muted-foreground">{w.p50.toFixed(0)}% &gt;50d · {w.p200.toFixed(0)}% &gt;200d · H/L {w.hl.toFixed(0)}</span>
     </span>
@@ -49,7 +51,7 @@ export default function RegimePanel({ rows }: { rows: StockStage[] }) {
         <Tooltip>
           <TooltipTrigger asChild>
             <div>
-              <div className="text-[11px] text-muted-foreground">Market regime {hover !== null && `· ${s.length - 1 - hover}w ago`}</div>
+              <div className="text-[11px] text-muted-foreground">Breadth of your list {hover !== null && `· ${s.length - 1 - hover}w ago`}</div>
               <div className="mt-0.5 flex items-center gap-2 text-base font-semibold" style={{ color: REGIME_COLOR[shown.color] }}>
                 <span className="h-2.5 w-2.5 rounded-full" style={{ background: REGIME_COLOR[shown.color] }} />
                 {REGIME_TEXT[shown.color].label}
@@ -69,6 +71,10 @@ export default function RegimePanel({ rows }: { rows: StockStage[] }) {
         {metric("High–Low index", shown.hl.toFixed(0), hover === null ? delta(w.hl, ago4.hl) : null, "New 52-week highs ÷ (highs + lows) among your stocks, ×100, 2-week average. > 55 leadership expanding, < 40 new lows dominate.")}
         {metric("SPY trend", shown.spyUp === null ? "—" : shown.spyUp ? "Up" : "Not up", null, "SPY above its 40-week MA and its 10-week MA above the 40-week.")}
       </div>
+      <p className="mt-2 text-xs text-muted-foreground">
+        {hover !== null ? REGIME_TEXT[shown.color].short + " " : ""}{shown.spyUp && shown.color !== "green" ? "The index itself is still up — a narrow market carried by few stocks. " : ""}
+        <Link to="/market-flag" className="text-primary hover:underline">Full market picture →</Link>
+      </p>
       <div className="relative mt-3">
         <svg viewBox={`0 0 ${W} ${H + 8}`} preserveAspectRatio="none" className="h-[68px] w-full"
           onMouseMove={(e) => { const r = (e.currentTarget as SVGElement).getBoundingClientRect(); setHover(Math.max(0, Math.min(s.length - 1, Math.round(((e.clientX - r.left) / r.width) * (s.length - 1))))); }}

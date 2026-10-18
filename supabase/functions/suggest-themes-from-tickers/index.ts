@@ -114,8 +114,8 @@ serve(async (req) => {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${GROQ_API_KEY}` },
         body: JSON.stringify({
-          model: "llama-3.3-70b-versatile",
-          max_tokens: 2500,
+          model: "openai/gpt-oss-120b", reasoning_effort: "low",
+          max_tokens: 3200,
           temperature: 0.2,
           response_format: { type: "json_object" },
           messages: [

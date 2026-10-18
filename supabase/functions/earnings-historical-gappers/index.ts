@@ -233,8 +233,8 @@ Write a single concise insight (max 2 sentences, ~35 words) covering: (1) the si
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${groqKey}` },
       body: JSON.stringify({
-        model: "llama-3.3-70b-versatile",
-        max_tokens: 180,
+        model: "openai/gpt-oss-120b", reasoning_effort: "low",
+        max_tokens: 880,
         temperature: 0.35,
         messages: [
           { role: "system", content: "You are a sharp equity research analyst. Be concise, specific, and never fabricate facts." },

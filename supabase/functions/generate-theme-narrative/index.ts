@@ -162,8 +162,8 @@ Write a complete market analysis following your instructions.`;
           Authorization: `Bearer ${GROQ_API_KEY}`,
         },
         body: JSON.stringify({
-          model: "llama-3.3-70b-versatile",
-          max_tokens: 1024,
+          model: "openai/gpt-oss-120b", reasoning_effort: "low",
+          max_tokens: 1724,
           messages: [
             { role: "system", content: SYSTEM_PROMPT },
             { role: "user", content: userMessage },

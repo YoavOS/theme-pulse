@@ -16,7 +16,6 @@ import { fetchEarningsCalendar, measureEarnings, scoreFuel, type DBar, type Earn
  *                                                 signal log snapshot + 4/8/13-week outcomes
  *   { action: "status" }                        → row counts + last week classified
  *   { action: "chart", symbol }                 → last 2 years of weekly bars + 30w MA (app charts)
- *   { action: "positions", symbols }            → 1 year of daily bars + next earnings date (Trade Desk, ≤30)
  *
  * One Yahoo call per stock (5 years of weekly bars — long warm-up for the stage state machine). Benchmark = SPY.
  * Daily bars for breakout timing are read from the Full Scan's cache
@@ -204,37 +203,6 @@ Deno.serve(async (req) => {
         if (error && !isMissingTable(error)) console.warn("stock_bases cleanup failed", error.message);
       }
       return json({ ok: true, processed: rows.length, bases: basesStored, failed, market: { stage: bench.stage, substage: bench.substage } });
-    }
-
-    if (action === "positions") {
-      // Daily bars (6 months) + next earnings date for the Trade Desk (≤ 30 symbols).
-      const syms = [...new Set((body.symbols ?? []).map((x) => String(x).toUpperCase().trim()).filter((x) => /^[A-Z0-9][A-Z0-9.\-]{0,9}$/.test(x)))].slice(0, 30);
-      const out: Record<string, unknown> = {};
-      const nextEarn = new Map<string, string>();
-      if (FINNHUB_KEY && syms.length) {
-        try {
-          for (const e of await fetchEarningsCalendar(FINNHUB_KEY, 0, 63)) {
-            if (!syms.includes(e.symbol)) continue;
-            const prev = nextEarn.get(e.symbol);
-            if (!prev || e.date < prev) nextEarn.set(e.symbol, e.date);
-          }
-        } catch (e) { console.warn("positions: earnings failed", e); }
-      }
-      let cur = 0;
-      const sig = (x: number | null) => (x === null ? null : Number(x.toPrecision(6)));
-      const worker = async () => {
-        while (cur < syms.length) {
-          const s = syms[cur++];
-          const d = await fetchDaily(s, "1y");
-          if (!d?.length) { out[s] = null; continue; }
-          out[s] = {
-            t: d.map((b) => b.ts), o: d.map((b) => sig(b.open)), h: d.map((b) => sig(b.high)), l: d.map((b) => sig(b.low)),
-            c: d.map((b) => sig(b.close)), v: d.map((b) => b.volume), earnings: nextEarn.get(s) ?? null,
-          };
-        }
-      };
-      await Promise.all(Array.from({ length: Math.min(6, syms.length) }, worker));
-      return json({ ok: true, data: out });
     }
 
     if (action === "chart") {
