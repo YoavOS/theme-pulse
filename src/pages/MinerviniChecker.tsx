@@ -63,13 +63,15 @@ interface Series {
   analystRec?: { buyPct: number | null; buyPct3mAgo: number | null; analysts: number } | null;
   revSurprises?: number[]; nextEarnings?: string | null;
   scoreParts?: { label: string; earned: number; max: number }[] | null; scoreCoveragePct?: number | null;
-  profiles?: { short: HProfile; medium: HProfile; long: HProfile } | null;
+  profiles?: Profiles | null;
   history?: History | null;
 }
 interface HProfile {
   key: string; label: string; horizon: string; question: string; score: number | null; coverage: number; verdict: "Strong" | "Mixed" | "Weak" | "Limited data";
-  parts: { label: string; earned: number; max: number; value: string; good: boolean | null }[]; strengths: string[]; weaknesses: string[];
+  parts: { label: string; earned: number; max: number; value: string; good: boolean | null; tested?: boolean }[]; strengths: string[]; weaknesses: string[];
 }
+interface RedFlag { key: string; label: string; detail: string; tested: boolean }
+interface Profiles { momentum?: HProfile; quality?: HProfile; redFlags?: RedFlag[] }
 interface History {
   quarters: { end: string; revenue: number | null; eps: number | null; opMargin: number | null; revenueYoY: number | null; epsYoY: number | null }[];
   years: { end: string; revenue: number | null; eps: number | null; netIncome: number | null; fcf: number | null; opMargin: number | null; shares: number | null }[];
@@ -120,7 +122,7 @@ function VerdictBadge({ verdict, score, label, tone }: { verdict: string; score:
   );
 }
 
-const CACHE_KEY = (sym: string) => `minervini:v11-horizons:${sym}`;
+const CACHE_KEY = (sym: string) => `minervini:v12-evidence:${sym}`;
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 
 
@@ -303,7 +305,7 @@ export default function MinerviniChecker() {
               Fundamentals Checker
             </h1>
           </div>
-          <div className="text-xs text-muted-foreground">SEPA · short / medium / long term · Minervini</div>
+          <div className="text-xs text-muted-foreground">SEPA · earnings momentum · quality · red flags · Minervini</div>
         </div>
       </header>
 
@@ -337,8 +339,8 @@ export default function MinerviniChecker() {
           </div>
 
           <p className="mt-3 text-xs text-muted-foreground">
-            One analysis: SEC filing history (up to 10 years), earnings and estimate data, and your scans — scored for three holding horizons plus
-            Minervini's SEPA fundamentals.
+            One analysis: SEC filing history (up to 10 years), earnings and estimate data, and your scans — scored only on the checks that held up in our 2021–25 backtest
+            (earnings momentum, quality, red flags), plus Minervini's SEPA fundamentals.
           </p>
         </Card>
 
@@ -356,7 +358,7 @@ export default function MinerviniChecker() {
         {loading && !multi && (
           <Card className="p-10 text-center text-sm text-muted-foreground">
             <Loader2 size={28} className="mx-auto mb-3 animate-spin text-[hsl(280,70%,60%)]" />
-            Fetching multi-quarter financials and scoring short / medium / long term and Minervini (~10–20s)…
+            Fetching multi-quarter financials and scoring earnings momentum, quality, red flags and Minervini (~10–20s)…
           </Card>
         )}
 
@@ -380,7 +382,7 @@ export default function MinerviniChecker() {
                   )}
                 </div>
                 <div className="flex flex-wrap gap-3">
-                  {(["short", "medium", "long"] as const).map((k) => {
+                  {(["momentum", "quality"] as const).map((k) => {
                     const pr = multi.series?.profiles?.[k];
                     if (!pr || pr.score === null) return null;
                     const tone = pr.verdict === "Strong" ? "PASS" : pr.verdict === "Mixed" ? "BORDERLINE" : pr.verdict === "Weak" ? "FAIL" : "LIMITED";
@@ -403,7 +405,7 @@ export default function MinerviniChecker() {
               code33={multi.series?.code33?.count ?? null}
             />
 
-            {multi.series?.profiles && <HorizonCards p={multi.series.profiles} />}
+            {multi.series?.profiles?.momentum && <ProfileCards p={multi.series.profiles} />}
             {multi.series?.history && <HistoryCard h={multi.series.history} />}
             {multi.series && multi.series.quarters.length > 0 && <QuarterTable s={multi.series} />}
             {multi.series && <ExtrasCard s={multi.series} />}
@@ -673,16 +675,19 @@ function ExtrasCard({ s }: { s: Series }) {
   );
 }
 
-// Measured on today's list (~450 US filers), scores rebuilt from SEC filings as they stood on each of
-// 16 quarterly dates (Nov 2021 – Aug 2025), returns vs SPY. Survivorship-biased (today's names only).
-const HORIZON_EVIDENCE: Record<string, string> = {
-  short:
-    "Tested 2021–25 (filing-based parts only): top third beat bottom third by ~2 pts median over the next 13 weeks, and ranked stocks the right way in 15 of 16 quarters. The most reliable of the three as a signal.",
-  medium:
-    "Tested 2021–25: weak and regime-dependent — strongly right in 2024, wrong in 2022 and mid-2025. Top third had fewer 26-week blow-ups (18% vs 25% lagging SPY by 25+ pts). Treat as a risk filter, not a timing signal.",
-  long:
-    "Tested 2021–25: did NOT predict next-year returns — low-quality names outran in the 2023–25 speculative rally (and this list is biased toward those that made it). Use it to know what you own, not to time entries.",
+// Every number below comes from the point-in-time backtest: ~450 US filers from the app's list,
+// 16 quarterly dates (Nov 2021 – Aug 2025), SEC filings as they stood on each date, returns vs SPY.
+// Survivorship-biased (only names on today's list), so absolute returns look worse than reality;
+// the comparisons between groups are what matter.
+const EVIDENCE = {
+  momentum:
+    "Tested: ranked stocks the right way at 13, 26 and 52 weeks, in both 2021–23 and 2023–25. Strong beat Weak by a median 4 pts over 26 weeks (−1 vs −5 vs SPY). Parts marked * are live data with no history to test (research-backed).",
+  quality:
+    "Tested: didn't add return in the 2023–25 rally, but in both halves the Strong group had far fewer big losses (lagging SPY by 25+ pts over 26 weeks, Strong vs Weak: 10% vs 34% in 2021–23, 20% vs 28% in 2023–25).",
+  flags:
+    "Each flag raised the share of stocks that lagged SPY by 25+ pts over the next 26 weeks (all stocks: 22%). With 3+ flags it was 39%.",
 };
+const FLAG_EVIDENCE: Record<string, string> = { ps: "42% lagged SPY by 25+ pts (median −18)", assets: "35% lagged by 25+ pts (median −14)", dilution: "33% lagged by 25+ pts (median −10)", burn: "32% lagged by 25+ pts (median −7)", expect: "32% lagged by 25+ pts (median −8)" };
 
 const VERDICT_CLS: Record<HProfile["verdict"], string> = {
   Strong: "border-gain-medium/50 bg-gain-medium/10 text-gain-medium",
@@ -691,43 +696,89 @@ const VERDICT_CLS: Record<HProfile["verdict"], string> = {
   "Limited data": "border-border bg-muted/20 text-muted-foreground",
 };
 
-function HorizonCards({ p }: { p: { short: HProfile; medium: HProfile; long: HProfile } }) {
+/** One-line read of momentum × quality × flags, with the tested outcome for that group. */
+function combinedRead(m: HProfile | undefined, q: HProfile | undefined, flags: RedFlag[]): { tone: "good" | "bad" | "neutral"; text: string } | null {
+  if (!m || m.score === null || m.verdict === "Limited data") return null;
+  const qs = q && q.verdict !== "Limited data" ? q.score : null;
+  if (flags.length >= 3) return { tone: "bad", text: `${flags.length} red flags. In testing, stocks with 3+ flags lagged SPY by a median 16 pts over 26 weeks, and 39% lagged by 25+ pts.` };
+  if (m.score >= 70 && qs !== null && qs >= 55) return { tone: "good", text: "Rising earnings on a solid business — the best combination in testing: a median 0 vs SPY over 26 weeks (all stocks −4), and only 13% lagged by 25+ pts (all stocks 22%)." };
+  if (m.score >= 70 && qs !== null && qs < 40) return { tone: "neutral", text: "Earnings are rising, but the business is low quality. In testing this mix had more big losses: 28% lagged SPY by 25+ pts over 26 weeks. Size the position for it." };
+  if (m.score < 40 && qs !== null && qs < 40) return { tone: "bad", text: "Earnings fading and low quality — the weakest group in testing: a median −9 vs SPY over 26 weeks, 31% lagged by 25+ pts." };
+  return null;
+}
+
+function ProfileCards({ p }: { p: Profiles }) {
   const [open, setOpen] = useState<string | null>(null);
+  const flags = p.redFlags ?? [];
+  const read = combinedRead(p.momentum, p.quality, flags);
+  const cards = [p.momentum, p.quality].filter((x): x is HProfile => !!x);
   return (
-    <div className="grid gap-4 lg:grid-cols-3">
-      {[p.short, p.medium, p.long].map((h) => (
-        <Card key={h.key} className="flex flex-col p-4">
+    <div className="space-y-3">
+      {read && (
+        <div className={`rounded-lg border px-4 py-2.5 text-sm ${read.tone === "good" ? "border-gain-medium/40 bg-gain-medium/10" : read.tone === "bad" ? "border-loss-medium/40 bg-loss-medium/10" : "border-[hsl(40,90%,55%)]/40 bg-[hsl(40,90%,55%)]/10"}`}>{read.text}</div>
+      )}
+      <div className="grid gap-4 lg:grid-cols-3">
+        {cards.map((h) => (
+          <Card key={h.key} className="flex flex-col p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="text-[11px] uppercase tracking-widest text-muted-foreground">{h.label} · {h.horizon}</div>
+                <div className="mt-0.5 text-sm font-semibold">{h.question}</div>
+              </div>
+              <div className={`shrink-0 rounded-lg border px-3 py-1.5 text-center ${VERDICT_CLS[h.verdict]}`}>
+                <div className="text-2xl font-extrabold tabular-nums leading-none">{h.score ?? "—"}</div>
+                <div className="mt-0.5 text-[10px] font-semibold uppercase tracking-wider">{h.verdict}</div>
+              </div>
+            </div>
+            <div className="mt-3 space-y-1 text-xs">
+              {h.strengths.slice(0, 3).map((x) => <div key={x} className="flex gap-1.5"><span className="text-gain-medium">▲</span><span>{x}</span></div>)}
+              {h.weaknesses.slice(0, 3).map((x) => <div key={x} className="flex gap-1.5"><span className="text-loss-medium">▼</span><span>{x}</span></div>)}
+              {!h.strengths.length && !h.weaknesses.length && <div className="text-muted-foreground">No standout readings.</div>}
+            </div>
+            <button onClick={() => setOpen(open === h.key ? null : h.key)} className="mt-3 self-start text-[11px] text-primary hover:underline">
+              {open === h.key ? "Hide" : "Show"} all {h.parts.length} checks · tested data coverage {h.coverage}%
+            </button>
+            {open === h.key && (
+              <div className="mt-2 space-y-1 text-[11px]">
+                {h.parts.map((x) => (
+                  <div key={x.label} className="grid grid-cols-[1fr_auto] gap-2 border-b border-border/30 pb-1">
+                    <span>{x.label}{x.tested === false && <span className="text-muted-foreground"> *</span>}<span className="block font-mono text-muted-foreground">{x.value}</span></span>
+                    <span className={`self-center font-mono ${x.earned >= x.max * 0.7 ? "text-gain-medium" : x.earned <= x.max * 0.25 ? "text-loss-medium" : ""}`}>{x.earned}/{x.max}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            <p className="mt-auto pt-3 text-[10.5px] leading-relaxed text-muted-foreground">{EVIDENCE[h.key as "momentum" | "quality"]}</p>
+          </Card>
+        ))}
+        <Card className="flex flex-col p-4">
           <div className="flex items-start justify-between gap-3">
             <div>
-              <div className="text-[11px] uppercase tracking-widest text-muted-foreground">{h.label} · {h.horizon}</div>
-              <div className="mt-0.5 text-sm font-semibold">{h.question}</div>
+              <div className="text-[11px] uppercase tracking-widest text-muted-foreground">Red flags · tested warning signs</div>
+              <div className="mt-0.5 text-sm font-semibold">What tends to go wrong?</div>
             </div>
-            <div className={`shrink-0 rounded-lg border px-3 py-1.5 text-center ${VERDICT_CLS[h.verdict]}`}>
-              <div className="text-2xl font-extrabold tabular-nums leading-none">{h.score ?? "—"}</div>
-              <div className="mt-0.5 text-[10px] font-semibold uppercase tracking-wider">{h.verdict}</div>
+            <div className={`shrink-0 rounded-lg border px-3 py-1.5 text-center ${flags.length === 0 ? VERDICT_CLS.Strong : flags.length >= 3 ? VERDICT_CLS.Weak : VERDICT_CLS.Mixed}`}>
+              <div className="text-2xl font-extrabold tabular-nums leading-none">{flags.length}</div>
+              <div className="mt-0.5 text-[10px] font-semibold uppercase tracking-wider">{flags.length === 1 ? "flag" : "flags"}</div>
             </div>
           </div>
-          <div className="mt-3 space-y-1 text-xs">
-            {h.strengths.slice(0, 3).map((x) => <div key={x} className="flex gap-1.5"><span className="text-gain-medium">▲</span><span>{x}</span></div>)}
-            {h.weaknesses.slice(0, 3).map((x) => <div key={x} className="flex gap-1.5"><span className="text-loss-medium">▼</span><span>{x}</span></div>)}
-            {!h.strengths.length && !h.weaknesses.length && <div className="text-muted-foreground">No standout readings.</div>}
+          <div className="mt-3 space-y-2 text-xs">
+            {flags.map((f) => (
+              <div key={f.key}>
+                <div className="flex gap-1.5"><span className="text-loss-medium">⚑</span><span className="font-medium">{f.label}</span></div>
+                <div className="pl-5 text-[11px] text-muted-foreground">{f.detail}{FLAG_EVIDENCE[f.key] ? ` · tested: ${FLAG_EVIDENCE[f.key]}` : ""}</div>
+              </div>
+            ))}
+            {!flags.length && <div className="text-muted-foreground">None of the tested warning signs: price above 20× sales, assets up 50%+, shares up 10%+, losses with cash burn, or years of 25%+ growth already priced in.</div>}
           </div>
-          <button onClick={() => setOpen(open === h.key ? null : h.key)} className="mt-3 self-start text-[11px] text-primary hover:underline">
-            {open === h.key ? "Hide" : "Show"} all {h.parts.length} checks · data coverage {h.coverage}%
-          </button>
-          {open === h.key && (
-            <div className="mt-2 space-y-1 text-[11px]">
-              {h.parts.map((x) => (
-                <div key={x.label} className="grid grid-cols-[1fr_auto] gap-2 border-b border-border/30 pb-1">
-                  <span>{x.label}<span className="block font-mono text-muted-foreground">{x.value}</span></span>
-                  <span className={`self-center font-mono ${x.earned >= x.max * 0.7 ? "text-gain-medium" : x.earned <= x.max * 0.25 ? "text-loss-medium" : ""}`}>{x.earned}/{x.max}</span>
-                </div>
-              ))}
-            </div>
-          )}
-          {HORIZON_EVIDENCE[h.key] && <p className="mt-auto pt-3 text-[10.5px] leading-relaxed text-muted-foreground">{HORIZON_EVIDENCE[h.key]}</p>}
+          <p className="mt-auto pt-3 text-[10.5px] leading-relaxed text-muted-foreground">{EVIDENCE.flags}</p>
         </Card>
-      ))}
+      </div>
+      <p className="text-[10.5px] leading-relaxed text-muted-foreground">
+        Backtest: ~450 US companies from your list, 16 dates (Nov 2021 – Aug 2025), filings as they stood on each date, returns vs SPY.
+        Only names on today's list were tested (survivorship bias), so treat the absolute numbers loosely and compare the groups with each other.
+        Dropped because they failed the test: sales-growth level and consistency, multi-year growth records, accruals, debt / equity.
+      </p>
     </div>
   );
 }

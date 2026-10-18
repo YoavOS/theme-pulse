@@ -1,21 +1,26 @@
 // ─────────────────────────────────────────────────────────────
-// Fundamental profiles by holding horizon — built on SEC filing history.
+// Evidence-based fundamental profiles, built on SEC filing history.
 //
-//  Short term (1–3 months)  "Is the business accelerating right now?"
-//    standardized unexpected earnings (SUE), EPS & sales acceleration, margin change,
-//    earnings / revenue surprise, estimate revisions, the market's reaction.
-//    Research: post-earnings drift (Bernard & Thomas 1989), revision momentum
-//    (Chan, Jegadeesh & Lakonishok 1996), revenue + EPS surprises (Jegadeesh & Livnat 2006).
-//  Medium term (3–12 months) "Is the growth durable?"
-//    8-quarter growth consistency, margin trend, operating leverage, cash-backed
-//    earnings (accruals — Sloan 1996), free cash flow, improving returns, leverage.
-//  Long term (1–5 years)    "Is this a great business?"
-//    multi-year sales/EPS growth and steadiness, gross profitability (Novy-Marx 2013),
-//    ROE, cash conversion, share dilution (net issuance — Pontiff & Woodgate 2008),
-//    Piotroski F-score (2000), resilience in the worst year.
+// Every scored part below was tested point-in-time: ~450 US filers from the app's list,
+// 16 quarterly dates (Nov 2021 – Aug 2025), filings as they stood on each date, returns vs SPY
+// 13 / 26 / 52 weeks later. A part was kept only if it ranked stocks the right way in BOTH
+// halves of the sample (2021–23 and 2023–25). Survivorship-biased (today's list only).
 //
-// Points only count when the data exists; the score is the share of available points.
-// Pure functions: the same code runs in the edge function and in the app's backtests.
+//  Earnings momentum  "Is earning power rising?"  — worked at 13, 26 and 52 weeks.
+//    Seasonal EPS change (scaled), standardized unexpected earnings, operating leverage,
+//    operating-margin change, EPS acceleration, consistency of EPS gains.
+//    Literature: post-earnings drift (Bernard & Thomas 1989), Jegadeesh & Livnat 2006.
+//    Live-only parts (estimate revisions, beats, reaction) have no history to test; they are
+//    research-backed (Chan, Jegadeesh & Lakonishok 1996; Brandt et al. 2008) and marked untested.
+//  Quality            "How well does it hold up?" — did NOT add return in the 2023–25 rally,
+//    but cut the odds of a big loss in both halves. Gross profitability (Novy-Marx 2013), ROE,
+//    cash conversion, Piotroski F-score, share count (Pontiff & Woodgate 2008), asset growth
+//    (Cooper, Gulen & Schill 2008).
+//  Red flags          Each one raised the share of stocks that lagged SPY by 25+ points.
+//
+//  Dropped after testing: sales-growth level and consistency, multi-year sales/EPS growth
+//  (high past growth did WORSE afterwards — expectations already priced, Lakonishok-Shleifer-
+//  Vishny 1994), accruals, debt/equity, ROA change.
 // ─────────────────────────────────────────────────────────────
 
 export interface FQ {
@@ -29,161 +34,83 @@ export interface Extras {
   revisions90?: (number | null)[];       // % change of this-FY and next-FY EPS estimates over 90 days
   reactionPct?: number | null;           // stock − SPY, days −1…+1 around the latest report
 }
-export interface Part { label: string; earned: number; max: number; value: string; good: boolean | null }
+export interface Part { label: string; earned: number; max: number; value: string; good: boolean | null; tested: boolean }
 export interface Profile {
-  key: "short" | "medium" | "long"; label: string; horizon: string; question: string;
+  key: "momentum" | "quality"; label: string; horizon: string; question: string;
   score: number | null; coverage: number; verdict: "Strong" | "Mixed" | "Weak" | "Limited data";
   parts: Part[]; strengths: string[]; weaknesses: string[];
+}
+export interface RedFlag { key: string; label: string; detail: string; tested: boolean }
+export interface Features {
+  sue: number | null; epsChg: number | null; epsYoY: number | null; epsAcc: number | null; epsUpShare: number | null;
+  opLeverage: number | null; marginChg: number | null; opMargin: number | null;
+  gpa: number | null; roe3: number | null; fcfConv: number | null; fscore: number | null; shareChg3: number | null; assetGrowth: number | null;
+  shareIssue1y: number | null; salesTTM: number | null; netIncomeTTM: number | null; fcfTTM: number | null; shares: number | null;
+  salesCagr: number | null;
 }
 
 const nn = (x: number | null | undefined): x is number => x !== null && x !== undefined && Number.isFinite(x);
 const growth = (now: number | null, prior: number | null) => (nn(now) && nn(prior) && prior > 0 ? (now / prior - 1) * 100 : null);
 const sum = (xs: (number | null)[]) => (xs.every(nn) ? (xs as number[]).reduce((a, b) => a + b, 0) : null);
-const median = (xs: number[]) => { const s = [...xs].sort((a, b) => a - b); return s.length ? s[s.length >> 1] : null; };
 const pf = (x: number | null, d = 0) => (nn(x) ? `${x >= 0 ? "+" : ""}${x.toFixed(d)}%` : "—");
 const sd = (xs: number[]) => { const m = xs.reduce((a, b) => a + b, 0) / xs.length; return Math.sqrt(xs.reduce((a, b) => a + (b - m) ** 2, 0) / Math.max(1, xs.length - 1)); };
 
-function finish(key: Profile["key"], label: string, horizon: string, question: string, parts: (Part | null)[], total: number): Profile {
-  const ps = parts.filter((p): p is Part => !!p);
-  const avail = ps.reduce((t, p) => t + p.max, 0), earned = ps.reduce((t, p) => t + p.earned, 0);
-  const coverage = Math.round((avail / total) * 100);
-  const score = avail ? Math.round((earned / avail) * 100) : null;
-  const verdict: Profile["verdict"] = coverage < 50 || score === null ? "Limited data" : score >= 75 ? "Strong" : score >= 55 ? "Mixed" : "Weak";
-  return {
-    key, label, horizon, question, score, coverage, verdict, parts: ps,
-    strengths: ps.filter((p) => p.good === true).map((p) => `${p.label}: ${p.value}`),
-    weaknesses: ps.filter((p) => p.good === false).map((p) => `${p.label}: ${p.value}`),
+/** q: quarters newest first (3-month values); a: fiscal years newest first. Same math as the backtest. */
+export function fundamentalFeatures(q: FQ[], a: FQ[]): Features {
+  const F: Features = {
+    sue: null, epsChg: null, epsYoY: null, epsAcc: null, epsUpShare: null, opLeverage: null, marginChg: null, opMargin: null,
+    gpa: null, roe3: null, fcfConv: null, fscore: null, shareChg3: null, assetGrowth: null, shareIssue1y: null,
+    salesTTM: null, netIncomeTTM: null, fcfTTM: null, shares: null, salesCagr: null,
   };
-}
-const part = (label: string, max: number, earned: number, value: string, good: boolean | null): Part => ({ label, max, earned: Math.max(0, Math.min(max, Math.round(earned * 10) / 10)), value, good });
-
-/** q: quarters newest first (3-month values). */
-export function shortTermProfile(q: FQ[], x: Extras = {}): Profile {
-  const yoy = (k: keyof FQ, i: number) => (q[i + 4] ? growth(q[i][k] as number | null, q[i + 4][k] as number | null) : null);
-  const parts: (Part | null)[] = [];
-  // SUE: latest seasonal EPS change vs the volatility of past changes
-  const diffs: number[] = [];
-  for (let i = 1; i <= 8 && q[i + 4]; i++) if (nn(q[i].eps) && nn(q[i + 4].eps)) diffs.push(q[i].eps! - q[i + 4].eps!);
-  if (q[4] && nn(q[0]?.eps) && nn(q[4].eps) && diffs.length >= 4) {
-    const s = sd(diffs) || Math.abs(q[4].eps!) * 0.1 || 0.01;
-    const sue = (q[0].eps! - q[4].eps! - diffs.reduce((a, b) => a + b, 0) / diffs.length) / s;
-    parts.push(part("Earnings surprise vs own history (SUE)", 20, sue >= 2 ? 20 : sue >= 1 ? 14 : sue > 0 ? 7 : 0, sue.toFixed(1), sue >= 1 ? true : sue < 0 ? false : null));
+  if (q.length) {
+    const yoy = (k: keyof FQ, i: number) => (q[i + 4] ? growth(q[i][k] as number | null, q[i + 4][k] as number | null) : null);
+    const diffs: number[] = [];
+    for (let i = 1; i <= 8 && q[i + 4]; i++) if (nn(q[i].eps) && nn(q[i + 4].eps)) diffs.push(q[i].eps! - q[i + 4].eps!);
+    if (q[4] && nn(q[0].eps) && nn(q[4].eps) && diffs.length >= 4) {
+      const s = sd(diffs) || Math.abs(q[4].eps!) * 0.1 || 0.01;
+      F.sue = (q[0].eps! - q[4].eps! - diffs.reduce((x, y) => x + y, 0) / diffs.length) / s;
+    }
+    const e0 = yoy("eps", 0), e1 = yoy("eps", 1);
+    F.epsYoY = e0;
+    if (nn(e0) && nn(e1)) F.epsAcc = e0 - e1;
+    if (q[4] && nn(q[0].eps) && nn(q[4].eps)) F.epsChg = (q[0].eps! - q[4].eps!) / Math.max(Math.abs(q[4].eps!), 0.05);
+    const om = (i: number) => (q[i] && nn(q[i].operatingIncome) && nn(q[i].revenue) && q[i].revenue! > 0 ? (q[i].operatingIncome! / q[i].revenue!) * 100 : null);
+    const m0 = om(0), m4 = om(4);
+    F.opMargin = m0;
+    if (nn(m0) && nn(m4)) F.marginChg = m0 - m4;
+    const eg = Array.from({ length: 8 }, (_, i) => (nn(q[i]?.eps) && nn(q[i + 4]?.eps) ? (q[i].eps! > q[i + 4].eps! ? 1 : 0) : null)).filter((v): v is 0 | 1 => v !== null);
+    if (eg.length >= 4) F.epsUpShare = eg.reduce((x: number, y) => x + y, 0) / eg.length;
+    const ttm = (k: keyof FQ, o = 0) => (q.length >= o + 4 ? sum(q.slice(o, o + 4).map((x) => x[k] as number | null)) : null);
+    const sT = ttm("revenue"), sP = ttm("revenue", 4), oT = ttm("operatingIncome"), oP = ttm("operatingIncome", 4);
+    const ocT = ttm("operatingCashFlow"), cpT = ttm("capex");
+    F.salesTTM = sT; F.netIncomeTTM = ttm("netIncome"); F.shares = q[0].shares;
+    if (nn(ocT) && nn(cpT)) F.fcfTTM = ocT - Math.abs(cpT);
+    if (nn(sT) && nn(sP) && nn(oT) && nn(oP) && sP > 0 && oP > 0) F.opLeverage = Math.max(-200, Math.min(200, (oT / oP - sT / sP) * 100));
+    if (q[4] && nn(q[0].assets) && nn(q[4].assets)) F.assetGrowth = growth(q[0].assets, q[4].assets);
+    if (q[4] && nn(q[0].shares) && nn(q[4].shares)) F.shareIssue1y = growth(q[0].shares, q[4].shares);
   }
-  const e0 = yoy("eps", 0), e1 = yoy("eps", 1), e2 = yoy("eps", 2);
-  if (nn(e0) && (nn(e1) || nn(e2))) {
-    const prior = [e1, e2].filter(nn) as number[];
-    const acc = e0 - prior.reduce((a, b) => a + b, 0) / prior.length;
-    parts.push(part("EPS growth acceleration", 12, acc >= 10 ? 12 : acc > 0 ? 7 : 0, `${pf(e0)} vs ${pf(prior[0])} before`, acc > 0 ? true : acc < -10 ? false : null));
-  } else if (nn(q[0]?.eps) && nn(q[4]?.eps) && q[4].eps! <= 0 && q[0].eps! > 0) {
-    parts.push(part("EPS growth acceleration", 12, 8, "turnaround to profit", true));
-  }
-  const r0 = yoy("revenue", 0), r1 = yoy("revenue", 1);
-  if (nn(r0)) parts.push(part("Sales growth", 12, r0 >= 25 ? 12 : r0 >= 15 ? 9 : r0 >= 5 ? 4 : 0, pf(r0), r0 >= 15 ? true : r0 < 5 ? false : null));
-  if (nn(r0) && nn(r1)) parts.push(part("Sales acceleration", 8, r0 - r1 > 2 ? 8 : r0 - r1 > -2 ? 4 : 0, `${pf(r0)} vs ${pf(r1)}`, r0 - r1 > 2 ? true : r0 - r1 < -5 ? false : null));
-  const m = (i: number) => (nn(q[i]?.operatingIncome) && nn(q[i]?.revenue) && q[i].revenue! > 0 ? (q[i].operatingIncome! / q[i].revenue!) * 100 : null);
-  const m0 = m(0), m4 = m(4);
-  if (nn(m0) && nn(m4)) parts.push(part("Operating margin vs a year ago", 8, m0 - m4 > 2 ? 8 : m0 - m4 > 0 ? 5 : 0, `${m0.toFixed(1)}% vs ${m4.toFixed(1)}%`, m0 > m4 ? true : m0 - m4 < -2 ? false : null));
-  if (nn(x.epsSurprisePct)) { const v = x.epsSurprisePct; parts.push(part("Latest EPS beat", 10, v >= 10 ? 10 : v >= 3 ? 7 : v > 0 ? 4 : 0, pf(v, 1), v >= 3 ? true : v < 0 ? false : null)); }
-  if (nn(x.revSurprisePct)) { const v = x.revSurprisePct; parts.push(part("Latest sales beat", 5, v > 1 ? 5 : v > 0 ? 3 : 0, pf(v, 1), v > 1 ? true : v < 0 ? false : null)); }
-  const rv = (x.revisions90 ?? []).filter(nn) as number[];
-  if (rv.length) parts.push(part("Estimate revisions (90 days)", 15, rv.every((v) => v > 0) ? 15 : rv.some((v) => v > 0) ? 8 : rv.every((v) => v > -1) ? 4 : 0, rv.map((v) => pf(v, 1)).join(" / "), rv.every((v) => v > 0) ? true : rv.every((v) => v < 0) ? false : null));
-  if (nn(x.reactionPct)) { const v = x.reactionPct; parts.push(part("Market reaction to the report", 10, v >= 5 ? 10 : v >= 0 ? 6 : v >= -5 ? 2 : 0, `${pf(v, 1)} vs SPY`, v >= 2 ? true : v <= -5 ? false : null)); }
-  return finish("short", "Short term", "1–3 months", "Is the business accelerating right now?", parts, 100);
-}
-
-export function mediumTermProfile(q: FQ[]): Profile {
-  const yoy = (k: keyof FQ, i: number) => (q[i + 4] ? growth(q[i][k] as number | null, q[i + 4][k] as number | null) : null);
-  const parts: (Part | null)[] = [];
-  const rg = Array.from({ length: 8 }, (_, i) => yoy("revenue", i)).filter(nn) as number[];
-  if (rg.length >= 4) {
-    const hits = rg.filter((v) => v >= 15).length;
-    parts.push(part("Sales growth ≥15% (last 8 quarters)", 16, (hits / rg.length) * 16, `${hits}/${rg.length} quarters`, hits / rg.length >= 0.75 ? true : hits / rg.length <= 0.25 ? false : null));
-    const med = median(rg)!;
-    parts.push(part("Typical sales growth", 12, med >= 25 ? 12 : med >= 15 ? 9 : med >= 8 ? 5 : 0, pf(med), med >= 15 ? true : med < 5 ? false : null));
-  }
-  const eg: (boolean | null)[] = Array.from({ length: 8 }, (_, i) => {
-    const a = q[i]?.eps, b = q[i + 4]?.eps;
-    return nn(a) && nn(b) ? a > b : null;
-  }).filter((v) => v !== null);
-  if (eg.length >= 4) { const h = eg.filter(Boolean).length; parts.push(part("EPS up year over year", 12, (h / eg.length) * 12, `${h}/${eg.length} quarters`, h / eg.length >= 0.75 ? true : h / eg.length <= 0.25 ? false : null)); }
-  const om = (i: number) => (nn(q[i]?.operatingIncome) && nn(q[i]?.revenue) && q[i].revenue! > 0 ? (q[i].operatingIncome! / q[i].revenue!) * 100 : null);
-  const last4 = [0, 1, 2, 3].map(om), prev4 = [4, 5, 6, 7].map(om);
-  if (last4.every(nn) && prev4.every(nn)) {
-    const a = (last4 as number[]).reduce((s, v) => s + v, 0) / 4, b = (prev4 as number[]).reduce((s, v) => s + v, 0) / 4;
-    parts.push(part("Margin trend (last 4 vs prior 4 quarters)", 12, a - b > 2 ? 12 : a - b > 0 ? 8 : a - b > -2 ? 4 : 0, `${a.toFixed(1)}% vs ${b.toFixed(1)}%`, a > b ? true : a - b < -2 ? false : null));
-  }
-  const ttm = (k: keyof FQ, off = 0) => (q.length >= off + 4 ? sum(q.slice(off, off + 4).map((x) => x[k] as number | null)) : null);
-  const salesT = ttm("revenue"), salesP = ttm("revenue", 4), opT = ttm("operatingIncome"), opP = ttm("operatingIncome", 4);
-  if (nn(salesT) && nn(salesP) && nn(opT) && nn(opP) && salesP > 0) {
-    const sg = (salesT / salesP - 1) * 100;
-    const og = opP > 0 ? (opT / opP - 1) * 100 : opT > opP ? 999 : -999;
-    parts.push(part("Operating leverage (profit growing faster than sales)", 8, og > sg ? 8 : 0, `op. income ${og === 999 ? "turned up" : pf(og)} vs sales ${pf(sg)}`, og > sg ? true : og < 0 ? false : null));
-  }
-  const niT = ttm("netIncome"), ocfT = ttm("operatingCashFlow"), capT = ttm("capex");
-  if (nn(niT) && nn(ocfT)) {
-    const v = niT > 0 ? (ocfT >= niT ? 10 : ocfT >= 0.8 * niT ? 6 : 0) : ocfT > 0 ? 6 : 0;
-    parts.push(part("Earnings backed by cash (low accruals)", 10, v, niT > 0 ? `cash flow ${(ocfT / niT).toFixed(2)}× net income` : `cash flow ${ocfT > 0 ? "positive" : "negative"}, net loss`, v >= 6 ? true : v === 0 ? false : null));
-  }
-  if (nn(ocfT) && nn(capT) && nn(salesT) && salesT > 0) {
-    const fcf = ocfT - Math.abs(capT), mgn = (fcf / salesT) * 100;
-    parts.push(part("Free cash flow (last 12 months)", 10, fcf > 0 ? (mgn >= 10 ? 10 : 8) : 0, `${mgn.toFixed(1)}% of sales`, fcf > 0 ? true : false));
-  }
-  const roa = (off: number) => { const n = ttm("netIncome", off), a = q[off]?.assets; return nn(n) && nn(a) && a > 0 ? (n / a) * 100 : null; };
-  const roaNow = roa(0), roaAgo = roa(4);
-  if (nn(roaNow) && nn(roaAgo)) parts.push(part("Return on assets improving", 8, roaNow > roaAgo ? 8 : 0, `${roaNow.toFixed(1)}% vs ${roaAgo.toFixed(1)}% a year ago`, roaNow > roaAgo ? true : roaNow < roaAgo - 2 ? false : null));
-  const de = nn(q[0]?.debt) && nn(q[0]?.equity) && q[0].equity! > 0 ? q[0].debt! / q[0].equity! : null;
-  if (nn(de)) parts.push(part("Debt / equity", 6, de <= 1 ? 6 : de <= 2 ? 3 : 0, `${de.toFixed(2)}×`, de <= 1 ? true : de > 2 ? false : null));
-  return finish("medium", "Medium term", "3–12 months", "Is the growth durable?", parts, 94);
-}
-
-/** a: fiscal years newest first. */
-export function longTermProfile(a: FQ[]): Profile {
-  const parts: (Part | null)[] = [];
-  const yrs = a.filter((y) => nn(y.revenue));
-  const span = Math.min(5, yrs.length - 1);
-  if (span >= 3) {
-    const cagr = (Math.pow(yrs[0].revenue! / yrs[span].revenue!, 1 / span) - 1) * 100;
-    parts.push(part(`Sales growth per year (${span}y)`, 16, cagr >= 20 ? 16 : cagr >= 12 ? 12 : cagr >= 7 ? 7 : cagr > 0 ? 3 : 0, pf(cagr, 1), cagr >= 12 ? true : cagr <= 2 ? false : null));
-    const ups = yrs.slice(0, span).filter((y, i) => y.revenue! > yrs[i + 1].revenue!).length;
-    parts.push(part("Years with higher sales", 10, (ups / span) * 10, `${ups}/${span}`, ups === span ? true : ups / span <= 0.5 ? false : null));
-    const worst = Math.min(...yrs.slice(0, Math.min(6, yrs.length - 1)).map((y, i) => (y.revenue! / yrs[i + 1].revenue! - 1) * 100));
-    parts.push(part("Worst year for sales (resilience)", 8, worst >= 0 ? 8 : worst >= -10 ? 5 : worst >= -25 ? 2 : 0, pf(worst, 1), worst >= 0 ? true : worst < -10 ? false : null));
-  }
-  const ep = a.filter((y) => nn(y.eps));
-  const es = Math.min(5, ep.length - 1);
-  if (es >= 3) {
-    const e0 = ep[0].eps!, eN = ep[es].eps!;
-    if (eN > 0 && e0 > 0) {
-      const c = (Math.pow(e0 / eN, 1 / es) - 1) * 100;
-      parts.push(part(`EPS growth per year (${es}y)`, 12, c >= 20 ? 12 : c >= 10 ? 8 : c > 0 ? 4 : 0, pf(c, 1), c >= 10 ? true : c < 0 ? false : null));
-    } else parts.push(part(`EPS growth per year (${es}y)`, 12, e0 > 0 ? 6 : 0, e0 > 0 ? "turned profitable" : "still loss-making", e0 > 0 ? null : false));
-  }
-  const y0 = a[0];
-  if (y0 && nn(y0.grossProfit) && nn(y0.assets) && y0.assets > 0) {
-    const gpa = y0.grossProfit / y0.assets;
-    parts.push(part("Gross profit / assets", 12, gpa >= 0.4 ? 12 : gpa >= 0.25 ? 8 : gpa >= 0.1 ? 4 : 0, gpa.toFixed(2), gpa >= 0.33 ? true : gpa < 0.1 ? false : null));
-  }
-  const roes = a.slice(0, 3).map((y, i) => { const eqPrev = a[i + 1]?.equity; return nn(y.netIncome) && nn(y.equity) && y.equity > 0 ? (y.netIncome / ((y.equity + (nn(eqPrev) && eqPrev > 0 ? eqPrev : y.equity)) / 2)) * 100 : null; }).filter(nn) as number[];
-  if (roes.length >= 2) { const m = roes.reduce((s, v) => s + v, 0) / roes.length; parts.push(part("Return on equity (3y avg)", 10, m >= 20 ? 10 : m >= 12 ? 6 : m > 0 ? 3 : 0, `${m.toFixed(1)}%`, m >= 15 ? true : m < 5 ? false : null)); }
+  const yrs = a.filter((y) => nn(y.revenue)), sp = Math.min(5, yrs.length - 1);
+  if (sp >= 3) F.salesCagr = (Math.pow(yrs[0].revenue! / yrs[sp].revenue!, 1 / sp) - 1) * 100;
+  const y0 = a[0], y1 = a[1];
+  if (y0 && nn(y0.grossProfit) && nn(y0.assets) && y0.assets > 0) F.gpa = y0.grossProfit / y0.assets;
+  const roes = a.slice(0, 3).map((y, i) => {
+    const p = a[i + 1]?.equity;
+    return nn(y.netIncome) && nn(y.equity) && y.equity > 0 ? (y.netIncome / ((y.equity + (nn(p) && p > 0 ? p : y.equity)) / 2)) * 100 : null;
+  }).filter(nn) as number[];
+  if (roes.length >= 2) F.roe3 = roes.reduce((s, v) => s + v, 0) / roes.length;
   const fc = a.slice(0, 5).filter((y) => nn(y.operatingCashFlow) && nn(y.capex) && nn(y.netIncome));
   if (fc.length >= 3) {
-    const fcf = fc.reduce((s, y) => s + y.operatingCashFlow! - Math.abs(y.capex!), 0), ni = fc.reduce((s, y) => s + y.netIncome!, 0);
-    const v = ni > 0 ? (fcf / ni >= 0.9 ? 10 : fcf / ni >= 0.6 ? 6 : fcf > 0 ? 3 : 0) : fcf > 0 ? 4 : 0;
-    parts.push(part(`Profits turned into free cash (${fc.length}y)`, 10, v, ni > 0 ? `${(fcf / ni).toFixed(2)}× net income` : fcf > 0 ? "cash positive despite losses" : "burning cash", v >= 6 ? true : v === 0 ? false : null));
+    const f = fc.reduce((s, y) => s + y.operatingCashFlow! - Math.abs(y.capex!), 0), n = fc.reduce((s, y) => s + y.netIncome!, 0);
+    F.fcfConv = n > 0 ? Math.max(-2, Math.min(3, f / n)) : f > 0 ? 1 : -1;
   }
   const sh = a.filter((y) => nn(y.shares));
-  if (sh.length >= 4) {
-    const c = (Math.pow(sh[0].shares! / sh[3].shares!, 1 / 3) - 1) * 100;
-    parts.push(part("Share count change per year (3y)", 10, c <= 0 ? 10 : c <= 2 ? 7 : c <= 5 ? 3 : 0, pf(c, 1), c <= 1 ? true : c > 5 ? false : null));
-  }
-  // Piotroski F-score (latest fiscal year vs the year before)
-  const y1 = a[1];
+  if (sh.length >= 4) F.shareChg3 = (Math.pow(sh[0].shares! / sh[3].shares!, 1 / 3) - 1) * 100;
   if (y0 && y1 && nn(y0.netIncome) && nn(y0.assets) && nn(y1.netIncome) && nn(y1.assets) && nn(y0.operatingCashFlow)) {
     let f = 0;
-    const roa0 = y0.netIncome! / y0.assets!, roa1 = y1.netIncome! / y1.assets!;
-    if (roa0 > 0) f++;
+    const r0 = y0.netIncome! / y0.assets!, r1 = y1.netIncome! / y1.assets!;
+    if (r0 > 0) f++;
     if (y0.operatingCashFlow! > 0) f++;
-    if (roa0 > roa1) f++;
+    if (r0 > r1) f++;
     if (y0.operatingCashFlow! > y0.netIncome!) f++;
     const lev = (y: FQ) => (nn(y.debt) && nn(y.assets) && y.assets! > 0 ? y.debt! / y.assets! : null);
     if (nn(lev(y0)) && nn(lev(y1)) && lev(y0)! <= lev(y1)!) f++;
@@ -194,7 +121,67 @@ export function longTermProfile(a: FQ[]): Profile {
     if (nn(gm(y0)) && nn(gm(y1)) && gm(y0)! > gm(y1)!) f++;
     const at = (y: FQ) => (nn(y.revenue) && nn(y.assets) && y.assets! > 0 ? y.revenue! / y.assets! : null);
     if (nn(at(y0)) && nn(at(y1)) && at(y0)! > at(y1)!) f++;
-    parts.push(part("Piotroski F-score", 12, f >= 7 ? 12 : f >= 5 ? 8 : f >= 3 ? 4 : 0, `${f}/9`, f >= 7 ? true : f <= 3 ? false : null));
+    F.fscore = f;
   }
-  return finish("long", "Long term", "1–5 years", "Is this a great business?", parts, 100);
+  return F;
+}
+
+const part = (label: string, max: number, earned: number, value: string, good: boolean | null, tested = true): Part =>
+  ({ label, max, earned: Math.max(0, Math.min(max, Math.round(earned * 10) / 10)), value, good, tested });
+
+/** Score = share of points earned among parts that have data. Verdict cut-offs are the ones the backtest used. */
+function finish(key: Profile["key"], label: string, horizon: string, question: string, parts: (Part | null)[]): Profile {
+  const ps = parts.filter((p): p is Part => !!p);
+  const tested = ps.filter((p) => p.tested);
+  const testedTotal = key === "momentum" ? 100 : 100;
+  const testedAvail = tested.reduce((t, p) => t + p.max, 0);
+  const avail = ps.reduce((t, p) => t + p.max, 0), earned = ps.reduce((t, p) => t + p.earned, 0);
+  const coverage = Math.round((testedAvail / testedTotal) * 100);
+  const score = avail ? Math.round((earned / avail) * 100) : null;
+  const verdict: Profile["verdict"] = coverage < 50 || score === null ? "Limited data" : score >= 70 ? "Strong" : score >= 40 ? "Mixed" : "Weak";
+  return {
+    key, label, horizon, question, score, coverage, verdict, parts: ps,
+    strengths: ps.filter((p) => p.good === true).map((p) => `${p.label}: ${p.value}`),
+    weaknesses: ps.filter((p) => p.good === false).map((p) => `${p.label}: ${p.value}`),
+  };
+}
+
+export function momentumProfile(F: Features, x: Extras = {}): Profile {
+  const p: (Part | null)[] = [];
+  if (nn(F.epsChg)) { const v = F.epsChg; p.push(part("EPS vs the same quarter last year", 25, v >= 0.5 ? 25 : v >= 0.2 ? 18 : v > 0 ? 10 : 0, `${v >= 0 ? "+" : ""}${(v * 100).toFixed(0)}%${F.epsYoY === null ? " (from a loss)" : ""}`, v >= 0.2 ? true : v < 0 ? false : null)); }
+  if (nn(F.sue)) { const v = F.sue; p.push(part("Earnings surprise vs its own history (SUE)", 20, v >= 2 ? 20 : v >= 1 ? 14 : v > 0 ? 7 : 0, v.toFixed(1), v >= 1 ? true : v < 0 ? false : null)); }
+  if (nn(F.opLeverage)) { const v = F.opLeverage; p.push(part("Operating profit growing faster than sales", 20, v >= 10 ? 20 : v > 0 ? 12 : 0, `${v >= 0 ? "+" : ""}${v.toFixed(0)} pts`, v > 0 ? true : v < -10 ? false : null)); }
+  if (nn(F.marginChg)) { const v = F.marginChg; p.push(part("Operating margin vs a year ago", 15, v >= 2 ? 15 : v > 0 ? 9 : 0, `${v >= 0 ? "+" : ""}${v.toFixed(1)} pts`, v > 0 ? true : v < -2 ? false : null)); }
+  if (nn(F.epsAcc)) { const v = F.epsAcc; p.push(part("EPS growth accelerating", 10, v > 0 ? 10 : 0, `${v >= 0 ? "+" : ""}${v.toFixed(0)} pts vs last quarter`, v > 0 ? true : v < -20 ? false : null)); }
+  if (nn(F.epsUpShare)) { const v = F.epsUpShare; p.push(part("Quarters with EPS up year over year (last 8)", 10, v * 10, `${Math.round(v * 8)}/8`, v >= 0.75 ? true : v <= 0.25 ? false : null)); }
+  // Live data — research-backed, no history to test
+  const rv = (x.revisions90 ?? []).filter(nn) as number[];
+  if (rv.length) p.push(part("Analysts raising estimates (90 days)", 12, rv.every((v) => v > 0) ? 12 : rv.some((v) => v > 0) ? 6 : 0, rv.map((v) => pf(v, 1)).join(" / "), rv.every((v) => v > 0) ? true : rv.every((v) => v < 0) ? false : null, false));
+  if (nn(x.reactionPct)) { const v = x.reactionPct; p.push(part("Stock's reaction to the last report", 8, v >= 5 ? 8 : v >= 0 ? 5 : v >= -5 ? 2 : 0, `${pf(v, 1)} vs SPY`, v >= 2 ? true : v <= -5 ? false : null, false)); }
+  if (nn(x.epsSurprisePct)) { const v = x.epsSurprisePct; p.push(part("Beat on EPS (last report)", 6, v >= 10 ? 6 : v >= 3 ? 4 : v > 0 ? 2 : 0, pf(v, 1), v >= 3 ? true : v < 0 ? false : null, false)); }
+  if (nn(x.revSurprisePct)) { const v = x.revSurprisePct; p.push(part("Beat on sales (last report)", 4, v > 1 ? 4 : v > 0 ? 2 : 0, pf(v, 1), v > 1 ? true : v < 0 ? false : null, false)); }
+  return finish("momentum", "Earnings momentum", "next 3–12 months", "Is earning power rising?", p);
+}
+
+export function qualityProfile(F: Features): Profile {
+  const p: (Part | null)[] = [];
+  if (nn(F.gpa)) { const v = F.gpa; p.push(part("Gross profit / assets", 20, v >= 0.4 ? 20 : v >= 0.25 ? 13 : v >= 0.1 ? 6 : 0, v.toFixed(2), v >= 0.33 ? true : v < 0.1 ? false : null)); }
+  if (nn(F.fscore)) { const v = F.fscore; p.push(part("Piotroski F-score", 20, v >= 7 ? 20 : v >= 5 ? 13 : v >= 3 ? 6 : 0, `${v}/9`, v >= 7 ? true : v <= 3 ? false : null)); }
+  if (nn(F.roe3)) { const v = F.roe3; p.push(part("Return on equity (3-year avg)", 15, v >= 20 ? 15 : v >= 12 ? 10 : v > 0 ? 4 : 0, `${v.toFixed(1)}%`, v >= 15 ? true : v < 5 ? false : null)); }
+  if (nn(F.fcfConv)) { const v = F.fcfConv; p.push(part("Profits turned into free cash", 15, v >= 0.9 ? 15 : v >= 0.6 ? 9 : v > 0 ? 4 : 0, `${v.toFixed(2)}× net income`, v >= 0.9 ? true : v <= 0 ? false : null)); }
+  if (nn(F.shareChg3)) { const v = F.shareChg3; p.push(part("Share count change per year (3y)", 15, v <= 0 ? 15 : v <= 2 ? 10 : v <= 5 ? 4 : 0, pf(v, 1), v <= 1 ? true : v > 5 ? false : null)); }
+  if (nn(F.assetGrowth)) { const v = F.assetGrowth; p.push(part("Asset growth (last 12 months)", 15, v <= 10 ? 15 : v <= 25 ? 9 : v <= 50 ? 4 : 0, pf(v, 0), v <= 15 ? true : v > 50 ? false : null)); }
+  return finish("quality", "Quality", "protection in sell-offs", "How well does it hold up?", p);
+}
+
+/** Tested warning signs. priceNow: latest close (for price / sales). */
+export function redFlags(F: Features, priceNow: number | null): RedFlag[] {
+  const out: RedFlag[] = [];
+  const mcap = nn(priceNow) && nn(F.shares) && F.shares > 0 ? priceNow * F.shares : null;
+  if (nn(mcap) && nn(F.salesTTM) && F.salesTTM > 0 && mcap / F.salesTTM > 20) out.push({ key: "ps", label: "Priced above 20× sales", detail: `about ${(mcap / F.salesTTM).toFixed(0)}× last-12-month sales`, tested: true });
+  if (nn(F.assetGrowth) && F.assetGrowth > 50) out.push({ key: "assets", label: "Balance sheet grew over 50% in a year", detail: `assets ${pf(F.assetGrowth)} (often acquisitions or capital raises)`, tested: true });
+  if (nn(F.shareIssue1y) && F.shareIssue1y > 10) out.push({ key: "dilution", label: "Share count up over 10% in a year", detail: `diluted shares ${pf(F.shareIssue1y, 1)}`, tested: true });
+  if (nn(F.netIncomeTTM) && nn(F.fcfTTM) && F.netIncomeTTM < 0 && F.fcfTTM < 0) out.push({ key: "burn", label: "Losing money and burning cash", detail: "net loss and negative free cash flow over the last 12 months", tested: true });
+  if (nn(F.salesCagr) && F.salesCagr >= 25) out.push({ key: "expect", label: "Years of 25%+ sales growth — expectations are high", detail: `sales ${pf(F.salesCagr, 0)} a year; past fast growers lagged afterwards on average`, tested: true });
+  return out;
 }

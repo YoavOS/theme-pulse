@@ -1,6 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
 import { fetchSecQuarters, type SecQuarter } from "../_shared/secFundamentals.ts";
-import { longTermProfile, mediumTermProfile, shortTermProfile, type FQ } from "../_shared/fundamentalProfiles.ts";
+import { fundamentalFeatures, momentumProfile, qualityProfile, redFlags, type FQ } from "../_shared/fundamentalProfiles.ts";
 import { measureEarnings, type DBar } from "../_shared/earningsFuel.ts";
 
 const corsHeaders = {
@@ -1803,7 +1803,7 @@ async function buildBundle(symbol: string, force: boolean) {
   };
   scoreDerived(derived);
 
-  // ----- Horizon profiles (short / medium / long term) from the filing history -----
+  // ----- Evidence-based profiles (earnings momentum, quality, red flags) from the filing history -----
   const toFQ = (p: PeriodPoint): FQ => ({
     end: p.date, revenue: p.revenue, netIncome: p.netIncome, eps: p.normalizedEps ?? p.eps, operatingIncome: p.operatingIncome, grossProfit: p.grossProfit,
     operatingCashFlow: p.operatingCashFlow, capex: p.operatingCashFlow !== null && p.freeCashFlow !== null ? p.operatingCashFlow - p.freeCashFlow : null,
@@ -1811,19 +1811,21 @@ async function buildBundle(symbol: string, force: boolean) {
   });
   const fq: FQ[] = sec.quarters.length >= 8 ? sec.quarters.map((q) => ({ ...q })) : quarters.map(toFQ);
   const fa: FQ[] = sec.annual.length >= 4 ? sec.annual.map((q) => ({ ...q })) : annual.map(toFQ);
-  let reactionPct: number | null = null;
   const lastRep = fhHist.past[0];
+  const [stockDaily, spyDaily] = await Promise.all([fetchYahooDaily(symbol, quality), lastRep ? fetchYahooDaily("SPY", quality) : Promise.resolve([] as DBar[])]);
+  let reactionPct: number | null = null;
   if (lastRep) {
-    const [sd, md] = await Promise.all([fetchYahooDaily(symbol, quality), fetchYahooDaily("SPY", quality)]);
-    const m = measureEarnings({ symbol, date: lastRep.date, hour: lastRep.hour, epsActual: lastRep.epsActual, epsEstimate: lastRep.epsEstimate, revenueActual: lastRep.revenueActual, revenueEstimate: lastRep.revenueEstimate }, sd, md);
+    const m = measureEarnings({ symbol, date: lastRep.date, hour: lastRep.hour, epsActual: lastRep.epsActual, epsEstimate: lastRep.epsEstimate, revenueActual: lastRep.revenueActual, revenueEstimate: lastRep.revenueEstimate }, stockDaily, spyDaily);
     reactionPct = m?.ear ?? null;
   }
+  const priceNow = [...stockDaily].reverse().find((b) => b.close !== null)?.close ?? null;
   const latestSurprise = lastRep && lastRep.epsActual !== null && lastRep.epsEstimate !== null && Math.abs(lastRep.epsEstimate) > 0.005
     ? round(((lastRep.epsActual - lastRep.epsEstimate) / Math.abs(lastRep.epsEstimate)) * 100) : (surprises[0] ?? null);
+  const feats = fundamentalFeatures(fq, fa);
   (derived as any).profiles = {
-    short: shortTermProfile(fq, { epsSurprisePct: latestSurprise, revSurprisePct: revSurprises[0] ?? null, revisions90: revisions ? [revisions.thisYear.chg90, revisions.nextYear.chg90] : [], reactionPct }),
-    medium: mediumTermProfile(fq),
-    long: longTermProfile(fa),
+    momentum: momentumProfile(feats, { epsSurprisePct: latestSurprise, revSurprisePct: revSurprises[0] ?? null, revisions90: revisions ? [revisions.thisYear.chg90, revisions.nextYear.chg90] : [], reactionPct }),
+    quality: qualityProfile(feats),
+    redFlags: redFlags(feats, priceNow),
   };
   // Long history for the app's charts (newest first)
   (derived as any).history = {
