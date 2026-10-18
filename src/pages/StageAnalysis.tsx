@@ -261,6 +261,20 @@ export default function StageAnalysis() {
     [stocks, transWindow],
   );
 
+  // ----- One-click screens (Deepvue-style presets) on the stage scan's own data -----
+  const screens = useMemo(() => {
+    const B32 = "0123456789abcdefghijklmnopqrstuv";
+    const newHigh = (r: StockStage) => { const fl = r.features?.flags ?? ""; const v = B32.indexOf(fl[fl.length - 1] ?? ""); return v >= 0 && (v & 4) !== 0; };
+    const rs = (r: StockStage) => rsRank.get(r.symbol) ?? 0;
+    const byRs = (a: StockStage, b: StockStage) => rs(b) - rs(a);
+    return [
+      { key: "tt", label: "Trend Template 8/8", tip: "Minervini's 7 price rules (weekly proxies of the 50/150/200-day MAs) plus RS rank ≥ 70.", rows: stocks.filter((r) => r.features?.tt?.pass && rs(r) >= 70).sort(byRs) },
+      { key: "rs", label: "RS leaders", tip: "Stage 2 with RS rank ≥ 90 — the strongest 10% of your list against SPY.", rows: stocks.filter((r) => r.stage === 2 && rs(r) >= 90).sort(byRs) },
+      { key: "high", label: "New 52-week high", tip: "Made a new 52-week high this week. Stocks near their highs tend to keep outperforming (George & Hwang 2004).", rows: stocks.filter((r) => r.as_of === asOf && newHigh(r)).sort(byRs) },
+      { key: "near", label: "Within 5% of high", tip: "Stage 2 and within 5% of the 52-week high — where breakouts to new highs come from.", rows: stocks.filter((r) => r.stage === 2 && (r.features?.pctFrom52wHigh ?? -99) >= -5).sort(byRs) },
+    ];
+  }, [stocks, rsRank, asOf]);
+
   // ----- Bottom line: breadth regime, Stage 2 share, leading groups, watchlist -----
   const regimeNow = useMemo(() => { const s = regimeSeries(regimeRows); return s[s.length - 1] ?? null; }, [regimeRows]);
   const leaders = useMemo(
@@ -424,7 +438,7 @@ export default function StageAnalysis() {
             {/* Transitions */}
             <section className="rounded-lg border border-border bg-card p-4">
               <div className="mb-3 flex flex-wrap items-center gap-2">
-                <h2 className="text-sm font-semibold">Stage changes</h2>
+                <h2 className="text-sm font-semibold">Stage changes &amp; screens</h2>
                 <div className="inline-flex rounded-md border border-border bg-muted/20 p-0.5">
                   {[1, 2, 4].map((w) => (
                     <button key={w} onClick={() => setTransWindow(w)} className={`rounded px-2 py-0.5 text-[10px] ${transWindow === w ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}>
@@ -484,6 +498,23 @@ export default function StageAnalysis() {
                     ))}
                   </button>
                 ))}
+              </div>
+              <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-border/60 pt-3">
+                <span className="text-[11px] text-muted-foreground">Screens</span>
+                {screens.map((sc) => (
+                  <Tooltip key={sc.key}>
+                    <TooltipTrigger asChild>
+                      <button disabled={!sc.rows.length}
+                        onClick={() => { setSubFilter(null); setMinConf(0); setSearch(""); setList({ title: sc.label, rows: sc.rows }); }}
+                        className="flex items-center gap-2 rounded-md border border-border bg-background/40 px-2.5 py-1.5 text-left text-[11px] hover:bg-accent/40 disabled:opacity-40">
+                        {sc.label} <span className="font-mono font-semibold">{sc.rows.length}</span>
+                        {sc.rows.slice(0, 3).map((r) => <span key={r.symbol} className="font-mono text-muted-foreground">{r.symbol}</span>)}
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent className="max-w-xs text-xs">{sc.tip}</TooltipContent>
+                  </Tooltip>
+                ))}
+                <Link to="/model-book" className="ml-auto text-[11px] text-primary hover:underline">Model Book: what recent winners looked like →</Link>
               </div>
             </section>
 

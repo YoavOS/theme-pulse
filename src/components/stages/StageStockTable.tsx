@@ -1,3 +1,4 @@
+import WatchStar from "@/components/WatchStar";
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { ChevronDown, ChevronRight, Copy, Download, Loader2 } from "lucide-react";
 import { toast } from "sonner";
@@ -122,6 +123,7 @@ export default function StageStockTable({
               <tr onClick={() => setOpen(open === r.symbol ? null : r.symbol)} className="cursor-pointer border-b border-border/30 hover:bg-accent/30" title="Click for the weekly chart">
                 <td className="whitespace-nowrap px-2 py-1 font-mono font-medium">
                   {open === r.symbol ? <ChevronDown size={10} className="mr-0.5 inline" /> : <ChevronRight size={10} className="mr-0.5 inline text-muted-foreground" />}
+                  <WatchStar symbol={r.symbol} size={11} className="mr-1 align-[-1px]" />
                   <a
                     onClick={(e) => e.stopPropagation()}
                     href={`https://www.tradingview.com/chart/?symbol=${encodeURIComponent(r.symbol)}`}

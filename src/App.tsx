@@ -15,6 +15,8 @@ import MarketDrivers from "./pages/MarketDrivers";
 import MorningBrief from "./pages/MorningBrief";
 import MarketFlag from "./pages/MarketFlag";
 import StorageManager from "./pages/StorageManager";
+import ModelBook from "./pages/ModelBook";
+import Watchlist from "./pages/Watchlist";
 import MinerviniChecker from "./pages/MinerviniChecker";
 import StageAnalysis from "./pages/StageAnalysis";
 import BaseScanner from "./pages/BaseScanner";
@@ -54,6 +56,8 @@ const App = () => (
             <Route path="/market-flag" element={<MarketFlag />} />
             <Route path="/storage" element={<StorageManager />} />
             <Route path="/minervini" element={<MinerviniChecker />} />
+            <Route path="/model-book" element={<ModelBook />} />
+            <Route path="/watchlist" element={<Watchlist />} />
             <Route path="/stages" element={<StageAnalysis />} />
             <Route path="/bases" element={<BaseScanner />} />
             <Route path="*" element={<NotFound />} />

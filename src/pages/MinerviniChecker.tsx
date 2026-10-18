@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { BottomLine, HowItWorks } from "@/components/Explainer";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useStockStages } from "@/hooks/useStockStages";
@@ -13,6 +13,7 @@ import type { StockStage } from "@/lib/stageAnalysis";
 import { ArrowLeft, Loader2, CheckCircle2, XCircle, MinusCircle, Search, Trophy, AlertTriangle, Info } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { WeekSpark } from "@/components/stages/StageStockTable";
+import WatchStar from "@/components/WatchStar";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -155,8 +156,8 @@ function StockHeader({ multi, header, fromCache, loading, onRefresh }: {
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div className="min-w-0">
           <div className="text-xs uppercase tracking-widest text-muted-foreground">{header.sector || "—"}</div>
-          <h2 className="mt-0.5 text-3xl font-extrabold tracking-tight">
-            {header.symbol} <span className="text-base font-medium text-muted-foreground">· {header.companyName}</span>
+          <h2 className="mt-0.5 flex items-center gap-2 text-3xl font-extrabold tracking-tight">
+            <WatchStar symbol={header.symbol} size={18} />{header.symbol} <span className="text-base font-medium text-muted-foreground">· {header.companyName}</span>
           </h2>
           {fromCache && (
             <button onClick={onRefresh} disabled={loading} className="mt-1 text-xs text-muted-foreground underline hover:text-foreground">
@@ -354,6 +355,14 @@ export default function MinerviniChecker() {
       setLoading(false);
     }
   };
+  // Deep link from other tabs (Model Book, Watchlist): /minervini?symbol=XYZ runs the analysis once.
+  const [params] = useSearchParams();
+  const linked = params.get("symbol");
+  useEffect(() => {
+    if (linked && /^[A-Za-z0-9.-]{1,10}$/.test(linked)) void runAnalysis(false, linked);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [linked]);
+
 
 
   const header = multi ? Object.values(multi.reports)[0] : null;

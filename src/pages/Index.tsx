@@ -7,7 +7,7 @@ import {
   RefreshCw, Download, Wifi, WifiOff, Loader2, Settings, ScanLine, X,
   ShieldCheck, Brain, ChevronDown, LayoutDashboard, AlertTriangle,
   BarChart3, Zap, Activity, DollarSign, Sun, Database, Trophy,
-  Share2, Flag, Layers, Boxes,
+  Share2, Flag, Layers, Boxes, BookOpen, Star,
 } from "lucide-react";
 import HeatmapGridView from "@/components/dashboard/HeatmapGridView";
 import ThemeTracker from "@/components/dashboard/ThemeTracker";
@@ -303,6 +303,8 @@ export default function Index() {
     { to: "/market-drivers", label: "Market Drivers", icon: <BarChart3 size={14} />, active: false, color: "text-[hsl(200,80%,55%)]" },
     { to: "/earnings", label: "Earnings", icon: <DollarSign size={14} />, active: false, color: "text-[hsl(40,90%,55%)]" },
     { to: "/minervini", label: "Minervini", icon: <Trophy size={14} />, active: false, color: "text-[hsl(40,90%,55%)]" },
+    { to: "/model-book", label: "Model Book", icon: <BookOpen size={14} />, active: false, color: "text-[hsl(40,90%,55%)]" },
+    { to: "/watchlist", label: "Watchlist", icon: <Star size={14} />, active: false, color: "text-[hsl(45,95%,58%)]" },
     { to: "/storage", label: "Storage", icon: <Database size={14} />, active: false, color: "text-muted-foreground" },
   ];
 

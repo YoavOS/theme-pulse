@@ -12,6 +12,7 @@ import { StageBadge } from "@/components/stages/StageStockTable";
 import TrackRecord from "@/components/stages/TrackRecord";
 import WeeklyChart from "@/components/stages/WeeklyChart";
 import { BottomLine, HowItWorks } from "@/components/Explainer";
+import WatchStar from "@/components/WatchStar";
 import { downloadTradingViewList, isStageScanRunning, regimeSeries, runStageScan } from "@/lib/stageAnalysis";
 import {
   ALL_LABELS, ALL_STATES, BREAKDOWN_PARTS, CHART_CHECKS, EARN_LABELS, LABEL_NAMES, STATE_NAMES,
@@ -341,6 +342,7 @@ export default function BaseScanner() {
                           <td className="whitespace-nowrap px-2 py-1.5">
                             <div className="flex items-center gap-1">
                               {isOpen ? <ChevronDown size={11} /> : <ChevronRight size={11} className="text-muted-foreground" />}
+                              <WatchStar symbol={r.symbol} size={11} />
                               <a href={`https://www.tradingview.com/chart/?symbol=${encodeURIComponent(r.symbol)}`} target="_blank" rel="noopener noreferrer"
                                 onClick={(e) => e.stopPropagation()} className="font-mono font-semibold hover:text-primary hover:underline" title="Open TradingView chart">
                                 {r.symbol}
