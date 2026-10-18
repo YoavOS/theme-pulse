@@ -1,5 +1,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
 import { fetchSecQuarters, type SecQuarter } from "../_shared/secFundamentals.ts";
+import { fundamentalFeatures, momentumProfile, qualityProfile, redFlags, type FQ } from "../_shared/fundamentalProfiles.ts";
+import { measureEarnings, type DBar } from "../_shared/earningsFuel.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -361,6 +363,20 @@ async function fetchFinnhubMetric(symbol: string, quality: DataQuality) {
   return data;
 }
 
+/** Yahoo daily bars (no login needed) — for the market's reaction to the latest report. */
+async function fetchYahooDaily(symbol: string, quality: DataQuality): Promise<DBar[]> {
+  try {
+    const r = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=1y&interval=1d`, { headers: { "User-Agent": UA } });
+    quality.yahooCalls++;
+    if (!r.ok) { await r.body?.cancel(); return []; }
+    const j = await r.json().catch(() => null);
+    const res = j?.chart?.result?.[0];
+    const ts: number[] = res?.timestamp ?? [];
+    const q = res?.indicators?.quote?.[0] ?? {};
+    return ts.map((t, i) => ({ ts: t, open: q.open?.[i] ?? null, high: q.high?.[i] ?? null, low: q.low?.[i] ?? null, close: q.close?.[i] ?? null, volume: q.volume?.[i] ?? null }));
+  } catch { return []; }
+}
+
 /** Finnhub earnings calendar for one symbol (~3 years back + next report): EPS and revenue actual vs estimate. */
 async function fetchFinnhubEarningsHistory(symbol: string, quality: DataQuality) {
   if (!FINNHUB_KEY) return { past: [] as EarnRow[], next: null as string | null };
@@ -372,7 +388,7 @@ async function fetchFinnhubEarningsHistory(symbol: string, quality: DataQuality)
     if (!r.ok) { quality.sourceStatus["Finnhub earnings calendar"] = `HTTP ${r.status}`; await r.body?.cancel(); return { past: [], next: null }; }
     const j = await r.json().catch(() => null);
     const rows: EarnRow[] = ((j?.earningsCalendar ?? []) as any[]).map((e) => ({
-      date: String(e.date), epsActual: num(e.epsActual), epsEstimate: num(e.epsEstimate), revenueActual: num(e.revenueActual), revenueEstimate: num(e.revenueEstimate),
+      date: String(e.date), hour: e.hour ? String(e.hour) : null, epsActual: num(e.epsActual), epsEstimate: num(e.epsEstimate), revenueActual: num(e.revenueActual), revenueEstimate: num(e.revenueEstimate),
     }));
     const today = new Date().toISOString().slice(0, 10);
     const past = rows.filter((x) => x.date < today && x.epsActual !== null).sort((a, b) => b.date.localeCompare(a.date));
@@ -381,7 +397,7 @@ async function fetchFinnhubEarningsHistory(symbol: string, quality: DataQuality)
     return { past, next };
   } catch (e) { quality.sourceStatus["Finnhub earnings calendar"] = `error: ${e instanceof Error ? e.message : e}`; return { past: [], next: null }; }
 }
-interface EarnRow { date: string; epsActual: number | null; epsEstimate: number | null; revenueActual: number | null; revenueEstimate: number | null }
+interface EarnRow { date: string; hour: string | null; epsActual: number | null; epsEstimate: number | null; revenueActual: number | null; revenueEstimate: number | null }
 
 /** Finnhub analyst recommendation trend (monthly counts). */
 async function fetchFinnhubRecommendation(symbol: string, quality: DataQuality) {
@@ -1786,6 +1802,45 @@ async function buildBundle(symbol: string, force: boolean) {
     revisions, shortInterest, analystRec, revSurprises, nextEarnings: fhHist.next,
   };
   scoreDerived(derived);
+
+  // ----- Evidence-based profiles (earnings momentum, quality, red flags) from the filing history -----
+  const toFQ = (p: PeriodPoint): FQ => ({
+    end: p.date, revenue: p.revenue, netIncome: p.netIncome, eps: p.normalizedEps ?? p.eps, operatingIncome: p.operatingIncome, grossProfit: p.grossProfit,
+    operatingCashFlow: p.operatingCashFlow, capex: p.operatingCashFlow !== null && p.freeCashFlow !== null ? p.operatingCashFlow - p.freeCashFlow : null,
+    equity: p.equity, debt: p.totalDebt, assets: null, currentAssets: null, currentLiabilities: null, shares: null,
+  });
+  const fq: FQ[] = sec.quarters.length >= 8 ? sec.quarters.map((q) => ({ ...q })) : quarters.map(toFQ);
+  const fa: FQ[] = sec.annual.length >= 4 ? sec.annual.map((q) => ({ ...q })) : annual.map(toFQ);
+  const lastRep = fhHist.past[0];
+  const [stockDaily, spyDaily] = await Promise.all([fetchYahooDaily(symbol, quality), lastRep ? fetchYahooDaily("SPY", quality) : Promise.resolve([] as DBar[])]);
+  let reactionPct: number | null = null;
+  if (lastRep) {
+    const m = measureEarnings({ symbol, date: lastRep.date, hour: lastRep.hour, epsActual: lastRep.epsActual, epsEstimate: lastRep.epsEstimate, revenueActual: lastRep.revenueActual, revenueEstimate: lastRep.revenueEstimate }, stockDaily, spyDaily);
+    reactionPct = m?.ear ?? null;
+  }
+  const priceNow = [...stockDaily].reverse().find((b) => b.close !== null)?.close ?? null;
+  const latestSurprise = lastRep && lastRep.epsActual !== null && lastRep.epsEstimate !== null && Math.abs(lastRep.epsEstimate) > 0.005
+    ? round(((lastRep.epsActual - lastRep.epsEstimate) / Math.abs(lastRep.epsEstimate)) * 100) : (surprises[0] ?? null);
+  const feats = fundamentalFeatures(fq, fa);
+  (derived as any).profiles = {
+    momentum: momentumProfile(feats, { epsSurprisePct: latestSurprise, revSurprisePct: revSurprises[0] ?? null, revisions90: revisions ? [revisions.thisYear.chg90, revisions.nextYear.chg90] : [], reactionPct }),
+    quality: qualityProfile(feats),
+    redFlags: redFlags(feats, priceNow),
+  };
+  // Long history for the app's charts (newest first)
+  (derived as any).history = {
+    quarters: fq.slice(0, 24).map((q, i) => ({
+      end: q.end, revenue: q.revenue, eps: q.eps, opMargin: q.operatingIncome !== null && q.revenue ? round((q.operatingIncome / q.revenue) * 100) : null,
+      revenueYoY: fq[i + 4] && q.revenue !== null && fq[i + 4].revenue ? round((q.revenue / fq[i + 4].revenue! - 1) * 100) : null,
+      epsYoY: fq[i + 4] && q.eps !== null && fq[i + 4].eps !== null && fq[i + 4].eps! > 0 ? round((q.eps / fq[i + 4].eps! - 1) * 100) : null,
+    })),
+    years: fa.slice(0, 10).map((y) => ({
+      end: y.end, revenue: y.revenue, eps: y.eps, netIncome: y.netIncome,
+      fcf: y.operatingCashFlow !== null && y.capex !== null ? y.operatingCashFlow - Math.abs(y.capex) : null,
+      opMargin: y.operatingIncome !== null && y.revenue ? round((y.operatingIncome / y.revenue) * 100) : null, shares: y.shares,
+    })),
+    source: sec.quarters.length >= 8 ? "SEC filings" : "provider data",
+  };
   return { profile, derived, quality };
 }
 
@@ -1922,7 +1977,7 @@ Deno.serve(async (req) => {
       })),
       code33: (derived as { code33?: unknown }).code33 ?? null, roePct: derived.roePct, debtToEquity: derived.debtToEquity,
       revisions: derived.revisions, shortInterest: derived.shortInterest, analystRec: derived.analystRec, revSurprises: derived.revSurprises,
-      nextEarnings: derived.nextEarnings, scoreParts: (derived as { scoreParts?: unknown }).scoreParts ?? null,
+      nextEarnings: derived.nextEarnings, profiles: (derived as any).profiles ?? null, history: (derived as any).history ?? null, scoreParts: (derived as { scoreParts?: unknown }).scoreParts ?? null,
       scoreCoveragePct: (derived as { scoreCoveragePct?: unknown }).scoreCoveragePct ?? null,
       surprises: derived.epsSurprisesRecent, beatRate: derived.epsBeatRatePct, institutionalPct: derived.institutionalOwnershipPct,
     };

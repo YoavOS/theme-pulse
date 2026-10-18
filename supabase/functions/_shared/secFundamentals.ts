@@ -17,6 +17,8 @@ export interface SecQuarter {
   revenue: number | null; netIncome: number | null; eps: number | null; operatingIncome: number | null; grossProfit: number | null;
   operatingCashFlow: number | null; capex: number | null;
   equity: number | null; debt: number | null; currentAssets: number | null; currentLiabilities: number | null;
+  assets: number | null; shares: number | null;   // total assets; diluted weighted-average shares
+  filed: string | null;                            // when this period was first reported (point-in-time tests)
   derived: string[];          // fields that were computed from year-to-date / annual figures
 }
 
@@ -37,17 +39,23 @@ export const CONCEPTS = {
   debtShort: ["LongTermDebtCurrent", "DebtCurrent", "ShortTermBorrowings"],
   currentAssets: ["AssetsCurrent"],
   currentLiabilities: ["LiabilitiesCurrent"],
+  assets: ["Assets"],
+  shares: ["WeightedAverageNumberOfDilutedSharesOutstanding", "WeightedAverageNumberOfShareOutstandingBasicAndDiluted", "WeightedAverageNumberOfSharesOutstandingBasic"],
+  costOfRevenue: ["CostOfRevenue", "CostOfGoodsAndServicesSold", "CostOfGoodsSold"],
 } as const;
 
 type Facts = Record<string, { units?: Record<string, SecFact[]> }>;
 
-function factsFor(gaap: Facts, names: readonly string[], unitPref: string[]): SecFact[][] {
+function factsFor(gaap: Facts, names: readonly string[], unitPref: string[], asOf?: string): SecFact[][] {
   const out: SecFact[][] = [];
   for (const n of names) {
     const u = gaap[n]?.units;
     if (!u) continue;
     const key = unitPref.find((k) => u[k]?.length) ?? Object.keys(u)[0];
-    if (key && u[key]?.length) out.push(u[key]);
+    if (!key || !u[key]?.length) continue;
+    // point-in-time: only facts already filed on `asOf`
+    const list = asOf ? u[key].filter((f) => (f.filed ?? "") <= asOf) : u[key];
+    if (list.length) out.push(list);
   }
   return out;
 }
@@ -99,17 +107,24 @@ function quarterEnds(all: SecFact[][]): string[] {
   return out;
 }
 
-export function parseCompanyFacts(json: { facts?: Record<string, Facts> }, maxQuarters = 14): SecQuarter[] {
+/** Diluted share count for a period (weighted average — not additive, so no year-to-date subtraction). */
+function sharesValue(facts: SecFact[], end: string): number | null {
+  const at = facts.filter((f) => f.end === end && f.start).sort((a, b) => dur(a) - dur(b));
+  return at.length ? at[0].val : null;
+}
+
+export function parseCompanyFacts(json: { facts?: Record<string, Facts> }, maxQuarters = 24, asOf?: string): SecQuarter[] {
   const gaap = json?.facts?.["us-gaap"];
   if (!gaap) return [];
-  const pick = (names: readonly string[], unit: string[]) => factsFor(gaap, names, unit).map(byPeriod);
-  const usd = ["USD"], eps = ["USD/shares", "USD-per-shares"];
+  const pick = (names: readonly string[], unit: string[]) => factsFor(gaap, names, unit, asOf).map(byPeriod);
+  const usd = ["USD"], eps = ["USD/shares", "USD-per-shares"], sh = ["shares"];
   const series = {
     revenue: pick(CONCEPTS.revenue, usd), netIncome: pick(CONCEPTS.netIncome, usd), eps: pick(CONCEPTS.eps, eps),
-    operatingIncome: pick(CONCEPTS.operatingIncome, usd), grossProfit: pick(CONCEPTS.grossProfit, usd),
+    operatingIncome: pick(CONCEPTS.operatingIncome, usd), grossProfit: pick(CONCEPTS.grossProfit, usd), costOfRevenue: pick(CONCEPTS.costOfRevenue, usd),
     operatingCashFlow: pick(CONCEPTS.operatingCashFlow, usd), capex: pick(CONCEPTS.capex, usd),
     equity: pick(CONCEPTS.equity, usd), debtLong: pick(CONCEPTS.debtLong, usd), debtShort: pick(CONCEPTS.debtShort, usd),
     currentAssets: pick(CONCEPTS.currentAssets, usd), currentLiabilities: pick(CONCEPTS.currentLiabilities, usd),
+    assets: pick(CONCEPTS.assets, usd), shares: pick(CONCEPTS.shares, sh),
   };
   const ends = quarterEnds([...series.revenue, ...series.netIncome, ...series.eps]).slice(0, maxQuarters);
   const flow = (lists: SecFact[][], end: string) => {
@@ -120,32 +135,43 @@ export function parseCompanyFacts(json: { facts?: Record<string, Facts> }, maxQu
     for (const l of lists) { const v = instantValue(l, end); if (v !== null) return v; }
     return null;
   };
+  const firstFiled = (end: string) => {
+    let f: string | null = null;
+    for (const l of series.revenue.concat(series.netIncome)) for (const x of l) if (x.end === end && x.filed && (!f || x.filed < f)) f = x.filed;
+    return f;
+  };
   return ends.map((end) => {
     const derived: string[] = [];
     const f = (k: keyof typeof series) => { const r = flow(series[k], end); if (r.derived) derived.push(k); return r.v; };
     const dl = inst(series.debtLong, end), ds = inst(series.debtShort, end);
-    const startGuess = new Date(Date.parse(end) - 91 * DAY).toISOString().slice(0, 10);
+    const revenue = f("revenue");
+    let grossProfit = f("grossProfit");
+    if (grossProfit === null && revenue !== null) { const c = f("costOfRevenue"); if (c !== null) grossProfit = revenue - c; }
+    let shares: number | null = null;
+    for (const l of series.shares) { shares = sharesValue(l, end); if (shares !== null) break; }
     return {
-      end, start: startGuess,
-      revenue: f("revenue"), netIncome: f("netIncome"), eps: f("eps"), operatingIncome: f("operatingIncome"), grossProfit: f("grossProfit"),
+      end, start: new Date(Date.parse(end) - 91 * DAY).toISOString().slice(0, 10),
+      revenue, netIncome: f("netIncome"), eps: f("eps"), operatingIncome: f("operatingIncome"), grossProfit,
       operatingCashFlow: f("operatingCashFlow"), capex: f("capex"),
       equity: inst(series.equity, end), debt: dl === null && ds === null ? null : (dl ?? 0) + (ds ?? 0),
       currentAssets: inst(series.currentAssets, end), currentLiabilities: inst(series.currentLiabilities, end),
+      assets: inst(series.assets, end), shares, filed: firstFiled(end),
       derived,
     };
   });
 }
 
 /** Fiscal years from 10-K full-year facts (≈ 1-year durations), newest first. */
-export function parseCompanyFactsAnnual(json: { facts?: Record<string, Facts> }, maxYears = 6): SecQuarter[] {
+export function parseCompanyFactsAnnual(json: { facts?: Record<string, Facts> }, maxYears = 10, asOf?: string): SecQuarter[] {
   const gaap = json?.facts?.["us-gaap"];
   if (!gaap) return [];
   const usd = ["USD"], epsU = ["USD/shares", "USD-per-shares"];
-  const lists = (names: readonly string[], unit: string[]) => factsFor(gaap, names, unit).map(byPeriod);
-  const fy = (names: readonly string[], unit: string[], end: string) => {
-    for (const l of lists(names, unit)) { const f = l.find((x) => x.end === end && dur(x) >= 350 && dur(x) <= 380); if (f) return f.val; }
+  const lists = (names: readonly string[], unit: string[]) => factsFor(gaap, names, unit, asOf).map(byPeriod);
+  const fyFact = (names: readonly string[], unit: string[], end: string) => {
+    for (const l of lists(names, unit)) { const f = l.find((x) => x.end === end && dur(x) >= 350 && dur(x) <= 380); if (f) return f; }
     return null;
   };
+  const fy = (names: readonly string[], unit: string[], end: string) => fyFact(names, unit, end)?.val ?? null;
   const inst = (names: readonly string[], end: string) => {
     for (const l of lists(names, usd)) { const f = l.find((x) => !x.start && x.end === end); if (f) return f.val; }
     return null;
@@ -154,15 +180,42 @@ export function parseCompanyFactsAnnual(json: { facts?: Record<string, Facts> },
   for (const l of [...lists(CONCEPTS.revenue, usd), ...lists(CONCEPTS.netIncome, usd)]) for (const f of l) if (dur(f) >= 350 && dur(f) <= 380 && /^10-K/.test(f.form ?? "")) ends.add(f.end);
   return [...ends].sort().reverse().slice(0, maxYears).map((end) => {
     const dl = inst(CONCEPTS.debtLong, end), ds = inst(CONCEPTS.debtShort, end);
+    const revenue = fy(CONCEPTS.revenue, usd, end);
+    let grossProfit = fy(CONCEPTS.grossProfit, usd, end);
+    if (grossProfit === null && revenue !== null) { const c = fy(CONCEPTS.costOfRevenue, usd, end); if (c !== null) grossProfit = revenue - c; }
+    const revFact = fyFact(CONCEPTS.revenue, usd, end) ?? fyFact(CONCEPTS.netIncome, usd, end);
     return {
       end, start: new Date(Date.parse(end) - 364 * DAY).toISOString().slice(0, 10),
-      revenue: fy(CONCEPTS.revenue, usd, end), netIncome: fy(CONCEPTS.netIncome, usd, end), eps: fy(CONCEPTS.eps, epsU, end),
-      operatingIncome: fy(CONCEPTS.operatingIncome, usd, end), grossProfit: fy(CONCEPTS.grossProfit, usd, end),
+      revenue, netIncome: fy(CONCEPTS.netIncome, usd, end), eps: fy(CONCEPTS.eps, epsU, end),
+      operatingIncome: fy(CONCEPTS.operatingIncome, usd, end), grossProfit,
       operatingCashFlow: fy(CONCEPTS.operatingCashFlow, usd, end), capex: fy(CONCEPTS.capex, usd, end),
       equity: inst(CONCEPTS.equity, end), debt: dl === null && ds === null ? null : (dl ?? 0) + (ds ?? 0),
-      currentAssets: inst(CONCEPTS.currentAssets, end), currentLiabilities: inst(CONCEPTS.currentLiabilities, end), derived: [],
+      currentAssets: inst(CONCEPTS.currentAssets, end), currentLiabilities: inst(CONCEPTS.currentLiabilities, end),
+      assets: inst(CONCEPTS.assets, end), shares: fy(CONCEPTS.shares, ["shares"], end), filed: revFact?.filed ?? null, derived: [],
     };
   });
+}
+
+/** Stock splits: periods filed before a split keep the old share count and EPS. A share-count jump
+ *  of a near-whole ratio (2:1, 3:1, 10:1 … or the reverse) between consecutive periods is treated as a
+ *  split and older periods are restated. rows: newest first (quarters or years). */
+export function adjustForSplits(rows: SecQuarter[]): SecQuarter[] {
+  const out = rows.map((r) => ({ ...r }));
+  let factor = 1;
+  for (let i = 0; i < out.length; i++) {
+    if (factor !== 1) {
+      if (out[i].shares !== null) out[i].shares = out[i].shares! * factor;
+      if (out[i].eps !== null) out[i].eps = Math.round((out[i].eps! / factor) * 1e4) / 1e4;
+    }
+    const a = out[i].shares, b = rows[i + 1]?.shares;
+    if (a && b) {
+      const ratio = a / (b * factor);
+      const near = (x: number) => Math.abs(x - Math.round(x)) / Math.round(x) < 0.04;
+      if (ratio >= 1.9 && near(ratio)) factor *= Math.round(ratio);
+      else if (ratio <= 0.55 && near(1 / ratio)) factor /= Math.round(1 / ratio);
+    }
+  }
+  return out;
 }
 
 // ── network (edge function only) ─────────────────────────────────
@@ -191,7 +244,7 @@ export async function fetchSecQuarters(symbol: string): Promise<{ quarters: SecQ
     const r = await fetch(`https://data.sec.gov/api/xbrl/companyfacts/CIK${String(cik).padStart(10, "0")}.json`, { headers: { "User-Agent": SEC_UA } });
     if (!r.ok) { await r.body?.cancel(); return { quarters: [], annual: [], status: `HTTP ${r.status}` }; }
     const j = await r.json();
-    const q = parseCompanyFacts(j), a = parseCompanyFactsAnnual(j);
+    const q = adjustForSplits(parseCompanyFacts(j)), a = adjustForSplits(parseCompanyFactsAnnual(j));
     const v = { quarters: q, annual: a, status: q.length ? `ok (${q.length} quarters, ${a.length} years)` : "no quarterly data (20-F/40-F filer?)" };
     secCache.set(symbol, { at: Date.now(), v });
     return v;
