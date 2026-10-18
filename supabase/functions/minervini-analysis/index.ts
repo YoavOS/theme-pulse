@@ -41,6 +41,9 @@ const pctGrowth = (now: number | null, prior: number | null): number | null => {
   if (now === null || prior === null || prior === 0) return null;
   return round(((now - prior) / Math.abs(prior)) * 100);
 };
+/** EPS growth is undefined when the base is a loss or zero — a turnaround, not "+500%". */
+const epsGrowth = (now: number | null, prior: number | null): number | null =>
+  prior === null || now === null || prior <= 0 ? null : pctGrowth(now, prior);
 const avg = (values: (number | null)[]) => {
   const clean = values.filter((v): v is number => v !== null && Number.isFinite(v));
   return clean.length ? round(clean.reduce((s, v) => s + v, 0) / clean.length) : null;
@@ -68,6 +71,7 @@ interface PeriodPoint {
 }
 
 interface QuarterTrend extends PeriodPoint {
+  epsTurnaround?: boolean;
   revenueYoY: number | null;
   epsYoY: number | null;
   normalizedEpsYoY: number | null;
@@ -227,15 +231,17 @@ function enrichQuarters(points: PeriodPoint[], yahooGrowth: { revenueYoY: number
   return points.map((p, i) => {
     const yearAgo = points[i + 4];
     const prev = points[i + 1];
-    const normalizedEpsYoY = pctGrowth(p.normalizedEps ?? p.eps, yearAgo?.normalizedEps ?? yearAgo?.eps ?? null);
-    const epsYoY = normalizedEpsYoY ?? pctGrowth(p.eps, yearAgo?.eps ?? null);
+    const normalizedEpsYoY = epsGrowth(p.normalizedEps ?? p.eps, yearAgo?.normalizedEps ?? yearAgo?.eps ?? null);
+    const epsYoY = normalizedEpsYoY ?? epsGrowth(p.eps, yearAgo?.eps ?? null);
+    const nowE = p.normalizedEps ?? p.eps, agoE = yearAgo?.normalizedEps ?? yearAgo?.eps ?? null;
     return {
       ...p,
+      epsTurnaround: nowE !== null && agoE !== null && agoE <= 0 && nowE > 0,
       revenueYoY: pctGrowth(p.revenue, yearAgo?.revenue ?? null) ?? (i === 0 ? yahooGrowth.revenueYoY : null),
       epsYoY: epsYoY ?? (i === 0 ? yahooGrowth.epsYoY : null),
       normalizedEpsYoY,
       revenueQoQ: pctGrowth(p.revenue, prev?.revenue ?? null),
-      epsQoQ: pctGrowth(p.normalizedEps ?? p.eps, prev?.normalizedEps ?? prev?.eps ?? null),
+      epsQoQ: epsGrowth(p.normalizedEps ?? p.eps, prev?.normalizedEps ?? prev?.eps ?? null),
       operatingMargin: p.operatingMarginPct ?? (p.revenue ? pct((p.operatingIncome ?? null) !== null ? p.operatingIncome! / p.revenue : null) : null),
       netMargin: p.netMarginPct ?? (p.revenue ? pct((p.netIncome ?? null) !== null ? p.netIncome! / p.revenue : null) : null),
       normalizedNetMargin: p.revenue ? pct((p.normalizedIncome ?? null) !== null ? p.normalizedIncome! / p.revenue : null) : null,
@@ -248,11 +254,11 @@ function enrichQuarters(points: PeriodPoint[], yahooGrowth: { revenueYoY: number
 function enrichAnnual(points: PeriodPoint[]): AnnualTrend[] {
   return points.map((p, i) => {
     const prev = points[i + 1];
-    const normalizedEpsYoY = pctGrowth(p.normalizedEps ?? p.eps, prev?.normalizedEps ?? prev?.eps ?? null);
+    const normalizedEpsYoY = epsGrowth(p.normalizedEps ?? p.eps, prev?.normalizedEps ?? prev?.eps ?? null);
     return {
       ...p,
       revenueYoY: pctGrowth(p.revenue, prev?.revenue ?? null),
-      epsYoY: normalizedEpsYoY ?? pctGrowth(p.eps, prev?.eps ?? null),
+      epsYoY: normalizedEpsYoY ?? epsGrowth(p.eps, prev?.eps ?? null),
       normalizedEpsYoY,
       operatingMargin: p.operatingMarginPct ?? (p.revenue ? pct((p.operatingIncome ?? null) !== null ? p.operatingIncome! / p.revenue : null) : null),
       netMargin: p.netMarginPct ?? (p.revenue ? pct((p.netIncome ?? null) !== null ? p.netIncome! / p.revenue : null) : null),
@@ -353,6 +359,18 @@ async function fetchFinnhubMetric(symbol: string, quality: DataQuality) {
   return data;
 }
 
+async function fetchFinnhubEarnings(symbol: string, quality: DataQuality): Promise<{ period: string; actual: number | null; estimate: number | null; surprisePercent: number | null }[]> {
+  if (!FINNHUB_KEY) return [];
+  try {
+    const r = await fetch(`https://finnhub.io/api/v1/stock/earnings?symbol=${encodeURIComponent(symbol)}&token=${FINNHUB_KEY}`);
+    quality.finnhubCalls++;
+    if (!r.ok) { await r.body?.cancel(); return []; }
+    const j = await r.json().catch(() => null);
+    return (Array.isArray(j) ? j : []).map((e: any) => ({ period: String(e.period ?? ""), actual: num(e.actual), estimate: num(e.estimate), surprisePercent: num(e.surprisePercent) }))
+      .sort((a, b) => b.period.localeCompare(a.period)).slice(0, 8);
+  } catch { return []; }
+}
+
 // ---------- Finnhub reported statements (PRIMARY source for depth) ----------
 const finnhubStatementCache = new Map<string, { ts: number; data: PeriodPoint[] }>();
 
@@ -370,7 +388,7 @@ function conceptValue(rows: any[], patterns: RegExp[]): number | null {
   return null;
 }
 
-function finnhubReportToPoint(entry: any): PeriodPoint | null {
+export function finnhubReportToPoint(entry: any): PeriodPoint | null {
   const date = String(entry?.endDate ?? "").slice(0, 10);
   if (!date) return null;
   const ic = entry?.report?.ic ?? [];
@@ -438,6 +456,60 @@ function finnhubReportToPoint(entry: any): PeriodPoint | null {
   return point;
 }
 
+// Finnhub's "financials-reported" quarterly feed follows the filings: a 10-Q's income and
+// cash-flow figures are often year-to-date (6 or 9 months) and the 4th quarter comes from the
+// 10-K as a full year. Mixed durations made quarterly growth meaningless (e.g. NVDA showing
+// +538% / −10% / +164% YoY). Each filing's start/end dates give its duration, so flow items are
+// converted back to 3-month values: quarter = cumulative − previous cumulative of the same
+// fiscal year. Balance-sheet items are point-in-time and stay as reported.
+const FLOW_KEYS: (keyof PeriodPoint)[] = ["revenue", "eps", "netIncome", "operatingIncome", "grossProfit", "operatingCashFlow", "freeCashFlow"];
+export function decumulateQuarters(rows: any[], points: PeriodPoint[], quality: DataQuality): PeriodPoint[] {
+  const startOf = new Map<string, string>();
+  for (const e of rows) {
+    const end = String(e?.endDate ?? "").slice(0, 10), start = String(e?.startDate ?? "").slice(0, 10);
+    if (end && start && !startOf.has(end)) startOf.set(end, start);
+  }
+  const days = (a: string, b: string) => (Date.parse(b) - Date.parse(a)) / 86_400_000;
+  const asc = [...points].sort((a, b) => a.date.localeCompare(b.date));
+  const out: PeriodPoint[] = [];
+  let fixed = 0, dropped = 0;
+  for (let i = 0; i < asc.length; i++) {
+    const p = asc[i];
+    const start = startOf.get(p.date);
+    const dur = start ? days(start, p.date) : 90;
+    if (dur <= 120) { out.push(p); continue; }
+    // cumulative period: find the previous filing of the same fiscal year (same start date)
+    let prev: PeriodPoint | null = null;
+    for (let k = i - 1; k >= 0; k--) {
+      const ps = startOf.get(asc[k].date);
+      if (ps === start) { if (days(asc[k].date, p.date) <= 120) prev = asc[k]; break; }
+      if (asc[k].date < (start ?? "")) break;
+    }
+    // otherwise: earlier 3-month quarters of this fiscal year (e.g. a 10-K year after three 3-month 10-Qs)
+    let parts: PeriodPoint[] = [];
+    if (!prev && start) {
+      parts = out.filter((x) => x.date > start && x.date < p.date);
+      const covered = parts.reduce((t, x) => { const st = startOf.get(x.date); return t + (st ? days(st, x.date) : 90); }, 0);
+      if (!parts.length || dur - covered > 120 || dur - covered < 45) parts = [];
+    }
+    if (!prev && !parts.length) { dropped++; continue; }   // cannot isolate the quarter
+    const q: PeriodPoint = { ...p };
+    for (const key of FLOW_KEYS) {
+      const a = p[key] as number | null;
+      let b: number | null;
+      if (prev) b = prev[key] as number | null;
+      else b = parts.every((x) => x[key] !== null) ? parts.reduce((t, x) => t + (x[key] as number), 0) : null;
+      (q as any)[key] = a !== null && b !== null ? round(a - b, key === "eps" ? 4 : 0) : null;
+    }
+    q.operatingMarginPct = null; q.netMarginPct = null; q.grossMarginPct = null;
+    out.push(q);
+    fixed++;
+  }
+  if (fixed) quality.warnings.push(`Converted ${fixed} year-to-date filings (10-Q / 10-K) to 3-month quarters.`);
+  if (dropped) quality.warnings.push(`${dropped} quarter(s) skipped: only year-to-date figures were available.`);
+  return out.sort((a, b) => b.date.localeCompare(a.date));
+}
+
 async function fetchFinnhubStatements(symbol: string, freq: "quarterly" | "annual", quality: DataQuality): Promise<PeriodPoint[]> {
   if (!FINNHUB_KEY) return [];
   const key = `${symbol}:${freq}`;
@@ -451,10 +523,11 @@ async function fetchFinnhubStatements(symbol: string, freq: "quarterly" | "annua
     if (!r.ok) return [];
     const j = await r.json().catch(() => null);
     const rows: any[] = Array.isArray(j?.data) ? j.data : [];
-    const points = rows
+    let points = rows
       .map(finnhubReportToPoint)
       .filter((p): p is PeriodPoint => p !== null)
       .sort((a, b) => b.date.localeCompare(a.date));
+    if (freq === "quarterly") points = decumulateQuarters(rows, points, quality);
     // De-dupe by date (amended filings)
     const byDate = new Map<string, PeriodPoint>();
     for (const p of points) if (!byDate.has(p.date)) byDate.set(p.date, p);
@@ -709,6 +782,15 @@ function summarizeTrend(values: (number | null)[]) {
   return "stable";
 }
 
+/** Minervini's "Code 33": EPS growth, sales growth and profit margin each up for 3 quarters in a row. */
+function code33(q: QuarterTrend[]) {
+  const up3 = (vals: (number | null)[]) => vals.length >= 4 && vals.slice(0, 4).every((v) => v !== null) &&
+    (vals[0] as number) > (vals[1] as number) && (vals[1] as number) > (vals[2] as number) && (vals[2] as number) > (vals[3] as number);
+  const eps = q.map((x) => x.normalizedEpsYoY ?? x.epsYoY), rev = q.map((x) => x.revenueYoY), mar = q.map((x) => x.operatingMargin ?? x.netMargin);
+  const r = { eps: up3(eps), sales: up3(rev), margin: up3(mar) };
+  return { ...r, count: [r.eps, r.sales, r.margin].filter(Boolean).length };
+}
+
 function fmtPct(v: number | null) { return v === null ? "N/A" : `${v.toFixed(1)}%`; }
 function fmtRatio(v: number | null) { return v === null ? "N/A" : `${v.toFixed(2)}x`; }
 function fmtTrend(values: (number | null)[]) { return values.map(fmtPct).join(" / "); }
@@ -759,7 +841,7 @@ function makeReport(symbol: string, profile: any, derived: any): MinerviniReport
       name: "Quarterly EPS Growth Trend",
       value: `YoY ${fmtTrend(epsTrend)} | QoQ ${fmtTrend(epsQoqTrend)}`, target: "≥25% YoY, consistent/accelerating",
       status: statusFrom(epsTrend[0], (epsTrend[0] ?? -999) >= 25 && epsAccel !== "decelerating", (epsTrend[0] ?? 999) < 0),
-      comment: `Latest ${latest?.date ?? "quarter"}; YoY trend is ${epsAccel}, QoQ trend is ${epsQoqAccel}. Uses normalized/non-GAAP EPS where available.`,
+      comment: `Latest ${latest?.date ?? "quarter"}; YoY trend is ${epsAccel}, QoQ trend is ${epsQoqAccel}.${latest?.epsTurnaround ? " Turnaround: profit vs a loss a year ago (growth % not meaningful)." : ""} Uses normalized/non-GAAP EPS where available.`,
     },
     {
       name: "Quarterly Sales Growth Trend",
@@ -768,11 +850,11 @@ function makeReport(symbol: string, profile: any, derived: any): MinerviniReport
       comment: `Latest ${latest?.date ?? "quarter"}; YoY trend is ${revAccel}, QoQ trend is ${revQoqAccel} across available reported quarters.`,
     },
     {
-      name: "Historical Coverage",
-      value: `${derived.coverage.quarterlyRevenueYoY}/${derived.coverage.quarterTarget} revenue YoY · ${derived.coverage.quarterlyEpsYoY}/${derived.coverage.quarterTarget} EPS YoY · ${derived.coverage.annualRevenueYoY}/${derived.coverage.annualTarget} annual rev`,
-      target: "6–8 quarters + 2–3 annual trends",
-      status: derived.coverage.quarterlyRevenueYoY >= MIN_QUARTER_TREND_COUNT && derived.coverage.quarterlyEpsYoY >= MIN_QUARTER_TREND_COUNT ? "pass" : derived.coverage.quarterlyRevenueYoY < 4 || derived.coverage.quarterlyEpsYoY < 4 ? "fail" : "neutral",
-      comment: `Raw statements target ${RAW_QUARTERS_FOR_YOY} quarters to compute full 8-quarter YoY trends; Finnhub reported filings are primary, FMP is secondary, Yahoo fills remaining gaps.`,
+      name: "Code 33 (3 quarters of acceleration)",
+      value: `EPS ${derived.code33.eps ? "✓" : "✗"} · Sales ${derived.code33.sales ? "✓" : "✗"} · Margin ${derived.code33.margin ? "✓" : "✗"}`,
+      target: "EPS growth, sales growth and margins each rising 3 quarters in a row",
+      status: derived.code33.count === 3 ? "pass" : derived.code33.count === 0 ? "fail" : "neutral",
+      comment: "Minervini's strongest fundamental tell: acceleration in all three at once. Few stocks have it at any time.",
     },
     {
       name: "Annual EPS Growth",
@@ -821,12 +903,6 @@ function makeReport(symbol: string, profile: any, derived: any): MinerviniReport
       value: derived.epsBeatRatePct === null ? "N/A" : `${derived.epsBeatRatePct}% beat rate`, target: "Consistent beats / positive surprises",
       status: statusFrom(derived.epsBeatRatePct, (derived.epsBeatRatePct ?? 0) >= 70, (derived.epsBeatRatePct ?? 100) < 40),
       comment: `Recent surprises: ${derived.epsSurprisesRecent.length ? derived.epsSurprisesRecent.map(fmtPct).join(" / ") : "N/A"}.`,
-    },
-    {
-      name: "Overall Fundamental Quality",
-      value: derived.qualityLabel, target: "Clear growth, profitability, and balance-sheet support",
-      status: derived.score >= 80 ? "pass" : derived.score < 60 ? "fail" : "neutral",
-      comment: "Score emphasizes multi-quarter EPS/sales growth, acceleration, margins, ROE, debt, cash flow, and sponsorship.",
     },
   ];
 
@@ -1323,6 +1399,8 @@ function scoreDerived(derived: any) {
   if (derived.cashFlowPoints > 0) score += derived.positiveCashFlowCount >= Math.max(1, derived.cashFlowPoints - 1) ? 5 : 1;
   if ((derived.institutionalOwnershipPct ?? 0) > 70) score += 6; else if ((derived.institutionalOwnershipPct ?? 0) > 40) score += 4;
   if ((derived.epsBeatRatePct ?? 0) >= 70) score += 4; else if ((derived.epsBeatRatePct ?? 0) >= 50) score += 2;
+  derived.code33 = code33(derived.quarters);
+  score += derived.code33.count * 2;
   derived.score = Math.max(0, Math.min(100, Math.round(score)));
   derived.qualityLabel = derived.score >= 80 ? "strong Minervini fundamental profile" : derived.score >= 60 ? "mixed but investable fundamental profile" : "weak/incomplete Minervini fundamental profile";
 }
@@ -1383,10 +1461,11 @@ async function buildBundle(symbol: string, force: boolean) {
 
   // ----- Tertiary: Yahoo only when Finnhub + FMP are still short -----
   const needYahooStatements = !hasQuarters || !hasAnnual;
-  const needAnyYahoo = force || needYahooStatements || !fmp;
-  const needFinnhub = !fmp && !fhQuartersRaw.length && (force || !stockFund);
+  const needAnyYahoo = force || needYahooStatements || !fmp || !fmp.instOwn; // Yahoo holds institutional ownership when FMP doesn't
+  const needFinnhub = true; // free Finnhub metrics fill ROE, debt/equity and margins when FMP returns nothing
 
 
+  const fhEarningsP = fetchFinnhubEarnings(symbol, quality);
   const [quote, timeseries, fh] = await Promise.all([
     needAnyYahoo ? fetchQuoteSummary(symbol, quality) : Promise.resolve(null),
     needYahooStatements ? fetchTimeseries(symbol, quality) : Promise.resolve(null),
@@ -1446,6 +1525,11 @@ async function buildBundle(symbol: string, force: boolean) {
   const kmLatest = fmp?.kmQ?.[0] ?? null;
   const ratiosTTM = fmp?.ratiosTTM ?? null;
 
+  // From the (de-cumulated) statements: TTM net income / average equity, latest debt / equity.
+  const ttmNI = quarters.slice(0, 4).every((q) => q.netIncome !== null) && quarters.length >= 4
+    ? quarters.slice(0, 4).reduce((t, q) => t + (q.netIncome as number), 0) : null;
+  const eqNow = quarters[0]?.equity ?? null, eqAgo = quarters[4]?.equity ?? quarters[3]?.equity ?? null;
+  const roeFromStatements = ttmNI !== null && eqNow && eqNow > 0 ? round((ttmNI / ((eqNow + (eqAgo && eqAgo > 0 ? eqAgo : eqNow)) / 2)) * 100) : null;
   let debtToEquity = latest?.debtToEquity
     ?? normalizeRatio(num(kmLatest?.debtToEquity))
     ?? normalizeRatio(num(ratiosTTM?.debtEquityRatioTTM))
@@ -1464,6 +1548,7 @@ async function buildBundle(symbol: string, force: boolean) {
     ?? stockFund?.roe
     ?? fundCache?.roe
     ?? num(fhMetric.roeTTM ?? fhMetric.roeRfy)
+    ?? roeFromStatements
     ?? null;
 
   // FMP institutional ownership (v4) returns ownershipPercent already as percent
@@ -1484,7 +1569,13 @@ async function buildBundle(symbol: string, force: boolean) {
   // Earnings surprises — prefer FMP (clean & wide)
   let surprises: (number | null)[] = [];
   let beatRate: number | null = null;
-  if (fmp?.surp?.length) {
+  const fhEarn = await fhEarningsP;
+  if (!fmp?.surp?.length && fhEarn.length) {
+    surprises = fhEarn.map((e) => e.surprisePercent).filter((v): v is number => v !== null).map((v) => round(v)!);
+    const beats = fhEarn.filter((e) => e.actual !== null && e.estimate !== null && e.actual >= e.estimate).length;
+    beatRate = Math.round((beats / fhEarn.length) * 100);
+    quality.sources.push(`Finnhub earnings surprises (${fhEarn.length}Q)`);
+  } else if (fmp?.surp?.length) {
     const rows = fmp.surp.slice(0, 8);
     surprises = rows.map((e: any) => {
       const act = num(e.actualEarningResult); const est = num(e.estimatedEarning);
@@ -1500,6 +1591,11 @@ async function buildBundle(symbol: string, force: boolean) {
     beatRate = earningsHistory.length ? Math.round((beatCount / earningsHistory.length) * 100) : null;
   }
 
+  // Cross-check the latest quarter against Finnhub's own computed growth (catches period mix-ups).
+  const fhRevYoY = num(fhMetric.revenueGrowthQuarterlyYoy);
+  if (fhRevYoY !== null && quarters[0]?.revenueYoY !== null && quarters[0]?.revenueYoY !== undefined && Math.abs(quarters[0].revenueYoY - fhRevYoY) > 15) {
+    quality.warnings.push(`Latest quarterly sales growth ${quarters[0].revenueYoY.toFixed(1)}% differs from Finnhub's ${fhRevYoY.toFixed(1)}% — check the filing.`);
+  }
   if ((quality.coverage?.quarterlyRevenueYoY ?? 0) < MIN_QUARTER_TREND_COUNT || (quality.coverage?.quarterlyEpsYoY ?? 0) < MIN_QUARTER_TREND_COUNT) {
     quality.warnings.push(`Historical coverage below target: revenue YoY ${quality.coverage?.quarterlyRevenueYoY ?? 0}/${TARGET_QUARTER_TREND_COUNT}, EPS YoY ${quality.coverage?.quarterlyEpsYoY ?? 0}/${TARGET_QUARTER_TREND_COUNT}.`);
   }
@@ -1650,7 +1746,16 @@ Deno.serve(async (req) => {
       });
     }
 
-    const data = buildAll(symbol, profile, derived);
+    const data = buildAll(symbol, profile, derived) as BundleResponse & { series?: unknown };
+    // Quarter-by-quarter numbers for the app's table (newest first)
+    data.series = {
+      quarters: (derived.quarters as QuarterTrend[]).slice(0, 8).map((q) => ({
+        date: q.date, revenue: q.revenue, eps: q.normalizedEps ?? q.eps, revenueYoY: q.revenueYoY, epsYoY: q.normalizedEpsYoY ?? q.epsYoY,
+        margin: q.operatingMargin ?? q.netMargin, turnaround: !!q.epsTurnaround,
+      })),
+      code33: (derived as { code33?: unknown }).code33 ?? null, roePct: derived.roePct, debtToEquity: derived.debtToEquity,
+      surprises: derived.epsSurprisesRecent, beatRate: derived.epsBeatRatePct, institutionalPct: derived.institutionalOwnershipPct,
+    };
     multiReportCache.set(symbol, { ts: Date.now(), data, dataQuality: quality });
     return jsonResponse({ ...data, cached: false, dataQuality: quality });
   } catch (e) {

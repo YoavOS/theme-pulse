@@ -46,7 +46,10 @@ export default function TradeDesk() {
   const [daily, setDaily] = useState<Record<string, Daily | null>>({});
   const [loadingBars, setLoadingBars] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(null);
-  const [form, setForm] = useState({ symbol: "", entry: "", stop: "", date: new Date().toISOString().slice(0, 10) });
+  const [form, setForm] = useState(() => {
+    const q = new URLSearchParams(window.location.search);   // prefilled from the Minervini tab
+    return { symbol: (q.get("symbol") ?? "").toUpperCase(), entry: q.get("entry") ?? "", stop: q.get("stop") ?? "", date: new Date().toISOString().slice(0, 10) };
+  });
 
   useEffect(() => { loadUni(); }, [loadUni]);
   useEffect(() => { try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)); } catch { /* ignore */ } }, [settings]);
