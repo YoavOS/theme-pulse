@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useStockStages } from "@/hooks/useStockStages";
 import { useStockBases } from "@/hooks/useStockBases";
@@ -59,13 +59,19 @@ interface Series {
   quarters: { date: string; revenue: number | null; eps: number | null; revenueYoY: number | null; epsYoY: number | null; margin: number | null; turnaround: boolean }[];
   code33: { eps: boolean; sales: boolean; margin: boolean; count: number } | null;
   roePct: number | null; debtToEquity: number | null; surprises: number[]; beatRate: number | null; institutionalPct: number | null;
+  revisions?: { thisYear?: Rev; nextYear?: Rev; thisQuarter?: Rev } | null;
+  shortInterest?: { floatShares: number | null; sharesShort: number | null; shortPctFloat: number | null; daysToCover: number | null } | null;
+  analystRec?: { buyPct: number | null; buyPct3mAgo: number | null; analysts: number } | null;
+  revSurprises?: number[]; nextEarnings?: string | null;
+  scoreParts?: { label: string; earned: number; max: number }[] | null; scoreCoveragePct?: number | null;
 }
+interface Rev { period: string; now: number | null; chg90: number | null; chg30: number | null; up30: number | null; down30: number | null; growth: number | null; analysts: number | null }
 
 interface MultiReport {
   series?: Series;
   reports: Record<ProfileId, ProfileReport>;
   cumulative: { averageScore: number; verdict: "PASS" | "FAIL" | "BORDERLINE"; passCount: number; profileCount: number };
-  dataQuality?: { sources?: string[]; warnings?: string[]; fmpCalls?: number; yahooCalls?: number; finnhubCalls?: number; dbCacheHit?: boolean; coverage?: DataCoverage };
+  dataQuality?: { sourceStatus?: Record<string, string>; sources?: string[]; warnings?: string[]; fmpCalls?: number; yahooCalls?: number; finnhubCalls?: number; dbCacheHit?: boolean; coverage?: DataCoverage };
 }
 
 const PROFILES: { id: ProfileId; label: string; short: string }[] = [
@@ -103,7 +109,7 @@ function VerdictBadge({ verdict, score, label }: { verdict: string; score: numbe
   );
 }
 
-const CACHE_KEY = (sym: string) => `minervini:v9-sepa:${sym}`;
+const CACHE_KEY = (sym: string) => `minervini:v10-sec:${sym}`;
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 
 
@@ -409,6 +415,7 @@ export default function MinerviniChecker() {
             />
 
             {multi.series && multi.series.quarters.length > 0 && <QuarterTable s={multi.series} />}
+            {multi.series && <ExtrasCard s={multi.series} />}
 
             {!!multi.dataQuality?.warnings?.length && (
               <Card className="border-[hsl(40,90%,55%)]/40 bg-[hsl(40,90%,55%)]/5 p-3 text-xs">
@@ -427,7 +434,14 @@ export default function MinerviniChecker() {
                     </div>
                   </div>
                   <div className="text-xs text-muted-foreground md:text-right">
-                    Sources: {(multi.dataQuality.sources ?? []).join(" + ") || "cache"}<br />
+                    {multi.dataQuality.sourceStatus && (
+                      <div className="mb-1 grid grid-cols-[auto_auto] justify-end gap-x-3 text-left">
+                        {Object.entries(multi.dataQuality.sourceStatus).map(([k, v]) => (
+                          <Fragment key={k}><span>{k}</span><span className={v.startsWith("ok") ? "text-gain-medium" : v.startsWith("skipped") ? "" : "text-[hsl(40,90%,60%)]"}>{v}</span></Fragment>
+                        ))}
+                      </div>
+                    )}
+                    Used: {(multi.dataQuality.sources ?? []).join(" + ") || "cache"}<br />
                     Calls: FMP {multi.dataQuality.fmpCalls ?? 0} · Yahoo {multi.dataQuality.yahooCalls ?? 0} · Finnhub {multi.dataQuality.finnhubCalls ?? 0}
                   </div>
                 </div>
@@ -626,5 +640,71 @@ function SepaCandidates({ items, leadBy, onPick, loading }: {
         )
       )}
     </Card>
+  );
+}
+
+function ExtrasCard({ s }: { s: Series }) {
+  const fmt = (v: number | null | undefined, suf = "%") => (v === null || v === undefined ? "—" : `${v >= 0 && suf === "%" ? "+" : ""}${v.toFixed(1)}${suf}`);
+  const big = (x: number | null | undefined) => (x === null || x === undefined ? "—" : Intl.NumberFormat("en", { notation: "compact", maximumFractionDigits: 1 }).format(x));
+  const rv = s.revisions;
+  const si = s.shortInterest;
+  return (
+    <div className="grid gap-4 lg:grid-cols-3">
+      <Card className="p-4 text-xs">
+        <h3 className="mb-2 text-sm font-semibold">Analyst estimates</h3>
+        {rv ? (
+          <table className="w-full">
+            <thead><tr className="text-[10.5px] text-muted-foreground"><th className="text-left font-medium">Period</th><th className="text-right font-medium">EPS est.</th><th className="text-right font-medium">30d</th><th className="text-right font-medium">90d</th><th className="text-right font-medium">Up/down 30d</th></tr></thead>
+            <tbody>
+              {([["This quarter", rv.thisQuarter], ["This FY", rv.thisYear], ["Next FY", rv.nextYear]] as [string, Rev | undefined][]).map(([l, r]) => (
+                <tr key={l} className="border-t border-border/30">
+                  <td className="py-1">{l}</td>
+                  <td className="py-1 text-right font-mono">{r?.now?.toFixed(2) ?? "—"}</td>
+                  <td className={`py-1 text-right font-mono ${(r?.chg30 ?? 0) > 0 ? "text-gain-medium" : (r?.chg30 ?? 0) < 0 ? "text-loss-medium" : ""}`}>{fmt(r?.chg30)}</td>
+                  <td className={`py-1 text-right font-mono ${(r?.chg90 ?? 0) > 0 ? "text-gain-medium" : (r?.chg90 ?? 0) < 0 ? "text-loss-medium" : ""}`}>{fmt(r?.chg90)}</td>
+                  <td className="py-1 text-right font-mono">{r ? `${r.up30 ?? 0}/${r.down30 ?? 0}` : "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : <p className="text-muted-foreground">Estimate revisions unavailable (Yahoo didn't answer).</p>}
+        {s.analystRec && <p className="mt-2 text-muted-foreground">Ratings: {s.analystRec.buyPct ?? "—"}% buy of {s.analystRec.analysts} analysts{s.analystRec.buyPct3mAgo !== null ? ` (3 months ago ${s.analystRec.buyPct3mAgo}%)` : ""}.</p>}
+        <p className="mt-1 text-[10.5px] text-muted-foreground">Rising estimates confirm the growth is lasting; ratings themselves carry little signal.</p>
+      </Card>
+      <Card className="p-4 text-xs">
+        <h3 className="mb-2 text-sm font-semibold">Earnings track</h3>
+        <div>EPS surprises: <span className="font-mono">{s.surprises.length ? s.surprises.slice(0, 6).map((x) => `${x >= 0 ? "+" : ""}${x.toFixed(0)}%`).join(" ") : "—"}</span></div>
+        <div className="mt-1">Revenue surprises: <span className="font-mono">{s.revSurprises?.length ? s.revSurprises.slice(0, 6).map((x) => `${x >= 0 ? "+" : ""}${x.toFixed(1)}%`).join(" ") : "—"}</span></div>
+        <div className="mt-1">Next report: <b>{s.nextEarnings ?? "—"}</b></div>
+        <p className="mt-2 text-[10.5px] text-muted-foreground">Beats on both EPS and sales have been the more durable kind. Holding through a report is a sizing decision — see the Trade Desk.</p>
+      </Card>
+      <Card className="p-4 text-xs">
+        <h3 className="mb-2 text-sm font-semibold">Float &amp; short interest</h3>
+        {si && (si.floatShares !== null || si.shortPctFloat !== null) ? (
+          <>
+            <div>Float: <b className="font-mono">{big(si.floatShares)}</b> shares</div>
+            <div className="mt-1">Short interest: <b className="font-mono">{si.shortPctFloat === null ? "—" : `${si.shortPctFloat.toFixed(1)}% of float`}</b>{si.daysToCover !== null ? ` · ${si.daysToCover.toFixed(1)} days to cover` : ""}</div>
+            <p className="mt-2 text-[10.5px] text-muted-foreground">
+              {(si.shortPctFloat ?? 0) >= 20 ? "Crowded short: breakouts can be explosive but fail violently — size from gap risk. " : (si.shortPctFloat ?? 0) >= 10 ? "Elevated short interest: find out why before buying. " : "Little short pressure. "}
+              Short sellers are informed on average, so high short interest is a risk factor, not fuel, unless news breaks the bear case. Reported twice a month (delayed).
+            </p>
+          </>
+        ) : <p className="text-muted-foreground">Unavailable (Yahoo didn't answer).</p>}
+      </Card>
+      {s.scoreParts && s.scoreParts.length > 0 && (
+        <Card className="p-4 text-xs lg:col-span-3">
+          <h3 className="mb-2 text-sm font-semibold">How the Minervini score is built <span className="font-normal text-muted-foreground">· only parts with data count · data coverage {s.scoreCoveragePct ?? "—"}%</span></h3>
+          <div className="grid gap-x-6 gap-y-1 sm:grid-cols-2 lg:grid-cols-3">
+            {s.scoreParts.map((p) => (
+              <div key={p.label} className="grid grid-cols-[1fr_80px_40px] items-center gap-2">
+                <span>{p.label}</span>
+                <span className="h-1.5 overflow-hidden rounded bg-muted"><span className="block h-full bg-primary" style={{ width: `${(p.earned / p.max) * 100}%` }} /></span>
+                <span className="text-right font-mono text-muted-foreground">{p.earned}/{p.max}</span>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+    </div>
   );
 }
