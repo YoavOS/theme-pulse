@@ -105,6 +105,7 @@ export default function StageStockTable({
           <thead className="sticky top-0 z-10 bg-background">
             <tr className="border-b border-border">
               {th("symbol", "Ticker", "text-left")}
+              <th className="px-2 py-1.5 text-left text-[10px] font-medium text-muted-foreground" title="Last 40 weekly closes">40 weeks</th>
               {th("stage", "Stage", "text-left")}
               {th("confidence", "Conf.")}
               {rsOf && th("rs", "RS")}
@@ -131,6 +132,7 @@ export default function StageStockTable({
                     {r.symbol}
                   </a>
                 </td>
+                <td className="px-2 py-1"><WeekSpark r={r} /></td>
                 <td className="whitespace-nowrap px-2 py-1">
                   <span className="inline-flex items-center gap-1">
                     <StageBadge r={r} />
@@ -162,18 +164,31 @@ export default function StageStockTable({
               </tr>
               {open === r.symbol && (
                 <tr className="border-b border-border/30 bg-background/40">
-                  <td colSpan={9} className="px-3 py-2"><StageChartPanel r={r} /></td>
+                  <td colSpan={10} className="px-3 py-2"><StageChartPanel r={r} /></td>
                 </tr>
               )}
               </Fragment>
             ))}
             {!sorted.length && (
-              <tr><td colSpan={9} className="px-2 py-6 text-center text-muted-foreground">No stocks match.</td></tr>
+              <tr><td colSpan={10} className="px-2 py-6 text-center text-muted-foreground">No stocks match.</td></tr>
             )}
           </tbody>
         </table>
       </div>
     </div>
+  );
+}
+
+/** Last 40 weekly closes, colored by the current stage. */
+export function WeekSpark({ r }: { r: StockStage }) {
+  const c = r.features?.wc ?? [];
+  if (c.length < 8) return <span className="text-muted-foreground">—</span>;
+  const lo = Math.min(...c), hi = Math.max(...c), W = 72, H = 20;
+  const d = c.map((v, k) => `${k ? "L" : "M"}${((k / (c.length - 1)) * W).toFixed(1)},${(H - 2 - ((v - lo) / (hi - lo || 1)) * (H - 4)).toFixed(1)}`).join("");
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} className="h-5 w-[72px]" aria-label="Last 40 weekly closes">
+      <path d={d} fill="none" stroke={STAGE_COLORS[(r.stage as StageNum) || 0]} strokeWidth={1.3} />
+    </svg>
   );
 }
 

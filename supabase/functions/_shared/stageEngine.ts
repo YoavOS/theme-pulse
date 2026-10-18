@@ -294,8 +294,17 @@ export function classifyStage(
       // buy area, not a top. The mirror holds for Stage 4 rallies into a falling MA.
       // The dip allowance is capped at 8% under the MA (a crash inflates the ATR), and a 35%+
       // drop from the 26-week high is never "holding" (mirror: a 50%+ rally off the low).
+      // A dip under a rising MA only counts as a pullback while it is recent: once price has spent
+      // most of the last 10 weeks under it, or closed under it 3 weeks in a row, the "test" is over —
+      // otherwise a volatile stock see-sawing between −6% and −12% resets the confirmation forever
+      // (e.g. a stock 14% below its MA for 9 of 10 weeks still read as Stage 2). Tested on 360 stocks
+      // × 2 years: the weeks this moves from 2 to 3 did no better than ordinary Stage 2 weeks.
+      // The Stage 4 mirror is deliberately NOT applied: rallies above a falling MA that persist for
+      // weeks did worse than ordinary Stage 4 weeks (bear-market rallies), so they stay Stage 4.
+      let below = 0;
+      for (let k = i; k >= Math.max(0, i - 3) && c[k] < ma[k]; k--) below++;
       const holdingUp = stage === 2 && f.slope5 > 0 && ddHigh > -0.35 &&
-        (c[i] > f.ma ? f.aboveFrac10 >= 0.5 : c[i] >= f.ma - Math.min(1.5 * f.atr, 0.08 * f.ma));
+        (c[i] > f.ma ? f.aboveFrac10 >= 0.5 : f.aboveFrac10 >= 0.5 && below < 3 && c[i] >= f.ma - Math.min(1.5 * f.atr, 0.08 * f.ma));
       const holdingDown = stage === 4 && f.slope5 < 0 && upLow < 0.5 &&
         (c[i] < f.ma ? f.aboveFrac10 <= 0.5 : c[i] <= f.ma + Math.min(1.5 * f.atr, 0.08 * f.ma));
       // Losing / reclaiming the MA decisively starts the top (3) / base (1) — never a jump
