@@ -137,9 +137,9 @@ export default function StageStockTable({
                     {r.quality && (
                       <span
                         className={`text-[9px] ${r.quality === "HIGH" ? "text-gain-medium" : r.quality === "LOW" ? "text-amber-400" : "text-muted-foreground"}`}
-                        title="Breakout quality: volume (≥2× avg), relative strength and nearby overhead supply"
+                        title="Breakout profile: volume ≥ 2× average, rising relative strength, within 15% of the 52-week high. Strong volume tends to raise the payoff of the winners, not the share of winners."
                       >
-                        {r.quality === "HIGH" ? "★ quality" : r.quality === "LOW" ? "⚠ low quality" : "mixed"}
+                        {r.quality === "HIGH" ? "★ strong volume & RS" : r.quality === "LOW" ? "light volume / weak RS" : "mixed"}
                       </span>
                     )}
                   </span>

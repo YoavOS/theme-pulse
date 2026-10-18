@@ -348,6 +348,12 @@ export default function BaseScanner() {
               research shows it raises the average payoff, <i>not</i> the hit rate, so keep the stop. Thresholds are the research's starting
               values, not proven cut-offs; the chart check in each row is part of the method.
             </p>
+            <p className="px-1 text-[11px] leading-relaxed text-muted-foreground">
+              <b className="text-foreground/80">Backtest (your list, weekly data, May 2023 – Jul 2026, 13 weeks ahead vs SPY):</b> Stage 2 stocks in a
+              detected base beat Stage 2 stocks without one (median −0.5% vs −2.0%, 49% vs 46% beating SPY); scores 85+ did best
+              (+1.4%, 52%). Below 85 the score barely separated winners from losers, and no single pattern stood out — the market
+              regime mattered more than any setup detail. The list is today's stocks, so the past looks better than it was (survivorship).
+            </p>
           </>
         )}
       </main>
