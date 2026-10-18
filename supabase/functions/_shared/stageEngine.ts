@@ -56,6 +56,13 @@ export interface StageResult {
     /** 26-week and year-to-date price change, % (cross-sectional RS ranks, Theme Tracker YTD). */
     r26Pct: number | null;
     ytdPct: number | null;
+    /** Market-breadth flags for the last ≤104 weeks, one base-32 char per week (oldest → newest):
+     *  bit0 close > 10w MA (≈ 50-day) · bit1 close > 40w MA (≈ 200-day) · bit2 new 52-week high ·
+     *  bit3 new 52-week low · bit4 10w MA > 40w MA. Aggregated across stocks for the regime gauge. */
+    flags: string;
+    /** Minervini Trend Template, weekly proxies (50/150/200-day ≈ 10/30/40-week MAs); the 8th rule,
+     *  RS rank ≥ 70, is cross-sectional and applied in the app. */
+    tt: { pass: boolean; count: number; failed: string[] } | null;
   };
   reasons: string[];          // short human-readable reasons
 }
@@ -458,8 +465,11 @@ export function classifyStage(
   // upside-transition quality for fresh Stage 2 (volume asymmetry: only upside needs volume)
   let quality: StageResult["quality"] = null;
   if (sub === "2A") {
-    const pts = (rvolEv !== null && rvolEv >= 2 ? 1 : 0) + ((f.rpSlope13 ?? 0) > 0 ? 1 : 0) + (pctFrom52wHigh > -15 ? 1 : 0);
-    quality = pts >= 3 ? "HIGH" : pts === 2 ? "MIXED" : "LOW";
+    // StageAnalysis.net breakout checklist (weekly): volume ≥ 2× the prior 4 weeks, RS line above
+    // its 52-week average (Mansfield RS > 0) and rising, little overhead supply (near the 52w high).
+    const pts = (rvolEv !== null && rvolEv >= 2 ? 1 : 0) + ((f.mrs52 ?? -1) > 0 ? 1 : 0) +
+      ((f.rpSlope13 ?? 0) > 0 ? 1 : 0) + (pctFrom52wHigh > -15 ? 1 : 0);
+    quality = pts >= 4 ? "HIGH" : pts >= 2 ? "MIXED" : "LOW";
     if (rvolEv !== null && rvolEv < 1.5) reasons.unshift("Breakout on weak volume");
   }
 
@@ -478,6 +488,42 @@ export function classifyStage(
   if (stage === 1 && pctToRangeHigh !== null && rangeWeeks !== null) reasons.push(`${pctToRangeHigh.toFixed(1)}% below ${rangeWeeks}w range high`);
 
   const hist = confirmed.slice(Math.max(START, n - 104)).map((s) => (s === 0 ? "T" : String(s))).join("");
+
+  // breadth flags per week (see features.flags)
+  const B32 = "0123456789abcdefghijklmnopqrstuv";
+  const ma10s = c.map((_, k) => sma(c, k, 10)), ma40s = c.map((_, k) => sma(c, k, 40));
+  let flags = "";
+  for (let k = Math.max(0, n - 104); k < n; k++) {
+    let b = 0;
+    if (k >= 9 && c[k] > ma10s[k]) b |= 1;
+    if (k >= 39 && c[k] > ma40s[k]) b |= 2;
+    if (k >= 52) {
+      let hh = -Infinity, ll = Infinity;
+      for (let q = k - 52; q < k; q++) { if (h[q] > hh) hh = h[q]; if (l[q] < ll) ll = l[q]; }
+      if (h[k] > hh) b |= 4;
+      if (l[k] < ll) b |= 8;
+    }
+    if (k >= 39 && ma10s[k] > ma40s[k]) b |= 16;
+    flags += B32[b];
+  }
+
+  // Minervini Trend Template (7 price rules on weekly proxies)
+  let tt: StageResult["features"]["tt"] = null;
+  if (n >= 56) {
+    const m10 = ma10s[i], m30 = sma(c, i, 30), m40 = ma40s[i], m40ago = sma(c, i - 4, 40);
+    const lo52 = Math.min(...l.slice(n - 52)), hi52 = Math.max(...h.slice(n - 52));
+    const rules: [string, boolean][] = [
+      ["close above 30w & 40w MA", c[i] > m30 && c[i] > m40],
+      ["30w MA above 40w MA", m30 > m40],
+      ["40w MA rising (1 month)", m40 > m40ago],
+      ["10w MA above 30w & 40w MA", m10 > m30 && m10 > m40],
+      ["close above 10w MA", c[i] > m10],
+      ["≥ 30% above 52w low", c[i] >= 1.3 * lo52],
+      ["within 25% of 52w high", c[i] >= 0.75 * hi52],
+    ];
+    const failed = rules.filter(([, ok]) => !ok).map(([name]) => name);
+    tt = { pass: failed.length === 0, count: rules.length - failed.length, failed };
+  }
   const asOfDate = new Date((weekStart(bars[i].t) + 4 * DAY) * 1000).toISOString().slice(0, 10);
 
   return {
@@ -508,6 +554,8 @@ export function classifyStage(
       rangeWeeks,
       r26Pct: r26Pct === null ? null : round(r26Pct, 1),
       ytdPct: ytdPct === null ? null : round(ytdPct, 1),
+      flags,
+      tt,
     },
     reasons: reasons.slice(0, 4),
   };

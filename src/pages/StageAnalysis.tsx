@@ -9,6 +9,7 @@ import { Slider } from "@/components/ui/slider";
 import { useStockStages } from "@/hooks/useStockStages";
 import { useUniverseSectors } from "@/hooks/useUniverseSectors";
 import { groupKeyForIndustry, GROUP_MODE_LABEL, type GroupMode } from "@/lib/groupColors";
+import RegimePanel from "@/components/stages/RegimePanel";
 import StageStockTable, { StageBadge } from "@/components/stages/StageStockTable";
 import {
   STAGE_COLORS, STAGE_NAMES, STAGE_TIPS, groupHealth, isStageScanRunning, runStageScan, stageWeeksAgo,
@@ -170,6 +171,7 @@ export default function StageAnalysis() {
   }, [stocks]);
 
   const series = useMemo(() => breadthSeries(aligned), [aligned]);
+  const regimeRows = useMemo(() => (market ? [...aligned, market] : aligned), [aligned, market]);
   // This week's Stage 2 share vs its own history (percentile).
   const breadth = useMemo(() => {
     const s2 = series[2];
@@ -345,6 +347,9 @@ export default function StageAnalysis() {
 
         {stocks.length > 0 && (
           <>
+            {/* Market regime (breadth) */}
+            <RegimePanel rows={regimeRows} />
+
             {/* Market overview */}
             <section className="rounded-lg border border-border bg-card p-4">
               <div className="mb-3 flex flex-wrap items-center gap-2">
@@ -544,6 +549,8 @@ export default function StageAnalysis() {
               <b className="text-foreground/80">Backtest (your list, May 2023 – Jul 2026, 13 weeks ahead vs SPY, median):</b> Stage 2 −0.7%,
               Stage 3 −1.5%, Stage 1 −2.5%, Stage 4 −3.4%; 2A was the best substage (+0.1%) and 4B− the worst (−5.3%). Stage 2 beat Stage 4
               in every year. Today's list only, so all numbers flatter the past (survivorship) — the ordering is what matters.
+              An independent survivorship-free test (S&P 500 members 1992–2026, SSRN 2026) agrees on the core: Stage 2 (rising 30-week MA)
+              carried a small, significant edge, while telling Stage 1 bases from Stage 3 tops added none — and the market regime above matters most.
             </p>
           </>
         )}

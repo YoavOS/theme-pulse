@@ -90,7 +90,8 @@ export interface BaseFeatures {
   supportHolding: boolean;
   dollarVolM: number | null;  // median daily dollar volume, $M
   baseCount: number;
-  baseCountCapped: boolean;   // Stage 2 began before the available history
+  baseCountCapped: boolean;   // Stage 2 began before the counted history
+  baseNumber: number;         // all bases in this advance (base-on-base included); baseCount = IBD base stage
   labels: BaseLabel[];        // pattern labels before the RS-percentile gates
   trigger: {
     status: "none" | "triggered" | "extended" | "failed";
@@ -101,6 +102,10 @@ export interface BaseFeatures {
     exceptional: boolean;
     extensionPct: number | null;
     source: "daily" | "weekly" | null;
+    acceptDays?: number;        // closes above the pivot in the first 5 sessions
+    acceptSessions?: number;    // sessions available (≤ 5)
+    minClosePct?: number;       // lowest close vs pivot in the first 5 sessions (%)
+    retest?: boolean;           // latest close slightly under the pivot (≤ 3%)
   };
   parts: {                    // score components before the RS percentile
     trend: number; rs: number; geometry: number; contraction: number; volume: number; pivotRisk: number; market: number;
@@ -203,7 +208,7 @@ interface WindowEval {
   end: number;
   partial: number;   // score without the RS percentile (max 92)
   fails: string[];   // generic gates this window misses (diagnostics)
-  f: Omit<BaseFeatures, "trigger" | "baseCount" | "baseCountCapped" | "dataNote" | "latestClose" | "latestDate" | "distToPivotPct" | "marketStage" | "stageNow" | "gatesOk" | "gateFails" | "chart">;
+  f: Omit<BaseFeatures, "trigger" | "baseCount" | "baseCountCapped" | "dataNote" | "latestClose" | "latestDate" | "distToPivotPct" | "baseNumber" | "marketStage" | "stageNow" | "gatesOk" | "gateFails" | "chart">;
   gatesOk: boolean;
 }
 
@@ -328,7 +333,8 @@ export function detectBase(input: BaseInput, debug?: string[]): BaseFeatures | n
 
     const last3 = c.slice(end - 2, end + 1);
     const tightClosesAtr = (Math.max(...last3) - Math.min(...last3)) / atrAbs;
-    const threeWeeksTight = Math.abs(c[end] / c[end - 1] - 1) <= 0.015 && Math.abs(c[end - 1] / c[end - 2] - 1) <= 0.015;
+    // MarketSmith: three consecutive weekly closes within ~1.5% of each other
+    const threeWeeksTight = Math.max(c[end], c[end - 1], c[end - 2]) / Math.min(c[end], c[end - 1], c[end - 2]) - 1 <= 0.015;
 
     const dryUp = W >= 6 ? median(wv.slice(-3)) / median(wv.slice(0, -3)) : null;
     const upV: number[] = [], dnV: number[] = [];
@@ -482,7 +488,8 @@ export function detectBase(input: BaseInput, debug?: string[]): BaseFeatures | n
     const slopeChange = Math.abs(olsSlope(closes) * (W - 1));
     const height = f.baseHigh - f.baseLow;
     const span3 = (Math.max(c[e], c[e - 1], c[e - 2]) / Math.min(c[e], c[e - 1], c[e - 2]) - 1) * 100;
-    if (f.priorImpulsePct >= 25 && ctx.sma30Slope8Pct > 0 && f.pctFrom52wHigh >= -20 &&
+    // IBD/TraderLion flat base: prior advance ≥ 30%, ≥ 5 weeks, ≤ 15% deep, tight
+    if (f.priorImpulsePct >= 30 && ctx.sma30Slope8Pct > 0 && f.pctFrom52wHigh >= -20 &&
       W >= 5 && W <= 26 && f.depthPct <= 15 && slopeChange <= 0.4 * height && f.pivotContacts >= 2 && span3 <= 6) labels.push("flat");
   }
   // VCP
@@ -531,7 +538,9 @@ export function detectBase(input: BaseInput, debug?: string[]): BaseFeatures | n
   }
   // Double bottom
   {
-    if (W >= 8 && W <= 40) {
+    // IBD/TraderLion: ≥ 7 weeks, ≤ 40% deep, prior advance ≥ 30%, the second low undercuts the
+    // first (a shakeout) and is reclaimed; pivot = middle peak of the W.
+    if (W >= 7 && W <= 40) {
       const firstPart = s + Math.floor(W * 0.6);
       let t1 = s;
       for (let k = s; k <= firstPart; k++) if (l[k] < l[t1]) t1 = k;
@@ -551,7 +560,7 @@ export function detectBase(input: BaseInput, debug?: string[]): BaseFeatures | n
         const pos = (latestClose - Math.min(l[t1], l[t2])) / (f.baseHigh - Math.min(l[t1], l[t2]));
         const dist = (h[m] / latestClose - 1) * 100;
         if (f.priorImpulsePct >= 30 && f.depthPct >= 15 && f.depthPct <= 40 && m > t1 && m < t2 &&
-          (rebound >= 0.10 || h[m] - l[t1] >= 2 * atrAbs) && rel >= -0.07 && rel <= 0.05 && reclaimed &&
+          (rebound >= 0.10 || h[m] - l[t1] >= 2 * atrAbs) && rel >= -0.07 && rel <= 0.005 && reclaimed &&
           pos >= 0.5 && dist >= -5 && latestClose >= 0.95 * sma30) {
           labels.push("double_bottom");
           if (!labels.includes("cup")) f.pivot = r4(h[m]);
@@ -560,14 +569,17 @@ export function detectBase(input: BaseInput, debug?: string[]): BaseFeatures | n
     }
   }
   // Ascending base (own window: highs may rise, so no "left high" requirement)
+  let ascPivot: number | null = null;
   {
-    for (let Wa = 9; Wa <= 30 && !labels.includes("ascending"); Wa++) {
+    // MarketSmith: prior advance ≥ 20%, three pullbacks of 10–20% with higher lows, 9–16 weeks;
+    // pivot = the high the third pullback started from.
+    for (let Wa = 9; Wa <= 18 && !labels.includes("ascending"); Wa++) {
       const sa = i - Wa + 1;
       if (sa < 26) break;
       const zz = zigzagPullbacks(h, l, sa, i, 0.07);
       const pb = zz.pullbacks;
-      if (pb.length < 3 || pb.length > 4) continue;
-      const okDepth = pb.every((p) => p.depth >= 0.08 && p.depth <= 0.22);
+      if (pb.length !== 3) continue;
+      const okDepth = pb.every((p) => p.depth >= 0.09 && p.depth <= 0.21);
       let higherLows = true, highsUp = true, noBlowout = true;
       for (let k = 1; k < pb.length; k++) {
         if (l[pb[k].loIdx] < l[pb[k - 1].loIdx] * 1.01) higherLows = false;
@@ -579,8 +591,11 @@ export function detectBase(input: BaseInput, debug?: string[]): BaseFeatures | n
       const top = Math.max(...h.slice(sa, i + 1)), bot = Math.min(...l.slice(sa, i + 1));
       const pos = (latestClose - bot) / (top - bot);
       const dist = (top / latestClose - 1) * 100;
-      if (okDepth && higherLows && highsUp && noBlowout && imp >= 50 && ctx.aboveSma30 && ctx.aboveSma40 &&
-        ctx.sma30Slope8Pct > 0 && ctx.ext30wPct <= 35 && pos >= 0.6) labels.push("ascending");
+      if (okDepth && higherLows && highsUp && noBlowout && imp >= 20 && ctx.aboveSma30 && ctx.aboveSma40 &&
+        ctx.sma30Slope8Pct > 0 && ctx.ext30wPct <= 35 && pos >= 0.6) {
+        labels.push("ascending");
+        ascPivot = h[pb[2].hiIdx];
+      }
     }
   }
   // Box / rectangle (Darvas)
@@ -597,10 +612,10 @@ export function detectBase(input: BaseInput, debug?: string[]): BaseFeatures | n
     if (top >= 2 && bottom >= 2 && W >= 4 && f.depthPct <= 20 && f.priorImpulsePct >= 20 && ctx.aboveSma30 &&
       ctx.sma30Slope8Pct >= 0 && f.stopRiskPct <= 15) labels.push("box");
   }
-  // High-tight flag (separate model: impulse ≥ 90% in ≤ 8 weeks, then a 2–5 week flag)
+  // High-tight flag (O'Neil/TraderLion: flagpole ≥ 100% in 4–8 weeks, then a 3–5 week flag 10–25% deep)
   let htf = false;
   {
-    for (let hiIdx = i - 2; hiIdx >= i - 5 && !htf; hiIdx--) {
+    for (let hiIdx = i - 3; hiIdx >= i - 5 && !htf; hiIdx--) {
       let lowIdx = -1;
       for (let k = Math.max(0, hiIdx - 8); k < hiIdx; k++) if (lowIdx === -1 || l[k] < l[lowIdx]) lowIdx = k;
       if (lowIdx < 0) continue;
@@ -615,7 +630,7 @@ export function detectBase(input: BaseInput, debug?: string[]): BaseFeatures | n
       const flagRisk = (h[hiIdx] - flagLow) / h[hiIdx] * 100;
       const dist = (h[hiIdx] / latestClose - 1) * 100;
       debug?.push(`htf hi=${hiIdx} imp=${impulse.toFixed(2)} depth=${flagDepth.toFixed(3)} pos=${posInImpulse.toFixed(2)} slope=${slopePct.toFixed(2)} vol=${(flagVol / impVol).toFixed(2)} risk=${flagRisk.toFixed(1)} dist=${dist.toFixed(1)} $=${dollarVolM}`);
-      if (impulse >= 0.9 && flagDepth >= 0.10 && flagDepth <= 0.34 && posInImpulse >= 0.5 && slopePct <= 0.5 &&
+      if (impulse >= 1.0 && flagDepth >= 0.10 && flagDepth <= 0.25 && posInImpulse >= 0.5 && slopePct <= 0.5 &&
         flagVol <= 0.9 * impVol && flagRisk <= 20 && dist <= 8 && (dollarVolM ?? 0) >= 30 &&
         ctx.aboveSma10 && ctx.aboveSma30) {
         htf = true;
@@ -643,6 +658,7 @@ export function detectBase(input: BaseInput, debug?: string[]): BaseFeatures | n
 
   // A pattern-specific pivot (cup handle high, double-bottom middle peak, flag high) can differ
   // from the generic one — the breakout is judged against the final pivot.
+  if (ascPivot !== null && !htf && !labels.includes("cup") && !labels.includes("double_bottom")) f.pivot = r4(ascPivot);
   const piv = f.pivot;
   if (trigger.status === "none" && (latestClose > buffer(piv) || (clearedThisWeek(piv) && c[i] <= buffer(piv)))) {
     const brokeThisWeek = c[i - 1] <= piv;
@@ -668,10 +684,16 @@ export function detectBase(input: BaseInput, debug?: string[]): BaseFeatures | n
       trigger.rvol = r2(rvol);
       trigger.closeLocation = d.high > d.low ? r2((d.close - d.low) / (d.high - d.low)) : null;
       trigger.rangeExpansion = r2(trK / (median(trs) || trK));
-      trigger.exceptional = rvol >= 2.5 && (trigger.closeLocation ?? 0) >= 0.75 && (trigger.rangeExpansion ?? 0) >= 1.2;
+      // Volume is the one breakout-day feature with (mixed) evidence; close location has none on its own.
+      trigger.exceptional = rvol >= 2.5;
       trigger.source = "daily";
-      // failed: a close back below the pivot within 3 sessions of the breakout
-      for (let j = k + 1; j <= Math.min(daily.length - 1, k + 3); j++) if (daily[j].close < piv) { trigger.status = "failed"; break; }
+      // Acceptance over the first 5 sessions; a retest of the pivot is common (Bulkowski: throwbacks
+      // after ~57% of high-volume breakouts) — only a decisive loss (> 3% under the pivot) is a failure.
+      const firstFive = daily.slice(k, Math.min(daily.length, k + 5));
+      trigger.acceptDays = firstFive.filter((d) => d.close > piv).length;
+      trigger.acceptSessions = firstFive.length;
+      trigger.minClosePct = r1((Math.min(...firstFive.map((d) => d.close)) / piv - 1) * 100);
+      for (let j = k + 1; j <= Math.min(daily.length - 1, k + 10); j++) if (daily[j].close < piv * 0.97) { trigger.status = "failed"; break; }
     } else if (latestClose <= buffer(piv)) {
       // the daily closes never cleared this pivot — no breakout
       trigger = { ...trigger, status: "none", date: null, rvol: null, source: null };
@@ -682,7 +704,8 @@ export function detectBase(input: BaseInput, debug?: string[]): BaseFeatures | n
     const ext = (latestClose / piv - 1) * 100;
     trigger.extensionPct = r1(ext);
     if (trigger.status !== "failed") {
-      if (latestClose < piv) trigger.status = "failed";
+      if (latestClose < piv * 0.97) trigger.status = "failed";
+      else if (latestClose < piv) trigger.retest = true;   // back at the pivot, not (yet) a failure
       else if (ext > 5) trigger.status = "extended";
     }
   }
@@ -695,24 +718,37 @@ export function detectBase(input: BaseInput, debug?: string[]): BaseFeatures | n
   }
   if (!labels.length) labels.push("generic");
 
-  // ── base count (Stage 2 only): earlier bases in this advance = corrections of ≥ max(10%, 1.5 ATR)
-  // lasting ≥ 5 weeks (high to new high) that the stock then climbed out of. A correction of
-  // 40%+ resets the count (O'Neil) — the advance after it is a new cycle.
-  let baseCount = 1, capped = false;
+  // ── base stage (IBD/MarketSmith rule), Stage 2 only ──
+  // Earlier bases in this advance = corrections of ≥ max(10%, 1.5 ATR) lasting ≥ 5 weeks (high to
+  // new high). The stage goes up only if the stock rose ≥ 20% from the prior base's pivot before
+  // the next base began (otherwise base-on-base: same stage); a base whose low undercuts the prior
+  // base's low resets the count to 1.
+  let baseCount = 1, capped = false, baseNumber = 1;
   if (input.stage && input.stage.stage === 2) {
     // counted over at most the last two years of the advance
     const since = Math.max(26, i - input.stage.weeksInStage + 1, i - 104);
     capped = i - input.stage.weeksInStage + 1 < Math.max(26, i - 104);
     const thrBC = Math.max(0.10, 1.5 * (atrPctSeries[i] || 0.05));
     const zz = zigzagPullbacks(h, l, since, Math.max(since + 1, s - 1), thrBC);
+    const seq: { piv: number; low: number; start: number }[] = [];
     for (const p of zz.pullbacks) {
       let r = -1;
       for (let k = p.loIdx + 1; k < s; k++) if (h[k] > h[p.hiIdx]) { r = k; break; }
-      if (r < 0) continue;                       // never cleared that high before this base
-      if (p.depth >= 0.40) { baseCount = 1; continue; }
-      if (r - p.hiIdx >= 5) baseCount++;
+      if (r < 0 || r - p.hiIdx < 5) continue;   // not a base the stock broke out of
+      seq.push({ piv: h[p.hiIdx], low: l[p.loIdx], start: p.hiIdx });
     }
+    seq.push({ piv: f.pivot, low: Math.min(...l.slice(s, e + 1)), start: s });
+    let st = 1;
+    for (let k = 1; k < seq.length; k++) {
+      const prev = seq[k - 1], cur = seq[k];
+      if (cur.low < prev.low) { st = 1; continue; }
+      const runHigh = Math.max(...h.slice(prev.start, Math.max(prev.start + 1, cur.start + 1)));
+      if (runHigh >= prev.piv * 1.2) st++;
+    }
+    baseCount = st;
+    baseNumber = seq.length;
   }
+
 
 
   const distToPivotPct = r1((f.pivot / latestClose - 1) * 100);
@@ -737,6 +773,7 @@ export function detectBase(input: BaseInput, debug?: string[]): BaseFeatures | n
     latestDate,
     distToPivotPct,
     baseCount,
+    baseNumber,
     baseCountCapped: capped,
     trigger,
     marketStage: input.marketStage,
@@ -789,7 +826,10 @@ export function finalizeBase(f: BaseFeatures, rsPct: number | null, earningsInDa
   if (f.baseCount >= 4) warnings.push(`Late-stage base (${f.baseCount}${f.baseCountCapped ? "+" : ""})`);
   else if (f.baseCount === 3) warnings.push("3rd-stage base");
   if (f.trigger.status === "extended") warnings.push("5%+ above pivot");
-  if (f.trigger.status === "failed") warnings.push("Closed back below pivot");
+  if (f.trigger.status === "failed") warnings.push("Failed: closed 3%+ back below the pivot");
+  if (f.trigger.retest) warnings.push("Retesting the pivot");
+  if (f.trigger.acceptSessions && f.trigger.acceptSessions >= 3 && (f.trigger.acceptDays ?? 0) < Math.ceil(f.trigger.acceptSessions / 2))
+    warnings.push(`Weak acceptance (${f.trigger.acceptDays}/${f.trigger.acceptSessions} closes above pivot)`);
   if (f.trigger.status === "triggered" && f.trigger.rvol !== null && f.trigger.rvol < 1.2) warnings.push("Breakout on light volume");
   if (!f.aboveSma10) warnings.push("Below 10-week MA");
   if (f.dryUp !== null && f.dryUp <= 0.75 && f.rangePos < 0.5) warnings.push("Volume dry-up while price sags");

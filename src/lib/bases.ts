@@ -28,9 +28,9 @@ export const STATE_TIPS: Record<BaseState, string> = {
   qualified: "Score ≥ 75 and within 10% of the pivot — not tight or close enough yet.",
   developing: "Score 65+ but still forming — far from the pivot, low in its range, a wide stop or below the 30-week MA (see its warnings).",
   watch: "Score below 65 — research only.",
-  triggered: "Closed above the pivot (≤ 5% extended). Judge the breakout quality separately.",
+  triggered: "Closed above the pivot — within the IBD buy zone (≤ 5% above). A pullback to the pivot (retest) is normal and not a failure.",
   extended: "More than 5% above the pivot — not an orthodox entry any more.",
-  failed: "Closed back below the pivot within 3 sessions of the breakout (or since).",
+  failed: "Closed more than 3% back below the pivot after the breakout — a decisive loss of the breakout level.",
 };
 export const ALL_STATES: BaseState[] = ["ready", "triggered", "qualified", "developing", "extended", "failed", "watch"];
 
@@ -43,6 +43,10 @@ export interface BaseTrigger {
   exceptional: boolean;
   extensionPct: number | null;
   source: "daily" | "weekly" | null;
+  acceptDays?: number;
+  acceptSessions?: number;
+  minClosePct?: number;
+  retest?: boolean;
 }
 
 export interface BaseFeatures {
@@ -89,6 +93,7 @@ export interface BaseFeatures {
   dollarVolM: number | null;
   baseCount: number;
   baseCountCapped: boolean;
+  baseNumber?: number;
   labels: BaseLabel[];
   trigger: BaseTrigger;
   stageNow?: number | null;
