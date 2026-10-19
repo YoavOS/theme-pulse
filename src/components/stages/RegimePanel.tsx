@@ -52,7 +52,7 @@ export default function RegimePanel({ rows }: { rows: StockStage[] }) {
           <TooltipTrigger asChild>
             <div>
               <div className="text-[11px] text-muted-foreground">Breadth of your list {hover !== null && `· ${s.length - 1 - hover}w ago`}</div>
-              <div className="mt-0.5 flex items-center gap-2 text-base font-semibold" style={{ color: REGIME_COLOR[shown.color] }}>
+              <div className="mt-0.5 flex items-center gap-2 font-display text-xl font-bold tracking-tight" style={{ color: REGIME_COLOR[shown.color] }}>
                 <span className="h-2.5 w-2.5 rounded-full" style={{ background: REGIME_COLOR[shown.color] }} />
                 {REGIME_TEXT[shown.color].label}
               </div>

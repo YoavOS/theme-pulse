@@ -18,7 +18,7 @@ export function BottomLine({ tone = "neutral", title, lines, children }: { tone?
     <section className={`rounded-lg border px-4 py-3 ${TONE[tone]}`}>
       <div className="flex items-center gap-2">
         <span className={`h-2 w-2 shrink-0 rounded-full ${DOT[tone]}`} />
-        <span className="text-[11px] uppercase tracking-widest text-muted-foreground">Bottom line</span>
+        <span className="text-[11px] text-muted-foreground">Bottom line</span>
       </div>
       <div className="mt-1 text-base font-semibold leading-snug">{title}</div>
       {lines && lines.filter(Boolean).length > 0 && (
@@ -77,5 +77,60 @@ export function Fold({ title, hint, defaultOpen = false, children }: { title: Re
       </button>
       {open && <div className="border-t border-border px-4 py-3">{children}</div>}
     </section>
+  );
+}
+
+/**
+ * Shared section header: title in the display face, one plain-language line under it, controls on the right.
+ * Every panel on the analysis tabs uses it so the pages read as one system.
+ */
+export function SectionHead({ title, sub, icon, right, className = "" }: { title: ReactNode; sub?: ReactNode; icon?: ReactNode; right?: ReactNode; className?: string }) {
+  return (
+    <header className={`mb-3 flex flex-wrap items-start gap-x-4 gap-y-2 ${className}`}>
+      <div className="min-w-0 flex-1">
+        <h2 className="flex items-center gap-2 font-display text-[15px] font-semibold leading-tight tracking-tight">{icon}{title}</h2>
+        {sub && <p className="mt-1 max-w-[70ch] text-[11.5px] leading-snug text-muted-foreground">{sub}</p>}
+      </div>
+      {right && <div className="flex flex-wrap items-center gap-2">{right}</div>}
+    </header>
+  );
+}
+
+/** Segmented control used for every small "pick one" toggle (timeframes, windows, groupings). */
+export function Segmented<T extends string | number>({ options, value, onChange, size = "sm" }: {
+  options: { value: T; label: ReactNode; title?: string }[]; value: T; onChange: (v: T) => void; size?: "xs" | "sm";
+}) {
+  return (
+    <div className="inline-flex max-w-full overflow-x-auto rounded-md border border-border bg-muted/20 p-0.5">
+      {options.map((o) => (
+        <button
+          key={String(o.value)}
+          title={o.title}
+          onClick={() => onChange(o.value)}
+          aria-pressed={value === o.value}
+          className={`whitespace-nowrap rounded ${size === "xs" ? "px-2 py-0.5 text-[10.5px]" : "px-2.5 py-1 text-[11px]"} font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary ${value === o.value ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}
+        >
+          {o.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/** A selectable summary card (a view or a screen): name, how many stocks, and the first few tickers. */
+export function PickCard({ title, count, tickers, on, onClick, title2 }: { title: ReactNode; count: number; tickers: string[]; on: boolean; onClick: () => void; title2?: string }) {
+  return (
+    <button
+      onClick={onClick}
+      title={title2}
+      aria-pressed={on}
+      className={`flex min-w-0 flex-col rounded-lg border px-3 py-2.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary ${on ? "border-primary/70 bg-primary/10" : "border-border bg-card hover:bg-accent/30"}`}
+    >
+      <span className="flex items-baseline justify-between gap-2">
+        <span className={`truncate text-xs font-medium ${on ? "text-primary" : "text-foreground/90"}`}>{title}</span>
+        <span className="font-mono text-lg font-semibold tabular-nums">{count}</span>
+      </span>
+      <span className="mt-1 truncate font-mono text-[10.5px] text-muted-foreground">{tickers.length ? tickers.slice(0, 4).join("  ") : "none right now"}</span>
+    </button>
   );
 }
