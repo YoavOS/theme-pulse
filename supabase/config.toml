@@ -107,3 +107,6 @@ verify_jwt = false
 
 [functions.stage-scan]
 verify_jwt = false
+
+[functions.market-sentiment]
+verify_jwt = false

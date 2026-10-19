@@ -3,6 +3,8 @@ import { corsHeaders } from "../_shared/cors.ts";
 import { classifyStage, completedWeeks, type Stage, type WeeklyBar } from "../_shared/stageEngine.ts";
 import { detectBase, finalizeBase, type BaseFeatures, type DailyBar } from "../_shared/baseEngine.ts";
 import { logSignals, type BaseLogInfo } from "../_shared/signalLog.ts";
+import { dailySnapshot } from "../_shared/dailySnapshot.ts";
+import { fetchEarnGrowth, type EarnGrowth } from "../_shared/earningsGrowth.ts";
 import { fetchEarningsCalendar, measureEarnings, scoreFuel, type DBar, type EarnEvent, type EarnInfo } from "../_shared/earningsFuel.ts";
 
 /** ---------------------------------------------------------------
@@ -18,8 +20,8 @@ import { fetchEarningsCalendar, measureEarnings, scoreFuel, type DBar, type Earn
  *   { action: "chart", symbol }                 → last 2 years of weekly bars + 30w MA (app charts)
  *
  * One Yahoo call per stock (5 years of weekly bars — long warm-up for the stage state machine). Benchmark = SPY.
- * Daily bars for breakout timing are read from the Full Scan's cache
- * (yahoo_history_cache, period 6mo) — no extra API calls.
+ * Daily bars (breakout timing + the screens' daily snapshot, features.dly) are read from the Full Scan's
+ * cache (yahoo_history_cache, period 6mo); stocks missing from it get one extra daily call.
  * Storage: one row per stock in stock_stages, one per base candidate in
  * stock_bases (latest scan only).
  * --------------------------------------------------------------*/
@@ -36,7 +38,7 @@ async function fetchWeekly(symbol: string): Promise<WeeklyBar[] | null> {
   const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=5y&interval=1wk&includePrePost=false`;
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
-      const res = await fetch(url, { headers: { "User-Agent": UA, Accept: "application/json" } });
+      const res = await fetch(url, { headers: { "User-Agent": UA, Accept: "application/json" }, signal: AbortSignal.timeout(8000) });
       if (res.status === 429) { await res.body?.cancel(); await new Promise((r) => setTimeout(r, 1500)); continue; }
       if (!res.ok) { await res.body?.cancel(); return null; }
       const j = await res.json();
@@ -150,6 +152,14 @@ Deno.serve(async (req) => {
           if (Array.isArray(r.ohlc)) dailyBy.set(String(r.symbol).toUpperCase(), r.ohlc);
         }
       }
+      // Earnings growth snapshot (features.ern): reuse one fetched in the last 7 days.
+      const ernBy = new Map<string, EarnGrowth>();
+      {
+        const { data } = await db.from("stock_stages").select("symbol, ern:features->ern").in("symbol", symbols);
+        for (const r of (data ?? []) as { symbol: string; ern: EarnGrowth | null }[]) {
+          if (r.ern?.at && Date.now() - Date.parse(r.ern.at) < 7 * 86400_000) ernBy.set(r.symbol, r.ern);
+        }
+      }
       let cursor = 0;
       const worker = async () => {
         while (cursor < symbols.length) {
@@ -158,10 +168,18 @@ Deno.serve(async (req) => {
           const bars = raw ? (sym === BENCH ? raw : completedWeeks(raw)) : null;
           const r = bars ? classifyStage(bars, sym === BENCH ? null : bench.bars, bench.stage) : null;
           if (!r) { failed.push(sym); continue; }
+          // Daily bars: Full Scan cache first, otherwise one daily call (never fatal).
+          if (sym !== BENCH && !dailyBy.has(sym)) {
+            try { const d = await fetchDaily(sym); if (d?.length) dailyBy.set(sym, d); } catch { /* ignore */ }
+          }
+          let dly = null;
+          try { dly = sym === BENCH ? null : dailySnapshot(dailyBy.get(sym)); } catch { /* ignore */ }
+          let ern: EarnGrowth | null = ernBy.get(sym) ?? null;
+          if (!ern && sym !== BENCH) ern = await fetchEarnGrowth(sym);
           rows.push({
             symbol: sym, stage: r.stage, substage: r.substage, confidence: r.confidence, quality: r.quality,
             event: r.event, event_kind: r.eventKind, event_weeks_ago: r.eventWeeksAgo, weeks_in_stage: r.weeksInStage,
-            last_directional: r.lastDirectional, history: r.history, features: r.features, reasons: r.reasons,
+            last_directional: r.lastDirectional, history: r.history, features: { ...r.features, dly, ern }, reasons: r.reasons,
             as_of: r.asOf, updated_at: new Date().toISOString(),
           });
           if (sym === BENCH || !bars) continue;

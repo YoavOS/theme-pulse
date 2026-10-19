@@ -193,7 +193,7 @@ export function WeekSpark({ r }: { r: StockStage }) {
 }
 
 /** Weekly chart for one stock with its confirmed stage history as a colored strip. */
-function StageChartPanel({ r }: { r: StockStage }) {
+export function StageChartPanel({ r }: { r: StockStage }) {
   const [data, setData] = useState<StageChartData | null>(null);
   const [err, setErr] = useState<string | null>(null);
   useEffect(() => {

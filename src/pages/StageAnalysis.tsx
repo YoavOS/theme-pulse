@@ -1,5 +1,5 @@
 import { ordinal } from "@/lib/utils";
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { ArrowLeft, Layers, Loader2, RefreshCw, Info, ChevronDown, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
@@ -11,10 +11,12 @@ import { useStockStages } from "@/hooks/useStockStages";
 import { useUniverseSectors } from "@/hooks/useUniverseSectors";
 import { groupKeyForIndustry, GROUP_MODE_LABEL, type GroupMode } from "@/lib/groupColors";
 import RegimePanel from "@/components/stages/RegimePanel";
-import { BottomLine, HowItWorks } from "@/components/Explainer";
+import { BottomLine, HowItWorks, SectionNav } from "@/components/Explainer";
 import { leadershipForGroups } from "@/lib/leadership";
 import TrackRecord from "@/components/stages/TrackRecord";
 import LeadershipPanel from "@/components/stages/LeadershipPanel";
+import RotationPanel from "@/components/stages/RotationPanel";
+import NewHighsLowsPanel from "@/components/stages/NewHighsLowsPanel";
 import StageStockTable, { StageBadge } from "@/components/stages/StageStockTable";
 import {
   REGIME_TEXT, STAGE_COLORS, STAGE_NAMES, STAGE_TIPS, groupHealth, isStageScanRunning, regimeSeries, runStageScan, stageWeeksAgo,
@@ -73,6 +75,13 @@ function MiniChart({ series }: { series: Record<StageNum, number[]> }) {
         onMouseLeave={() => setHover(null)}
       >
         {[0.25, 0.5, 0.75].map((f) => <line key={f} x1={0} x2={W} y1={H * f} y2={H * f} stroke="hsl(var(--border))" strokeWidth={1} vectorEffect="non-scaling-stroke" opacity={0.4} />)}
+        {/* shade the gap between Stage 2 and Stage 4: blue while advancing stocks outnumber declining ones, pink otherwise */}
+        {series[2].slice(1).map((_, k) => {
+          const x0 = (k / (len - 1)) * W, x1 = ((k + 1) / (len - 1)) * W;
+          const y = (v: number) => H - (v / max) * (H - 8) - 4;
+          const net = series[2][k] + series[2][k + 1] - series[4][k] - series[4][k + 1];
+          return <polygon key={k} points={`${x0},${y(series[2][k])} ${x1},${y(series[2][k + 1])} ${x1},${y(series[4][k + 1])} ${x0},${y(series[4][k])}`} fill={net >= 0 ? STAGE_COLORS[2] : STAGE_COLORS[4]} opacity={0.13} />;
+        })}
         {([1, 3, 4, 2] as StageNum[]).map((k) => (
           <path key={k} d={path(series[k])} fill="none" stroke={STAGE_COLORS[k]} strokeWidth={k === 2 || k === 4 ? 2 : 1.2}
             opacity={k === 2 || k === 4 ? 1 : 0.6} vectorEffect="non-scaling-stroke" />
@@ -83,6 +92,7 @@ function MiniChart({ series }: { series: Record<StageNum, number[]> }) {
         <div className="pointer-events-none absolute top-1 rounded border border-border bg-background/95 px-2 py-1 font-mono text-[10px]" style={{ left: `min(${(hover / (len - 1)) * 100}%, calc(100% - 150px))` }}>
           <div className="text-muted-foreground">{len - 1 - hover === 0 ? "last week" : `${len - 1 - hover}w ago`}</div>
           {STAGES.map((k) => <div key={k} style={{ color: STAGE_COLORS[k] }}>S{k} {series[k][hover].toFixed(0)}%</div>)}
+          <div className="text-foreground">S2 − S4 {(series[2][hover] - series[4][hover]) >= 0 ? "+" : ""}{(series[2][hover] - series[4][hover]).toFixed(0)}</div>
         </div>
       )}
       <div className="flex justify-between text-[10px] text-muted-foreground"><span>{len}w ago</span><span>max {max}%</span><span>last completed week</span></div>
@@ -162,10 +172,10 @@ export default function StageAnalysis() {
   const nameBySymbol = useMemo(() => new Map(uni.map((r) => [r.symbol.toUpperCase(), r.name ?? null])), [uni]);
   const nameOf = (sym: string) => nameBySymbol.get(sym) ?? null;
 
-  const groupsOf = (sym: string): string[] => {
+  const groupsOf = useCallback((sym: string): string[] => {
     if (mode === "theme") return themeMap.get(sym) ?? [];
     return [groupKeyForIndustry(labelBySymbol.get(sym) ?? null, mode)];
-  };
+  }, [mode, themeMap, labelBySymbol]);
   const firstGroup = (sym: string) => groupsOf(sym)[0] ?? "—";
 
   const totals = useMemo(() => {
@@ -184,6 +194,12 @@ export default function StageAnalysis() {
     const now = s2[s2.length - 1];
     const below = s2.filter((v) => v < now).length;
     return { now, pct: Math.round((below / (s2.length - 1)) * 100), lo: Math.min(...s2), hi: Math.max(...s2), weeks: s2.length };
+  }, [series]);
+
+  const net = useMemo(() => {
+    const a = series[2], b = series[4], L = a.length;
+    if (L < 5) return null;
+    return { now: a[L - 1] - b[L - 1], d4: (a[L - 1] - b[L - 1]) - (a[L - 5] - b[L - 5]) };
   }, [series]);
 
   const groups: GroupRow[] = useMemo(() => {
@@ -281,6 +297,8 @@ export default function StageAnalysis() {
     }
   };
 
+  const openList = (title: string, rs: StockStage[]) => { setSubFilter(null); setMinConf(0); setSearch(""); setList({ title, rows: rs }); };
+
   const openStage = (s: StageNum) => {
     setSubFilter(null); setMinConf(0); setSearch("");
     setList({ title: STAGE_NAMES[s], rows: stocks.filter((r) => r.stage === s), stage: s });
@@ -375,10 +393,19 @@ export default function StageAnalysis() {
               />
             )}
 
-            <RegimePanel rows={regimeRows} />
+            <SectionNav items={[
+              { id: "sa-breadth", label: "Breadth" },
+              { id: "sa-overview", label: "Stages" },
+              { id: "sa-changes", label: "Stage changes" },
+              { id: "sa-leadership", label: "Leadership" },
+              { id: "sa-rotation", label: "Rotation & new highs" },
+              { id: "sa-groups", label: "By group" },
+            ]} />
+
+            <div id="sa-breadth" className="scroll-mt-12"><RegimePanel rows={regimeRows} /></div>
 
             {/* Market overview */}
-            <section className="rounded-lg border border-border bg-card p-4">
+            <section id="sa-overview" className="scroll-mt-12 rounded-lg border border-border bg-card p-4">
               <div className="mb-3 flex flex-wrap items-center gap-2">
                 <h2 className="text-sm font-semibold">Stages across your list</h2>
                 <span className="text-[11px] text-muted-foreground">· click a stage for its stocks</span>
@@ -415,6 +442,12 @@ export default function StageAnalysis() {
                     {breadth.pct <= 10 ? " · washout zone" : breadth.pct >= 90 ? " · crowded zone" : ""}
                   </span>
                 )}
+                {net && (
+                  <span title="Share of stocks in Stage 2 minus the share in Stage 4 — positive while advancing stocks outnumber declining ones (the shaded gap on the chart)">
+                    S2 − S4 <b className={net.now >= 0 ? "text-[hsl(222,82%,70%)]" : "text-[hsl(329,70%,66%)]"}>{net.now >= 0 ? "+" : ""}{net.now.toFixed(0)} pts</b>
+                    {" "}<span className={net.d4 >= 0 ? "text-gain-medium" : "text-loss-medium"}>({net.d4 >= 0 ? "▲" : "▼"}{Math.abs(net.d4).toFixed(0)} in 4w)</span>
+                  </span>
+                )}
                 {STAGES.map((k) => <span key={k} className="inline-flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full" style={{ background: STAGE_COLORS[k] }} />S{k}</span>)}
                 <span>· % of classified stocks, weekly</span>
               </div>
@@ -422,7 +455,7 @@ export default function StageAnalysis() {
             </section>
 
             {/* Transitions */}
-            <section className="rounded-lg border border-border bg-card p-4">
+            <section id="sa-changes" className="scroll-mt-12 rounded-lg border border-border bg-card p-4">
               <div className="mb-3 flex flex-wrap items-center gap-2">
                 <h2 className="text-sm font-semibold">Stage changes</h2>
                 <div className="inline-flex rounded-md border border-border bg-muted/20 p-0.5">
@@ -487,10 +520,15 @@ export default function StageAnalysis() {
               </div>
             </section>
 
-            <LeadershipPanel groups={groups} spy={market} asOf={asOf} modeLabel={GROUP_MODE_LABEL[mode]} minMembers={minGroupSize} />
+            <div id="sa-leadership" className="scroll-mt-12"><LeadershipPanel groups={groups} spy={market} asOf={asOf} modeLabel={GROUP_MODE_LABEL[mode]} minMembers={minGroupSize} /></div>
+
+            <div id="sa-rotation" className="grid scroll-mt-12 gap-4 lg:grid-cols-2">
+              <RotationPanel groups={groups} asOf={asOf} modeLabel={GROUP_MODE_LABEL[mode]} minMembers={minGroupSize} onOpen={(name, rs) => openList(`${name} — stocks by stage`, rs)} />
+              <NewHighsLowsPanel stocks={aligned} groupsOf={groupsOf} modeLabel={GROUP_MODE_LABEL[mode]} onOpen={openList} />
+            </div>
 
             {/* Groups */}
-            <section className="overflow-hidden rounded-lg border border-border bg-card">
+            <section id="sa-groups" className="scroll-mt-12 overflow-hidden rounded-lg border border-border bg-card">
               <div className="flex flex-wrap items-center gap-2 border-b border-border px-4 py-3">
                 <h2 className="text-sm font-semibold">By group</h2>
                 <div className="inline-flex rounded-md border border-border bg-muted/20 p-0.5">

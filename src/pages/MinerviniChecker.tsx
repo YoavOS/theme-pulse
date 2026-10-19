@@ -585,6 +585,7 @@ function QuarterTable({ s }: { s: Series }) {
         <span className="text-[11px] text-muted-foreground">· newest first · growth vs the same quarter a year earlier · <span className="text-gain-medium">green</span> = 25%+ · ▲▼ = faster / slower than the quarter before</span>
         {s.code33 && <span className="ml-auto text-[11px]">Code 33: EPS {s.code33.eps ? "✓" : "✗"} · sales {s.code33.sales ? "✓" : "✗"} · margin {s.code33.margin ? "✓" : "✗"}</span>}
       </div>
+      <GrowthBars q={q} />
       <div className="overflow-x-auto">
         <table className="w-full border-collapse text-xs">
           <thead>
@@ -613,6 +614,62 @@ function QuarterTable({ s }: { s: Series }) {
       </div>
       <p className="mt-2 text-[10.5px] text-muted-foreground">A profit after a year-ago loss shows as "turnaround" instead of a misleading growth %.</p>
     </Card>
+  );
+}
+
+/** Sales and EPS growth per quarter as bars (oldest → newest) — acceleration is visible at a glance. */
+function GrowthBars({ q }: { q: Series["quarters"] }) {
+  const rows = [...q].reverse();
+  const series: { label: string; vals: (number | null)[]; turn?: boolean[] }[] = [
+    { label: "Sales growth vs a year ago", vals: rows.map((r) => r.revenueYoY) },
+    { label: "EPS growth vs a year ago", vals: rows.map((r) => (r.turnaround ? null : r.epsYoY)), turn: rows.map((r) => r.turnaround) },
+  ];
+  const all = series.flatMap((s) => s.vals).filter((x): x is number => x !== null);
+  if (rows.length < 3 || all.length < 3) return null;
+  const hi = Math.max(25, Math.min(200, Math.max(...all))), lo = Math.max(-100, Math.min(0, ...all));
+  const span = hi - lo;
+  const zero = (hi / span) * 100;                 // % from the top where 0 sits
+  const yPct = (v: number) => ((hi - Math.max(lo, Math.min(hi, v))) / span) * 100;
+  const qLabel = (d: string) => { const [y, m] = d.split("-").map(Number); return `Q${Math.ceil(m / 3)} '${String(y).slice(2)}`; };
+  return (
+    <div className="mb-4 grid gap-4 sm:grid-cols-2">
+      {series.map((s) => (
+        <div key={s.label} className="rounded-md border border-border/50 bg-background/30 px-3 pb-2 pt-2.5">
+          <div className="mb-5 flex items-baseline justify-between text-[11px]">
+            <span className="font-medium">{s.label}</span>
+            <span className="text-[10px] text-muted-foreground"><span className="mr-1 inline-block w-3 border-t border-dashed border-gain-medium/60 align-middle" />25%</span>
+          </div>
+          <div className="relative h-24">
+            <div className="pointer-events-none absolute inset-x-0 border-t border-border" style={{ top: `${zero}%` }} />
+            <div className="pointer-events-none absolute inset-x-0 border-t border-dashed border-gain-medium/40" style={{ top: `${yPct(25)}%` }} />
+            <div className="absolute inset-0 flex gap-1.5">
+              {s.vals.map((v, i) => {
+                const turn = s.turn?.[i];
+                const txt = turn ? "T/A" : v === null ? "—" : `${v >= 0 ? "+" : ""}${v.toFixed(0)}`;
+                const top = v === null ? zero : Math.min(zero, yPct(v)), h = v === null ? 0 : Math.abs(yPct(v) - zero);
+                const col = v === null ? "" : v >= 25 ? "hsl(150,65%,45%)" : v >= 0 ? "hsla(150,40%,45%,0.55)" : "hsl(344,75%,60%)";
+                return (
+                  <div key={i} className="relative flex-1" title={`${rows[i].date}: ${turn ? "turnaround (profit after a loss)" : v === null ? "no data" : `${txt}%`}`}>
+                    {turn ? (
+                      <div className="absolute inset-x-0 rounded-t-sm border border-dashed border-gain-medium/60" style={{ top: `${yPct(25)}%`, height: `${zero - yPct(25)}%` }} />
+                    ) : v !== null && (
+                      <div className={`absolute inset-x-0 ${v >= 0 ? "rounded-t-sm" : "rounded-b-sm"}`} style={{ top: `${top}%`, height: `max(${h}%, 2px)`, background: col }} />
+                    )}
+                    <span
+                      className={`absolute inset-x-0 -translate-y-full pb-0.5 text-center font-mono text-[9.5px] ${turn ? "text-gain-medium" : v !== null && v >= 25 ? "text-foreground" : "text-muted-foreground"}`}
+                      style={{ top: `${turn ? yPct(25) : v !== null && v < 0 ? zero : top}%` }}
+                    >{txt}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+          <div className="mt-1 flex gap-1.5">
+            {rows.map((r, i) => <span key={i} className="flex-1 truncate text-center font-mono text-[9px] text-muted-foreground">{qLabel(r.date)}</span>)}
+          </div>
+        </div>
+      ))}
+    </div>
   );
 }
 

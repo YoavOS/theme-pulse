@@ -6,6 +6,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { BottomLine, Fold, HowItWorks } from "@/components/Explainer";
+import { AaiiCard, CotCard, McClellanCard, useMarketSentiment } from "@/components/market/SentimentPanels";
+import { useStockStages } from "@/hooks/useStockStages";
 import {
   HISTORY, HISTORY_ALL, PLAYBOOK, REFERENCES, STRENGTH_STYLE, TYPE_INFO, nextFomc, overlays, volTargetExposure,
   type FearGreed, type FlagMetrics, type MarketTypeKey, type Tip,
@@ -80,6 +82,9 @@ export default function MarketFlag() {
   const [fng, setFng] = useState<FearGreed | null>(null);
   const [fngState, setFngState] = useState<"loading" | "ok" | "fail">("loading");
   const [loading, setLoading] = useState(false);
+  const [sentKey, setSentKey] = useState(0);
+  const sentiment = useMarketSentiment(sentKey);
+  const { rows: stageRows } = useStockStages(true);
 
   const load = useCallback(async (force = false) => {
     setFngState("loading");
@@ -130,7 +135,7 @@ export default function MarketFlag() {
           <h1 className="text-sm font-semibold tracking-wide">Market Flag</h1>
           <div className="ml-auto flex items-center gap-3">
             {data && <span className="hidden text-[11px] text-muted-foreground sm:inline">Updated {new Date(data.generatedAt).toLocaleString()}</span>}
-            <button onClick={() => load(true)} disabled={loading}
+            <button onClick={() => { load(true); setSentKey((k) => k + 1); }} disabled={loading}
               className="flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-xs transition-colors hover:bg-accent disabled:opacity-50">
               {loading ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />} Refresh
             </button>
@@ -208,7 +213,7 @@ export default function MarketFlag() {
               </div>
             </section>
 
-            <div className="grid gap-4 lg:grid-cols-3">
+            <div className="grid gap-4 md:grid-cols-2">
               {/* Sizing */}
               <section className="rounded-lg border border-border bg-card p-4">
                 <div className="mb-2 flex items-center gap-2"><Scale size={14} className="text-sky-300" /><h2 className="text-sm font-semibold">Position sizing</h2></div>
@@ -240,8 +245,20 @@ export default function MarketFlag() {
                 </p>
               </section>
 
-              {/* Sentiment */}
-              <FearGreedCard fng={fng} state={fngState} />
+            </div>
+
+            {/* Sentiment & positioning */}
+            <div>
+              <div className="mb-2 flex flex-wrap items-baseline gap-2 px-1">
+                <h2 className="text-sm font-semibold">Sentiment &amp; positioning</h2>
+                <span className="text-[11px] text-muted-foreground">· what the crowd feels and how it is positioned — useful at extremes, read contrarian, kept out of the risk score</span>
+              </div>
+              <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 [&>*]:min-w-0">
+                <FearGreedCard fng={fng} state={fngState} />
+                <AaiiCard data={sentiment.data} state={sentiment.state} />
+                <CotCard data={sentiment.data} state={sentiment.state} />
+                <McClellanCard rows={stageRows} />
+              </div>
             </div>
 
             {/* History by type */}
