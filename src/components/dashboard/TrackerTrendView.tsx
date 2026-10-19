@@ -138,7 +138,7 @@ export default function TrackerTrendView({
   return (
     <div className="min-w-0 rounded-xl border border-border bg-card px-4 py-3.5">
       <div className="mb-3 flex flex-wrap items-center gap-2.5">
-        <h2 className="text-[15px] font-semibold" style={{ fontFamily: "Syne, sans-serif" }}>{title}</h2>
+        <h2 className="font-display text-[15px] font-semibold tracking-tight">{title}</h2>
         <span className="font-mono text-[11px] text-muted-foreground">{status}</span>
         <div className="ml-auto max-w-full overflow-x-auto">{switcher}</div>
       </div>
@@ -159,7 +159,7 @@ export default function TrackerTrendView({
                 onClick={() => setFilter(filter === k ? "all" : k)}
                 className={`rounded-lg border px-3 py-2 text-left transition hover:brightness-110 ${TREND_META[k].cls} ${filter === k ? "ring-1 ring-current" : ""}`}
               >
-                <div className="text-[10.5px] uppercase tracking-wide opacity-80">{cap}</div>
+                <div className="text-[10.5px] opacity-80">{cap}</div>
                 <div className="mt-0.5 truncate text-[13px] font-semibold text-foreground">{names.length ? names.join(" · ") : "—"}</div>
               </button>
             ))}

@@ -11,7 +11,7 @@ import { useStockStages } from "@/hooks/useStockStages";
 import { useUniverseSectors } from "@/hooks/useUniverseSectors";
 import { groupKeyForIndustry, GROUP_MODE_LABEL, type GroupMode } from "@/lib/groupColors";
 import RegimePanel from "@/components/stages/RegimePanel";
-import { BottomLine, HowItWorks, SectionNav } from "@/components/Explainer";
+import { BottomLine, HowItWorks, SectionHead, SectionNav, Segmented } from "@/components/Explainer";
 import { leadershipForGroups } from "@/lib/leadership";
 import TrackRecord from "@/components/stages/TrackRecord";
 import LeadershipPanel from "@/components/stages/LeadershipPanel";
@@ -108,6 +108,8 @@ const TRANSITION_GROUPS: { key: string; label: string; color: StageNum; match: (
   { key: "down", label: "Breakdowns → Stage 4", color: 4, match: (r) => r.stage === 4 && !!r.event },
 ];
 
+const GROUP_PREVIEW = 15;
+
 export default function StageAnalysis() {
   const { rows, loading, error, reload } = useStockStages(true);
   const { rows: uni, extra, load: loadUni, loaded: uniLoaded } = useUniverseSectors();
@@ -195,6 +197,8 @@ export default function StageAnalysis() {
     const below = s2.filter((v) => v < now).length;
     return { now, pct: Math.round((below / (s2.length - 1)) * 100), lo: Math.min(...s2), hi: Math.max(...s2), weeks: s2.length };
   }, [series]);
+
+  const [showAllGroups, setShowAllGroups] = useState(false);
 
   const net = useMemo(() => {
     const a = series[2], b = series[4], L = a.length;
@@ -406,15 +410,11 @@ export default function StageAnalysis() {
 
             {/* Market overview */}
             <section id="sa-overview" className="scroll-mt-12 rounded-lg border border-border bg-card p-4">
-              <div className="mb-3 flex flex-wrap items-center gap-2">
-                <h2 className="text-sm font-semibold">Stages across your list</h2>
-                <span className="text-[11px] text-muted-foreground">· click a stage for its stocks</span>
-                {market && (
-                  <span className="ml-auto inline-flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                    SPY <StageBadge r={market} />
-                  </span>
-                )}
-              </div>
+              <SectionHead
+                title="Stages across your list"
+                sub="Where every stock sits in Weinstein's four stages this week. Click a stage to see its stocks."
+                right={market && <span className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground">SPY <StageBadge r={market} /></span>}
+              />
               <div className="flex h-2 overflow-hidden rounded-full bg-muted">
                 {STAGES.map((k) => <div key={k} style={{ width: `${pctOf(k)}%`, background: STAGE_COLORS[k] }} />)}
               </div>
@@ -456,17 +456,11 @@ export default function StageAnalysis() {
 
             {/* Transitions */}
             <section id="sa-changes" className="scroll-mt-12 rounded-lg border border-border bg-card p-4">
-              <div className="mb-3 flex flex-wrap items-center gap-2">
-                <h2 className="text-sm font-semibold">Stage changes</h2>
-                <div className="inline-flex rounded-md border border-border bg-muted/20 p-0.5">
-                  {[1, 2, 4].map((w) => (
-                    <button key={w} onClick={() => setTransWindow(w)} className={`rounded px-2 py-0.5 text-[10px] ${transWindow === w ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}>
-                      {w === 1 ? "last week" : `last ${w} weeks`}
-                    </button>
-                  ))}
-                </div>
-                <span className="text-[11px] text-muted-foreground">· click to open the list</span>
-              </div>
+              <SectionHead
+                title="Stage changes"
+                sub="Stocks that moved between stages recently. Fresh breakouts into Stage 2 are the best long candidates; click a chip for the list."
+                right={<Segmented<number> size="xs" value={transWindow} onChange={setTransWindow} options={[1, 2, 4].map((w) => ({ value: w, label: w === 1 ? "last week" : `last ${w} weeks` }))} />}
+              />
               <div className="flex flex-wrap gap-2">
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -529,24 +523,20 @@ export default function StageAnalysis() {
 
             {/* Groups */}
             <section id="sa-groups" className="scroll-mt-12 overflow-hidden rounded-lg border border-border bg-card">
-              <div className="flex flex-wrap items-center gap-2 border-b border-border px-4 py-3">
-                <h2 className="text-sm font-semibold">By group</h2>
-                <div className="inline-flex rounded-md border border-border bg-muted/20 p-0.5">
-                  {MODES.map((m) => (
-                    <button key={m} onClick={() => { setMode(m); setExpanded(null); }} className={`rounded px-2.5 py-1 text-[11px] font-medium ${mode === m ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}>
-                      {GROUP_MODE_LABEL[m]}
-                    </button>
-                  ))}
-                </div>
-                <span className="text-[11px] text-muted-foreground">
-                  {mode !== "theme" && !uniLoaded ? "Loading industries…" : `${groups.length} groups · click a row for its stocks`}
-                </span>
-                <label className="ml-auto flex items-center gap-1.5 text-[11px] text-muted-foreground" title="Groups with very few stocks swing between 0% and 100% — hide them for a fair ranking">
-                  Min stocks
-                  <select value={minGroupSize} onChange={(e) => setMinGroupSize(Number(e.target.value))} className="h-6 rounded border border-border bg-background px-1 text-[11px]">
-                    {[1, 3, 5, 10, 20].map((v) => <option key={v} value={v}>{v}</option>)}
-                  </select>
-                </label>
+              <div className="border-b border-border px-4 pb-1 pt-4">
+                <SectionHead
+                  title="By group"
+                  sub={mode !== "theme" && !uniLoaded ? "Loading industries…" : `${groups.length} groups ranked by their share of stocks in Stage 2. Click a row for its stocks.`}
+                  right={<>
+                    <Segmented value={mode} onChange={(m) => { setMode(m); setExpanded(null); setShowAllGroups(false); }} options={MODES.map((m) => ({ value: m, label: GROUP_MODE_LABEL[m] }))} />
+                    <label className="flex items-center gap-1.5 text-[11px] text-muted-foreground" title="Groups with very few stocks swing between 0% and 100% — hide them for a fair ranking">
+                      Min stocks
+                      <select value={minGroupSize} onChange={(e) => setMinGroupSize(Number(e.target.value))} className="h-7 rounded border border-border bg-background px-1 text-[11px]">
+                        {[1, 3, 5, 10, 20].map((v) => <option key={v} value={v}>{v}</option>)}
+                      </select>
+                    </label>
+                  </>}
+                />
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full border-collapse">
@@ -560,7 +550,7 @@ export default function StageAnalysis() {
                     </tr>
                   </thead>
                   <tbody>
-                    {groups.map((g) => {
+                    {(showAllGroups ? groups : groups.slice(0, GROUP_PREVIEW)).map((g) => {
                       const h = groupHealth(g.pct[2], g.pct[4]);
                       const open = expanded === g.name;
                       return (
@@ -605,6 +595,11 @@ export default function StageAnalysis() {
                   </tbody>
                 </table>
               </div>
+              {groups.length > GROUP_PREVIEW && (
+                <button onClick={() => setShowAllGroups((v) => !v)} className="w-full border-t border-border px-4 py-2 text-left text-[11.5px] text-primary hover:bg-accent/30">
+                  {showAllGroups ? `Show the top ${GROUP_PREVIEW} only` : `Show all ${groups.length} groups`}
+                </button>
+              )}
             </section>
 
             <HowItWorks title="How to read this page & how stages tested">

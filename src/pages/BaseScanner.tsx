@@ -12,7 +12,7 @@ import { StageBadge } from "@/components/stages/StageStockTable";
 import TrackRecord from "@/components/stages/TrackRecord";
 import WeeklyChart from "@/components/stages/WeeklyChart";
 import ScreensView from "@/components/bases/ScreensView";
-import { BottomLine, HowItWorks } from "@/components/Explainer";
+import { BottomLine, HowItWorks, PickCard, SectionHead } from "@/components/Explainer";
 import { downloadTradingViewList, isStageScanRunning, regimeSeries, runStageScan } from "@/lib/stageAnalysis";
 import {
   ALL_LABELS, ALL_STATES, BREAKDOWN_PARTS, CHART_CHECKS, EARN_LABELS, LABEL_NAMES, STATE_NAMES,
@@ -274,23 +274,20 @@ export default function BaseScanner() {
             )}
 
             {/* Views */}
-            <div className="flex flex-wrap items-stretch gap-2">
+            <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
               {VIEWS.map((v) => {
-                const n = scoreRows.filter((r) => inView(r, v.key)).length;
-                const on = view === v.key;
+                const list = scoreRows.filter((r) => inView(r, v.key)).sort((a, b) => b.score - a.score);
                 return (
-                  <button key={v.key} onClick={() => { setView(v.key); setStateF("all"); }}
-                    className={`min-w-[120px] flex-1 rounded-lg border px-3 py-2 text-left transition ${on ? "border-primary bg-primary/10" : "border-border bg-card hover:bg-accent/40"}`}>
-                    <div className={`text-xs ${on ? "text-primary" : "text-muted-foreground"}`}>{v.label}</div>
-                    <div className="font-mono text-xl font-semibold">{n}</div>
-                  </button>
+                  <PickCard key={v.key} title={v.label} count={list.length} tickers={list.map((r) => r.symbol)} on={view === v.key} title2={v.hint}
+                    onClick={() => { setView(v.key); setStateF("all"); }} />
                 );
               })}
             </div>
-            <p className="-mt-1 px-1 text-xs text-muted-foreground">{VIEWS.find((v) => v.key === view)?.hint}</p>
 
             {/* Toolbar */}
-            <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-card px-3 py-2">
+            <div className="rounded-lg border border-border bg-card px-3 pb-2.5 pt-3">
+            <SectionHead className="mb-2" title={VIEWS.find((v) => v.key === view)?.label} sub={VIEWS.find((v) => v.key === view)?.hint} />
+            <div className="flex flex-wrap items-center gap-2">
               <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Ticker or industry…" className="h-8 w-44 rounded border border-border bg-background px-2 text-xs" />
               <select value={labelF} onChange={(e) => setLabelF(e.target.value as BaseLabel | "all")} className="h-8 rounded border border-border bg-background px-2 text-xs" title="Pattern">
                 <option value="all">All patterns</option>
@@ -321,6 +318,7 @@ export default function BaseScanner() {
                   className="inline-flex h-8 items-center gap-1 rounded border border-primary/40 bg-primary/10 px-2 text-[11px] font-medium text-primary hover:bg-primary/20 disabled:opacity-40"
                 ><Download size={11} /> TradingView</button>
               </div>
+            </div>
             </div>
 
             <div className="overflow-x-auto rounded-lg border border-border bg-card">

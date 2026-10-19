@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { SectionHead, Segmented } from "@/components/Explainer";
 import type { StockStage } from "@/lib/stageAnalysis";
 
 /**
@@ -74,26 +75,20 @@ export default function NewHighsLowsPanel({ stocks, groupsOf, modeLabel, onOpen 
 
   return (
     <section className="rounded-lg border border-border bg-card p-4">
-      <div className="mb-3 flex flex-wrap items-center gap-2">
-        <h2 className="text-sm font-semibold">New highs &amp; lows</h2>
-        <span className="text-[11px] text-muted-foreground">· 52-week, by {modeLabel.toLowerCase()}</span>
-        <div className="ml-auto inline-flex rounded-md border border-border bg-muted/20 p-0.5">
-          {([1, 4] as const).map((w) => (
-            <button key={w} onClick={() => setWin(w)} className={`rounded px-2 py-0.5 text-[10px] ${win === w ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}>
-              {w === 1 ? "last week" : "last 4 weeks"}
-            </button>
-          ))}
-        </div>
-      </div>
+      <SectionHead
+        title="New highs & lows"
+        sub={`Stocks making new 52-week highs or lows, by ${modeLabel.toLowerCase()}. Where the highs cluster is where money is going.`}
+        right={<Segmented<1 | 4> size="xs" value={win} onChange={setWin} options={[{ value: 1, label: "last week" }, { value: 4, label: "last 4 weeks" }]} />}
+      />
 
       <div className="mb-3 grid grid-cols-[auto_1fr] items-end gap-4">
         <div className="space-y-1">
           <button onClick={() => onOpen(`New 52-week highs (${win === 1 ? "last week" : "last 4 weeks"})`, sortTicks(stocks.filter((r) => groups.some((g) => g.highs.includes(r)))))} className="block text-left">
-            <div className="text-[10px] uppercase tracking-wide text-muted-foreground">New highs</div>
+            <div className="text-[11px] text-muted-foreground">New highs</div>
             <div className="font-mono text-xl font-semibold" style={{ color: HI }}>{totHi}</div>
           </button>
           <button onClick={() => onOpen(`New 52-week lows (${win === 1 ? "last week" : "last 4 weeks"})`, stocks.filter((r) => groups.some((g) => g.lows.includes(r))))} className="block text-left">
-            <div className="text-[10px] uppercase tracking-wide text-muted-foreground">New lows</div>
+            <div className="text-[11px] text-muted-foreground">New lows</div>
             <div className="font-mono text-xl font-semibold" style={{ color: LO }}>{totLo}</div>
           </button>
         </div>

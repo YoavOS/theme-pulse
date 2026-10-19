@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { BottomLine, HowItWorks } from "@/components/Explainer";
+import { BottomLine, HowItWorks, SectionHead } from "@/components/Explainer";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useStockStages } from "@/hooks/useStockStages";
 import { useStockBases } from "@/hooks/useStockBases";
@@ -120,7 +120,7 @@ function VerdictBadge({ verdict, score, label, tone }: { verdict: string; score:
   return (
     <div className={`inline-flex flex-col items-center justify-center rounded-xl border-2 px-6 py-4 ${verdictClasses(tone ?? verdict)}`}>
       <div className="text-4xl font-extrabold tracking-tight tabular-nums">{score}</div>
-      {label && <div className="mt-0.5 text-[10px] uppercase tracking-widest text-muted-foreground">{label}</div>}
+      {label && <div className="mt-0.5 text-[10px] text-muted-foreground">{label}</div>}
       <div className="mt-2 text-2xl font-extrabold tracking-widest">{verdict}</div>
     </div>
   );
@@ -154,8 +154,8 @@ function StockHeader({ multi, header, fromCache, loading, onRefresh }: {
     <Card className="p-5">
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div className="min-w-0">
-          <div className="text-xs uppercase tracking-widest text-muted-foreground">{header.sector || "—"}</div>
-          <h2 className="mt-0.5 text-3xl font-extrabold tracking-tight">
+          <div className="text-xs text-muted-foreground">{header.sector || "—"}</div>
+          <h2 className="mt-0.5 font-display text-3xl font-bold tracking-tight">
             {header.symbol} <span className="text-base font-medium text-muted-foreground">· {header.companyName}</span>
           </h2>
           {fromCache && (
@@ -168,8 +168,8 @@ function StockHeader({ multi, header, fromCache, loading, onRefresh }: {
           {pills.map((p) => (
             <div key={p.label} className={`rounded-lg border-2 px-3 py-1.5 text-center ${verdictClasses(p.tone)}`}>
               <div className="text-2xl font-extrabold tabular-nums leading-none">{p.score}</div>
-              <div className="mt-0.5 text-[10px] uppercase tracking-wider text-muted-foreground">{p.label}</div>
-              <div className="text-[11px] font-bold uppercase tracking-wider">{p.verdict}</div>
+              <div className="mt-0.5 text-[10px] text-muted-foreground">{p.label}</div>
+              <div className="text-[11px] font-bold">{p.verdict}</div>
             </div>
           ))}
         </div>
@@ -177,7 +177,7 @@ function StockHeader({ multi, header, fromCache, loading, onRefresh }: {
       <div className="mt-4 grid grid-cols-2 gap-x-4 gap-y-2 border-t border-border pt-3 sm:grid-cols-4 lg:grid-cols-8">
         {stats.map(([k, v, cls]) => (
           <div key={k}>
-            <div className="text-[10px] uppercase tracking-wide text-muted-foreground">{k}</div>
+            <div className="text-[10px] text-muted-foreground">{k}</div>
             <div className={`font-mono text-sm font-semibold ${cls ?? ""}`}>{v}</div>
           </div>
         ))}
@@ -208,7 +208,7 @@ function ProfileReportCard({ report }: { report: ProfileReport }) {
     <Card className="p-5 space-y-4">
       <div className="flex flex-col items-start gap-4 md:flex-row md:items-center md:justify-between">
         <div className="min-w-0 flex-1">
-          <div className="text-xs uppercase tracking-widest text-muted-foreground">{report.profileLabel}</div>
+          <div className="text-xs text-muted-foreground">{report.profileLabel}</div>
           <p className="mt-2 text-sm text-foreground/90">{report.headline}</p>
           {report.subScores && report.subScores.length > 0 && (
             <div className="mt-3 flex flex-wrap gap-2">
@@ -219,7 +219,7 @@ function ProfileReportCard({ report }: { report: ProfileReport }) {
                   : "text-loss-medium border-loss-medium/40 bg-loss-medium/10";
                 return (
                   <div key={i} className={`inline-flex items-center gap-2 rounded-md border px-2 py-1 text-[11px] ${color}`}>
-                    <span className="uppercase tracking-wider opacity-80">{s.label}</span>
+                    <span className="opacity-80">{s.label}</span>
                     <span className="font-mono font-bold tabular-nums">{s.score}/{s.max}</span>
                   </div>
                 );
@@ -251,7 +251,7 @@ function ProfileReportCard({ report }: { report: ProfileReport }) {
 
       <div className="grid gap-3 md:grid-cols-2">
         <div className="rounded-md border border-gain-medium/30 bg-gain-medium/5 p-3">
-          <h4 className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-gain-medium">
+          <h4 className="mb-2 flex items-center gap-2 text-xs font-bold text-gain-medium">
             <CheckCircle2 size={14} /> Bull Case
           </h4>
           <ul className="space-y-1 text-xs">
@@ -261,7 +261,7 @@ function ProfileReportCard({ report }: { report: ProfileReport }) {
           </ul>
         </div>
         <div className="rounded-md border border-loss-medium/30 bg-loss-medium/5 p-3">
-          <h4 className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-loss-medium">
+          <h4 className="mb-2 flex items-center gap-2 text-xs font-bold text-loss-medium">
             <XCircle size={14} /> Bear Case
           </h4>
           <ul className="space-y-1 text-xs">
@@ -273,7 +273,7 @@ function ProfileReportCard({ report }: { report: ProfileReport }) {
       </div>
 
       <div className="rounded-md bg-muted/30 p-3 text-sm">
-        <span className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Final Verdict · </span>
+        <span className="text-xs font-bold text-muted-foreground">Final Verdict · </span>
         <span>{report.finalVerdict}</span>
       </div>
     </Card>
@@ -391,7 +391,7 @@ export default function MinerviniChecker() {
                 onChange={(e) => setSymbol(e.target.value.toUpperCase())}
                 onKeyDown={(e) => e.key === "Enter" && !loading && runAnalysis()}
                 placeholder="Enter ticker (e.g. NVDA, AAPL, CRWD)"
-                className="pl-9 text-base font-semibold tracking-wider uppercase"
+                className="pl-9 text-base font-semibold"
                 disabled={loading}
                 autoFocus
               />
@@ -535,27 +535,26 @@ function SepaCard(props: {
   const pivot = b ? (b.pivot ?? b.features.pivot) : null, stop = b ? (b.support ?? b.features.support) : null;
   return (
     <Card className="p-5">
-      <div className="mb-3 flex flex-wrap items-center gap-3">
-        <div>
-          <div className="text-xs uppercase tracking-widest text-muted-foreground">SEPA alignment · trend, fundamentals, setup, group, market</div>
-          <div className={`mt-1 text-2xl font-extrabold ${verdict === "Aligned" ? "text-gain-medium" : verdict === "Partly aligned" || verdict === "Not enough data" ? "text-[hsl(40,90%,60%)]" : "text-loss-medium"}`}>
-            {verdict} <span className="text-sm font-medium text-muted-foreground">· {passes}/{known.length} pillars pass</span>
-          </div>
-        </div>
-        {pivot !== null && stop !== null && stop < pivot && (
-          <div className="ml-auto rounded-md border border-border bg-muted/20 px-3 py-1.5 text-xs">
+      <SectionHead
+        title="SEPA alignment"
+        sub="Minervini buys a leader only when trend, fundamentals, setup, group and market all line up."
+        right={pivot !== null && stop !== null && stop < pivot ? (
+          <div className="rounded-md border border-border bg-muted/20 px-3 py-1.5 text-xs">
             Buy point <b className="font-mono">{pivot.toFixed(2)}</b> · stop <b className="font-mono">{stop.toFixed(2)}</b> · risk {(((pivot - stop) / pivot) * 100).toFixed(1)}%
           </div>
-        )}
+        ) : undefined}
+      />
+      <div className={`mb-3 font-display text-2xl font-bold tracking-tight ${verdict === "Aligned" ? "text-gain-medium" : verdict === "Partly aligned" || verdict === "Not enough data" ? "text-[hsl(40,90%,60%)]" : "text-loss-medium"}`}>
+        {verdict} <span className="font-sans text-sm font-medium text-muted-foreground">{passes} of {known.length} checked pillars pass</span>
       </div>
-      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-5">
         {pillars.map((p) => (
-          <div key={p.key} className={`rounded-md border p-3 ${MARK_CLS[p.mark]}`}>
-            <div className="flex items-center justify-between gap-2 text-sm font-semibold">
-              <span>{MARK_ICON[p.mark]} {p.label}</span>
-              <span className="font-mono text-xs">{p.value}</span>
+          <div key={p.key} className={`rounded-md border px-3 py-2.5 ${MARK_CLS[p.mark]}`} title={p.detail}>
+            <div className="flex items-center justify-between gap-2 text-[13px] font-semibold">
+              <span className="truncate">{MARK_ICON[p.mark]} {p.label}</span>
             </div>
-            <p className="mt-1 text-[11px] leading-relaxed text-foreground/75">{p.detail}</p>
+            <div className="mt-0.5 truncate font-mono text-[11px] opacity-90">{p.value}</div>
+            <p className="mt-1 line-clamp-2 text-[11px] leading-snug text-foreground/70">{p.detail}</p>
           </div>
         ))}
       </div>
@@ -580,11 +579,11 @@ function QuarterTable({ s }: { s: Series }) {
     now === null || prev === null || prev === undefined ? null : now - prev >= 5 ? <span className="ml-0.5 text-gain-medium">▲</span> : prev - now >= 5 ? <span className="ml-0.5 text-loss-medium">▼</span> : null;
   return (
     <Card className="p-5">
-      <div className="mb-2 flex flex-wrap items-center gap-2">
-        <h3 className="text-sm font-semibold">Quarter by quarter</h3>
-        <span className="text-[11px] text-muted-foreground">· newest first · growth vs the same quarter a year earlier · <span className="text-gain-medium">green</span> = 25%+ · ▲▼ = faster / slower than the quarter before</span>
-        {s.code33 && <span className="ml-auto text-[11px]">Code 33: EPS {s.code33.eps ? "✓" : "✗"} · sales {s.code33.sales ? "✓" : "✗"} · margin {s.code33.margin ? "✓" : "✗"}</span>}
-      </div>
+      <SectionHead
+        title="Quarter by quarter"
+        sub={<>Growth vs the same quarter a year earlier, newest first. <span className="text-gain-medium">Green</span> is 25% or more; ▲▼ means faster or slower than the quarter before.</>}
+        right={s.code33 ? <span className="rounded border border-border px-2 py-1 text-[11px]">Code 33: EPS {s.code33.eps ? "✓" : "✗"} · sales {s.code33.sales ? "✓" : "✗"} · margin {s.code33.margin ? "✓" : "✗"}</span> : undefined}
+      />
       <GrowthBars q={q} />
       <div className="overflow-x-auto">
         <table className="w-full border-collapse text-xs">
@@ -742,7 +741,7 @@ function ExtrasCard({ s }: { s: Series }) {
   return (
     <div className="grid gap-4 lg:grid-cols-3">
       <Card className="p-4 text-xs">
-        <h3 className="mb-2 text-sm font-semibold">Analyst estimates</h3>
+        <h3 className="mb-2 font-display text-[15px] font-semibold tracking-tight">Analyst estimates</h3>
         {rv ? (
           <table className="w-full">
             <thead><tr className="text-[10.5px] text-muted-foreground"><th className="text-left font-medium">Period</th><th className="text-right font-medium">EPS est.</th><th className="text-right font-medium">30d</th><th className="text-right font-medium">90d</th><th className="text-right font-medium">Up/down 30d</th></tr></thead>
@@ -763,14 +762,14 @@ function ExtrasCard({ s }: { s: Series }) {
         <p className="mt-1 text-[10.5px] text-muted-foreground">Rising estimates confirm the growth is lasting; ratings themselves carry little signal.</p>
       </Card>
       <Card className="p-4 text-xs">
-        <h3 className="mb-2 text-sm font-semibold">Earnings track</h3>
+        <h3 className="mb-2 font-display text-[15px] font-semibold tracking-tight">Earnings track</h3>
         <div>EPS surprises: <span className="font-mono">{s.surprises.length ? s.surprises.slice(0, 6).map((x) => `${x >= 0 ? "+" : ""}${x.toFixed(0)}%`).join(" ") : "—"}</span></div>
         <div className="mt-1">Revenue surprises: <span className="font-mono">{s.revSurprises?.length ? s.revSurprises.slice(0, 6).map((x) => `${x >= 0 ? "+" : ""}${x.toFixed(1)}%`).join(" ") : "—"}</span></div>
         <div className="mt-1">Next report: <b>{s.nextEarnings ?? "—"}</b></div>
         <p className="mt-2 text-[10.5px] text-muted-foreground">Beats on both EPS and sales have been the more durable kind. Holding through a report is a sizing decision: a gap can jump past your stop.</p>
       </Card>
       <Card className="p-4 text-xs">
-        <h3 className="mb-2 text-sm font-semibold">Float &amp; short interest</h3>
+        <h3 className="mb-2 font-display text-[15px] font-semibold tracking-tight">Float &amp; short interest</h3>
         {si && (si.floatShares !== null || si.shortPctFloat !== null) ? (
           <>
             <div>Float: <b className="font-mono">{big(si.floatShares)}</b> shares</div>
@@ -790,7 +789,7 @@ function ScoreBuild({ s }: { s: Series }) {
   if (!s.scoreParts?.length) return null;
   return (
     <div className="text-xs">
-      <h3 className="mb-2 text-sm font-semibold">How the score is built <span className="font-normal text-muted-foreground">· only parts with data count · data coverage {s.scoreCoveragePct ?? "—"}%</span></h3>
+      <h3 className="mb-2 font-display text-[15px] font-semibold tracking-tight">How the score is built <span className="font-normal text-muted-foreground">· only parts with data count · data coverage {s.scoreCoveragePct ?? "—"}%</span></h3>
       <div className="grid gap-x-6 gap-y-1 sm:grid-cols-2 lg:grid-cols-3">
         {s.scoreParts.map((p) => (
           <div key={p.label} className="grid grid-cols-[1fr_80px_40px] items-center gap-2">
@@ -878,12 +877,12 @@ function ProfileCards({ p }: { p: Profiles }) {
           <Card key={h.key} className="flex flex-col p-4">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <div className="text-[11px] uppercase tracking-widest text-muted-foreground">{h.label} · {h.horizon}</div>
+                <div className="text-[11px] text-muted-foreground">{h.label} · {h.horizon}</div>
                 <div className="mt-0.5 text-sm font-semibold">{h.question}</div>
               </div>
               <div className={`shrink-0 rounded-lg border px-3 py-1.5 text-center ${VERDICT_CLS[h.verdict]}`}>
                 <div className="text-2xl font-extrabold tabular-nums leading-none">{h.score ?? "—"}</div>
-                <div className="mt-0.5 text-[10px] font-semibold uppercase tracking-wider">{h.verdict}</div>
+                <div className="mt-0.5 text-[10px] font-semibold">{h.verdict}</div>
               </div>
             </div>
             <div className="mt-3 space-y-1 text-xs">
@@ -915,12 +914,12 @@ function ProfileCards({ p }: { p: Profiles }) {
         <Card className="flex flex-col p-4">
           <div className="flex items-start justify-between gap-3">
             <div>
-              <div className="text-[11px] uppercase tracking-widest text-muted-foreground">Red flags · tested warning signs</div>
+              <div className="text-[11px] text-muted-foreground">Red flags · tested warning signs</div>
               <div className="mt-0.5 text-sm font-semibold">What tends to go wrong?</div>
             </div>
             <div className={`shrink-0 rounded-lg border px-3 py-1.5 text-center ${flags.length === 0 ? VERDICT_CLS.Strong : flags.length >= 3 ? VERDICT_CLS.Weak : VERDICT_CLS.Mixed}`}>
               <div className="text-2xl font-extrabold tabular-nums leading-none">{flags.length}</div>
-              <div className="mt-0.5 text-[10px] font-semibold uppercase tracking-wider">{flags.length === 1 ? "flag" : "flags"}</div>
+              <div className="mt-0.5 text-[10px] font-semibold">{flags.length === 1 ? "flag" : "flags"}</div>
             </div>
           </div>
           <div className="mt-3 space-y-2 text-xs">
@@ -966,7 +965,7 @@ function HistoryCard({ h }: { h: History }) {
   return (
     <Card className="p-5">
       <div className="mb-2 flex flex-wrap items-center gap-2">
-        <h3 className="text-sm font-semibold">Long history</h3>
+        <h3 className="font-display text-[15px] font-semibold tracking-tight">Long history</h3>
         <span className="text-[11px] text-muted-foreground">· from {h.source}</span>
         <div className="ml-auto inline-flex rounded-md border border-border bg-muted/20 p-0.5">
           {(["quarters", "years"] as const).map((v) => (
