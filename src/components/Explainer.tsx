@@ -45,6 +45,26 @@ export function HowItWorks({ title = "How this works & the evidence", children, 
   );
 }
 
+/** Sticky row of jump links for long pages (each target needs a matching id and scroll-mt). */
+export function SectionNav({ items }: { items: { id: string; label: string }[] }) {
+  return (
+    <nav className="sticky top-0 z-20 -mx-4 border-b border-border/60 bg-background/85 px-4 py-1.5 backdrop-blur-md">
+      <div className="flex gap-1 overflow-x-auto">
+        {items.map((it) => (
+          <a
+            key={it.id}
+            href={`#${it.id}`}
+            onClick={(e) => { e.preventDefault(); document.getElementById(it.id)?.scrollIntoView({ behavior: "smooth", block: "start" }); }}
+            className="whitespace-nowrap rounded-full px-2.5 py-1 text-[11px] text-muted-foreground transition hover:bg-accent hover:text-foreground"
+          >
+            {it.label}
+          </a>
+        ))}
+      </div>
+    </nav>
+  );
+}
+
 /** A section that can be folded away (e.g. long tables most people don't need every time). */
 export function Fold({ title, hint, defaultOpen = false, children }: { title: ReactNode; hint?: ReactNode; defaultOpen?: boolean; children: ReactNode }) {
   const [open, setOpen] = useState(defaultOpen);

@@ -58,6 +58,7 @@ export default {
         },
         loss: {
           mild: "hsl(var(--loss-mild))",
+          medium: "hsl(var(--loss-medium))",
           strong: "hsl(var(--loss-strong))",
         },
         bar: {

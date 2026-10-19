@@ -45,6 +45,7 @@
     --gain-medium: 152 60% 42%;
     --gain-mild: 152 50% 55%;
     --loss-mild: 0 70% 55%;
+    --loss-medium: 0 70% 50%;
     --loss-strong: 0 72% 45%;
 
     --surface-elevated: 0 0% 100%;
@@ -102,6 +103,7 @@
     --gain-medium: 152 76% 41%;
     --gain-mild: 120 60% 75%;
     --loss-mild: 348 83% 60%;
+    --loss-medium: 350 78% 58%;
     --loss-strong: 0 66% 50%;
 
     --surface-elevated: 222 18% 15%;

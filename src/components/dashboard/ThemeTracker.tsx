@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Loader2, RefreshCw } from "lucide-react";
 import type { ThemeData, Ticker } from "@/data/themeData";
+import TrendView from "@/components/dashboard/TrackerTrendView";
 import type { PerfCache } from "@/hooks/useFullScan";
 import { useStockStages } from "@/hooks/useStockStages";
 import { GROUP_MODE_LABEL, groupKeyForIndustry, type GroupMode } from "@/lib/groupColors";
@@ -13,7 +14,7 @@ import { GROUP_MODE_LABEL, groupKeyForIndustry, type GroupMode } from "@/lib/gro
  *  • YTD: weekly closes from the Stage scan (true year-to-date, not the scan's 6-month field).
  */
 
-export type TrackerTf = "open" | "1D" | "1W" | "1M" | "3M" | "YTD";
+export type TrackerTf = "open" | "1D" | "1W" | "1M" | "3M" | "YTD" | "trend";
 const TFS: { key: TrackerTf; label: string; tip: string }[] = [
   { key: "open", label: "Since Open", tip: "Change from today's opening price (live) — where money flows during the session, separate from the overnight gap." },
   { key: "1D", label: "Today", tip: "Change from yesterday's close, as of the last Full Scan." },
@@ -21,6 +22,7 @@ const TFS: { key: TrackerTf; label: string; tip: string }[] = [
   { key: "1M", label: "1M", tip: "1-month change, as of the last Full Scan." },
   { key: "3M", label: "3M", tip: "3-month change, as of the last Full Scan." },
   { key: "YTD", label: "YTD", tip: "Change since the last close of the previous year (weekly closes from the Stage scan)." },
+  { key: "trend", label: "1W · 1M · 3M", tip: "All three timeframes side by side — who has led consistently, who is newly leading, who is losing steam." },
 ];
 const TF_KEY = "theme_tracker_tf_v1";
 const SHOW_KEY = "theme_tracker_show_v1";
@@ -221,6 +223,30 @@ export default function ThemeTracker({
 
   const fmt = (x: number) => `${x > 0 ? "+" : ""}${x.toFixed(2)}%`;
 
+  const tfSwitch = (
+    <div className="inline-flex rounded-md border border-border bg-muted/20 p-0.5">
+      {TFS.map((t) => (
+        <button
+          key={t.key}
+          title={t.tip}
+          onClick={() => setTf(t.key)}
+          className={`rounded px-2.5 py-1 text-[11px] font-medium ${tf === t.key ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}
+        >
+          {t.label}
+        </button>
+      ))}
+    </div>
+  );
+
+  if (tf === "trend") {
+    return (
+      <TrendView
+        groups={groups} perf={perf} title={`${GROUP_MODE_LABEL[groupMode]} Tracker`} status={status}
+        switcher={tfSwitch} onOpen={onOpen} universe={groupMode !== "theme"}
+      />
+    );
+  }
+
   return (
     <div className="rounded-xl border border-border bg-card px-4 py-3.5">
       <div className="mb-2 flex flex-wrap items-center gap-2.5">
@@ -237,18 +263,7 @@ export default function ThemeTracker({
               {showAll ? `Top & bottom 15` : `Show all ${rows.length}`}
             </button>
           )}
-          <div className="inline-flex rounded-md border border-border bg-muted/20 p-0.5">
-            {TFS.map((t) => (
-              <button
-                key={t.key}
-                title={t.tip}
-                onClick={() => setTf(t.key)}
-                className={`rounded px-2.5 py-1 text-[11px] font-medium ${tf === t.key ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}
-              >
-                {t.label}
-              </button>
-            ))}
-          </div>
+          {tfSwitch}
         </div>
       </div>
 

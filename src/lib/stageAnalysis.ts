@@ -29,6 +29,19 @@ export interface StageFeatures {
   /** Minervini Trend Template — 7 price rules on weekly proxies (the RS ≥ 70 rule is applied in the app) */
   tt?: { pass: boolean; count: number; failed: string[] } | null;
   wc?: number[];
+  /** daily snapshot for the screens (stage-scan, from ~6 months of daily bars) */
+  dly?: DailySnap | null;
+  /** earnings growth snapshot (Yahoo quarterly EPS / revenue, refreshed weekly) */
+  ern?: EarnGrowth | null;
+}
+
+export interface DailySnap {
+  date: string; close: number; ema21Pct: number; sma50Pct: number | null; adrPct: number;
+  range10Pct: number; tight: number; lodAdr: number; r21Pct: number | null; vol5x50: number | null; ud?: string;
+}
+export interface EarnGrowth {
+  at: string; qEnd: string | null; eps: (number | null)[]; rev: (number | null)[];
+  epsYoY: number | null; fyEps: number | null; revYoY: number | null; revQoQ: number | null; revQoQPrev: number | null; accel: boolean;
 }
 
 export interface StockStage {

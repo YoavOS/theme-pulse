@@ -11,6 +11,7 @@ import { groupKeyForIndustry } from "@/lib/groupColors";
 import { StageBadge } from "@/components/stages/StageStockTable";
 import TrackRecord from "@/components/stages/TrackRecord";
 import WeeklyChart from "@/components/stages/WeeklyChart";
+import ScreensView from "@/components/bases/ScreensView";
 import { BottomLine, HowItWorks } from "@/components/Explainer";
 import { downloadTradingViewList, isStageScanRunning, regimeSeries, runStageScan } from "@/lib/stageAnalysis";
 import {
@@ -85,6 +86,9 @@ export default function BaseScanner() {
   const [wide, setWide] = useState<boolean>(() => { try { return localStorage.getItem("bases_wide_v1") === "1"; } catch { return false; } });
   useEffect(() => { try { localStorage.setItem("bases_wide_v1", wide ? "1" : "0"); } catch { /* ignore */ } }, [wide]);
   const [scan, setScan] = useState<{ done: number; total: number } | null>(isStageScanRunning() ? { done: 0, total: 0 } : null);
+  const [mode, setMode] = useState<"bases" | "screens">(() => { try { return localStorage.getItem("bases_mode_v1") === "screens" ? "screens" : "bases"; } catch { return "bases"; } });
+  useEffect(() => { try { localStorage.setItem("bases_mode_v1", mode); } catch { /* ignore */ } }, [mode]);
+  const baseBy = useMemo(() => new Map(rows.map((r) => [r.symbol, r])), [rows]);
 
   useEffect(() => { loadUni(); }, [loadUni]);
   useEffect(() => { try { localStorage.setItem(PRESET_KEY, preset); } catch { /* ignore */ } }, [preset]);
@@ -193,7 +197,14 @@ export default function BaseScanner() {
             <ArrowLeft size={14} />
           </Link>
           <Boxes size={16} className="text-primary" />
-          <h1 className="text-sm font-semibold tracking-wide">Base Scanner</h1>
+          <h1 className="text-sm font-semibold tracking-wide">Bases &amp; Screens</h1>
+          <div className="inline-flex rounded-md border border-border bg-muted/20 p-0.5">
+            {(["bases", "screens"] as const).map((m) => (
+              <button key={m} onClick={() => setMode(m)} className={`rounded px-3 py-1 text-[11px] font-medium capitalize ${mode === m ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}>
+                {m === "bases" ? "Base scanner" : "Screens"}
+              </button>
+            ))}
+          </div>
           <Tooltip>
             <TooltipTrigger asChild><Info size={13} className="text-muted-foreground" /></TooltipTrigger>
             <TooltipContent className="max-w-sm text-xs leading-relaxed">
@@ -205,11 +216,11 @@ export default function BaseScanner() {
           </Tooltip>
           {asOf && <span className="font-mono text-[11px] text-muted-foreground">week ending {new Date(asOf + "T12:00:00Z").toLocaleDateString("en-US", { month: "short", day: "numeric" })}</span>}
           <div className="ml-auto flex items-center gap-2">
-            <div className="inline-flex rounded-md border border-border bg-muted/20 p-0.5" title="Strict = the research's strict columns: RS ≥ 90, within 15% of the 52-week high, range position ≥ 0.85, ≤ 5% below the pivot, stop ≤ 8%, volume dry-up ≤ 0.8">
+            {mode === "bases" && <div className="inline-flex rounded-md border border-border bg-muted/20 p-0.5" title="Strict = the research's strict columns: RS ≥ 90, within 15% of the 52-week high, range position ≥ 0.85, ≤ 5% below the pivot, stop ≤ 8%, volume dry-up ≤ 0.8">
               {(["balanced", "strict"] as const).map((p) => (
                 <button key={p} onClick={() => setPreset(p)} className={`rounded px-2.5 py-1 text-[11px] font-medium capitalize ${preset === p ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}>{p}</button>
               ))}
-            </div>
+            </div>}
             <button
               onClick={startScan}
               disabled={!!scan}
@@ -223,6 +234,15 @@ export default function BaseScanner() {
         </div>
       </header>
 
+      {mode === "screens" ? (
+        <main className="mx-auto max-w-7xl px-4 py-4">
+          {stageRows.length ? (
+            <ScreensView stageRows={stageRows} baseBy={baseBy} nameOf={nameOf} groupOf={groupOf} />
+          ) : (
+            <div className="rounded-lg border border-border bg-card p-8 text-center text-sm text-muted-foreground">No stage data yet — press <b>Scan</b>.</div>
+          )}
+        </main>
+      ) : (
       <main className="mx-auto max-w-7xl space-y-3 px-4 py-4">
         {error && !rows.length && (
           <div className="rounded-lg border border-border bg-card p-6 text-center text-sm text-muted-foreground">
@@ -424,6 +444,7 @@ export default function BaseScanner() {
           </>
         )}
       </main>
+      )}
     </div>
   );
 }
