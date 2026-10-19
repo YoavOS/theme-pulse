@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { SectionHead, Segmented } from "@/components/Explainer";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { LEAD_INFO, leadershipForGroups, type GroupLead, type LeadState } from "@/lib/leadership";
 import { HowItWorks } from "@/components/Explainer";
@@ -25,13 +26,14 @@ export default function LeadershipPanel({ groups, spy, asOf, modeLabel, minMembe
   groups: { name: string; members: StockStage[] }[]; spy: StockStage | null; asOf: string | null; modeLabel: string; minMembers: number;
 }) {
   const [show, setShow] = useState<"leaders" | "all">("leaders");
+  const [all, setAll] = useState(false);
   const leads = useMemo(() => leadershipForGroups(groups, spy, asOf, minMembers), [groups, spy, asOf, minMembers]);
 
   if (!leads.length) {
     return (
       <section className="rounded-lg border border-border bg-card p-4">
-        <h2 className="text-sm font-semibold">Group leadership</h2>
-        <p className="mt-1 text-xs text-muted-foreground">Needs weekly price history per stock — press Scan Stages (or run a Full Scan) to fill it in.</p>
+        <SectionHead title="Group leadership" className="mb-1" />
+        <p className="text-xs text-muted-foreground">Needs weekly price history per stock — press Scan Stages (or run a Full Scan) to fill it in.</p>
       </section>
     );
   }
@@ -41,16 +43,12 @@ export default function LeadershipPanel({ groups, spy, asOf, modeLabel, minMembe
 
   return (
     <section className="overflow-hidden rounded-lg border border-border bg-card">
-      <div className="flex flex-wrap items-center gap-2 border-b border-border px-4 py-3">
-        <h2 className="text-sm font-semibold">Group leadership</h2>
-        <span className="text-[11px] text-muted-foreground">· {modeLabel} · equal-weight, vs SPY · change the grouping below</span>
-        <div className="ml-auto inline-flex rounded-md border border-border bg-muted/20 p-0.5">
-          {(["leaders", "all"] as const).map((x) => (
-            <button key={x} onClick={() => setShow(x)} className={`rounded px-2 py-0.5 text-[11px] ${show === x ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}>
-              {x === "leaders" ? "Leadership signals" : `All ${leads.length}`}
-            </button>
-          ))}
-        </div>
+      <div className="border-b border-border px-4 pb-0.5 pt-4">
+        <SectionHead
+          title="Group leadership"
+          sub={`Which ${modeLabel.toLowerCase()} groups are beating SPY (equal-weight returns) and where each is in its leadership cycle. Change the grouping in "By group" below.`}
+          right={<Segmented<"leaders" | "all"> size="xs" value={show} onChange={setShow} options={[{ value: "leaders" as const, label: "Leadership signals" }, { value: "all" as const, label: `All ${leads.length}` }]} />}
+        />
       </div>
       <div className="flex flex-wrap gap-1.5 px-4 pt-3">
         {(Object.keys(LEAD_INFO) as LeadState[]).filter((s) => counts.get(s)).map((s) => (
@@ -79,7 +77,7 @@ export default function LeadershipPanel({ groups, spy, asOf, modeLabel, minMembe
               </tr>
             </thead>
             <tbody>
-              {rows.map((g) => (
+              {(all ? rows : rows.slice(0, 12)).map((g) => (
                 <tr key={g.name} className="border-b border-border/30">
                   <td className="max-w-[220px] truncate px-2 py-1" title={g.name}>{g.name} <span className="text-[10px] text-muted-foreground">{g.n}</span></td>
                   <td className="px-2 py-1">
@@ -104,6 +102,11 @@ export default function LeadershipPanel({ groups, spy, asOf, modeLabel, minMembe
               ))}
             </tbody>
           </table>
+          {rows.length > 12 && (
+            <button onClick={() => setAll((v) => !v)} className="w-full border-t border-border px-4 py-2 text-left text-[11.5px] text-primary hover:bg-accent/30">
+              {all ? "Show the first 12 only" : `Show all ${rows.length}`}
+            </button>
+          )}
         </div>
       )}
       <div className="border-t border-border px-4 py-2">

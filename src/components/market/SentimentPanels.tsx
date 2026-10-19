@@ -62,10 +62,12 @@ export function useMarketSentiment(refreshKey: number) {
 function Card({ title, sub, evidence, children }: { title: string; sub: string; evidence: "strong" | "moderate" | "weak"; children: React.ReactNode }) {
   return (
     <section className="flex flex-col rounded-lg border border-border bg-card p-4">
-      <div className="mb-2 flex items-center gap-2">
-        <h3 className="text-sm font-semibold">{title}</h3>
-        <span className="truncate text-[11px] text-muted-foreground">· {sub}</span>
-        <span className={`ml-auto shrink-0 rounded px-1.5 py-[1px] text-[10px] ${STRENGTH_STYLE[evidence]}`} title="How strong the evidence is that this predicts returns">{evidence} evidence</span>
+      <div className="mb-2 flex items-start gap-2">
+        <div className="min-w-0 flex-1">
+          <h3 className="font-display text-[15px] font-semibold leading-tight tracking-tight">{title}</h3>
+          <p className="mt-0.5 truncate text-[11px] text-muted-foreground">{sub}</p>
+        </div>
+        <span className={`shrink-0 rounded px-1.5 py-[1px] text-[10px] ${STRENGTH_STYLE[evidence]}`} title="How strong the evidence is that this predicts returns">{evidence} evidence</span>
       </div>
       {children}
     </section>

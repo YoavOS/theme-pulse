@@ -5,7 +5,7 @@ import { ArrowLeft, RefreshCw, Flag, Loader2, Info, Sparkles, BookOpen, Calendar
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { BottomLine, Fold, HowItWorks } from "@/components/Explainer";
+import { BottomLine, Fold, HowItWorks, SectionHead } from "@/components/Explainer";
 import { AaiiCard, CotCard, McClellanCard, useMarketSentiment } from "@/components/market/SentimentPanels";
 import { useStockStages } from "@/hooks/useStockStages";
 import {
@@ -173,7 +173,7 @@ export default function MarketFlag() {
             <section className="rounded-xl border p-5" style={{ borderColor: tone.bar, background: tone.bg }}>
               <div className="flex flex-wrap items-start gap-4">
                 <div className="min-w-[240px] flex-1">
-                  <div className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground">Market type</div>
+                  <div className="text-[11px] tracking-[0.2em] text-muted-foreground">Market type</div>
                   <div className="mt-1 text-3xl font-black tracking-tight" style={{ color: tone.text }}>{info.name}</div>
                   <p className="mt-2 max-w-2xl text-sm leading-relaxed text-foreground/85">{info.blurb}</p>
                 </div>
@@ -190,7 +190,7 @@ export default function MarketFlag() {
 
             {data.summary && (
               <section className="rounded-lg border border-border bg-card p-4">
-                <div className="flex items-center gap-1.5 text-[11px] uppercase tracking-wide text-muted-foreground">
+                <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
                   <Sparkles size={12} className="text-[hsl(40,90%,55%)]" /> AI read
                 </div>
                 <p className="mt-2 whitespace-pre-line text-sm leading-relaxed">{data.summary}</p>
@@ -199,11 +199,11 @@ export default function MarketFlag() {
 
             {/* Playbook */}
             <section className="rounded-lg border border-border bg-card p-4">
-              <div className="mb-3 flex items-center gap-2">
-                <BookOpen size={14} className="text-[hsl(40,90%,55%)]" />
-                <h2 className="text-sm font-semibold">Playbook for this market</h2>
-                <span className="text-[11px] text-muted-foreground">· each tip shows how strong the evidence behind it is</span>
-              </div>
+              <SectionHead
+                icon={<BookOpen size={15} className="text-[hsl(40,90%,55%)]" />}
+                title="Playbook for this market"
+                sub="What tends to work in this kind of market. Each tip is tagged with how strong the evidence behind it is."
+              />
               <div className="grid gap-2.5 md:grid-cols-2">
                 {[...extra, ...PLAYBOOK[typeKey].tips].map((t, k) => <TipCard key={k} t={t} highlight={k < extra.length} />)}
               </div>
@@ -216,10 +216,10 @@ export default function MarketFlag() {
             <div className="grid gap-4 md:grid-cols-2">
               {/* Sizing */}
               <section className="rounded-lg border border-border bg-card p-4">
-                <div className="mb-2 flex items-center gap-2"><Scale size={14} className="text-sky-300" /><h2 className="text-sm font-semibold">Position sizing</h2></div>
+                <SectionHead className="mb-2" icon={<Scale size={15} className="text-sky-300" />} title="Position sizing" />
                 {exposure !== null ? (
                   <>
-                    <div className="text-3xl font-black" style={{ color: exposure >= 90 ? TONE.go.text : exposure >= 60 ? TONE.caution.text : TONE.stop.text }}>{exposure}%</div>
+                    <div className="font-display text-4xl font-bold tracking-tight" style={{ color: exposure >= 90 ? TONE.go.text : exposure >= 60 ? TONE.caution.text : TONE.stop.text }}>{exposure}%</div>
                     <div className="text-xs text-muted-foreground">of your normal position size</div>
                     <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
                       S&P volatility over the last 20 days is {m.spy.rv20?.toFixed(1)}% a year
@@ -233,7 +233,7 @@ export default function MarketFlag() {
 
               {/* Calendar */}
               <section className="rounded-lg border border-border bg-card p-4">
-                <div className="mb-2 flex items-center gap-2"><CalendarClock size={14} className="text-violet-300" /><h2 className="text-sm font-semibold">Calendar</h2></div>
+                <SectionHead className="mb-2" icon={<CalendarClock size={15} className="text-violet-300" />} title="Calendar" />
                 {fomc ? (
                   <>
                     <div className="text-sm">Next Fed decision: <b>{new Date(fomc.date + "T12:00:00Z").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}</b></div>
@@ -248,18 +248,23 @@ export default function MarketFlag() {
             </div>
 
             {/* Sentiment & positioning */}
-            <div>
-              <div className="mb-2 flex flex-wrap items-baseline gap-2 px-1">
-                <h2 className="text-sm font-semibold">Sentiment &amp; positioning</h2>
-                <span className="text-[11px] text-muted-foreground">· what the crowd feels and how it is positioned — useful at extremes, read contrarian, kept out of the risk score</span>
+            <section>
+              <SectionHead
+                className="px-1"
+                title="Sentiment & positioning"
+                sub="How the crowd feels and how it is positioned. Read it contrarian and only at extremes — it is kept out of the risk score."
+              />
+              <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-2 [&>*]:min-w-0">
+                <div className="flex flex-col gap-4">
+                  <FearGreedCard fng={fng} state={fngState} />
+                  <CotCard data={sentiment.data} state={sentiment.state} />
+                </div>
+                <div className="flex flex-col gap-4">
+                  <AaiiCard data={sentiment.data} state={sentiment.state} />
+                  <McClellanCard rows={stageRows} />
+                </div>
               </div>
-              <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 [&>*]:min-w-0">
-                <FearGreedCard fng={fng} state={fngState} />
-                <AaiiCard data={sentiment.data} state={sentiment.state} />
-                <CotCard data={sentiment.data} state={sentiment.state} />
-                <McClellanCard rows={stageRows} />
-              </div>
-            </div>
+            </section>
 
             {/* History by type */}
             <Fold title="What happened next, by market type" hint={`· S&P 500 since 2003 · now: ${info.name}, median ${sign(HISTORY[typeKey].m3)}% over 3 months, up ${HISTORY[typeKey].up3}% of the time`}>
@@ -328,7 +333,7 @@ export default function MarketFlag() {
                     </div>
                     <div className="mt-1 text-[13px] font-mono leading-snug">{f.value}</div>
                     <div className="mt-1 text-[11px] text-muted-foreground">{f.note}</div>
-                    <div className="mt-1 text-[10px] uppercase tracking-wide text-muted-foreground/70">weight {f.weight}</div>
+                    <div className="mt-1 text-[10px] text-muted-foreground/70">weight {f.weight}</div>
                   </div>
                 ))}
               </div>
@@ -350,7 +355,7 @@ export default function MarketFlag() {
 function Stat({ label, value, hint }: { label: string; value: string; hint?: string }) {
   return (
     <div>
-      <div className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</div>
+      <div className="text-[10px] text-muted-foreground">{label}</div>
       <div className="font-mono text-sm font-semibold">{value}{hint && <span className="ml-1 text-[10px] font-normal text-muted-foreground">{hint}</span>}</div>
     </div>
   );
@@ -368,7 +373,7 @@ function TipCard({ t, highlight }: { t: Tip; highlight: boolean }) {
         </span>
       </div>
       <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{t.text}</p>
-      {highlight && <div className="mt-1 text-[10px] uppercase tracking-wide text-muted-foreground/70">today's conditions</div>}
+      {highlight && <div className="mt-1 text-[10px] text-muted-foreground/70">today's conditions</div>}
     </div>
   );
 }
@@ -376,9 +381,9 @@ function TipCard({ t, highlight }: { t: Tip; highlight: boolean }) {
 function FearGreedCard({ fng, state }: { fng: FearGreed | null; state: "loading" | "ok" | "fail" }) {
   return (
     <section className="rounded-lg border border-border bg-card p-4">
-      <div className="mb-2 flex items-center gap-2">
-        <h2 className="text-sm font-semibold">Fear &amp; Greed</h2>
-        <span className="text-[11px] text-muted-foreground">· CNN, contrarian read</span>
+      <div className="mb-2">
+        <h3 className="font-display text-[15px] font-semibold leading-tight tracking-tight">Fear &amp; Greed</h3>
+        <p className="mt-0.5 text-[11px] text-muted-foreground">CNN's index of seven market gauges, read contrarian</p>
       </div>
       {state === "loading" && <p className="flex items-center gap-1.5 text-xs text-muted-foreground"><Loader2 size={12} className="animate-spin" /> Loading…</p>}
       {state === "fail" && <p className="text-xs text-muted-foreground">CNN's index couldn't be loaded right now (it may be blocked by your browser or network).</p>}

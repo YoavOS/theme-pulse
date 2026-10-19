@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { SectionHead, Segmented } from "@/components/Explainer";
 import { ordinal } from "@/lib/utils";
 import { STAGE_COLORS, stageWeeksAgo, type StockStage } from "@/lib/stageAnalysis";
 
@@ -100,17 +101,11 @@ export default function RotationPanel({ groups, asOf, modeLabel, minMembers, onO
 
   return (
     <section className="rounded-lg border border-border bg-card p-4">
-      <div className="mb-3 flex flex-wrap items-center gap-2">
-        <h2 className="text-sm font-semibold">Stage 2 rotation</h2>
-        <span className="text-[11px] text-muted-foreground">· {modeLabel} groups ranked by the share of their stocks in Stage 2</span>
-        <div className="ml-auto inline-flex rounded-md border border-border bg-muted/20 p-0.5">
-          {WINDOWS.map((w) => (
-            <button key={w} onClick={() => setWin(w)} className={`rounded px-2 py-0.5 text-[10px] ${win === w ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}>
-              vs {w}w ago
-            </button>
-          ))}
-        </div>
-      </div>
+      <SectionHead
+        title="Stage 2 rotation"
+        sub={`${modeLabel} groups whose share of stocks in Stage 2 moved the most. Climbers are where new uptrends are forming.`}
+        right={<Segmented<number> size="xs" value={win} onChange={setWin} options={WINDOWS.map((w) => ({ value: w, label: `vs ${w}w ago` }))} />}
+      />
       {rows.length < 4 ? (
         <p className="text-xs text-muted-foreground">Not enough groups with weekly history yet.</p>
       ) : (

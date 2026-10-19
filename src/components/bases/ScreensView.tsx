@@ -5,6 +5,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { StageBadge, StageChartPanel, WeekSpark } from "@/components/stages/StageStockTable";
 import { downloadTradingViewList, stageWeeksAgo, type StockStage } from "@/lib/stageAnalysis";
 import { STATE_NAMES, type StockBase } from "@/lib/bases";
+import { PickCard, SectionHead } from "@/components/Explainer";
 
 /**
  * Ready-made screens over the whole stock list (Deepvue-style presets), built from the weekly
@@ -209,39 +210,23 @@ export default function ScreensView({ stageRows, baseBy, nameOf, groupOf }: {
 
   return (
     <div className="space-y-3">
-      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
+      <div className="grid grid-cols-2 gap-2 lg:grid-cols-5">
         {SCREENS.map((s) => {
           const list = results.get(s.key) ?? [];
-          const on = s.key === key;
-          return (
-            <button
-              key={s.key}
-              onClick={() => pick(s.key)}
-              className={`flex flex-col rounded-lg border px-3 py-2.5 text-left transition ${on ? "border-primary bg-primary/10" : "border-border bg-card hover:bg-accent/40"}`}
-            >
-              <div className="flex items-baseline justify-between gap-2">
-                <span className={`text-xs font-medium ${on ? "text-primary" : ""}`}>{s.title}</span>
-                <span className="font-mono text-lg font-semibold">{list.length}</span>
-              </div>
-              <div className="mt-1 truncate font-mono text-[10.5px] text-muted-foreground">{list.slice(0, 4).map((r) => r.symbol).join(" · ") || "—"}</div>
-            </button>
-          );
+          return <PickCard key={s.key} title={s.title} count={list.length} tickers={list.map((r) => r.symbol)} on={s.key === key} onClick={() => pick(s.key)} title2={s.blurb} />;
         })}
       </div>
 
-      <div className="rounded-lg border border-border bg-card px-3 py-2.5">
-        <div className="flex flex-wrap items-start gap-2">
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-1.5 text-sm font-semibold">
-              {screen.title}
-              <Tooltip>
-                <TooltipTrigger asChild><Info size={12} className="text-muted-foreground" /></TooltipTrigger>
-                <TooltipContent className="max-w-sm text-xs"><ul className="list-disc space-y-0.5 pl-4">{screen.rules.map((x) => <li key={x}>{x}</li>)}</ul></TooltipContent>
-              </Tooltip>
-            </div>
-            <p className="text-[11.5px] text-muted-foreground">{screen.blurb} Sorted by 1-month relative strength.</p>
-          </div>
-          <div className="flex items-center gap-1.5">
+      <div className="rounded-lg border border-border bg-card px-3 pb-2.5 pt-3">
+        <SectionHead
+          className="mb-1"
+          title={<>{screen.title}
+            <Tooltip>
+              <TooltipTrigger asChild><Info size={13} className="text-muted-foreground" /></TooltipTrigger>
+              <TooltipContent className="max-w-sm text-xs"><ul className="list-disc space-y-0.5 pl-4">{screen.rules.map((x) => <li key={x}>{x}</li>)}</ul></TooltipContent>
+            </Tooltip></>}
+          sub={<>{screen.blurb} Sorted by 1-month relative strength.</>}
+          right={<>
             <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Ticker or industry…" className="h-8 w-40 rounded border border-border bg-background px-2 text-xs" />
             <button
               onClick={() => { navigator.clipboard.writeText(symbols.join(",")); toast.success(`${symbols.length} symbols copied.`); }}
@@ -253,8 +238,8 @@ export default function ScreensView({ stageRows, baseBy, nameOf, groupOf }: {
               disabled={!symbols.length} title="Download a TradingView watchlist"
               className="inline-flex h-8 items-center gap-1 rounded border border-primary/40 bg-primary/10 px-2 text-[11px] font-medium text-primary hover:bg-primary/20 disabled:opacity-40"
             ><Download size={11} /> TradingView</button>
-          </div>
-        </div>
+          </>}
+        />
         {missing && (
           <p className="mt-2 rounded border border-amber-400/30 bg-amber-400/10 px-2.5 py-1.5 text-[11px] text-amber-200">
             {screen.needs === "ern" ? "Earnings data" : "Daily data"} is only available for {coverage[screen.needs!]} of {stocks.length} stocks — press <b>Scan</b> (top right) once to fill it in.

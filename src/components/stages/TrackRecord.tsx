@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { SectionHead, Segmented } from "@/components/Explainer";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import { Loader2 } from "lucide-react";
@@ -82,17 +83,11 @@ export default function TrackRecord({ mode }: { mode: "stages" | "bases" }) {
   const resolvedWeeks = data ? new Set(data.rows.filter((r) => (h === 4 ? r.fwd4 : h === 8 ? r.fwd8 : r.fwd13) != null).map((r) => r.week)).size : 0;
   return (
     <section className="rounded-lg border border-border bg-card p-4">
-      <div className="mb-2 flex flex-wrap items-center gap-2">
-        <h2 className="text-sm font-semibold">Track record</h2>
-        <span className="text-[11px] text-muted-foreground">
-          · the app's own signals, logged every scan and checked {h} weeks later (stocks that leave the list still count)
-        </span>
-        <div className="ml-auto inline-flex rounded-md border border-border bg-muted/20 p-0.5">
-          {([4, 8, 13] as H[]).map((x) => (
-            <button key={x} onClick={() => setH(x)} className={`rounded px-2 py-0.5 text-[11px] ${h === x ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}>{x}w</button>
-          ))}
-        </div>
-      </div>
+      <SectionHead
+        title="Track record"
+        sub={`The app's own signals, logged every scan and checked ${h} weeks later. Stocks that later leave your list still count.`}
+        right={<Segmented<H> size="xs" value={h} onChange={setH} options={([4, 8, 13] as H[]).map((x) => ({ value: x, label: `${x}w` }))} />}
+      />
       {err ? (
         <p className="text-xs text-muted-foreground">{/does not exist|schema cache/i.test(err) ? "The signal log isn't set up on the server yet." : `Couldn't load the log: ${err}`}</p>
       ) : !data ? (
