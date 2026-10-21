@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Loader2, RefreshCw } from "lucide-react";
 import type { ThemeData, Ticker } from "@/data/themeData";
-import TrendView from "@/components/dashboard/TrackerTrendView";
-import { HeatLegend, HeatTiles, TreemapView } from "@/components/dashboard/TrackerDisplays";
+import { HeatLegend, HeatTiles } from "@/components/dashboard/TrackerDisplays";
+import SectorIndustryHeatmap, { buildSectorBlocks } from "@/components/dashboard/SectorIndustryHeatmap";
 import { Segmented } from "@/components/Explainer";
 import { marketClock, useLiveSession } from "@/hooks/useLiveSession";
 import type { PerfCache } from "@/hooks/useFullScan";
@@ -17,7 +17,7 @@ import { GROUP_MODE_LABEL, groupKeyForIndustry, type GroupMode } from "@/lib/gro
  *  • YTD: weekly closes from the Stage scan (true year-to-date, not the scan's 6-month field).
  */
 
-export type TrackerTf = "open" | "1D" | "1W" | "1M" | "3M" | "YTD" | "trend";
+export type TrackerTf = "open" | "1D" | "1W" | "1M" | "3M" | "YTD";
 const TFS: { key: TrackerTf; label: string; tip: string }[] = [
   { key: "open", label: "Since Open", tip: "Change from today's opening price (live) — where money flows during the session, separate from the overnight gap." },
   { key: "1D", label: "Today", tip: "Change from yesterday's close, as of the last Full Scan." },
@@ -25,16 +25,14 @@ const TFS: { key: TrackerTf; label: string; tip: string }[] = [
   { key: "1M", label: "1M", tip: "1-month change, as of the last Full Scan." },
   { key: "3M", label: "3M", tip: "3-month change, as of the last Full Scan." },
   { key: "YTD", label: "YTD", tip: "Change since the last close of the previous year (weekly closes from the Stage scan)." },
-  { key: "trend", label: "1W · 1M · 3M", tip: "All three timeframes side by side — who has led consistently, who is newly leading, who is losing steam." },
 ];
 const TF_KEY = "theme_tracker_tf_v1";
 const SHOW_KEY = "theme_tracker_show_v1";
 const DISPLAY_KEY = "theme_tracker_display_v1";
-export type TrackerDisplay = "bars" | "heat" | "tree";
+export type TrackerDisplay = "bars" | "heat";
 const DISPLAYS: { value: TrackerDisplay; label: string; title: string }[] = [
   { value: "bars", label: "Bars", title: "Every group as one bar, strongest first" },
   { value: "heat", label: "Heatmap", title: "Colored tiles, strongest first" },
-  { value: "tree", label: "Treemap", title: "Tile size = how many stocks the group holds, color = its move" },
 ];
 
 interface Member { symbol: string; name?: string | null }
@@ -47,7 +45,7 @@ function niceMax(x: number) {
 }
 
 export default function ThemeTracker({
-  groupMode, baseThemes, universeList, industryBySymbol, loadPerfMap, scanCompletedAt, onOpen,
+  groupMode, baseThemes, universeList, industryBySymbol, loadPerfMap, scanCompletedAt, onOpen, sectorOf,
 }: {
   groupMode: GroupMode;
   baseThemes: ThemeData[];
@@ -56,6 +54,8 @@ export default function ThemeTracker({
   loadPerfMap: () => Promise<PerfCache | null>;
   scanCompletedAt: Date | null;
   onOpen: (t: ThemeData) => void;
+  /** Sector + Industry mode: industry name → its sector. */
+  sectorOf?: (industry: string) => string;
 }) {
   const [tf, setTf] = useState<TrackerTf>(() => {
     try { const v = localStorage.getItem(TF_KEY) as TrackerTf | null; return v && TFS.some((t) => t.key === v) ? v : "open"; } catch { return "open"; }
@@ -148,7 +148,7 @@ export default function ThemeTracker({
   }, [groups, valueOf]);
 
   const shown = useMemo(() => {
-    if (showAll || rows.length <= 30 || display !== "bars") return rows;
+    if (showAll || rows.length <= 30 || display !== "bars" || sectorOf) return rows;
     return [...rows.slice(0, 15), ...rows.slice(-15)];
   }, [rows, showAll, display]);
   const scale = niceMax(Math.max(0, ...shown.map((r) => Math.abs(r.performance_pct))));
@@ -193,20 +193,10 @@ export default function ThemeTracker({
     </div>
   );
 
-  if (tf === "trend") {
-    return (
-      <TrendView
-        groups={groups} perf={perf} title={`${GROUP_MODE_LABEL[groupMode]} Tracker`} status={status}
-        switcher={<div className="flex flex-wrap items-center gap-2"><Segmented<TrackerDisplay> size="xs" value={display === "tree" ? "heat" : display} onChange={setDisplay} options={DISPLAYS.filter((d) => d.value !== "tree")} />{tfSwitch}</div>}
-        onOpen={onOpen} universe={groupMode !== "theme"} heat={display !== "bars"}
-      />
-    );
-  }
-
   return (
     <div className="rounded-xl border border-border bg-card px-4 py-3.5">
       <div className="mb-2 flex flex-wrap items-center gap-2.5">
-        <h2 className="font-display text-[15px] font-semibold tracking-tight">{GROUP_MODE_LABEL[groupMode]} Tracker</h2>
+        <h2 className="font-display text-[15px] font-semibold tracking-tight">{sectorOf ? "Sector + Industry" : GROUP_MODE_LABEL[groupMode]} Tracker</h2>
         <span className="font-mono text-[11px] text-muted-foreground">{status}</span>
         {tf === "open" && (
           <button onClick={fetchOpen} disabled={liveLoading} title="Refresh live quotes" className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-50">
@@ -215,7 +205,7 @@ export default function ThemeTracker({
         )}
         <div className="ml-auto flex flex-wrap items-center gap-2">
           <Segmented<TrackerDisplay> size="xs" value={display} onChange={setDisplay} options={DISPLAYS} />
-          {rows.length > 30 && display === "bars" && (
+          {rows.length > 30 && display === "bars" && !sectorOf && (
             <button onClick={() => setShowAll(!showAll)} className="rounded border border-border px-2 py-1 text-[11px] text-muted-foreground hover:text-foreground">
               {showAll ? `Top & bottom 15` : `Show all ${rows.length}`}
             </button>
@@ -226,10 +216,21 @@ export default function ThemeTracker({
 
       {!shown.length ? (
         <div className="py-10 text-center text-sm text-muted-foreground">{emptyMsg}</div>
-      ) : display !== "bars" ? (
+      ) : display === "heat" && sectorOf ? (
+        <SectorIndustryHeatmap industries={rows} sectorOf={sectorOf} onOpen={onOpen} />
+      ) : display === "heat" ? (
         <div className="space-y-2">
           <div className="flex justify-end"><HeatLegend scale={scale} /></div>
-          {display === "heat" ? <HeatTiles rows={shown} scale={scale} onOpen={onOpen} /> : <TreemapView rows={shown} scale={scale} onOpen={onOpen} />}
+          <HeatTiles rows={shown} scale={scale} onOpen={onOpen} />
+        </div>
+      ) : sectorOf ? (
+        <div className="space-y-2">
+          {buildSectorBlocks(rows, sectorOf).map((b) => (
+            <div key={b.name} className="rounded-md border border-border/50 bg-background/30 px-1.5 py-1">
+              <BarRow r={b.theme} scale={scale} onOpen={onOpen} strong />
+              {b.industries.map((r) => <BarRow key={r.theme_name} r={r} scale={scale} onOpen={onOpen} indent />)}
+            </div>
+          ))}
         </div>
       ) : (
         <>
@@ -281,9 +282,30 @@ export default function ThemeTracker({
         ) : (
           <><b className="text-foreground/90">{TFS.find((t) => t.key === tf)?.label}</b> numbers come from the Dashboard's last Full Scan{groupMode !== "theme" ? " and cover the whole stock list" : ""}.</>
         )}
-        {" "}{display === "bars" ? "The right column is breadth: stocks up / stocks with data." : display === "tree" ? "Tile size is the number of stocks in the group." : "Tiles are ordered strongest first."} Click a group to open its stocks.
+        {" "}{display === "bars" ? "The right column is breadth: stocks up / stocks with data." : sectorOf ? "Tile width is the number of stocks in the industry; click a sector name for all its stocks." : "Tiles are ordered strongest first."} Click a group to open its stocks.
       </div>
     </div>
+  );
+}
+
+/** One bar row (used for the grouped Sector + Industry list). */
+function BarRow({ r, scale, onOpen, strong = false, indent = false }: { r: ThemeData; scale: number; onOpen: (t: ThemeData) => void; strong?: boolean; indent?: boolean }) {
+  const v = r.performance_pct, w = Math.min(50, (Math.abs(v) / scale) * 50), valid = r.valid_count ?? r.up_count + r.down_count;
+  const f = (x: number) => `${x > 0 ? "+" : ""}${x.toFixed(2)}%`;
+  return (
+    <button
+      onClick={() => onOpen(r)}
+      className="grid w-full grid-cols-[120px_1fr_60px] items-center gap-2.5 rounded-md px-1 py-[3px] text-left hover:bg-accent/40 sm:grid-cols-[190px_1fr_64px_70px]"
+      title={`${r.theme_name}: ${f(v)} average of ${valid} stocks — click to open`}
+    >
+      <span className={`truncate text-xs ${strong ? "font-semibold" : "font-medium text-foreground/85"} ${indent ? "pl-3" : ""}`}>{r.theme_name}</span>
+      <span className={`relative rounded-[3px] bg-muted/40 ${strong ? "h-3.5" : "h-2.5"}`}>
+        <span className="absolute -bottom-[3px] -top-[3px] left-1/2 w-px bg-border" />
+        <span className="absolute bottom-0 top-0 rounded-[3px]" style={v >= 0 ? { left: "50%", width: `${w}%`, background: `hsla(166, 100%, 42%, ${strong ? 1 : 0.75})` } : { right: "50%", width: `${w}%`, background: `hsla(344, 100%, 65%, ${strong ? 1 : 0.75})` }} />
+      </span>
+      <span className={`text-right font-mono text-xs ${strong ? "font-semibold" : ""} ${v > 0 ? "text-[hsl(166,100%,42%)]" : v < 0 ? "text-[hsl(344,100%,65%)]" : "text-muted-foreground"}`}>{f(v)}</span>
+      <span className="hidden text-right font-mono text-[10.5px] text-muted-foreground sm:block">{r.up_count}/{valid} ↑</span>
+    </button>
   );
 }
 

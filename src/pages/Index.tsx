@@ -12,6 +12,7 @@ import {
 import HeatmapGridView from "@/components/dashboard/HeatmapGridView";
 import ThemeTracker from "@/components/dashboard/ThemeTracker";
 import SessionView from "@/components/dashboard/SessionView";
+import SectorIndustryHeatmap from "@/components/dashboard/SectorIndustryHeatmap";
 import DashboardConcentrationPanel from "@/components/dashboard/DashboardConcentrationPanel";
 
 import OverallBestThemesList from "@/components/dashboard/OverallBestThemesList";
@@ -39,7 +40,7 @@ import { useUniverseSectors } from "@/hooks/useUniverseSectors";
 import ClassificationCoverage from "@/components/dashboard/ClassificationCoverage";
 import { buildGroupedThemes, buildUniverseGroups } from "@/lib/groupThemes";
 import type { PerfCache } from "@/hooks/useFullScan";
-import { GROUP_MODE_LABEL, type GroupMode } from "@/lib/groupColors";
+import { GROUP_MODE_LABEL, type GroupMode, groupKeyForIndustry } from "@/lib/groupColors";
 
 const TIMEFRAMES = ["Today", "1W", "1M", "3M", "Overall"] as const;
 const GROUP_MODE_PLURAL: Record<GroupMode, string> = {
@@ -71,6 +72,11 @@ export default function Index() {
   useEffect(() => {
     try { localStorage.setItem("dashboard_group_mode_v1", groupMode); } catch { /* ignore */ }
   }, [groupMode]);
+  // Sector + Industry: industries grouped under their sector (uses the industry groups underneath).
+  const [mixed, setMixed] = useState<boolean>(() => { try { return localStorage.getItem("dashboard_mixed_v1") === "1"; } catch { return false; } });
+  useEffect(() => { try { localStorage.setItem("dashboard_mixed_v1", mixed ? "1" : "0"); } catch { /* ignore */ } }, [mixed]);
+  const pickGroupMode = (m: GroupMode) => { setMixed(false); setGroupMode(m); };
+  const pickMixed = () => { setMixed(true); setGroupMode("industry"); };
   const [dashView, setDashView] = useState<"heatmap" | "tracker" | "session">(() => {
     try { const v = localStorage.getItem("dashboard_view_v1"); return v === "tracker" || v === "session" ? v : "heatmap"; } catch { return "heatmap"; }
   });
@@ -227,6 +233,21 @@ export default function Index() {
   }, [sectorRows, baseThemes, industryBySymbol]);
 
   const usingUniverse = groupMode !== "theme" && sectorRows.length > 0 && !!scanPerf;
+  // industry → sector, from the same classification the groups use (majority vote per industry)
+  const sectorOfMap = useMemo(() => {
+    const votes = new Map<string, Map<string, number>>();
+    for (const r of universeList) {
+      const ind = groupKeyForIndustry(r.sector, "industry"), sec = groupKeyForIndustry(r.sector, "sector");
+      const v = votes.get(ind) ?? new Map<string, number>();
+      v.set(sec, (v.get(sec) ?? 0) + 1);
+      votes.set(ind, v);
+    }
+    const m = new Map<string, string>();
+    votes.forEach((v, ind) => m.set(ind, [...v.entries()].sort((a, b) => b[1] - a[1])[0][0]));
+    return m;
+  }, [universeList]);
+  const sectorOf = useCallback((ind: string) => sectorOfMap.get(ind) ?? "Other", [sectorOfMap]);
+  const isMixed = mixed && groupMode === "industry";
   const scannedInList = useMemo(
     () => (scanPerf ? universeList.filter(r => scanPerf.tickers[r.symbol.toUpperCase()]).length : 0),
     [scanPerf, universeList],
@@ -648,12 +669,12 @@ export default function Index() {
               <button
                 key={v}
                 onClick={() => setDashView(v)}
-                title={v === "tracker" ? "Every group ranked, as bars, a heatmap or a treemap — with a live 'Since Open' view" : v === "session" ? "Today's move split into the overnight gap and the move during trading hours" : "Heatmap cards"}
+                title={v === "tracker" ? "Every group ranked, as bars or a heatmap — with a live 'Since Open' view" : v === "session" ? "Combined: how each group opened (the gap) and what it did once trading started" : "Heatmap cards"}
                 className={`rounded px-3 py-1 text-[11px] font-medium transition ${
                   dashView === v ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"
                 }`}
               >
-                {v === "session" ? "Gap vs session" : v === "tracker" ? "Tracker" : "Heatmap"}
+                {v === "session" ? "Combined" : v === "tracker" ? "Tracker" : "Heatmap"}
               </button>
             ))}
           </div>
@@ -662,19 +683,31 @@ export default function Index() {
             {(["theme", "industry", "subIndustry", "sector"] as GroupMode[]).map(m => (
               <button
                 key={m}
-                onClick={() => setGroupMode(m)}
+                onClick={() => pickGroupMode(m)}
                 className={`rounded px-3 py-1 text-[11px] font-medium transition ${
-                  groupMode === m ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"
+                  groupMode === m && !isMixed ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"
                 }`}
               >
                 {GROUP_MODE_LABEL[m]}
               </button>
             ))}
           </div>
+          <span className="text-[11px] uppercase tracking-wide text-muted-foreground">Mixed</span>
+          <div className="inline-flex items-center gap-0.5 rounded-md border border-border bg-muted/20 p-0.5">
+            <button
+              onClick={pickMixed}
+              title="Industries grouped under their sector — see each sector's move and what drives it"
+              className={`rounded px-3 py-1 text-[11px] font-medium transition ${isMixed ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}
+            >
+              Sector + Industry
+            </button>
+          </div>
           <span className="text-[11px] text-muted-foreground">
             {sectorsLoading && groupMode !== "theme"
               ? "Loading industry data…"
-              : `${themes.length} ${GROUP_MODE_LABEL[groupMode].toLowerCase()} groups`}
+              : isMixed
+                ? `${new Set(themes.map(t => sectorOf(t.theme_name))).size} sectors · ${themes.length} industries`
+                : `${themes.length} ${GROUP_MODE_LABEL[groupMode].toLowerCase()} groups`}
             {usingUniverse && (
               <span title="Industry, Sub-Industry and Sector views cover the whole stock list (RS universe list + theme tickers). Numbers come from this Dashboard's own Full Scan — press Full Scan to refresh them.">
                 {` · ${scannedInList.toLocaleString("en-US")}/${universeList.length.toLocaleString("en-US")} stocks scanned`}
@@ -687,7 +720,7 @@ export default function Index() {
         </div>
 
         {dashView === "session" ? (
-          <SessionView groupMode={groupMode} baseThemes={baseThemes} industryBySymbol={industryBySymbol} onOpen={setDrilldownTheme} />
+          <SessionView groupMode={groupMode} baseThemes={baseThemes} industryBySymbol={industryBySymbol} onOpen={setDrilldownTheme} sectorOf={isMixed ? sectorOf : undefined} />
         ) : dashView === "tracker" ? (
           <ThemeTracker
             groupMode={groupMode}
@@ -697,6 +730,7 @@ export default function Index() {
             loadPerfMap={loadPerfMap}
             scanCompletedAt={scanCompletedAt}
             onOpen={setDrilldownTheme}
+            sectorOf={isMixed ? sectorOf : undefined}
           />
         ) : activeTimeframe === "Overall" ? (
           <OverallBestThemesList
@@ -704,6 +738,8 @@ export default function Index() {
             weights={overallWeights}
             onThemeClick={setDrilldownTheme}
           />
+        ) : isMixed ? (
+          <SectorIndustryHeatmap industries={themes} sectorOf={sectorOf} onOpen={setDrilldownTheme} />
         ) : (
           <HeatmapGridView
             themes={themes}
