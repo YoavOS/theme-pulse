@@ -18,6 +18,19 @@
 //    (Cooper, Gulen & Schill 2008).
 //  Red flags          Each one raised the share of stocks that lagged SPY by 25+ points.
 //
+//  Added Oct 2026 after a second, larger test (619 companies, 24 quarterly dates Nov 2019 – Aug 2025,
+//  26 weeks ahead vs SPY). Kept only if the score ranked stocks the right way in BOTH halves
+//  (2019–22 and 2023–25):
+//  Sales acceleration "Is growth speeding up?"   — IC +0.044 / +0.057.
+//  Margin expansion   "Are margins widening?"    — IC +0.039 / +0.069; Strong 21% big losses vs Weak 24%.
+//  Cash flow          "Is the cash real?"         — IC +0.044 / +0.039; Strong 19% big losses vs Weak 28%.
+//  Dropped in that test: turnaround (losses turning to profits — mostly the same stocks earnings
+//  momentum already flags, and no better when it disagreed) and a steady-compounder profile
+//  (ranked stocks the wrong way in 2019–22).
+//  Company type (speculative / established / large) is not a score: it shows the measured odds of a
+//  big win or a big loss, because big winners came mostly from small or loss-making companies, where
+//  the fundamental scores barely changed the odds.
+//
 //  Dropped after testing: sales-growth level and consistency, multi-year sales/EPS growth
 //  (high past growth did WORSE afterwards — expectations already priced, Lakonishok-Shleifer-
 //  Vishny 1994), accruals, debt/equity, ROA change.
@@ -36,7 +49,7 @@ export interface Extras {
 }
 export interface Part { label: string; earned: number; max: number; value: string; good: boolean | null; tested: boolean }
 export interface Profile {
-  key: "momentum" | "quality"; label: string; horizon: string; question: string;
+  key: "momentum" | "quality" | "growth" | "margins" | "cash"; label: string; horizon: string; question: string;
   score: number | null; coverage: number; verdict: "Strong" | "Mixed" | "Weak" | "Limited data";
   parts: Part[]; strengths: string[]; weaknesses: string[];
 }
@@ -47,6 +60,10 @@ export interface Features {
   gpa: number | null; roe3: number | null; fcfConv: number | null; fscore: number | null; shareChg3: number | null; assetGrowth: number | null;
   shareIssue1y: number | null; salesTTM: number | null; netIncomeTTM: number | null; fcfTTM: number | null; shares: number | null;
   salesCagr: number | null;
+  // added for the growth / margin / cash profiles (quarters newest first, % unless noted)
+  revYoY0: number | null; revYoY1: number | null; revYoY2: number | null; revSeq: number | null;
+  gm0: number | null; gm4: number | null; om4: number | null; om8: number | null; omUpShare: number | null;
+  ocfTTM: number | null; ocfPrevTTM: number | null; fcfPrevTTM: number | null; salesPrevTTM: number | null;
 }
 
 const nn = (x: number | null | undefined): x is number => x !== null && x !== undefined && Number.isFinite(x);
@@ -61,6 +78,8 @@ export function fundamentalFeatures(q: FQ[], a: FQ[]): Features {
     sue: null, epsChg: null, epsYoY: null, epsAcc: null, epsUpShare: null, opLeverage: null, marginChg: null, opMargin: null,
     gpa: null, roe3: null, fcfConv: null, fscore: null, shareChg3: null, assetGrowth: null, shareIssue1y: null,
     salesTTM: null, netIncomeTTM: null, fcfTTM: null, shares: null, salesCagr: null,
+    revYoY0: null, revYoY1: null, revYoY2: null, revSeq: null, gm0: null, gm4: null, om4: null, om8: null, omUpShare: null,
+    ocfTTM: null, ocfPrevTTM: null, fcfPrevTTM: null, salesPrevTTM: null,
   };
   if (q.length) {
     const yoy = (k: keyof FQ, i: number) => (q[i + 4] ? growth(q[i][k] as number | null, q[i + 4][k] as number | null) : null);
@@ -88,6 +107,16 @@ export function fundamentalFeatures(q: FQ[], a: FQ[]): Features {
     if (nn(sT) && nn(sP) && nn(oT) && nn(oP) && sP > 0 && oP > 0) F.opLeverage = Math.max(-200, Math.min(200, (oT / oP - sT / sP) * 100));
     if (q[4] && nn(q[0].assets) && nn(q[4].assets)) F.assetGrowth = growth(q[0].assets, q[4].assets);
     if (q[4] && nn(q[0].shares) && nn(q[4].shares)) F.shareIssue1y = growth(q[0].shares, q[4].shares);
+    // growth / margin / cash profiles
+    F.revYoY0 = yoy("revenue", 0); F.revYoY1 = yoy("revenue", 1); F.revYoY2 = yoy("revenue", 2);
+    if (q[1]) F.revSeq = growth(q[0].revenue, q[1].revenue);
+    const gmOf = (x?: FQ) => (x && nn(x.grossProfit) && nn(x.revenue) && x.revenue > 0 ? (x.grossProfit / x.revenue) * 100 : null);
+    F.gm0 = gmOf(q[0]); F.gm4 = gmOf(q[4]); F.om4 = m4; F.om8 = om(8);
+    const ups = Array.from({ length: 4 }, (_, i) => { const a = om(i), b = om(i + 4); return nn(a) && nn(b) ? (a > b ? 1 : 0) : null; }).filter((v): v is 0 | 1 => v !== null);
+    if (ups.length >= 3) F.omUpShare = ups.reduce((x: number, y) => x + y, 0) / ups.length;
+    F.ocfTTM = ocT; F.ocfPrevTTM = ttm("operatingCashFlow", 4); F.salesPrevTTM = sP;
+    const cpP = ttm("capex", 4);
+    if (nn(F.ocfPrevTTM) && nn(cpP)) F.fcfPrevTTM = F.ocfPrevTTM - Math.abs(cpP);
   }
   const yrs = a.filter((y) => nn(y.revenue)), sp = Math.min(5, yrs.length - 1);
   if (sp >= 3) F.salesCagr = (Math.pow(yrs[0].revenue! / yrs[sp].revenue!, 1 / sp) - 1) * 100;
@@ -172,6 +201,56 @@ export function qualityProfile(F: Features): Profile {
   if (nn(F.shareChg3)) { const v = F.shareChg3; p.push(part("Share count change per year (3y)", 15, v <= 0 ? 15 : v <= 2 ? 10 : v <= 5 ? 4 : 0, pf(v, 1), v <= 1 ? true : v > 5 ? false : null)); }
   if (nn(F.assetGrowth)) { const v = F.assetGrowth; p.push(part("Asset growth (last 12 months)", 15, v <= 10 ? 15 : v <= 25 ? 9 : v <= 50 ? 4 : 0, pf(v, 0), v <= 15 ? true : v > 50 ? false : null)); }
   return finish("quality", "Quality", "protection in sell-offs", "How well does it hold up?", p);
+}
+
+/** Is sales growth speeding up? (Second test: IC +0.044 in 2019–22, +0.057 in 2023–25.) */
+export function growthProfile(F: Features): Profile {
+  const p: (Part | null)[] = [];
+  if (nn(F.revYoY0)) { const v = F.revYoY0; p.push(part("Sales vs the same quarter last year", 30, v >= 25 ? 30 : v >= 15 ? 20 : v >= 5 ? 10 : 0, pf(v), v >= 15 ? true : v < 0 ? false : null)); }
+  if (nn(F.revYoY0) && nn(F.revYoY1)) { const d = F.revYoY0 - F.revYoY1; p.push(part("Sales growth faster than last quarter's", 25, d >= 5 ? 25 : d > 0 ? 15 : 0, `${d >= 0 ? "+" : ""}${d.toFixed(0)} pts`, d > 0 ? true : d < -10 ? false : null)); }
+  if (nn(F.revYoY0) && nn(F.revYoY2)) { const d = F.revYoY0 - F.revYoY2; p.push(part("Faster than two quarters ago", 15, d > 0 ? 15 : 0, `${d >= 0 ? "+" : ""}${d.toFixed(0)} pts`, d > 0 ? true : null)); }
+  if (nn(F.revSeq)) { const v = F.revSeq; p.push(part("Sales up from the previous quarter", 15, v > 0 ? 15 : 0, pf(v, 1), v > 0 ? true : v < -5 ? false : null)); }
+  if (nn(F.gm0) && nn(F.gm4)) { const d = F.gm0 - F.gm4; p.push(part("Gross margin vs a year ago", 15, d > 0 ? 15 : 0, `${d >= 0 ? "+" : ""}${d.toFixed(1)} pts`, d > 0 ? true : d < -2 ? false : null)); }
+  return finish("growth", "Sales acceleration", "next 6 months", "Is growth speeding up?", p);
+}
+
+/** Are margins widening? (Second test: IC +0.039 / +0.069; fewer big losses when Strong.) */
+export function marginProfile(F: Features): Profile {
+  const p: (Part | null)[] = [];
+  if (nn(F.gm0) && nn(F.gm4)) { const d = F.gm0 - F.gm4; p.push(part("Gross margin vs a year ago", 30, d >= 1 ? 30 : d > 0 ? 15 : 0, `${d >= 0 ? "+" : ""}${d.toFixed(1)} pts`, d >= 1 ? true : d < -2 ? false : null)); }
+  if (nn(F.opMargin) && nn(F.om4)) { const d = F.opMargin - F.om4; p.push(part("Operating margin vs a year ago", 30, d >= 2 ? 30 : d > 0 ? 15 : 0, `${d >= 0 ? "+" : ""}${d.toFixed(1)} pts`, d >= 2 ? true : d < -2 ? false : null)); }
+  if (nn(F.omUpShare)) { const v = F.omUpShare; p.push(part("Quarters with a wider operating margin than a year before (last 4)", 25, v * 25, `${Math.round(v * 4)}/4`, v >= 0.75 ? true : v <= 0.25 ? false : null)); }
+  if (nn(F.opMargin) && nn(F.om8)) { const d = F.opMargin - F.om8; p.push(part("Operating margin vs two years ago", 15, d > 0 ? 15 : 0, `${d >= 0 ? "+" : ""}${d.toFixed(1)} pts`, d > 0 ? true : d < -5 ? false : null)); }
+  return finish("margins", "Margin expansion", "next 6 months", "Are margins widening?", p);
+}
+
+/** Is the cash real and growing? (Second test: IC +0.044 / +0.039; Strong 19% big losses vs Weak 28%.) */
+export function cashProfile(F: Features): Profile {
+  const p: (Part | null)[] = [];
+  if (nn(F.ocfTTM) && nn(F.ocfPrevTTM)) {
+    const up = F.ocfTTM > F.ocfPrevTTM, g = F.ocfPrevTTM > 0 ? (F.ocfTTM / F.ocfPrevTTM - 1) * 100 : null;
+    p.push(part("Operating cash flow vs the year before", 30, g !== null && g >= 20 ? 30 : up ? 15 : 0, g !== null ? pf(g) : up ? "improving" : "falling", up ? true : false));
+  }
+  if (nn(F.fcfTTM) && nn(F.fcfPrevTTM) && nn(F.salesTTM) && nn(F.salesPrevTTM) && F.salesTTM > 0 && F.salesPrevTTM > 0) {
+    const d = (F.fcfTTM / F.salesTTM - F.fcfPrevTTM / F.salesPrevTTM) * 100;
+    p.push(part("Free-cash-flow margin vs the year before", 25, d > 0 ? 25 : 0, `${d >= 0 ? "+" : ""}${d.toFixed(1)} pts`, d > 0 ? true : d < -3 ? false : null));
+  }
+  if (nn(F.fcfTTM)) p.push(part("Free cash flow over the last 12 months", 25, F.fcfTTM > 0 ? 25 : 0, F.fcfTTM > 0 ? "positive" : "negative", F.fcfTTM > 0));
+  if (nn(F.ocfTTM) && nn(F.netIncomeTTM)) p.push(part("Cash flow above reported profit", 20, F.ocfTTM > F.netIncomeTTM ? 20 : 0, F.ocfTTM > F.netIncomeTTM ? "yes" : "no", F.ocfTTM > F.netIncomeTTM ? true : null));
+  return finish("cash", "Cash flow", "fewer big losses", "Is the cash real?", p);
+}
+
+export interface CompanyType { key: "speculative" | "established" | "large"; label: string; detail: string; winPct: number; lossPct: number; medianVsSpy: number }
+/**
+ * Company type with the measured odds over the next 26 weeks (second test, 13,008 stock-dates):
+ * a big win = beat SPY by 50+ points, a big loss = lagged by 25+ points. Not a score.
+ */
+export function companyType(F: Features): CompanyType | null {
+  if (!nn(F.salesTTM) || !nn(F.netIncomeTTM)) return null;
+  if (F.netIncomeTTM <= 0 || F.salesTTM < 5e8)
+    return { key: "speculative", label: "Speculative", detail: F.netIncomeTTM <= 0 ? "losing money over the last 12 months" : "under $500M in yearly sales", winPct: 15, lossPct: 27, medianVsSpy: -4 };
+  if (F.salesTTM >= 1e10) return { key: "large", label: "Large and profitable", detail: "$10B+ in yearly sales and profitable", winPct: 3, lossPct: 12, medianVsSpy: -1 };
+  return { key: "established", label: "Established and profitable", detail: "profitable, $0.5–10B in yearly sales", winPct: 5, lossPct: 19, medianVsSpy: -5 };
 }
 
 /** Tested warning signs. priceNow: latest close (for price / sales). */

@@ -75,7 +75,8 @@ interface HProfile {
   parts: { label: string; earned: number; max: number; value: string; good: boolean | null; tested?: boolean }[]; strengths: string[]; weaknesses: string[];
 }
 interface RedFlag { key: string; label: string; detail: string; tested: boolean }
-interface Profiles { momentum?: HProfile; quality?: HProfile; redFlags?: RedFlag[] }
+interface CompanyType { key: "speculative" | "established" | "large"; label: string; detail: string; winPct: number; lossPct: number; medianVsSpy: number }
+interface Profiles { momentum?: HProfile; quality?: HProfile; growth?: HProfile; margins?: HProfile; cash?: HProfile; type?: CompanyType | null; redFlags?: RedFlag[] }
 interface History {
   quarters: { end: string; revenue: number | null; eps: number | null; opMargin: number | null; revenueYoY: number | null; epsYoY: number | null }[];
   years: { end: string; revenue: number | null; eps: number | null; netIncome: number | null; fcf: number | null; opMargin: number | null; shares: number | null }[];
@@ -186,7 +187,7 @@ function StockHeader({ multi, header, fromCache, loading, onRefresh }: {
   );
 }
 
-const CACHE_KEY = (sym: string) => `minervini:v12-evidence:${sym}`;
+const CACHE_KEY = (sym: string) => `minervini:v13-profiles:${sym}`;
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 
 
@@ -377,7 +378,7 @@ export default function MinerviniChecker() {
               Fundamentals Checker
             </h1>
           </div>
-          <div className="text-xs text-muted-foreground">SEPA · earnings momentum · quality · red flags · Minervini</div>
+          <div className="text-xs text-muted-foreground">SEPA · earnings, sales, margins, cash, quality · red flags · Minervini</div>
         </div>
       </header>
 
@@ -807,9 +808,15 @@ function ScoreBuild({ s }: { s: Series }) {
 // 16 quarterly dates (Nov 2021 – Aug 2025), SEC filings as they stood on each date, returns vs SPY.
 // Survivorship-biased (only names on today's list), so absolute returns look worse than reality;
 // the comparisons between groups are what matter.
-const EVIDENCE = {
+const EVIDENCE: Record<string, string> = {
   momentum:
-    "Tested: ranked stocks the right way at 13, 26 and 52 weeks, in both 2021–23 and 2023–25. Strong beat Weak by a median 4 pts over 26 weeks (−1 vs −5 vs SPY). Parts marked * are live data with no history to test (research-backed).",
+    "Tested twice. First test (450 companies, 2021–25): ranked stocks the right way at 13, 26 and 52 weeks; Strong beat Weak by a median 4 pts over 26 weeks. Second test (619 companies, 2019–25): still ranked the right way in both halves, Strong −3 vs Weak −5 vs SPY, with fewer big losses (20% vs 24%). Parts marked * are live data with no history to test (research-backed).",
+  growth:
+    "Second test (619 companies, Nov 2019 – Aug 2025, 26 weeks ahead): ranked stocks the right way in both 2019–22 and 2023–25. Strong −2 vs Weak −5 vs SPY (median). A modest tilt: it doesn't raise the odds of a big winner.",
+  margins:
+    "Second test: ranked stocks the right way in both halves (strongest in 2023–25). Strong −3 vs Weak −6 vs SPY, and fewer big losses (21% vs 24% lagged SPY by 25+ pts).",
+  cash:
+    "Second test: ranked stocks the right way in both halves. Its clearest effect is on risk: 19% of Strong vs 28% of Weak lagged SPY by 25+ pts over 26 weeks (median −3 vs −6).",
   quality:
     "Tested: didn't add return in the 2023–25 rally, but in both halves the Strong group had far fewer big losses (lagging SPY by 25+ pts over 26 weeks, Strong vs Weak: 10% vs 34% in 2021–23, 20% vs 28% in 2023–25).",
   flags:
@@ -857,6 +864,7 @@ function SummaryLine({ p, sepa, base }: { p: Profiles | null; sepa: ReturnType<t
       title={title}
       lines={[
         read ? read.text : null,
+        p?.type?.key === "speculative" ? <>Speculative company ({p.type.detail}): in testing {p.type.winPct}% of these beat SPY by 50+ pts over 26 weeks and {p.type.lossPct}% lagged by 25+ — the scores barely changed those odds, so size for the risk.</> : null,
         flags.length ? <>{flags.length} red flag{flags.length === 1 ? "" : "s"}: {flags.map((f) => f.label.toLowerCase()).join("; ")}.</> : <>No red flags.</>,
         sepa.verdict === "Not enough data"
           ? <>SEPA: this stock isn't in your last stage/base scan, so trend, setup and group can't be checked.</>
@@ -869,10 +877,16 @@ function SummaryLine({ p, sepa, base }: { p: Profiles | null; sepa: ReturnType<t
 function ProfileCards({ p }: { p: Profiles }) {
   const [open, setOpen] = useState<string | null>(null);
   const flags = p.redFlags ?? [];
-  const cards = [p.momentum, p.quality].filter((x): x is HProfile => !!x);
+  const cards = [p.momentum, p.growth, p.margins, p.cash, p.quality].filter((x): x is HProfile => !!x);
+  const growthSet = [p.momentum, p.growth, p.margins, p.cash].filter((x): x is HProfile => !!x && x.verdict !== "Limited data");
+  const strongN = growthSet.filter((x) => x.verdict === "Strong").length;
   return (
     <div className="space-y-3">
-      <div className="grid gap-4 lg:grid-cols-3">
+      <div className="grid gap-3 md:grid-cols-2">
+        {p.type && <TypeCard t={p.type} momentum={p.momentum} />}
+        {growthSet.length >= 2 && <AgreementCard set={growthSet} strongN={strongN} />}
+      </div>
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         {cards.map((h) => (
           <Card key={h.key} className="flex flex-col p-4">
             <div className="flex items-start justify-between gap-3">
@@ -905,9 +919,9 @@ function ProfileCards({ p }: { p: Profiles }) {
             )}
             <Tooltip>
               <TooltipTrigger asChild>
-                <span className="mt-auto inline-flex cursor-help items-center gap-1 self-start pt-3 text-[11px] text-muted-foreground"><Info size={12} /> {h.key === "momentum" ? "Backtested: predicted returns 3–12 months out" : "Backtested: fewer big losses, not more return"}</span>
+                <span className="mt-auto inline-flex cursor-help items-center gap-1 self-start pt-3 text-[11px] text-muted-foreground"><Info size={12} /> {CAPTION[h.key] ?? "Backtested"}</span>
               </TooltipTrigger>
-              <TooltipContent className="max-w-sm text-xs leading-relaxed">{EVIDENCE[h.key as "momentum" | "quality"]}</TooltipContent>
+              <TooltipContent className="max-w-sm text-xs leading-relaxed">{EVIDENCE[h.key]}</TooltipContent>
             </Tooltip>
           </Card>
         ))}
@@ -945,8 +959,81 @@ function ProfileCards({ p }: { p: Profiles }) {
         Only names on today's list were tested (survivorship bias), so treat the absolute numbers loosely and compare the groups with each other.
         Dropped because they failed the test: sales-growth level and consistency, multi-year growth records, accruals, debt / equity.
       </p>
+      <p>
+        Second test (Oct 2026): 619 companies, 24 quarterly dates from Nov 2019 to Aug 2025, 13,008 stock-dates, returns vs SPY 26 weeks later.
+        A new profile was kept only if it ranked stocks the right way in both 2019–22 and 2023–25: sales acceleration, margin expansion and cash flow passed.
+        Dropped: a turnaround profile (mostly the same stocks earnings momentum already flags, and no better when the two disagreed) and a steady-compounder
+        profile (ranked stocks the wrong way in 2019–22). The honest limit: about 1 in 10 stocks beat SPY by 50+ points over 26 weeks whatever their scores —
+        big winners came mostly from small or loss-making companies, where these scores barely changed the odds.
+      </p>
       </HowItWorks>
     </div>
+  );
+}
+
+const CAPTION: Record<string, string> = {
+  momentum: "Backtested: predicted returns 3–12 months out",
+  growth: "Backtested: a modest tilt toward better returns",
+  margins: "Backtested: better returns, fewer big losses",
+  cash: "Backtested: fewer big losses",
+  quality: "Backtested: fewer big losses, not more return",
+};
+// Second test, 26 weeks ahead vs SPY: median, and share that lagged SPY by 25+ pts, by how many of the four growth checks were Strong.
+const AGREE_EVIDENCE = [
+  { n: "0", med: -5, loss: 26 }, { n: "1", med: -4, loss: 22 }, { n: "2", med: -3, loss: 21 }, { n: "3–4", med: -2, loss: 19 },
+];
+
+/** Company type with the measured odds of a big win and a big loss. Not a score. */
+function TypeCard({ t, momentum }: { t: CompanyType; momentum?: HProfile }) {
+  const spec = t.key === "speculative";
+  return (
+    <Card className="p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <div className="text-[11px] text-muted-foreground">Company type · upside and risk</div>
+          <div className="mt-0.5 font-display text-lg font-semibold tracking-tight">{t.label}</div>
+          <div className="text-[11px] text-muted-foreground">{t.detail}</div>
+        </div>
+        <div className="grid shrink-0 grid-cols-2 gap-2 text-center">
+          <div className="rounded-md border border-gain-medium/40 bg-gain-medium/10 px-2.5 py-1.5"><div className="font-mono text-lg font-bold text-gain-medium">{t.winPct}%</div><div className="text-[10px] text-muted-foreground">big winners</div></div>
+          <div className="rounded-md border border-loss-medium/40 bg-loss-medium/10 px-2.5 py-1.5"><div className="font-mono text-lg font-bold text-loss-medium">{t.lossPct}%</div><div className="text-[10px] text-muted-foreground">big losers</div></div>
+        </div>
+      </div>
+      <p className="mt-2 text-[11.5px] leading-relaxed text-muted-foreground">
+        Of companies like this in the test, {t.winPct}% beat SPY by 50+ points over the next 26 weeks and {t.lossPct}% lagged it by 25+.
+        {spec
+          ? <> Most big winners came from this group — and most big losers. Here the fundamental scores barely changed the odds{momentum && momentum.verdict === "Weak" ? ", so a Weak score is not a reason to rule it out on its own" : ""}: size for the risk and let the chart decide.</>
+          : <> The scores below matter more here: for profitable companies they separated better and worse stocks more clearly.</>}
+      </p>
+    </Card>
+  );
+}
+
+/** How many of the four growth-side profiles agree, with what each count did in testing. */
+function AgreementCard({ set, strongN }: { set: HProfile[]; strongN: number }) {
+  const row = strongN >= 3 ? 3 : strongN;
+  return (
+    <Card className="p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <div className="text-[11px] text-muted-foreground">Agreement · earnings, sales, margins, cash</div>
+          <div className="mt-0.5 font-display text-lg font-semibold tracking-tight">Strong on {strongN} of {set.length}</div>
+          <div className="flex flex-wrap gap-1 pt-1">
+            {set.map((h) => <span key={h.key} className={`rounded border px-1.5 py-[1px] text-[10.5px] ${VERDICT_CLS[h.verdict]}`}>{h.label}: {h.verdict}</span>)}
+          </div>
+        </div>
+      </div>
+      <div className="mt-2 grid grid-cols-4 gap-1 text-center text-[10.5px]">
+        {AGREE_EVIDENCE.map((e, i) => (
+          <div key={e.n} className={`rounded px-1 py-1 ${i === row ? "bg-primary/15 text-foreground ring-1 ring-primary/50" : "bg-muted/20 text-muted-foreground"}`}>
+            <div className="font-medium">{e.n} strong</div>
+            <div className="font-mono">{e.med} vs SPY</div>
+            <div className="font-mono">{e.loss}% big losers</div>
+          </div>
+        ))}
+      </div>
+      <p className="mt-2 text-[11px] text-muted-foreground">Tested: the more of these agree, the better the median and the fewer big losses — in both 2019–22 and 2023–25.</p>
+    </Card>
   );
 }
 
