@@ -26,6 +26,9 @@ import { useInsideCandles } from "@/hooks/useInsideCandles";
 import { useFiftyTwoWeekHighs } from "@/hooks/useFiftyTwoWeekHighs";
 import type { FiftyTwoWeekHigh } from "@/hooks/useFiftyTwoWeekHighs";
 import CandleSummaryBar from "@/components/rs/CandleSummaryBar";
+import { useCuratedThemes } from "@/hooks/useCuratedThemes";
+import { GROUP_MODE_LABEL, groupKeyForIndustry, type GroupMode } from "@/lib/groupColors";
+import { EXPORT_FORMAT_LABEL, rankedGroups, tvSectionsText, type ExportFormat } from "@/lib/tvSections";
 import {
   useSetupMetrics,
   loadCoilConfig,
@@ -595,22 +598,44 @@ export default function CustomTradingViewListModal({
 
   const symbols = filtered.map((s) => s.symbol);
 
+  // Export format — plain list or TradingView sections (###Group headings, best groups first).
+  const [fmt, setFmt] = useState<ExportFormat>(() => { try { return (localStorage.getItem("rs-custom-export-format") as ExportFormat) || "lines"; } catch { return "lines"; } });
+  const [groupBy, setGroupBy] = useState<GroupMode>(() => { try { return (localStorage.getItem("rs-custom-export-group") as GroupMode) || "industry"; } catch { return "industry"; } });
+  useEffect(() => { try { localStorage.setItem("rs-custom-export-format", fmt); localStorage.setItem("rs-custom-export-group", groupBy); } catch { /* ignore */ } }, [fmt, groupBy]);
+  const { themes: curatedThemes } = useCuratedThemes();
+  const sectionItems = useMemo(() => {
+    if (fmt !== "sections") return [];
+    const themeOf = new Map<string, string>();
+    if (groupBy === "theme") for (const t of curatedThemes) for (const sym of t.symbols) if (!themeOf.has(sym.toUpperCase())) themeOf.set(sym.toUpperCase(), t.name);
+    return filtered.map((s) => ({
+      symbol: s.symbol,
+      group: groupBy === "theme" ? (themeOf.get(s.symbol.toUpperCase()) ?? "No theme") : groupKeyForIndustry(s.sector, groupBy),
+      score: getRsForTab(s, tabId),
+    }));
+  }, [fmt, groupBy, filtered, curatedThemes, getRsForTab, tabId]);
+  const sections = useMemo(() => (fmt === "sections" ? rankedGroups(sectionItems) : []), [fmt, sectionItems]);
+  const exportText = (sep: string) => (fmt === "sections" ? tvSectionsText(sectionItems) : symbols.join(sep));
+
   const handleCopy = async () => {
     try {
-      await navigator.clipboard.writeText(symbols.join(","));
+      await navigator.clipboard.writeText(exportText(","));
       toast.success(`${symbols.length} symbols copied to clipboard.`, { description: "Paste into TradingView Watchlist → Import symbols." });
     } catch { toast.error("Could not copy to clipboard."); }
   };
 
   const handleDownload = () => {
-    const blob = new Blob([symbols.join("\n") + "\n"], { type: "text/plain;charset=utf-8" });
+    const blob = new Blob([exportText("\n") + "\n"], { type: "text/plain;charset=utf-8" });
     const url = URL.createObjectURL(blob);
-    const safe = tabLabel.replace(/\s+/g, "");
+    const safe = tabLabel.replace(/\s+/g, "") + (fmt === "sections" ? `_by${groupBy}` : "");
     const a = document.createElement("a");
     a.href = url; a.download = `RS_Custom_${safe}_${symbols.length}tickers.txt`;
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
     URL.revokeObjectURL(url);
-    toast.success(`Downloaded ${symbols.length} symbols.`, { description: "One ticker per line — ready for TradingView import." });
+    toast.success(`Downloaded ${symbols.length} symbols.`, {
+      description: fmt === "sections"
+        ? `${sections.length} ${GROUP_MODE_LABEL[groupBy].toLowerCase()} sections, best average RS first — ready for TradingView import.`
+        : "One ticker per line — ready for TradingView import.",
+    });
   };
 
   const isAll = state.topN >= TOPN_MAX;
@@ -1219,6 +1244,32 @@ export default function CustomTradingViewListModal({
             );
           })()}
 
+          {/* Export format */}
+          <div className="rounded-md border border-border bg-card/40 px-3 py-2.5">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs font-semibold">Format</span>
+              {(["lines", "sections"] as ExportFormat[]).map((f) => (
+                <button
+                  key={f}
+                  onClick={() => setFmt(f)}
+                  className={`rounded-md border px-3 py-1 text-xs font-medium transition-colors ${fmt === f ? "border-primary bg-primary/15 text-primary" : "border-border text-muted-foreground hover:bg-accent hover:text-foreground"}`}
+                >
+                  {EXPORT_FORMAT_LABEL[f]}
+                </button>
+              ))}
+              {fmt === "sections" && (
+                <select value={groupBy} onChange={(e) => setGroupBy(e.target.value as GroupMode)} className="h-7 rounded-md border border-border bg-background px-2 text-xs" aria-label="Sections by">
+                  {(["industry", "subIndustry", "sector", "theme"] as GroupMode[]).map((m) => <option key={m} value={m}>by {GROUP_MODE_LABEL[m]}</option>)}
+                </select>
+              )}
+            </div>
+            <p className="mt-1.5 text-[11px] text-muted-foreground">
+              {fmt === "sections"
+                ? "Each group goes under its own heading in TradingView. Groups with the highest average RS come first, the weakest last; tickers inside a group are ordered by RS."
+                : "A plain list, one ticker per line, in the sort order above."}
+            </p>
+          </div>
+
           {/* Live preview */}
           <div className="rounded-md border border-primary/30 bg-primary/5 px-3 py-2.5 text-xs">
             <div className="flex items-center justify-between">
@@ -1229,9 +1280,21 @@ export default function CustomTradingViewListModal({
               </span>
             </div>
             {symbols.length > 0 && (
-              <div className="mt-1.5 truncate font-mono text-[10px] text-muted-foreground" title={symbols.join(", ")}>
-                {symbols.slice(0, 12).join(", ")}{symbols.length > 12 ? ` …+${symbols.length - 12} more` : ""}
-              </div>
+              fmt === "sections" ? (
+                <div className="mt-1.5 space-y-0.5 font-mono text-[10px] text-muted-foreground">
+                  {sections.slice(0, 5).map((g, i) => (
+                    <div key={g.name} className="truncate" title={g.symbols.join(", ")}>
+                      <span className="text-foreground">{i + 1}. {g.name}</span>
+                      {g.avg !== null && <span> · avg RS {g.avg.toFixed(1)}</span>} · {g.symbols.slice(0, 6).join(", ")}{g.symbols.length > 6 ? ` +${g.symbols.length - 6}` : ""}
+                    </div>
+                  ))}
+                  {sections.length > 5 && <div>…{sections.length - 5} more sections, weakest last</div>}
+                </div>
+              ) : (
+                <div className="mt-1.5 truncate font-mono text-[10px] text-muted-foreground" title={symbols.join(", ")}>
+                  {symbols.slice(0, 12).join(", ")}{symbols.length > 12 ? ` …+${symbols.length - 12} more` : ""}
+                </div>
+              )
             )}
           </div>
         </div>
