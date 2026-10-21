@@ -3,6 +3,7 @@ import { ChevronDown, ChevronRight, Copy, Download, Loader2 } from "lucide-react
 import { toast } from "sonner";
 import { Segmented } from "@/components/Explainer";
 import { GROUP_MODE_LABEL, groupKeyForIndustry, type GroupMode } from "@/lib/groupColors";
+import { EXPORT_FORMAT_LABEL, tvSectionsText, type ExportFormat } from "@/lib/tvSections";
 
 /**
  * RS Alpha — new 52-week highs and lows in one panel with one timeframe.
@@ -85,20 +86,28 @@ export default function HighsLowsPanel({ stocks, loading, range, onRange, mode, 
   const shown = showAll ? groups : groups.slice(0, PREVIEW);
   const net = highs.length - lows.length;
 
+  const [fmt, setFmt] = useState<ExportFormat>(() => { try { return (localStorage.getItem("rs-hl-format") as ExportFormat) || "lines"; } catch { return "lines"; } });
+  const pickFmt = (f: ExportFormat) => { setFmt(f); try { localStorage.setItem("rs-hl-format", f); } catch { /* ignore */ } };
+  const groupOf = (s: HlStock) => (mode === "theme" ? (s.theme?.trim() || "No theme") : groupKeyForIndustry(s.industry, mode));
+  const textFor = (list: HlStock[], sep: string) =>
+    fmt === "sections" ? tvSectionsText(list.map((s) => ({ symbol: s.symbol, group: groupOf(s), score: s.rating }))) : list.map((s) => s.symbol).join(sep);
+
   const exportList = (list: HlStock[], what: "highs" | "lows") => {
     if (!list.length) return;
-    const blob = new Blob([list.map((s) => s.symbol).join("\n")], { type: "text/plain" });
+    const blob = new Blob([textFor(list, "\n") + "\n"], { type: "text/plain" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `new-52w-${what}-${range}-${new Date().toISOString().slice(0, 10)}.txt`;
+    a.download = `new-52w-${what}-${range}${fmt === "sections" ? `-by-${mode}` : ""}-${new Date().toISOString().slice(0, 10)}.txt`;
     a.click();
     URL.revokeObjectURL(url);
-    toast.success(`Downloaded ${list.length} new 52-week ${what}`, { description: "One ticker per line — ready for TradingView import." });
+    toast.success(`Downloaded ${list.length} new 52-week ${what}`, {
+      description: fmt === "sections" ? `Grouped by ${GROUP_MODE_LABEL[mode].toLowerCase()}, best groups first — ready for TradingView import.` : "One ticker per line — ready for TradingView import.",
+    });
   };
   const copyList = (list: HlStock[], what: string) => {
     if (!list.length) return;
-    navigator.clipboard.writeText(list.map((s) => s.symbol).join(",")).then(() => toast.success(`Copied ${list.length} ${what}`));
+    navigator.clipboard.writeText(textFor(list, ",")).then(() => toast.success(`Copied ${list.length} ${what}`));
   };
 
   const kpi = (label: string, value: string, cls = "", sub?: string) => (
@@ -211,6 +220,8 @@ export default function HighsLowsPanel({ stocks, loading, range, onRange, mode, 
           {filterOn && <span className="text-muted-foreground">· {tableMatches.toLocaleString()} in the table</span>}
         </label>
         <span className="ml-auto flex flex-wrap items-center gap-1.5">
+          <Segmented<ExportFormat> size="xs" value={fmt} onChange={pickFmt}
+            options={(["lines", "sections"] as ExportFormat[]).map((f) => ({ value: f, label: EXPORT_FORMAT_LABEL[f], title: f === "sections" ? `Each ${GROUP_MODE_LABEL[mode].toLowerCase()} under its own heading, best groups (highest average RS) first` : "A plain list, highest RS first" }))} />
           <ExportButton n={highs.length} what="highs" onDownload={() => exportList(highs, "highs")} onCopy={() => copyList(highs, "new highs")} />
           <ExportButton n={lows.length} what="lows" onDownload={() => exportList(lows, "lows")} onCopy={() => copyList(lows, "new lows")} />
         </span>

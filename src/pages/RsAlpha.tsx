@@ -18,7 +18,9 @@ import { useSuperperformance } from "@/hooks/useSuperperformance";
 import SetupAnalyzerModal from "@/components/rs/SetupAnalyzerModal";
 import HighsLowsPanel, { hlWindowDays, type HlStock, type HlWindow } from "@/components/rs/HighsLowsPanel";
 import { useCuratedThemes } from "@/hooks/useCuratedThemes";
-import type { GroupMode } from "@/lib/groupColors";
+import { GROUP_MODE_LABEL, groupKeyForIndustry, type GroupMode } from "@/lib/groupColors";
+import { Segmented } from "@/components/Explainer";
+import { EXPORT_FORMAT_LABEL, rankedGroups, tvSectionsText, type ExportFormat } from "@/lib/tvSections";
 import SectorDistributionModal from "@/components/rs/SectorDistributionModal";
 import ThemeDistributionModal from "@/components/rs/ThemeDistributionModal";
 import FundamentalsCoverageModal from "@/components/rs/FundamentalsCoverageModal";
@@ -253,6 +255,10 @@ export default function RsAlpha() {
   useEffect(() => { try { localStorage.setItem("rs-hl-range", hlRange); } catch { /* ignore */ } }, [hlRange]);
   const [hlMode, setHlMode] = useState<GroupMode>("industry");
   const { themes: curatedThemesForHl } = useCuratedThemes();
+  const [exFmt, setExFmt] = useState<ExportFormat>(() => { try { return (localStorage.getItem("rs-export-format") as ExportFormat) || "lines"; } catch { return "lines"; } });
+  useEffect(() => { try { localStorage.setItem("rs-export-format", exFmt); } catch { /* ignore */ } }, [exFmt]);
+  const [exGroup, setExGroup] = useState<GroupMode>(() => { try { return (localStorage.getItem("rs-export-group") as GroupMode) || "industry"; } catch { return "industry"; } });
+  useEffect(() => { try { localStorage.setItem("rs-export-group", exGroup); } catch { /* ignore */ } }, [exGroup]);
 
   // Days-ago cutoff for the chosen window (see hlWindowDays).
   const nh52wWindowDays = useMemo(() => hlWindowDays(hlRange), [hlRange]);
@@ -502,6 +508,17 @@ export default function RsAlpha() {
     }
     return out;
   }, [stocks, nh52wMap, curatedThemesForHl, ratingMap]);
+
+  const exportItems = () => {
+    const themeOf = new Map<string, string>();
+    for (const t of curatedThemesForHl) for (const sym of t.symbols) if (!themeOf.has(sym)) themeOf.set(sym, t.name);
+    return sortedStocks.map((st) => ({
+      symbol: st.symbol,
+      group: exGroup === "theme" ? (themeOf.get(st.symbol.toUpperCase()) ?? "No theme") : groupKeyForIndustry(st.sector, exGroup),
+      score: getRsForTab(st, activeTab),
+    }));
+  };
+  const exportText = (sep: string) => (exFmt === "sections" ? tvSectionsText(exportItems()) : sortedStocks.map((st) => st.symbol).join(sep));
 
   const displayStocks = showAll ? sortedStocks : sortedStocks.slice(0, 25);
   const hasMore = sortedStocks.length > 25;
@@ -1158,12 +1175,21 @@ export default function RsAlpha() {
               <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border bg-card px-3 py-2">
                 <div className="text-[11px] text-muted-foreground">
                   Exports all <strong className="text-foreground">{sortedStocks.length}</strong> tickers in this timeframe for easy import into TradingView.
+                  <span className="ml-2 inline-flex flex-wrap items-center gap-1.5 align-middle">
+                    <Segmented<ExportFormat> size="xs" value={exFmt} onChange={setExFmt}
+                      options={(["lines", "sections"] as ExportFormat[]).map((f) => ({ value: f, label: EXPORT_FORMAT_LABEL[f], title: f === "sections" ? "Each group under its own heading — best groups (highest average RS in this timeframe) first, worst last" : "A plain list, best RS first" }))} />
+                    {exFmt === "sections" && (
+                      <select value={exGroup} onChange={(e) => setExGroup(e.target.value as GroupMode)} className="h-6 rounded border border-border bg-background px-1.5 text-[11px] text-foreground" aria-label="Sections by">
+                        {(["industry", "subIndustry", "sector", "theme"] as GroupMode[]).map((m) => <option key={m} value={m}>by {GROUP_MODE_LABEL[m]}</option>)}
+                      </select>
+                    )}
+                  </span>
                 </div>
                 <div className="flex items-center gap-2">
                   <button
                     onClick={async () => {
                       const symbols = sortedStocks.map(s => s.symbol);
-                      const text = symbols.join(",");
+                      const text = exportText(",");
                       try {
                         await navigator.clipboard.writeText(text);
                         toast.success(`${symbols.length} symbols copied to clipboard.`, {
@@ -1181,18 +1207,20 @@ export default function RsAlpha() {
                   <button
                     onClick={() => {
                       const symbols = sortedStocks.map(s => s.symbol);
-                      const blob = new Blob([symbols.join("\n") + "\n"], { type: "text/plain;charset=utf-8" });
+                      const blob = new Blob([exportText("\n") + "\n"], { type: "text/plain;charset=utf-8" });
                       const url = URL.createObjectURL(blob);
                       const tabLabel = TABS.find(t => t.id === activeTab)?.label.replace(/\s+/g, "") ?? activeTab;
                       const a = document.createElement("a");
                       a.href = url;
-                      a.download = `RS_${tabLabel}_BestRS_${symbols.length}tickers.txt`;
+                      a.download = `RS_${tabLabel}_BestRS_${symbols.length}tickers${exFmt === "sections" ? `_by${exGroup}` : ""}.txt`;
                       document.body.appendChild(a);
                       a.click();
                       document.body.removeChild(a);
                       URL.revokeObjectURL(url);
                       toast.success(`Downloaded ${symbols.length} symbols.`, {
-                        description: "One ticker per line — ready for TradingView import.",
+                        description: exFmt === "sections"
+                          ? `${rankedGroups(exportItems()).length} ${GROUP_MODE_LABEL[exGroup].toLowerCase()} sections, best average RS first — ready for TradingView import.`
+                          : "One ticker per line — ready for TradingView import.",
                       });
                     }}
                     className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
