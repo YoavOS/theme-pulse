@@ -1,7 +1,10 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Loader2, RefreshCw } from "lucide-react";
 import type { ThemeData, Ticker } from "@/data/themeData";
 import TrendView from "@/components/dashboard/TrackerTrendView";
+import { HeatLegend, HeatTiles, TreemapView } from "@/components/dashboard/TrackerDisplays";
+import { Segmented } from "@/components/Explainer";
+import { marketClock, useLiveSession } from "@/hooks/useLiveSession";
 import type { PerfCache } from "@/hooks/useFullScan";
 import { useStockStages } from "@/hooks/useStockStages";
 import { GROUP_MODE_LABEL, groupKeyForIndustry, type GroupMode } from "@/lib/groupColors";
@@ -26,23 +29,15 @@ const TFS: { key: TrackerTf; label: string; tip: string }[] = [
 ];
 const TF_KEY = "theme_tracker_tf_v1";
 const SHOW_KEY = "theme_tracker_show_v1";
-const REFRESH_MS = 5 * 60 * 1000;
+const DISPLAY_KEY = "theme_tracker_display_v1";
+export type TrackerDisplay = "bars" | "heat" | "tree";
+const DISPLAYS: { value: TrackerDisplay; label: string; title: string }[] = [
+  { value: "bars", label: "Bars", title: "Every group as one bar, strongest first" },
+  { value: "heat", label: "Heatmap", title: "Colored tiles, strongest first" },
+  { value: "tree", label: "Treemap", title: "Tile size = how many stocks the group holds, color = its move" },
+];
 
 interface Member { symbol: string; name?: string | null }
-interface LiveOpen { map: Map<string, number>; fetchedAt: number }
-
-/** US regular session status in New York time. */
-function marketClock(now = new Date()) {
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: "America/New_York", weekday: "short", hour: "2-digit", minute: "2-digit", hourCycle: "h23",
-  }).formatToParts(now);
-  const get = (t: string) => parts.find((p) => p.type === t)?.value ?? "";
-  const wd = get("weekday");
-  const mins = Number(get("hour")) * 60 + Number(get("minute"));
-  const weekday = !["Sat", "Sun"].includes(wd);
-  const open = weekday && mins >= 9 * 60 + 30 && mins < 16 * 60;
-  return { open, sinceOpen: open ? mins - (9 * 60 + 30) : null, time: `${get("hour")}:${get("minute")}` };
-}
 
 /** Round the scale up to a readable number so bars are comparable at a glance. */
 function niceMax(x: number) {
@@ -70,6 +65,10 @@ export default function ThemeTracker({
   });
   useEffect(() => { try { localStorage.setItem(TF_KEY, tf); } catch { /* ignore */ } }, [tf]);
   useEffect(() => { try { localStorage.setItem(SHOW_KEY, showAll ? "all" : "top"); } catch { /* ignore */ } }, [showAll]);
+  const [display, setDisplay] = useState<TrackerDisplay>(() => {
+    try { const v = localStorage.getItem(DISPLAY_KEY) as TrackerDisplay | null; return v && DISPLAYS.some((d) => d.value === v) ? v : "bars"; } catch { return "bars"; }
+  });
+  useEffect(() => { try { localStorage.setItem(DISPLAY_KEY, display); } catch { /* ignore */ } }, [display]);
 
   // ── Full Scan numbers ──
   const [perf, setPerf] = useState<PerfCache | null>(null);
@@ -83,51 +82,7 @@ export default function ThemeTracker({
   const { bySymbol: stageBy, loading: stagesLoading } = useStockStages(tf === "YTD");
 
   // ── Live since-open ──
-  const [live, setLive] = useState<LiveOpen | null>(null);
-  const [liveLoading, setLiveLoading] = useState(false);
-  const [liveError, setLiveError] = useState<string | null>(null);
-  const [, setTick] = useState(0); // re-render the clock line
-  const inflight = useRef(false);
-
-  const fetchOpen = useCallback(async () => {
-    if (inflight.current) return;
-    inflight.current = true;
-    setLiveLoading(true);
-    try {
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-      const anonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
-      if (!supabaseUrl || !anonKey) throw new Error("Config missing");
-      const res = await fetch(`${supabaseUrl}/functions/v1/fetch-themes?timeframe=Today`, {
-        headers: { apikey: anonKey, Authorization: `Bearer ${anonKey}` },
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const j = await res.json() as { error?: string; themes?: { tickers?: { symbol: string; pct_open?: number | null; skipped?: boolean }[] }[] };
-      if (j.error) throw new Error(j.error);
-      const map = new Map<string, number>();
-      for (const t of j.themes ?? []) for (const tk of t.tickers ?? []) {
-        if (!tk.skipped && typeof tk.pct_open === "number" && Number.isFinite(tk.pct_open)) map.set(tk.symbol.toUpperCase(), tk.pct_open);
-      }
-      setLive({ map, fetchedAt: Date.now() });
-      setLiveError(map.size ? null : "no_open");
-    } catch (e) {
-      setLiveError(e instanceof Error ? e.message : String(e));
-    } finally {
-      inflight.current = false;
-      setLiveLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (tf !== "open") return;
-    if (!live || Date.now() - live.fetchedAt > REFRESH_MS) fetchOpen();
-    // Auto-refresh every 5 minutes during the session while the page is visible.
-    const id = window.setInterval(() => {
-      setTick((n) => n + 1);
-      if (document.visibilityState === "visible" && marketClock().open) fetchOpen();
-    }, REFRESH_MS);
-    return () => window.clearInterval(id);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tf, fetchOpen]);
+  const { live, loading: liveLoading, error: liveError, refresh: fetchOpen } = useLiveSession(tf === "open");
 
   // ── Groups ──
   const groups = useMemo(() => {
@@ -156,7 +111,7 @@ export default function ThemeTracker({
 
   const valueOf = useCallback((sym: string): number | null => {
     let v: number | null | undefined;
-    if (tf === "open") v = live?.map.get(sym);
+    if (tf === "open") v = live?.map.get(sym)?.open;
     else if (tf === "YTD") v = stageBy.get(sym)?.features?.ytdPct;
     else {
       const p = perf?.tickers[sym];
@@ -193,9 +148,9 @@ export default function ThemeTracker({
   }, [groups, valueOf]);
 
   const shown = useMemo(() => {
-    if (showAll || rows.length <= 30) return rows;
+    if (showAll || rows.length <= 30 || display !== "bars") return rows;
     return [...rows.slice(0, 15), ...rows.slice(-15)];
-  }, [rows, showAll]);
+  }, [rows, showAll, display]);
   const scale = niceMax(Math.max(0, ...shown.map((r) => Math.abs(r.performance_pct))));
   const clock = marketClock();
 
@@ -242,7 +197,8 @@ export default function ThemeTracker({
     return (
       <TrendView
         groups={groups} perf={perf} title={`${GROUP_MODE_LABEL[groupMode]} Tracker`} status={status}
-        switcher={tfSwitch} onOpen={onOpen} universe={groupMode !== "theme"}
+        switcher={<div className="flex flex-wrap items-center gap-2"><Segmented<TrackerDisplay> size="xs" value={display === "tree" ? "heat" : display} onChange={setDisplay} options={DISPLAYS.filter((d) => d.value !== "tree")} />{tfSwitch}</div>}
+        onOpen={onOpen} universe={groupMode !== "theme"} heat={display !== "bars"}
       />
     );
   }
@@ -250,7 +206,7 @@ export default function ThemeTracker({
   return (
     <div className="rounded-xl border border-border bg-card px-4 py-3.5">
       <div className="mb-2 flex flex-wrap items-center gap-2.5">
-        <h2 className="text-[15px] font-semibold" style={{ fontFamily: "Syne, sans-serif" }}>{GROUP_MODE_LABEL[groupMode]} Tracker</h2>
+        <h2 className="font-display text-[15px] font-semibold tracking-tight">{GROUP_MODE_LABEL[groupMode]} Tracker</h2>
         <span className="font-mono text-[11px] text-muted-foreground">{status}</span>
         {tf === "open" && (
           <button onClick={fetchOpen} disabled={liveLoading} title="Refresh live quotes" className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-50">
@@ -258,7 +214,8 @@ export default function ThemeTracker({
           </button>
         )}
         <div className="ml-auto flex flex-wrap items-center gap-2">
-          {rows.length > 30 && (
+          <Segmented<TrackerDisplay> size="xs" value={display} onChange={setDisplay} options={DISPLAYS} />
+          {rows.length > 30 && display === "bars" && (
             <button onClick={() => setShowAll(!showAll)} className="rounded border border-border px-2 py-1 text-[11px] text-muted-foreground hover:text-foreground">
               {showAll ? `Top & bottom 15` : `Show all ${rows.length}`}
             </button>
@@ -269,6 +226,11 @@ export default function ThemeTracker({
 
       {!shown.length ? (
         <div className="py-10 text-center text-sm text-muted-foreground">{emptyMsg}</div>
+      ) : display !== "bars" ? (
+        <div className="space-y-2">
+          <div className="flex justify-end"><HeatLegend scale={scale} /></div>
+          {display === "heat" ? <HeatTiles rows={shown} scale={scale} onOpen={onOpen} /> : <TreemapView rows={shown} scale={scale} onOpen={onOpen} />}
+        </div>
       ) : (
         <>
           <div className="mb-0.5 grid grid-cols-[120px_1fr_60px] gap-2.5 px-1 font-mono text-[10px] text-muted-foreground sm:grid-cols-[190px_1fr_64px_70px]">
@@ -319,7 +281,7 @@ export default function ThemeTracker({
         ) : (
           <><b className="text-foreground/90">{TFS.find((t) => t.key === tf)?.label}</b> numbers come from the Dashboard's last Full Scan{groupMode !== "theme" ? " and cover the whole stock list" : ""}.</>
         )}
-        {" "}The right column is breadth: stocks up / stocks with data. Click a row to open its stocks.
+        {" "}{display === "bars" ? "The right column is breadth: stocks up / stocks with data." : display === "tree" ? "Tile size is the number of stocks in the group." : "Tiles are ordered strongest first."} Click a group to open its stocks.
       </div>
     </div>
   );
