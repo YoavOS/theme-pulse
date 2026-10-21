@@ -1,6 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
 import { fetchSecQuarters, type SecQuarter } from "../_shared/secFundamentals.ts";
-import { fundamentalFeatures, momentumProfile, qualityProfile, redFlags, type FQ } from "../_shared/fundamentalProfiles.ts";
+import { cashProfile, companyType, fundamentalFeatures, growthProfile, marginProfile, momentumProfile, qualityProfile, redFlags, type FQ } from "../_shared/fundamentalProfiles.ts";
 import { measureEarnings, type DBar } from "../_shared/earningsFuel.ts";
 
 const corsHeaders = {
@@ -1840,6 +1840,10 @@ async function buildBundle(symbol: string, force: boolean) {
   (derived as any).profiles = {
     momentum: momentumProfile(feats, { epsSurprisePct: latestSurprise, revSurprisePct: revSurprises[0] ?? null, revisions90: revisions ? [revisions.thisYear.chg90, revisions.nextYear.chg90] : [], reactionPct }),
     quality: qualityProfile(feats),
+    growth: growthProfile(feats),
+    margins: marginProfile(feats),
+    cash: cashProfile(feats),
+    type: companyType(feats),
     redFlags: redFlags(feats, priceNow),
   };
   // Long history for the app's charts (newest first)
