@@ -1,6 +1,7 @@
 import { useMemo, useState, type ReactNode } from "react";
 import type { ThemeData, Ticker } from "@/data/themeData";
 import type { PerfCache } from "@/hooks/useFullScan";
+import { heatFill } from "@/components/dashboard/TrackerDisplays";
 
 /**
  * Tracker "1W · 1M · 3M" view: every group's average move over three timeframes side by side,
@@ -56,7 +57,7 @@ export function classifyTrend(pr: Record<Key, number>): TrendLabel {
 }
 
 export default function TrackerTrendView({
-  groups, perf, title, status, switcher, onOpen, universe,
+  groups, perf, title, status, switcher, onOpen, universe, heat = false,
 }: {
   groups: Map<string, { symbol: string; name?: string | null }[]>;
   perf: PerfCache | null;
@@ -65,6 +66,7 @@ export default function TrackerTrendView({
   switcher: ReactNode;
   onOpen: (t: ThemeData) => void;
   universe: boolean;
+  heat?: boolean;
 }) {
   const [filter, setFilter] = useState<TrendLabel | "all">("all");
   const [sort, setSort] = useState<Key | "label">("label");
@@ -202,7 +204,9 @@ export default function TrackerTrendView({
                 title={`${r.name} — ${r.n} stocks · click to open`}
               >
                 <span className="truncate text-xs font-medium">{r.name} <span className="font-normal text-muted-foreground">({r.n})</span></span>
-                {COLS.map((c) => <MiniBar key={c.key} v={r.v[c.key]} scale={scales[c.key]} top={r.pr[c.key] >= 2 / 3} bottom={r.pr[c.key] <= 1 / 3} fmt={fmt} />)}
+                {COLS.map((c) => heat
+                  ? <span key={c.key} className="rounded px-1.5 py-1 text-center font-mono text-[11px] tabular-nums text-white" style={{ background: heatFill(r.v[c.key], scales[c.key]) }}>{fmt(r.v[c.key])}</span>
+                  : <MiniBar key={c.key} v={r.v[c.key]} scale={scales[c.key]} top={r.pr[c.key] >= 2 / 3} bottom={r.pr[c.key] <= 1 / 3} fmt={fmt} />)}
                 <span className="flex justify-end">
                   <span title={TREND_META[r.label].tip} className={`whitespace-nowrap rounded-full border px-2 py-0.5 text-[10.5px] font-medium ${TREND_META[r.label].cls}`}>{TREND_META[r.label].text}</span>
                 </span>

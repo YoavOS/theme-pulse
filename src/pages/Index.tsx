@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import HeatmapGridView from "@/components/dashboard/HeatmapGridView";
 import ThemeTracker from "@/components/dashboard/ThemeTracker";
+import SessionView from "@/components/dashboard/SessionView";
 import DashboardConcentrationPanel from "@/components/dashboard/DashboardConcentrationPanel";
 
 import OverallBestThemesList from "@/components/dashboard/OverallBestThemesList";
@@ -70,8 +71,8 @@ export default function Index() {
   useEffect(() => {
     try { localStorage.setItem("dashboard_group_mode_v1", groupMode); } catch { /* ignore */ }
   }, [groupMode]);
-  const [dashView, setDashView] = useState<"heatmap" | "tracker">(() => {
-    try { return localStorage.getItem("dashboard_view_v1") === "tracker" ? "tracker" : "heatmap"; } catch { return "heatmap"; }
+  const [dashView, setDashView] = useState<"heatmap" | "tracker" | "session">(() => {
+    try { const v = localStorage.getItem("dashboard_view_v1"); return v === "tracker" || v === "session" ? v : "heatmap"; } catch { return "heatmap"; }
   });
   useEffect(() => {
     try { localStorage.setItem("dashboard_view_v1", dashView); } catch { /* ignore */ }
@@ -643,16 +644,16 @@ export default function Index() {
         <div className="mb-4 flex flex-wrap items-center gap-2">
           <span className="text-[11px] uppercase tracking-wide text-muted-foreground">View</span>
           <div className="inline-flex items-center gap-0.5 rounded-md border border-border bg-muted/20 p-0.5">
-            {(["heatmap", "tracker"] as const).map(v => (
+            {(["heatmap", "tracker", "session"] as const).map(v => (
               <button
                 key={v}
                 onClick={() => setDashView(v)}
-                title={v === "tracker" ? "Every group as one bar, strongest first — with a live 'Since Open' view" : "Heatmap cards"}
-                className={`rounded px-3 py-1 text-[11px] font-medium capitalize transition ${
+                title={v === "tracker" ? "Every group ranked, as bars, a heatmap or a treemap — with a live 'Since Open' view" : v === "session" ? "Today's move split into the overnight gap and the move during trading hours" : "Heatmap cards"}
+                className={`rounded px-3 py-1 text-[11px] font-medium transition ${
                   dashView === v ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"
                 }`}
               >
-                {v}
+                {v === "session" ? "Gap vs session" : v === "tracker" ? "Tracker" : "Heatmap"}
               </button>
             ))}
           </div>
@@ -685,7 +686,9 @@ export default function Index() {
           {groupMode !== "theme" && <ClassificationCoverage onUpdated={() => loadSectors(true)} />}
         </div>
 
-        {dashView === "tracker" ? (
+        {dashView === "session" ? (
+          <SessionView groupMode={groupMode} baseThemes={baseThemes} industryBySymbol={industryBySymbol} onOpen={setDrilldownTheme} />
+        ) : dashView === "tracker" ? (
           <ThemeTracker
             groupMode={groupMode}
             baseThemes={baseThemes}
