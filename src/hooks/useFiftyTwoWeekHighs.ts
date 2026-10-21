@@ -6,10 +6,12 @@ export interface FiftyTwoWeekHigh {
   latestClose: number | null;
   lastHighDaysAgo: number | null;
   pctBelowHigh: number | null;
+  /** days since the most recent bar at the 52-week low */
+  lastLowDaysAgo?: number | null;
 }
 
 // localStorage-backed 24h cache — keyed per symbol so partial universes reuse hits.
-const LS_KEY = "rs-52w-highs-v1";
+const LS_KEY = "rs-52w-highs-v2"; // v2 adds lastLowDaysAgo
 const LS_TTL_MS = 24 * 60 * 60 * 1000;
 
 interface StoredEntry extends FiftyTwoWeekHigh { at: number }
@@ -49,7 +51,7 @@ export function useFiftyTwoWeekHighs(symbols: string[], enabled = true) {
     for (const s of symbols) {
       const hit = store[s];
       if (hit && now - hit.at < LS_TTL_MS) {
-        fresh.set(s, { high52w: hit.high52w, latestClose: hit.latestClose, lastHighDaysAgo: hit.lastHighDaysAgo, pctBelowHigh: hit.pctBelowHigh });
+        fresh.set(s, { high52w: hit.high52w, latestClose: hit.latestClose, lastHighDaysAgo: hit.lastHighDaysAgo, pctBelowHigh: hit.pctBelowHigh, lastLowDaysAgo: hit.lastLowDaysAgo ?? null });
       } else if (!inflight.current.has(s)) {
         need.push(s);
       }
@@ -71,7 +73,7 @@ export function useFiftyTwoWeekHighs(symbols: string[], enabled = true) {
         const nowInner = Date.now();
         const store2 = readStore();
         for (const r of rows) {
-          const entry = { high52w: r.high52w, latestClose: r.latestClose, lastHighDaysAgo: r.lastHighDaysAgo, pctBelowHigh: r.pctBelowHigh };
+          const entry = { high52w: r.high52w, latestClose: r.latestClose, lastHighDaysAgo: r.lastHighDaysAgo, pctBelowHigh: r.pctBelowHigh, lastLowDaysAgo: r.lastLowDaysAgo ?? null };
           fresh.set(r.symbol, entry);
           store2[r.symbol] = { ...entry, at: nowInner };
         }

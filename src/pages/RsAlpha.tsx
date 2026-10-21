@@ -16,8 +16,7 @@ import Clean21EmaScanModal from "@/components/rs/Clean21EmaScanModal";
 import SuperperformanceScanModal from "@/components/rs/SuperperformanceScanModal";
 import { useSuperperformance } from "@/hooks/useSuperperformance";
 import SetupAnalyzerModal from "@/components/rs/SetupAnalyzerModal";
-import HighLowLeadership, { type HighLowItem } from "@/components/shared/HighLowLeadership";
-import { useSetupMetrics } from "@/hooks/useSetupMetrics";
+import HighsLowsPanel, { hlWindowDays, type HlStock, type HlWindow } from "@/components/rs/HighsLowsPanel";
 import { useCuratedThemes } from "@/hooks/useCuratedThemes";
 import type { GroupMode } from "@/lib/groupColors";
 import SectorDistributionModal from "@/components/rs/SectorDistributionModal";
@@ -247,27 +246,20 @@ export default function RsAlpha() {
   });
   useEffect(() => { localStorage.setItem("rs-52w-filter", String(nh52wOn)); }, [nh52wOn]);
 
-  // 52-Week High / Low Leadership (lazy — reuses the cached 1y OHLC metrics).
-  const [hlOpen, setHlOpen] = useState(false);
+  // New 52-week highs & lows panel — one timeframe for the panel and the table filter.
+  const [hlOpen, setHlOpen] = useState<boolean>(() => { try { return localStorage.getItem("rs-hl-open") !== "0"; } catch { return true; } });
+  useEffect(() => { try { localStorage.setItem("rs-hl-open", hlOpen ? "1" : "0"); } catch { /* ignore */ } }, [hlOpen]);
+  const [hlRange, setHlRange] = useState<HlWindow>(() => { try { return (localStorage.getItem("rs-hl-range") as HlWindow) || "1w"; } catch { return "1w"; } });
+  useEffect(() => { try { localStorage.setItem("rs-hl-range", hlRange); } catch { /* ignore */ } }, [hlRange]);
   const [hlMode, setHlMode] = useState<GroupMode>("industry");
   const { themes: curatedThemesForHl } = useCuratedThemes();
-  const { metrics: hlMetrics, loading: hlLoading, progress: hlProgress, load: loadHlMetrics } = useSetupMetrics();
 
-  // 52W-high window per active timeframe (days-ago cutoff).
-  const nh52wWindowDays = useMemo(() => {
-    switch (activeTab) {
-      case "1d": return 1;
-      case "1w": return 7;
-      case "1m": return 31;
-      case "3m": return 92;
-      case "6m": return 183;
-      default: return 366; // overall — any 52W-high hit within the last year
-    }
-  }, [activeTab]);
+  // Days-ago cutoff for the chosen window (see hlWindowDays).
+  const nh52wWindowDays = useMemo(() => hlWindowDays(hlRange), [hlRange]);
 
   const { highsMap: nh52wMap, loading: nh52wLoading } = useFiftyTwoWeekHighs(
     useMemo(() => stocks.map(s => s.symbol), [stocks]),
-    stocks.length > 0 && nh52wOn,
+    stocks.length > 0 && (nh52wOn || hlOpen),
   );
 
   useEffect(() => { setShowAll(false); }, [activeTab]);
@@ -497,32 +489,19 @@ export default function RsAlpha() {
     [stocks, hideOtc, activeTab, weights]
   );
 
-  const hlPool = useMemo(
-    () => stocks
-      .filter(s => !isOtcSymbol(s.symbol))
-      .sort((a, b) => (b.avgDollarVolume ?? 0) - (a.avgDollarVolume ?? 0))
-      .slice(0, 1500),
-    [stocks], // eslint-disable-line react-hooks/exhaustive-deps
-  );
-
-  const hlItems = useMemo<HighLowItem[]>(() => {
+  const hlStocks = useMemo<HlStock[]>(() => {
     const themeOf = new Map<string, string>();
     for (const t of curatedThemesForHl) for (const sym of t.symbols) if (!themeOf.has(sym)) themeOf.set(sym, t.name);
-    const out: HighLowItem[] = [];
-    for (const s of hlPool) {
-      const m = hlMetrics.get(s.symbol.toUpperCase());
+    const out: HlStock[] = [];
+    for (const s of stocks) {
+      if (isOtcSymbol(s.symbol)) continue;
+      const m = nh52wMap.get(s.symbol);
       if (!m) continue;
-      out.push({
-        symbol: s.symbol.toUpperCase(),
-        industry: s.sector ?? null,
-        theme: themeOf.get(s.symbol.toUpperCase()) ?? null,
-        rating: ratingMap.get(s.symbol) ?? null,
-        lastHighDaysAgo: m.lastHighDaysAgo,
-        lastLowDaysAgo: m.lastLowDaysAgo,
-      });
+      const sym = s.symbol.toUpperCase();
+      out.push({ symbol: sym, name: s.companyName ?? null, industry: s.sector ?? null, theme: themeOf.get(sym) ?? null, rating: ratingMap.get(s.symbol) ?? null, hi: m.lastHighDaysAgo, lo: m.lastLowDaysAgo ?? null });
     }
     return out;
-  }, [hlPool, hlMetrics, curatedThemesForHl, ratingMap]);
+  }, [stocks, nh52wMap, curatedThemesForHl, ratingMap]);
 
   const displayStocks = showAll ? sortedStocks : sortedStocks.slice(0, 25);
   const hasMore = sortedStocks.length > 25;
@@ -1003,108 +982,20 @@ export default function RsAlpha() {
           </div>
         </div>
 
-        {/* New 52-Week Highs filter */}
+        {/* New 52-week highs & lows */}
         <div className="container pb-2">
-          <div className="flex flex-wrap items-center gap-2 rounded-md border border-border bg-card/30 px-3 py-2 text-xs">
-            <Filter size={11} className="shrink-0" />
-            <span className="font-medium text-foreground">New 52-Week Highs</span>
-            <span className="text-[10px] text-muted-foreground" title="Stocks whose closing price hit a fresh 52-week high within the currently selected timeframe.">
-              <Info size={10} className="inline" />
-            </span>
-            <button
-              onClick={() => setNh52wOn(v => !v)}
-              className={`ml-1 rounded px-2 py-0.5 text-[11px] border transition-colors ${
-                nh52wOn
-                  ? "border-[hsl(45,90%,55%)] bg-[hsl(45,90%,55%)]/15 text-[hsl(45,90%,60%)] font-medium"
-                  : "border-border text-muted-foreground hover:bg-accent hover:text-foreground"
-              }`}
-            >
-              {nh52wOn ? "On" : "Off"}
+          {hlOpen ? (
+            <HighsLowsPanel
+              stocks={hlStocks} loading={nh52wLoading} range={hlRange} onRange={setHlRange} mode={hlMode} onMode={setHlMode}
+              filterOn={nh52wOn} onFilter={setNh52wOn} tableMatches={sortedStocks.length} onHide={() => setHlOpen(false)}
+            />
+          ) : (
+            <button onClick={() => setHlOpen(true)} className="flex w-full items-center gap-2 rounded-md border border-border bg-card/30 px-3 py-2 text-left text-xs hover:bg-accent/30">
+              <span className="font-medium">New 52-week highs &amp; lows</span>
+              <span className="text-muted-foreground">{nh52wOn ? "· table filtered to new highs" : ""}</span>
+              <span className="ml-auto text-[11px] text-muted-foreground">Show</span>
             </button>
-            <span className="text-[10px] text-muted-foreground">
-              Window: last {nh52wWindowDays === 1 ? "1 day" : nh52wWindowDays >= 366 ? "12 months" : `${nh52wWindowDays} days`} (matches timeframe {activeTab.toUpperCase()})
-            </span>
-            <button
-              onClick={() => { setSortField("nh52w"); setSortDir("asc"); }}
-              className={`rounded px-2 py-0.5 text-[10px] border transition-colors ${
-                sortField === "nh52w"
-                  ? "border-[hsl(45,90%,55%)] bg-[hsl(45,90%,55%)]/15 text-[hsl(45,90%,60%)] font-medium"
-                  : "border-border text-muted-foreground hover:bg-accent hover:text-foreground"
-              }`}
-              title="Sort by freshest 52-week high first"
-            >
-              Sort: New 52W Highs First
-            </button>
-            {nh52wOn && (
-              <span className="ml-auto flex items-center gap-2 text-[10px] text-muted-foreground">
-                <span>{sortedStocks.length.toLocaleString()} matches</span>
-                {nh52wLoading && <span className="italic">loading…</span>}
-                <button
-                  onClick={() => {
-                    const list = sortedStocks.map(s => s.symbol).join("\n");
-                    navigator.clipboard.writeText(list).then(() => toast.success(`Copied ${sortedStocks.length} tickers`));
-                  }}
-                  className="rounded border border-border px-2 py-0.5 hover:bg-accent hover:text-foreground"
-                >
-                  Copy
-                </button>
-                <button
-                  onClick={() => {
-                    const list = sortedStocks.map(s => s.symbol).join("\n");
-                    const blob = new Blob([list], { type: "text/plain" });
-                    const url = URL.createObjectURL(blob);
-                    const a = document.createElement("a");
-                    a.href = url;
-                    a.download = `new-52w-highs-${activeTab}.txt`;
-                    a.click();
-                    URL.revokeObjectURL(url);
-                  }}
-                  className="rounded border border-border px-2 py-0.5 hover:bg-accent hover:text-foreground"
-                >
-                  .txt
-                </button>
-              </span>
-            )}
-          </div>
-        </div>
-
-        {/* 52-Week High / Low Leadership */}
-        <div className="container pb-2">
-          <div className="rounded-md border border-border bg-card/30 px-3 py-2">
-            <div className="flex flex-wrap items-center gap-2 text-xs">
-              <span className="font-medium text-foreground">52-Week High / Low Leadership</span>
-              <span className="text-[10px] text-muted-foreground">
-                Which industries, sectors or themes are printing new highs and new lows.
-              </span>
-              <button
-                onClick={() => {
-                  setHlOpen(v => !v);
-                  if (!hlOpen && hlItems.length === 0) void loadHlMetrics(hlPool.map(s => s.symbol));
-                }}
-                className="ml-auto rounded border border-border px-2 py-0.5 text-[11px] text-muted-foreground hover:bg-accent hover:text-foreground"
-              >
-                {hlOpen ? "Hide" : "Show"}
-              </button>
-              {hlOpen && (
-                <button
-                  onClick={() => void loadHlMetrics(hlPool.map(s => s.symbol))}
-                  disabled={hlLoading}
-                  className="rounded border border-border px-2 py-0.5 text-[11px] text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-50"
-                >
-                  {hlLoading ? `Loading ${hlProgress.done}/${hlProgress.total}…` : "Refresh"}
-                </button>
-              )}
-            </div>
-            {hlOpen && (
-              <div className="mt-2">
-                {hlItems.length === 0 && !hlLoading ? (
-                  <div className="py-2 text-[11px] text-muted-foreground">No data yet — press Refresh.</div>
-                ) : (
-                  <HighLowLeadership items={hlItems} mode={hlMode} onModeChange={setHlMode} />
-                )}
-              </div>
-            )}
-          </div>
+          )}
         </div>
 
 
