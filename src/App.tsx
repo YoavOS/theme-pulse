@@ -11,7 +11,6 @@ import ThemeIntelligence from "./pages/ThemeIntelligence";
 import RsAlpha from "./pages/RsAlpha";
 import LiveExecution from "./pages/LiveExecution";
 import Earnings from "./pages/Earnings";
-import MorningBrief from "./pages/MorningBrief";
 import MarketFlag from "./pages/MarketFlag";
 import StorageManager from "./pages/StorageManager";
 import MinerviniChecker from "./pages/MinerviniChecker";
@@ -49,7 +48,7 @@ const App = () => (
             <Route path="/live" element={<LiveExecution />} />
             <Route path="/earnings" element={<Earnings />} />
             <Route path="/market-drivers" element={<Navigate to="/" replace />} />
-            <Route path="/morning-brief" element={<MorningBrief />} />
+            <Route path="/morning-brief" element={<Navigate to="/?brief=1" replace />} />
             <Route path="/market-flag" element={<MarketFlag />} />
             <Route path="/storage" element={<StorageManager />} />
             <Route path="/minervini" element={<MinerviniChecker />} />
