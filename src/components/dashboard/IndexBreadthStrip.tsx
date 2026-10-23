@@ -7,7 +7,7 @@ import { Loader2, RefreshCw } from "lucide-react";
  * Data comes from the `index-drivers` edge function (full constituent lists).
  */
 
-type Tf = "today" | "1w" | "1m" | "3m";
+export type Tf = "today" | "1w" | "1m" | "3m";
 const TF_OF: Record<string, Tf> = { Today: "today", "1W": "1w", "1M": "1m", "3M": "3m" };
 const TF_LONG: Record<Tf, string> = { today: "today", "1w": "over the last week", "1m": "over the last month", "3m": "over the last 3 months" };
 const INDEXES = [
@@ -15,7 +15,7 @@ const INDEXES = [
   { key: "QQQ", label: "Nasdaq 100" },
 ] as const;
 
-interface Breadth { indexPct: number | null; up: number; down: number; known: number; at: number }
+export interface Breadth { indexPct: number | null; up: number; down: number; known: number; at: number }
 
 const CACHE_KEY = "index_breadth_v1";
 const ttlFor = (tf: Tf) => (tf === "today" ? 5 * 60_000 : 60 * 60_000);
@@ -45,8 +45,8 @@ async function load(index: string, tf: Tf): Promise<Breadth | null> {
   };
 }
 
-export default function IndexBreadthStrip({ timeframe }: { timeframe: string }) {
-  const tf = TF_OF[timeframe];
+/** Shared loader (cached per index + timeframe) — also used by the dashboard Brief panel. */
+export function useIndexBreadth(tf: Tf | undefined) {
   const [data, setData] = useState<Record<string, Breadth | null>>({});
   const [loading, setLoading] = useState(false);
 
@@ -74,6 +74,12 @@ export default function IndexBreadthStrip({ timeframe }: { timeframe: string }) 
   }, [tf]);
 
   useEffect(() => { void run(false); }, [run]);
+  return { spy: data.SPY, qqq: data.QQQ, data, loading, refresh: () => run(true) };
+}
+
+export default function IndexBreadthStrip({ timeframe }: { timeframe: string }) {
+  const tf = TF_OF[timeframe];
+  const { data, loading, refresh } = useIndexBreadth(tf);
 
   if (!tf) return null;
 
@@ -83,7 +89,7 @@ export default function IndexBreadthStrip({ timeframe }: { timeframe: string }) 
         <h2 className="font-display text-[13px] font-semibold tracking-tight">Index breadth</h2>
         <span className="text-[11px] text-muted-foreground">Members that rose vs fell {TF_LONG[tf]}</span>
         <button
-          onClick={() => void run(true)}
+          onClick={() => void refresh()}
           disabled={loading}
           className="ml-auto rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-50"
           title="Refresh"

@@ -30,7 +30,11 @@ import { TooltipProvider, Tooltip, TooltipTrigger, TooltipContent } from "@/comp
 import { useSpyBenchmark } from "@/hooks/useSpyBenchmark";
 import { useFullScan } from "@/hooks/useFullScan";
 import { useVolumeData } from "@/hooks/useVolumeData";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
+import BriefPanel from "@/components/brief/BriefPanel";
+import BriefRail from "@/components/brief/BriefRail";
+import { useBriefData } from "@/hooks/useBrief";
+import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import HelpButton from "@/components/HelpButton";
 import ThemeSearchBar from "@/components/ThemeSearchBar";
 import { useThemeSearch } from "@/hooks/useThemeSearch";
@@ -56,6 +60,12 @@ function formatTime(d: Date) {
   return d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
 }
 
+
+function useMedia(q: string) {
+  const [m, setM] = useState(() => typeof window !== "undefined" && window.matchMedia(q).matches);
+  useEffect(() => { const mq = window.matchMedia(q); const on = () => setM(mq.matches); on(); mq.addEventListener("change", on); return () => mq.removeEventListener("change", on); }, [q]);
+  return m;
+}
 export default function Index() {
   const [activeTimeframe, setActiveTimeframe] = useState<string>("Today");
   const [showPlaceholders, setShowPlaceholders] = useState(false);
@@ -63,6 +73,28 @@ export default function Index() {
   const [showSelector, setShowSelector] = useState(false);
   const [showValidateDialog, setShowValidateDialog] = useState(false);
   const [drilldownTheme, setDrilldownTheme] = useState<ThemeData | null>(null);
+
+  // ── Brief side panel (replaces the Morning Brief page) ──
+  const isWide = useMedia("(min-width: 1280px)");
+  const isPhone = useMedia("(max-width: 639px)");
+  const [briefDocked, setBriefDocked] = useState<boolean>(() => { try { return localStorage.getItem("dashboard_brief_open_v1") !== "0"; } catch { return true; } });
+  useEffect(() => { try { localStorage.setItem("dashboard_brief_open_v1", briefDocked ? "1" : "0"); } catch { /* ignore */ } }, [briefDocked]);
+  const [briefSheet, setBriefSheet] = useState(false);
+  const briefData = useBriefData(true);
+  const toggleBrief = () => (isWide ? setBriefDocked((v) => !v) : setBriefSheet((v) => !v));
+  const [searchParams, setSearchParams] = useSearchParams();
+  useEffect(() => {
+    if (searchParams.get("brief") !== "1") return;
+    if (window.matchMedia("(min-width: 1280px)").matches) setBriefDocked(true); else setBriefSheet(true);
+    const next = new URLSearchParams(searchParams); next.delete("brief"); setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams]);
+  const headerRef = useRef<HTMLElement>(null);
+  const [headerH, setHeaderH] = useState(0);
+  useEffect(() => {
+    const el = headerRef.current; if (!el) return;
+    const ro = new ResizeObserver(() => setHeaderH(el.offsetHeight)); ro.observe(el); setHeaderH(el.offsetHeight);
+    return () => ro.disconnect();
+  }, []);
   const [showOptions, setShowOptions] = useState(false);
   const [showDemoConfirm, setShowDemoConfirm] = useState(false);
   const [showExportLeaders, setShowExportLeaders] = useState(false);
@@ -316,7 +348,6 @@ export default function Index() {
 
   const dashboardTabs = [
     { to: "/", label: "Dashboard", icon: <LayoutDashboard size={14} />, active: true, color: "" },
-    { to: "/morning-brief", label: "Morning Brief", icon: <Sun size={14} />, active: false, color: "text-[hsl(40,90%,55%)]" },
     { to: "/market-flag", label: "Market Flag", icon: <Flag size={14} />, active: false, color: "text-[hsl(150,70%,45%)]" },
     { to: "/intelligence", label: "Intelligence", icon: <Brain size={14} />, active: false, color: "text-primary" },
     { to: "/rs-alpha", label: "RS Alpha", icon: <Zap size={14} />, active: false, color: "text-[hsl(280,70%,60%)]" },
@@ -343,7 +374,7 @@ export default function Index() {
         onCancel={() => setShowDemoConfirm(false)}
       />
 
-      <header className="sticky top-0 z-30 border-b border-border bg-background/80 backdrop-blur-md">
+      <header ref={headerRef} className="sticky top-0 z-30 border-b border-border bg-background/80 backdrop-blur-md">
         <div className="container py-3">
           {/* Row 1: title + status */}
           <div className="flex items-center justify-between gap-4">
@@ -421,6 +452,7 @@ export default function Index() {
 
           {/* Row 2: Timeframes + Actions */}
           <div className="mt-2.5 flex items-center justify-between gap-3 flex-wrap">
+            <div className="flex flex-wrap items-center gap-2">
             <div className="flex rounded-md border border-border bg-secondary/50">
               {TIMEFRAMES.map((tf) => (
                 <button
@@ -435,6 +467,15 @@ export default function Index() {
                   {tf}
                 </button>
               ))}
+            </div>
+            <button
+              onClick={toggleBrief}
+              aria-pressed={isWide ? briefDocked : briefSheet}
+              className={`inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-semibold transition-colors ${(isWide ? briefDocked : briefSheet) ? "border-[hsl(40,90%,55%)]/70 bg-[hsl(40,90%,55%)]/15 text-[hsl(40,90%,62%)]" : "border-border text-muted-foreground hover:text-foreground"}`}
+              title="Brief: market context, events, earnings, news and the AI brief"
+            >
+              <Sun size={13} /> Brief
+            </button>
             </div>
 
             <div className="flex items-center gap-2">
@@ -645,7 +686,8 @@ export default function Index() {
         </div>
       )}
 
-      <main className="container py-6">
+      <div className="flex items-start">
+      <main className="container min-w-0 flex-1 py-6">
         {searchResult && (
           <div className="mb-4 flex items-center gap-2 rounded-lg border border-primary/20 bg-primary/5 px-4 py-2.5 text-sm">
             <span className="font-medium text-foreground">
@@ -755,6 +797,26 @@ export default function Index() {
 
         <IndexBreadthStrip timeframe={activeTimeframe} />
       </main>
+      {isWide && (
+        <aside
+          className={`sticky shrink-0 border-l border-border bg-background ${briefDocked ? "w-[400px]" : "w-14"}`}
+          style={{ top: headerH, height: `calc(100vh - ${headerH}px)` }}
+          aria-label="Brief"
+        >
+          {briefDocked
+            ? <BriefPanel data={briefData} themes={themes} timeframe={activeTimeframe} groupLabel={isMixed ? "Industry" : GROUP_MODE_LABEL[groupMode]} onOpenGroup={setDrilldownTheme} onClose={() => setBriefDocked(false)} />
+            : <BriefRail data={briefData} onOpen={() => setBriefDocked(true)} />}
+        </aside>
+      )}
+      </div>
+      {!isWide && (
+        <Sheet open={briefSheet} onOpenChange={setBriefSheet}>
+          <SheetContent side={isPhone ? "bottom" : "right"} className={`p-0 [&>button]:hidden ${isPhone ? "h-[85vh] rounded-t-2xl" : "w-full sm:max-w-[420px]"}`}>
+            <SheetTitle className="sr-only">Brief</SheetTitle>
+            <BriefPanel data={briefData} themes={themes} timeframe={activeTimeframe} groupLabel={isMixed ? "Industry" : GROUP_MODE_LABEL[groupMode]} onOpenGroup={(t) => { setBriefSheet(false); setDrilldownTheme(t); }} onClose={() => setBriefSheet(false)} closeIcon="x" />
+          </SheetContent>
+        </Sheet>
+      )}
 
 
       <footer className="border-t border-border py-6 text-center text-xs text-muted-foreground">
