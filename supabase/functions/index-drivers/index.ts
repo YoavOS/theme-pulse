@@ -1,5 +1,5 @@
 // Computes weighted contribution of top constituents to QQQ / SPY index move.
-// GET /?index=QQQ|SPY&timeframe=today|1w|1m
+// GET /?index=QQQ|SPY&timeframe=today|1w|1m|3m
 // Uses static top-50 weight tables (approximate, refresh periodically) and
 // fetches today's % change from Yahoo Finance for each symbol.
 
@@ -651,8 +651,23 @@ async function fetchQuoteViaChart(symbol: string): Promise<QuoteResult> {
     const r = json?.chart?.result?.[0];
     const meta = r?.meta;
     const price: number | null = typeof meta?.regularMarketPrice === "number" ? meta.regularMarketPrice : null;
-    const prevClose: number | null = typeof meta?.chartPreviousClose === "number" ? meta.chartPreviousClose
-      : typeof meta?.previousClose === "number" ? meta.previousClose : null;
+    // NOTE: with range=5d, meta.chartPreviousClose is the close BEFORE the 5-day window
+    // (≈ a weekly change), not yesterday's close. Use the bars: the latest session is the
+    // bar on the same exchange-local day as regularMarketTime; previous close is the bar before it.
+    const ts: number[] = r?.timestamp ?? [];
+    const closes: (number | null)[] = r?.indicators?.quote?.[0]?.close ?? [];
+    const off = Number(meta?.gmtoffset ?? 0);
+    const dayOf = (t: number) => Math.floor((t + off) / 86400);
+    const mktDay = dayOf(Number(meta?.regularMarketTime ?? ts[ts.length - 1] ?? 0));
+    let todayIdx = -1;
+    for (let k = ts.length - 1; k >= 0; k--) if (dayOf(ts[k]) === mktDay) { todayIdx = k; break; }
+    if (todayIdx === -1) todayIdx = ts.length - 1;
+    let prevClose: number | null = null;
+    for (let k = todayIdx - 1; k >= 0; k--) if (typeof closes[k] === "number" && closes[k]! > 0) { prevClose = closes[k]!; break; }
+    if (prevClose === null) {
+      const p = Number(meta?.regularMarketPreviousClose ?? meta?.previousClose);
+      prevClose = Number.isFinite(p) && p > 0 ? p : null;
+    }
     let pct: number | null = null;
     if (price !== null && prevClose && prevClose > 0) {
       pct = ((price - prevClose) / prevClose) * 100;
@@ -676,7 +691,7 @@ async function fetchQuotes(symbols: string[]): Promise<Map<string, QuoteResult>>
 }
 
 async function fetchHistoricalPct(symbol: string, days: number): Promise<number | null> {
-  const range = days <= 7 ? "1mo" : "3mo";
+  const range = days <= 7 ? "1mo" : days <= 21 ? "3mo" : "6mo";
   const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=${range}&interval=1d`;
   try {
     const res = await fetch(url, { headers: { "User-Agent": UA } });
@@ -721,9 +736,13 @@ Deno.serve(async (req) => {
         pctChange: quotes.get(sym)?.pctChange ?? null,
       }));
     } else {
-      const days = timeframe === "1m" ? 21 : 5;
+      const days = timeframe === "3m" ? 63 : timeframe === "1m" ? 21 : 5;
       const symbols = [indexSymbol, ...weights.map((w) => w[0])];
-      const results = await Promise.all(symbols.map((s) => fetchHistoricalPct(s, days).catch(() => null)));
+      const results: (number | null)[] = [];
+      for (let i = 0; i < symbols.length; i += 50) {
+        const part = await Promise.all(symbols.slice(i, i + 50).map((s) => fetchHistoricalPct(s, days).catch(() => null)));
+        results.push(...part);
+      }
       const map = new Map<string, number | null>();
       symbols.forEach((s, i) => map.set(s, results[i]));
       indexPct = map.get(indexSymbol) ?? null;
@@ -774,7 +793,7 @@ Deno.serve(async (req) => {
       rows,
       top5ContributionPct,
       top10ContributionPct,
-      breadth: { advancers, decliners, total: enriched.length },
+      breadth: { advancers, decliners, total: enriched.length, known: enriched.filter((r) => r.pctChange !== null).length },
       lastUpdated: new Date().toISOString(),
     });
   } catch (e) {

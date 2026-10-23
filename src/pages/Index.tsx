@@ -1,4 +1,5 @@
 import { useState, useMemo, useCallback, useRef, useEffect } from "react";
+import IndexBreadthStrip from "@/components/dashboard/IndexBreadthStrip";
 import { ThemeData } from "@/data/themeData";
 import { useLiveThemeData } from "@/hooks/useLiveThemeData";
 import ThemeDrilldownModal from "@/components/ThemeDrilldownModal";
@@ -752,6 +753,8 @@ export default function Index() {
         )}
 
         <DashboardConcentrationPanel themes={baseThemes} />
+
+        <IndexBreadthStrip timeframe={activeTimeframe} />
       </main>
 
 
