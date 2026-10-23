@@ -2,7 +2,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "@/hooks/useAuth";
 import Index from "./pages/Index";
 import Login from "./pages/Login";
@@ -11,7 +11,6 @@ import ThemeIntelligence from "./pages/ThemeIntelligence";
 import RsAlpha from "./pages/RsAlpha";
 import LiveExecution from "./pages/LiveExecution";
 import Earnings from "./pages/Earnings";
-import MarketDrivers from "./pages/MarketDrivers";
 import MorningBrief from "./pages/MorningBrief";
 import MarketFlag from "./pages/MarketFlag";
 import StorageManager from "./pages/StorageManager";
@@ -49,7 +48,7 @@ const App = () => (
             <Route path="/rs-alpha" element={<RsAlpha />} />
             <Route path="/live" element={<LiveExecution />} />
             <Route path="/earnings" element={<Earnings />} />
-            <Route path="/market-drivers" element={<MarketDrivers />} />
+            <Route path="/market-drivers" element={<Navigate to="/" replace />} />
             <Route path="/morning-brief" element={<MorningBrief />} />
             <Route path="/market-flag" element={<MarketFlag />} />
             <Route path="/storage" element={<StorageManager />} />

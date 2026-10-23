@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { BarChart3, ChevronDown, ChevronRight, ExternalLink, Loader2 } from "lucide-react";
+import { BarChart3, ChevronDown, ChevronRight, Loader2 } from "lucide-react";
 
 interface DriverRow { symbol: string; name: string; weightedContribution: number | null; pctChange: number | null; }
 interface DriversPayload {
@@ -26,7 +25,6 @@ function concColor(p: number | null | undefined) {
 }
 
 export default function MarketDriversWidget() {
-  const navigate = useNavigate();
   const [open, setOpen] = useState(true);
   const [qqq, setQqq] = useState<DriversPayload | null>(null);
   const [spy, setSpy] = useState<DriversPayload | null>(null);
@@ -88,10 +86,6 @@ export default function MarketDriversWidget() {
               </table>
             </>
           )}
-          <button onClick={() => navigate("/market-drivers")}
-            className="inline-flex w-full items-center justify-center gap-1.5 rounded-md bg-primary/10 px-2 py-1.5 text-[11px] font-semibold text-primary hover:bg-primary/20">
-            <ExternalLink size={11} /> Open Full Market Drivers
-          </button>
         </div>
       )}
     </div>
