@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
 import { ChevronRight, Loader2, Minus, RefreshCw, Sparkles, Sun, TrendingDown, TrendingUp, X } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -104,7 +104,36 @@ export default function BriefPanel({ data, themes, timeframe, groupLabel, onOpen
   const ai = useAiBrief();
   const explain = useExplain();
   const refs = { now: useRef<HTMLElement>(null), events: useRef<HTMLElement>(null), earnings: useRef<HTMLElement>(null), news: useRef<HTMLElement>(null), ai: useRef<HTMLElement>(null) };
-  const jump = (k: keyof typeof refs) => refs[k].current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  // The panel scrolls on its own: section jumps move only the panel (scrollIntoView
+  // would also scroll the page), and wheel/trackpad input over the panel never
+  // reaches the dashboard — not at the panel's ends, and not over its header.
+  const root = useRef<HTMLDivElement>(null);
+  const scroller = useRef<HTMLDivElement>(null);
+  const jump = (k: keyof typeof refs) => {
+    const sc = scroller.current, el = refs[k].current;
+    if (!sc || !el) return;
+    sc.scrollTo({ top: el.getBoundingClientRect().top - sc.getBoundingClientRect().top + sc.scrollTop - 8, behavior: "smooth" });
+  };
+  useEffect(() => {
+    const r = root.current, sc = scroller.current;
+    if (!r || !sc) return;
+    const onWheel = (e: WheelEvent) => {
+      if (e.ctrlKey) return; // pinch-zoom
+      const t = e.target as HTMLElement | null;
+      if (t && sc.contains(t)) {
+        // Inside the list: let it scroll, but never hand the leftover to the page.
+        const atTop = sc.scrollTop <= 0 && e.deltaY < 0;
+        const atEnd = sc.scrollTop + sc.clientHeight >= sc.scrollHeight - 1 && e.deltaY > 0;
+        if (atTop || atEnd || sc.scrollHeight <= sc.clientHeight) e.preventDefault();
+        return;
+      }
+      // Over the header: scroll the panel instead of the page.
+      e.preventDefault();
+      sc.scrollBy({ top: e.deltaY });
+    };
+    r.addEventListener("wheel", onWheel, { passive: false });
+    return () => r.removeEventListener("wheel", onWheel);
+  }, []);
 
   const ranked = useMemo(
     () => themes.filter((t) => (t.valid_count ?? t.tickers.length) > 0 && Number.isFinite(t.performance_pct)).sort((a, b) => b.performance_pct - a.performance_pct),
@@ -146,7 +175,7 @@ export default function BriefPanel({ data, themes, timeframe, groupLabel, onOpen
   };
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-card/40">
+    <div ref={root} className="flex h-full min-h-0 flex-col overscroll-contain bg-card/40">
       <header className="shrink-0 border-b border-border px-4 pb-2.5 pt-3">
         <div className="flex items-center gap-2">
           <Sun size={15} className="shrink-0 text-[hsl(40,90%,58%)]" aria-hidden />
@@ -173,7 +202,7 @@ export default function BriefPanel({ data, themes, timeframe, groupLabel, onOpen
         </nav>
       </header>
 
-      <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-4 py-3.5">
+      <div ref={scroller} className="min-h-0 flex-1 space-y-5 overflow-y-auto overscroll-contain px-4 py-3.5 [scrollbar-gutter:stable]">
         {/* Right now */}
         <section ref={refs.now} className="scroll-mt-2">
           <H sub={`from your dashboard · ${timeframe}`}>Right now</H>

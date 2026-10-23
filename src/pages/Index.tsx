@@ -88,13 +88,7 @@ export default function Index() {
     if (window.matchMedia("(min-width: 1280px)").matches) setBriefDocked(true); else setBriefSheet(true);
     const next = new URLSearchParams(searchParams); next.delete("brief"); setSearchParams(next, { replace: true });
   }, [searchParams, setSearchParams]);
-  const headerRef = useRef<HTMLElement>(null);
-  const [headerH, setHeaderH] = useState(0);
-  useEffect(() => {
-    const el = headerRef.current; if (!el) return;
-    const ro = new ResizeObserver(() => setHeaderH(el.offsetHeight)); ro.observe(el); setHeaderH(el.offsetHeight);
-    return () => ro.disconnect();
-  }, []);
+
   const [showOptions, setShowOptions] = useState(false);
   const [showDemoConfirm, setShowDemoConfirm] = useState(false);
   const [showExportLeaders, setShowExportLeaders] = useState(false);
@@ -360,7 +354,8 @@ export default function Index() {
   ];
 
   return (
-    <div className="relative min-h-screen bg-background">
+    <div className="relative flex min-h-screen items-start bg-background">
+      <div className="min-w-0 flex-1">
       {isStale && isLive && (
         <div className="border-b border-[hsl(40,80%,50%)]/30 bg-[hsl(40,80%,50%)]/10 px-4 py-2 text-center text-xs text-[hsl(40,80%,50%)]">
           <AlertTriangle size={12} className="mr-1 inline" />
@@ -374,8 +369,8 @@ export default function Index() {
         onCancel={() => setShowDemoConfirm(false)}
       />
 
-      <header ref={headerRef} className="sticky top-0 z-30 border-b border-border bg-background/80 backdrop-blur-md">
-        <div className="container py-3">
+      <header className="sticky top-0 z-30 border-b border-border bg-background/80 backdrop-blur-md">
+        <div className="w-full px-4 py-3 lg:px-6">
           {/* Row 1: title + status */}
           <div className="flex items-center justify-between gap-4">
             <div className="min-w-0">
@@ -619,7 +614,7 @@ export default function Index() {
       </header>
 
       {isLoading && (
-        <div className="container py-4">
+        <div className="w-full px-4 py-4 lg:px-6">
           <div className="flex items-center gap-3 rounded-lg border border-border bg-card p-4">
             <Loader2 size={20} className="animate-spin text-primary" />
             <div>
@@ -633,7 +628,7 @@ export default function Index() {
       )}
 
       {showSelector && (
-        <div className="container py-4">
+        <div className="w-full px-4 py-4 lg:px-6">
           <div className="rounded-lg border border-border bg-card p-4">
             <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <div>
@@ -686,8 +681,7 @@ export default function Index() {
         </div>
       )}
 
-      <div className="flex items-start">
-      <main className="container min-w-0 flex-1 py-6">
+      <main className="w-full min-w-0 px-4 py-6 lg:px-6">
         {searchResult && (
           <div className="mb-4 flex items-center gap-2 rounded-lg border border-primary/20 bg-primary/5 px-4 py-2.5 text-sm">
             <span className="font-medium text-foreground">
@@ -797,18 +791,6 @@ export default function Index() {
 
         <IndexBreadthStrip timeframe={activeTimeframe} />
       </main>
-      {isWide && (
-        <aside
-          className={`sticky shrink-0 border-l border-border bg-background ${briefDocked ? "w-[400px]" : "w-14"}`}
-          style={{ top: headerH, height: `calc(100vh - ${headerH}px)` }}
-          aria-label="Brief"
-        >
-          {briefDocked
-            ? <BriefPanel data={briefData} themes={themes} timeframe={activeTimeframe} groupLabel={isMixed ? "Industry" : GROUP_MODE_LABEL[groupMode]} onOpenGroup={setDrilldownTheme} onClose={() => setBriefDocked(false)} />
-            : <BriefRail data={briefData} onOpen={() => setBriefDocked(true)} />}
-        </aside>
-      )}
-      </div>
       {!isWide && (
         <Sheet open={briefSheet} onOpenChange={setBriefSheet}>
           <SheetContent side={isPhone ? "bottom" : "right"} className={`p-0 [&>button]:hidden ${isPhone ? "h-[85vh] rounded-t-2xl" : "w-full sm:max-w-[420px]"}`}>
@@ -859,6 +841,17 @@ export default function Index() {
           isLoadingSummary={newsPanelSummaryLoading}
           sentiment={newsPanelSentiment}
         />
+      )}
+      </div>
+      {isWide && (
+        <aside
+          className={`sticky top-0 z-40 h-screen shrink-0 border-l border-border bg-background ${briefDocked ? "w-[400px] 2xl:w-[440px]" : "w-14"}`}
+          aria-label="Brief"
+        >
+          {briefDocked
+            ? <BriefPanel data={briefData} themes={themes} timeframe={activeTimeframe} groupLabel={isMixed ? "Industry" : GROUP_MODE_LABEL[groupMode]} onOpenGroup={setDrilldownTheme} onClose={() => setBriefDocked(false)} />
+            : <BriefRail data={briefData} onOpen={() => setBriefDocked(true)} />}
+        </aside>
       )}
     </div>
   );
