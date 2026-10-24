@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { hasAnyLlm, llmFetch } from "../_shared/llm.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -32,9 +33,8 @@ serve(async (req) => {
   }
 
   try {
-    const GROQ_API_KEY = Deno.env.get("GROQ_API_KEY");
-    if (!GROQ_API_KEY) {
-      return jsonResponse({ error: "GROQ_API_KEY not configured" }, 500);
+    if (!hasAnyLlm()) {
+      return jsonResponse({ error: "No AI provider configured (set GEMINI_API_KEY or GROQ_API_KEY)" }, 500);
     }
 
     let payload: any;
@@ -57,13 +57,7 @@ serve(async (req) => {
 
     let response: Response;
     try {
-      response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${GROQ_API_KEY}`,
-        },
-        body: JSON.stringify({
+      response = await llmFetch({
           model: "openai/gpt-oss-120b", reasoning_effort: "low",
           max_tokens: 1212,
           temperature: 0.1,
@@ -71,8 +65,7 @@ serve(async (req) => {
             { role: "system", content: SYSTEM_PROMPT },
             { role: "user", content: userMessage },
           ],
-        }),
-      });
+        }, { task: "fast", label: "natural-language-search" });
     } catch (fetchErr) {
       console.error("Groq fetch error:", fetchErr);
       return jsonResponse({ error: "network_error" }, 503);

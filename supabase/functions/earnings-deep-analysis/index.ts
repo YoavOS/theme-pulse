@@ -6,6 +6,7 @@ const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
+import { hasAnyLlm, llmFetch } from "../_shared/llm.ts";
 
 function jsonResponse(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -28,8 +29,7 @@ interface Body {
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   try {
-    const GROQ = Deno.env.get("GROQ_API_KEY");
-    if (!GROQ) return jsonResponse({ error: "GROQ_API_KEY missing" }, 500);
+    if (!hasAnyLlm()) return jsonResponse({ error: "No AI provider configured (set GEMINI_API_KEY or GROQ_API_KEY)" }, 500);
 
     const body = (await req.json().catch(() => ({}))) as Body;
     const symbol = (body.symbol || "").toUpperCase();
@@ -58,10 +58,7 @@ Return STRICT JSON (no markdown, no code fences) with EXACTLY these three keys, 
 
 No emojis. No disclaimers. Output ONLY the JSON object.`;
 
-    const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${GROQ}` },
-      body: JSON.stringify({
+    const res = await llmFetch({
         model: "openai/gpt-oss-120b", reasoning_effort: "low",
         max_tokens: 1600,
         temperature: 0.4,
@@ -70,8 +67,7 @@ No emojis. No disclaimers. Output ONLY the JSON object.`;
           { role: "system", content: "You are a precise, candid equity research analyst. Return strict JSON only." },
           { role: "user", content: prompt },
         ],
-      }),
-    });
+      }, { task: "long", label: "earnings-deep-analysis" });
     if (!res.ok) {
       const txt = await res.text().catch(() => "");
       return jsonResponse({ error: `Groq ${res.status}`, detail: txt.slice(0, 300) }, 200);

@@ -206,7 +206,7 @@ export default function StockDriversPanel({ open, onOpenChange, ...ctx }: Props)
           {/* Chat section */}
           <div className="pt-2">
             <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              <MessageSquare size={13} /> Ask Groq about {symbol}
+              <MessageSquare size={13} /> Ask AI about {symbol}
             </div>
 
             {messages.length === 0 && (
@@ -266,7 +266,7 @@ export default function StockDriversPanel({ open, onOpenChange, ...ctx }: Props)
                   sendMessage(input);
                 }
               }}
-              placeholder="Ask Groq…"
+              placeholder="Ask AI…"
               rows={1}
               className="flex-1 resize-none rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               disabled={sending}

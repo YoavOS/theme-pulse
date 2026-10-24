@@ -10,6 +10,7 @@
 // Designed to be called once per Setup Analyzer run (on-demand, no persistence).
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { hasAnyLlm, llmFetch } from "../_shared/llm.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -18,7 +19,6 @@ const corsHeaders = {
 };
 
 const FINNHUB_KEY = Deno.env.get("FINNHUB_API_KEY") || "";
-const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY") || "";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -143,7 +143,7 @@ async function scoreSentimentBatch(
   perSymbol: Array<{ symbol: string; headlines: string[] }>,
 ): Promise<Map<string, number>> {
   const result = new Map<string, number>();
-  if (!LOVABLE_API_KEY) return result;
+  if (!hasAnyLlm()) return result;
   const withNews = perSymbol.filter((p) => p.headlines.length > 0);
   if (withNews.length === 0) return result;
 
@@ -159,22 +159,14 @@ ${withNews.map((p) => `${p.symbol}:\n - ${p.headlines.slice(0, 6).join("\n - ")}
   try {
     const ctrl = new AbortController();
     const t = setTimeout(() => ctrl.abort(), 20000);
-    const r = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
+    const r = await llmFetch({
         model: "google/gemini-2.5-flash",
         messages: [
           { role: "system", content: "You are a terse financial sentiment scorer. Output JSON only." },
           { role: "user", content: prompt },
         ],
         response_format: { type: "json_object" },
-      }),
-      signal: ctrl.signal,
-    });
+      }, { task: "grounded", label: "analyze-setup-catalysts" });
     clearTimeout(t);
     if (!r.ok) return result;
     const j = await r.json();

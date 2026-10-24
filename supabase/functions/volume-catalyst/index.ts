@@ -8,8 +8,7 @@ const corsHeaders = {
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type",
 };
-
-const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY") || "";
+import { hasAnyLlm, llmFetch } from "../_shared/llm.ts";
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") || "";
 const ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY") || "";
 
@@ -47,7 +46,7 @@ Deno.serve(async (req) => {
     if (!body?.themeName || !Array.isArray(body.symbols) || body.symbols.length === 0) {
       return json({ error: "themeName and symbols required" }, 400);
     }
-    if (!LOVABLE_API_KEY) return json({ error: "Missing LOVABLE_API_KEY" }, 500);
+    if (!hasAnyLlm()) return json({ error: "No AI provider configured (set GEMINI_API_KEY or GROQ_API_KEY)" }, 500);
 
     // Pull cached news for up to 6 representative symbols.
     let headlines: string[] = [];
@@ -94,13 +93,7 @@ Stats: ${stats || "n/a"}
 Recent headlines:
 ${headlines.length ? headlines.map(h => `- ${h}`).join("\n") : "(no recent headlines)"}`;
 
-    const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-      },
-      body: JSON.stringify({
+    const aiRes = await llmFetch({
         model: "google/gemini-3-flash-preview",
         messages: [
           { role: "system", content: system },
@@ -108,8 +101,7 @@ ${headlines.length ? headlines.map(h => `- ${h}`).join("\n") : "(no recent headl
         ],
         response_format: { type: "json_object" },
         temperature: 0.2,
-      }),
-    });
+      }, { task: "grounded", label: "volume-catalyst" });
 
     if (!aiRes.ok) {
       const txt = await aiRes.text();

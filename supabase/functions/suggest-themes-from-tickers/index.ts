@@ -6,6 +6,7 @@
 // Returns: { new_themes: [...], theme_additions: [...] }
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { hasAnyLlm, llmFetch } from "../_shared/llm.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -63,8 +64,7 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
   try {
-    const GROQ_API_KEY = Deno.env.get("GROQ_API_KEY");
-    if (!GROQ_API_KEY) return jsonResponse({ error: "GROQ_API_KEY not configured" }, 500);
+    if (!hasAnyLlm()) return jsonResponse({ error: "No AI provider configured (set GEMINI_API_KEY or GROQ_API_KEY)" }, 500);
 
     let payload: any;
     try { payload = await req.json(); } catch { return jsonResponse({ error: "Invalid JSON" }, 400); }
@@ -110,10 +110,7 @@ serve(async (req) => {
 
     let response: Response;
     try {
-      response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${GROQ_API_KEY}` },
-        body: JSON.stringify({
+      response = await llmFetch({
           model: "openai/gpt-oss-120b", reasoning_effort: "low",
           max_tokens: 3200,
           temperature: 0.2,
@@ -122,8 +119,7 @@ serve(async (req) => {
             { role: "system", content: SYSTEM_PROMPT },
             { role: "user", content: userMessage },
           ],
-        }),
-      });
+        }, { task: "long", label: "suggest-themes-from-tickers" });
     } catch (e) {
       console.error("Groq fetch error:", e);
       return jsonResponse({ error: "network_error" }, 503);

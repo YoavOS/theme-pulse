@@ -2,8 +2,7 @@ const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
-
-const GROQ_KEY = Deno.env.get("GROQ_API_KEY");
+import { hasAnyLlm, llmFetch } from "../_shared/llm.ts";
 
 interface ChatMsg { role: "user" | "assistant"; content: string }
 interface ReqBody {
@@ -22,7 +21,7 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
   try {
-    if (!GROQ_KEY) throw new Error("GROQ_API_KEY not set");
+    if (!hasAnyLlm()) throw new Error("No AI provider configured (set GEMINI_API_KEY or GROQ_API_KEY)");
     const body = (await req.json()) as ReqBody;
     if (!body?.symbol || !Array.isArray(body.messages) || body.messages.length === 0) {
       return new Response(JSON.stringify({ error: "symbol and messages required" }), {
@@ -49,15 +48,11 @@ Deno.serve(async (req) => {
       ...trimmed.map((m) => ({ role: m.role, content: String(m.content || "").slice(0, 4000) })),
     ];
 
-    const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${GROQ_KEY}` },
-      body: JSON.stringify({
+    const res = await llmFetch({
         model: "openai/gpt-oss-120b", reasoning_effort: "low",
         temperature: 0.4,
         messages,
-      }),
-    });
+      }, { task: "fast", label: "stock-drivers-chat" });
     if (!res.ok) {
       const t = await res.text();
       return new Response(JSON.stringify({ error: `groq ${res.status}: ${t.slice(0, 200)}` }), {

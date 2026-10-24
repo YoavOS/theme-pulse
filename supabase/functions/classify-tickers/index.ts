@@ -1,6 +1,7 @@
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
 import { corsHeaders } from "../_shared/cors.ts";
 import { ALL_SUB_INDUSTRIES, classifyLabel, norm, resolveSubIndustry } from "../_shared/gicsTaxonomy.ts";
+import { hasAnyLlm, llmFetch } from "../_shared/llm.ts";
 
 /** ---------------------------------------------------------------
  * classify-tickers — permanent Sector → Industry → Sub-Industry labels.
@@ -34,7 +35,6 @@ const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const FMP_KEY = Deno.env.get("FMP_API_KEY");
 const FINNHUB_KEY = Deno.env.get("FINNHUB_API_KEY");
-const GROQ_KEY = Deno.env.get("GROQ_API_KEY");
 const AV_KEY = [
   "ALPHA_VANTAGE_API_KEY", "ALPHAVANTAGE_API_KEY", "ALPHA_VANTAGE_KEY",
   "ALPHAVANTAGE_KEY", "AV_API_KEY", "ALPHA_VANTAGE",
@@ -362,7 +362,7 @@ async function runGroq(db: SupabaseClient) {
   const unusable = rows.filter((r) => !(r.company_name || r.description));
 
   let answers: Record<string, string | null> = {};
-  if (GROQ_KEY && usable.length) {
+  if (hasAnyLlm() && usable.length) {
     const items = usable.map((r) =>
       `${r.symbol} | ${r.company_name ?? "?"} | sector hint: ${r.sector ?? "?"} | ${(r.description ?? "").slice(0, 300)}`
     ).join("\n");
@@ -375,17 +375,13 @@ ${items}
 
 Return JSON only: {"SYMBOL": "Sub-Industry name", ...}. Use null if you are not confident.`;
     try {
-      const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-        method: "POST",
-        headers: { Authorization: `Bearer ${GROQ_KEY}`, "Content-Type": "application/json" },
-        body: JSON.stringify({
+      const res = await llmFetch({
           model: "openai/gpt-oss-120b", reasoning_effort: "low",
           messages: [{ role: "user", content: prompt }],
           temperature: 0,
           max_tokens: 1900,
           response_format: { type: "json_object" },
-        }),
-      });
+        }, { task: "fast", label: "classify-tickers" });
       if (res.ok) {
         const j = await res.json();
         answers = JSON.parse(j?.choices?.[0]?.message?.content ?? "{}");

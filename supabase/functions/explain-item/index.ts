@@ -1,8 +1,8 @@
 // Lightweight Groq-powered explainer for a single news headline or economic event.
 // Returns a short structured brief. Cached aggressively client-side.
 import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
+import { hasAnyLlm, llmFetch } from "../_shared/llm.ts";
 
-const GROQ_API_KEY = Deno.env.get("GROQ_API_KEY");
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -15,7 +15,7 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
   try {
-    if (!GROQ_API_KEY) return json({ error: "GROQ_API_KEY not configured" }, 500);
+    if (!hasAnyLlm()) return json({ error: "No AI provider configured (set GEMINI_API_KEY or GROQ_API_KEY)" }, 500);
     const body = await req.json().catch(() => ({}));
     const kind: "event" | "news" = body.kind === "news" ? "news" : "event";
     const payload = body.payload || {};
@@ -51,13 +51,7 @@ Explain for a US active equity trader.`;
 }
 Keep it tight, factual, trader-focused. No disclaimers. Never invent precise numbers you don't have.`;
 
-    const resp = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${GROQ_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
+    const resp = await llmFetch({
         model: "openai/gpt-oss-120b", reasoning_effort: "low",
         temperature: 0.3,
         max_tokens: 1200,
@@ -66,8 +60,7 @@ Keep it tight, factual, trader-focused. No disclaimers. Never invent precise num
           { role: "system", content: systemPrompt },
           { role: "user", content: userPrompt },
         ],
-      }),
-    });
+      }, { task: "fast", label: "explain-item" });
 
     if (!resp.ok) {
       const t = await resp.text();

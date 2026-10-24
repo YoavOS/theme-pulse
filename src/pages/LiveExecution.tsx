@@ -1608,7 +1608,7 @@ export default function LiveExecution() {
                             <span className="rounded-md border border-primary/30 bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">AI</span>
                           </div>
                           <div className="mt-1 text-xs text-muted-foreground">
-                            Open the side panel for short/long-term drivers, outlook, and an interactive Groq chat.
+                            Open the side panel for short/long-term drivers, outlook, and an interactive AI chat.
                           </div>
                         </div>
                         <span className="rounded-md border border-border bg-background/80 px-2.5 py-1 text-xs font-medium text-foreground group-hover:bg-accent">
@@ -1640,10 +1640,10 @@ export default function LiveExecution() {
                             <span className="font-['Syne',sans-serif] text-sm font-semibold text-foreground">
                               StockBot Deep Analysis — {activeSymbol}
                             </span>
-                            <span className="rounded-md border border-emerald-500/30 bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-medium text-emerald-400">GROQ</span>
+                            <span className="rounded-md border border-emerald-500/30 bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-medium text-emerald-400">AI</span>
                           </div>
                           <div className="mt-1 text-xs text-muted-foreground">
-                            Llama 3.3 70B with live tool calls: financials, key ratios, news, peer comparison.
+                            Live tool calls: financials, key ratios, news, peer comparison.
                           </div>
                         </div>
                         <span className="rounded-md border border-border bg-background/80 px-2.5 py-1 text-xs font-medium text-foreground group-hover:bg-accent">

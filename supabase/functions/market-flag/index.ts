@@ -1,6 +1,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
 import { corsHeaders } from "../_shared/cors.ts";
 import { latestRegime } from "../_shared/signalLog.ts";
+import { hasAnyLlm, llmFetch } from "../_shared/llm.ts";
 const ord = (n: number) => `${n}${n % 100 >= 11 && n % 100 <= 13 ? "th" : ["th", "st", "nd", "rd"][n % 10] ?? "th"}`;
 
 /** ---------------------------------------------------------------
@@ -20,8 +21,6 @@ const ord = (n: number) => `${n}${n % 100 >= 11 && n % 100 <= 13 ? "th" : ["th",
  * shown separately — it is a contrarian overlay, not part of the trend score.
  * Cached in memory for 1 hour (manual `force` bypasses).
  * --------------------------------------------------------------*/
-
-const GROQ_API_KEY = Deno.env.get("GROQ_API_KEY");
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 
@@ -350,23 +349,19 @@ Deno.serve(async (req) => {
 
     // Optional plain-language read (Groq). The playbook does not depend on it.
     let summary = "", summaryError: string | null = null;
-    if (GROQ_API_KEY) {
+    if (hasAnyLlm()) {
       try {
         const prompt = `You are a cautious, evidence-minded strategist for a swing/momentum trader. In 3 short sentences: what kind of market this is, the strongest and weakest readings, and what that means for taking new breakouts. Plain words, no hype, no predictions, no markdown.
 
 Market type: ${TYPE_NAMES[type]} · composite ${composite}/100 (${state})
 ${factors.map((f) => `- ${f.label}: ${f.value} (${f.note})`).join("\n")}`;
-        const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-          method: "POST",
-          headers: { Authorization: `Bearer ${GROQ_API_KEY}`, "Content-Type": "application/json" },
-          body: JSON.stringify({ model: "openai/gpt-oss-120b", reasoning_effort: "low", messages: [{ role: "user", content: prompt }], temperature: 0.2, max_tokens: 960 }),
-        });
+        const res = await llmFetch({ model: "openai/gpt-oss-120b", reasoning_effort: "low", messages: [{ role: "user", content: prompt }], temperature: 0.2, max_tokens: 960 }, { task: "long", label: "market-flag" });
         if (res.ok) summary = ((await res.json())?.choices?.[0]?.message?.content ?? "").trim();
         else summaryError = `AI read unavailable (Groq ${res.status}: ${(await res.text()).slice(0, 120)})`;
       } catch (e) {
         summaryError = `AI read unavailable (${e instanceof Error ? e.message : String(e)})`;
       }
-    } else summaryError = "AI read unavailable (GROQ_API_KEY not set)";
+    } else summaryError = "AI read unavailable (no AI provider key set)";
 
     const payload = {
       version: 2,

@@ -3,8 +3,7 @@ const corsHeaders = {
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type",
 };
-
-const GROQ_KEY = Deno.env.get("GROQ_API_KEY");
+import { hasAnyLlm, llmFetch } from "../_shared/llm.ts";
 
 interface ReqBody {
   symbol: string;
@@ -21,7 +20,7 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
   try {
-    if (!GROQ_KEY) throw new Error("GROQ_API_KEY not set");
+    if (!hasAnyLlm()) throw new Error("No AI provider configured (set GEMINI_API_KEY or GROQ_API_KEY)");
     const body = (await req.json()) as ReqBody;
     if (!body?.symbol) {
       return new Response(JSON.stringify({ error: "symbol required" }), {
@@ -56,13 +55,7 @@ Rules:
 Context:
 ${ctx}`;
 
-    const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${GROQ_KEY}`,
-      },
-      body: JSON.stringify({
+    const res = await llmFetch({
         model: "openai/gpt-oss-120b", reasoning_effort: "low",
         temperature: 0.3,
         response_format: { type: "json_object" },
@@ -70,8 +63,7 @@ ${ctx}`;
           { role: "system", content: "You are a concise, professional equity analyst that always replies in strict JSON." },
           { role: "user", content: prompt },
         ],
-      }),
-    });
+      }, { task: "grounded", label: "stock-drivers-analysis" });
     if (!res.ok) {
       const t = await res.text();
       return new Response(JSON.stringify({ error: `groq ${res.status}: ${t.slice(0, 200)}` }), {

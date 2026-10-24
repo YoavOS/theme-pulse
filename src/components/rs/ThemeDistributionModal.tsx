@@ -75,7 +75,7 @@ function CohesionBadge({ score }: { score?: number }) {
   return (
     <span
       className={`inline-flex items-center gap-1 rounded border px-1.5 py-0.5 font-mono text-[10px] font-semibold ${tone}`}
-      title={`Groq cohesion self-score: ${score}/10 — ${label}`}
+      title={`AI cohesion self-score: ${score}/10 — ${label}`}
     >
       Cohesion {score}/10
     </span>
@@ -367,7 +367,7 @@ export default function ThemeDistributionModal({
                 className="inline-flex w-full items-center justify-center gap-2 rounded-md border border-primary/60 bg-primary/15 px-3 py-2 text-xs font-semibold text-primary transition-colors hover:bg-primary/25 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {suggesting ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
-                {suggesting ? "Analyzing with Groq…" : "Suggest New Themes with Groq"}
+                {suggesting ? "Analyzing with AI…" : "Suggest New Themes with AI"}
               </button>
             </div>
 
