@@ -1356,7 +1356,7 @@ export default function LiveExecution() {
             className="rounded-xl border border-border/60 bg-card/40 p-4 backdrop-blur-sm"
             style={{ background: "rgba(255,255,255,0.03)" }}
           >
-            <div className="mb-4 flex items-center gap-2">
+            <div className="mb-4 flex flex-wrap items-center gap-2">
               <Zap size={20} className="text-primary" />
               <h2 className="font-['Syne',sans-serif] text-2xl font-bold uppercase tracking-wider text-foreground">
                 Quick Trade Check

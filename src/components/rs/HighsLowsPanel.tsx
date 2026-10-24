@@ -21,12 +21,15 @@ const LONG: Record<HlWindow, string> = { today: "the last session", "1w": "the l
  * a night or a weekend (holidays are not known here and can shift it by a day).
  */
 export function hlWindowDays(w: HlWindow, now = new Date()) {
-  const ny = new Date(now.toLocaleString("en-US", { timeZone: "America/New_York" }));
-  const open = new Date(ny);
-  open.setHours(9, 30, 0, 0);
-  if (ny < open) open.setDate(open.getDate() - 1);
-  while (open.getDay() === 0 || open.getDay() === 6) open.setDate(open.getDate() - 1);
-  const age = Math.max(0, Math.floor((ny.getTime() - open.getTime()) / 86400000));
+  // New York wall clock, then UTC arithmetic (no local-timezone/DST surprises).
+  const p = Object.fromEntries(new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23",
+  }).formatToParts(now).map((x) => [x.type, x.value]));
+  const wall = Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour, +p.minute);
+  let open = Date.UTC(+p.year, +p.month - 1, +p.day, 9, 30);
+  if (wall < open) open -= 86400000;
+  while ([0, 6].includes(new Date(open).getUTCDay())) open -= 86400000;
+  const age = Math.max(0, Math.floor((wall - open) / 86400000));
   return age + SPAN[w];
 }
 

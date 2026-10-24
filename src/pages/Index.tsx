@@ -80,7 +80,7 @@ export default function Index() {
   const [briefDocked, setBriefDocked] = useState<boolean>(() => { try { return localStorage.getItem("dashboard_brief_open_v1") !== "0"; } catch { return true; } });
   useEffect(() => { try { localStorage.setItem("dashboard_brief_open_v1", briefDocked ? "1" : "0"); } catch { /* ignore */ } }, [briefDocked]);
   const [briefSheet, setBriefSheet] = useState(false);
-  const briefData = useBriefData(true);
+  const briefData = useBriefData(true, { news: isWide ? briefDocked : briefSheet });
   const toggleBrief = () => (isWide ? setBriefDocked((v) => !v) : setBriefSheet((v) => !v));
   const [searchParams, setSearchParams] = useSearchParams();
   useEffect(() => {
@@ -369,7 +369,7 @@ export default function Index() {
         onCancel={() => setShowDemoConfirm(false)}
       />
 
-      <header className="sticky top-0 z-30 border-b border-border bg-background/80 backdrop-blur-md">
+      <header className="z-30 border-b border-border bg-background/80 backdrop-blur-md md:sticky md:top-0">
         <div className="w-full px-4 py-3 lg:px-6">
           {/* Row 1: title + status */}
           <div className="flex items-center justify-between gap-4">
