@@ -88,7 +88,7 @@ export default function StockBotPanel({ open, onOpenChange, symbol, companyName,
                 StockBot — {symbol}
               </div>
               <div className="text-[11px] text-muted-foreground">
-                Groq Llama 3.3 70B · live tools: quote, financials, ratios, news, peers
+                AI · live tools: quote, financials, ratios, news, peers
               </div>
             </div>
           </div>

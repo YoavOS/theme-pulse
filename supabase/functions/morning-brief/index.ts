@@ -1,7 +1,7 @@
 import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { hasAnyLlm, llmFetch } from "../_shared/llm.ts";
 
-const GROQ_API_KEY = Deno.env.get("GROQ_API_KEY");
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
@@ -9,8 +9,8 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
   try {
-    if (!GROQ_API_KEY) {
-      return new Response(JSON.stringify({ error: "GROQ_API_KEY not configured" }), {
+    if (!hasAnyLlm()) {
+      return new Response(JSON.stringify({ error: "No AI provider configured (set GEMINI_API_KEY or GROQ_API_KEY)" }), {
         status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
@@ -47,13 +47,7 @@ Rules:
 - Use only numbers present in the data; never invent figures. If a section has no data, write one bullet saying so.`;
     const userPrompt = `Generate today's Morning Brief using this data:\n\n${JSON.stringify(payload, null, 2)}`;
 
-    const resp = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${GROQ_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
+    const resp = await llmFetch({
         model: "openai/gpt-oss-120b", reasoning_effort: "low",
         temperature: 0.5,
         max_tokens: 1400,
@@ -61,8 +55,7 @@ Rules:
           { role: "system", content: systemPrompt },
           { role: "user", content: userPrompt },
         ],
-      }),
-    });
+      }, { task: "long", label: "morning-brief" });
 
     if (!resp.ok) {
       const t = await resp.text();

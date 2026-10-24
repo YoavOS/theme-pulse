@@ -8,6 +8,7 @@ const corsHeaders = {
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
+import { hasAnyLlm, llmFetch } from "../_shared/llm.ts";
 
 const UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36";
@@ -51,8 +52,7 @@ async function fetchQuoteAndHistory(symbol: string): Promise<PeerQuote | null> {
 }
 
 async function suggestPeersWithAI(symbol: string, hint: string | null): Promise<{ theme: string | null; peers: string[] }> {
-  const apiKey = Deno.env.get("LOVABLE_API_KEY");
-  if (!apiKey) return { theme: null, peers: [] };
+  if (!hasAnyLlm()) return { theme: null, peers: [] };
   const prompt =
     `For the publicly listed US stock with ticker ${symbol}${hint ? ` (industry/sector context: ${hint})` : ""}, ` +
     `identify the most specific investing theme it belongs to (e.g. "Space Economy", "Satellite Communications", ` +
@@ -60,10 +60,7 @@ async function suggestPeersWithAI(symbol: string, hint: string | null): Promise<
     `that belong to the same narrow theme. Use real, current tickers only. Do NOT include ${symbol} in the peer list. ` +
     `Avoid OTC, mutual funds, and obscure ETFs. Prefer pure-play peers over diversified conglomerates.`;
   try {
-    const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
+    const res = await llmFetch({
         model: "google/gemini-2.5-flash",
         messages: [
           { role: "system", content: "You are a precise equity analyst. Return only data via the provided tool." },
@@ -90,8 +87,7 @@ async function suggestPeersWithAI(symbol: string, hint: string | null): Promise<
           },
         }],
         tool_choice: { type: "function", function: { name: "report_theme" } },
-      }),
-    });
+      }, { task: "long", label: "live-theme-suggest" });
     if (!res.ok) {
       console.error("AI gateway", res.status, await res.text().catch(() => ""));
       return { theme: null, peers: [] };

@@ -6,8 +6,7 @@ const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
-
-const GROQ_KEY = Deno.env.get("GROQ_API_KEY");
+import { hasAnyLlm, llmFetch } from "../_shared/llm.ts";
 const UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 StockBot/1.0";
 
 // ── Yahoo auth (warm-container cache) ───────────────────────────────────────
@@ -208,7 +207,7 @@ interface ChatMsg { role: "user" | "assistant"; content: string }
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   try {
-    if (!GROQ_KEY) throw new Error("GROQ_API_KEY not set");
+    if (!hasAnyLlm()) throw new Error("No AI provider configured (set GEMINI_API_KEY or GROQ_API_KEY)");
     const body = await req.json() as { symbol: string; messages: ChatMsg[]; companyName?: string | null; sector?: string | null };
     const symbol = (body.symbol || "").toUpperCase();
     if (!symbol || !Array.isArray(body.messages) || body.messages.length === 0) {
@@ -238,17 +237,13 @@ Default symbol for all tool calls: ${symbol}.`;
 
     // Tool-calling loop, max 3 rounds
     for (let round = 0; round < 3; round++) {
-      const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${GROQ_KEY}` },
-        body: JSON.stringify({
+      const res = await llmFetch({
           model: "openai/gpt-oss-120b", reasoning_effort: "low",
           temperature: 0.3,
           messages,
           tools: TOOLS,
           tool_choice: round === 0 ? "auto" : "auto",
-        }),
-      });
+        }, { task: "fast", label: "stockbot-chat" });
       if (!res.ok) {
         const t = await res.text();
         return new Response(JSON.stringify({ error: `groq ${res.status}: ${t.slice(0, 300)}` }), {

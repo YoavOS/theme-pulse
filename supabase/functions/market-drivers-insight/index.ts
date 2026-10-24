@@ -5,6 +5,7 @@ const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
+import { hasAnyLlm, llmFetch } from "../_shared/llm.ts";
 
 function jsonResponse(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -16,8 +17,7 @@ function jsonResponse(body: unknown, status = 200) {
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   try {
-    const apiKey = Deno.env.get("LOVABLE_API_KEY");
-    if (!apiKey) return jsonResponse({ error: "LOVABLE_API_KEY missing", commentary: null }, 500);
+    if (!hasAnyLlm()) return jsonResponse({ error: "No AI provider configured (set GEMINI_API_KEY or GROQ_API_KEY)", commentary: null }, 500);
 
     const body = await req.json().catch(() => ({})) as {
       index?: string;
@@ -40,17 +40,13 @@ Top contributors (weight × % change, in % points of index): ${top.map((r) => `$
 Top-5 share of total absolute contribution: ${top5Pct !== null && top5Pct !== undefined ? top5Pct + "%" : "n/a"}.
 Highlight whether the move is broad or concentrated, name the 1-2 biggest drivers, and call out any notable divergence (e.g. one mega-cap dragging while breadth is positive). No emojis. No disclaimers.`;
 
-    const aiResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify({
+    const aiResp = await llmFetch({
         model: "google/gemini-3-flash-preview",
         messages: [
           { role: "system", content: "You are a precise, terse equity-market commentator." },
           { role: "user", content: prompt },
         ],
-      }),
-    });
+      }, { task: "grounded", label: "market-drivers-insight" });
     if (!aiResp.ok) {
       const txt = await aiResp.text().catch(() => "");
       return jsonResponse({ error: `AI gateway ${aiResp.status}`, detail: txt.slice(0, 200), commentary: null }, 200);

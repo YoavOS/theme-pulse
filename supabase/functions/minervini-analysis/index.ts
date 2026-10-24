@@ -2,13 +2,12 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
 import { fetchSecQuarters, type SecQuarter } from "../_shared/secFundamentals.ts";
 import { cashProfile, companyType, fundamentalFeatures, growthProfile, marginProfile, momentumProfile, qualityProfile, redFlags, type FQ } from "../_shared/fundamentalProfiles.ts";
 import { measureEarnings, type DBar } from "../_shared/earningsFuel.ts";
+import { hasAnyLlm, llmFetch } from "../_shared/llm.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
-
-const GROQ_KEY = Deno.env.get("GROQ_API_KEY");
 const FINNHUB_KEY = Deno.env.get("FINNHUB_API_KEY");
 const FMP_KEY = Deno.env.get("FMP_API_KEY");
 const SB_URL = Deno.env.get("SUPABASE_URL")!;
@@ -1870,11 +1869,8 @@ Rules:
 - Return ONLY valid JSON.`;
 
 async function polishWithGroq(report: MinerviniReport, derived: any): Promise<MinerviniReport> {
-  if (!GROQ_KEY) return report;
-  const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${GROQ_KEY}` },
-    body: JSON.stringify({
+  if (!hasAnyLlm()) return report;
+  const res = await llmFetch({
       model: "openai/gpt-oss-120b", reasoning_effort: "low",
       temperature: 0.1,
       response_format: { type: "json_object" },
@@ -1882,8 +1878,7 @@ async function polishWithGroq(report: MinerviniReport, derived: any): Promise<Mi
         { role: "system", content: GROQ_SYSTEM },
         { role: "user", content: JSON.stringify({ report, sourceMetrics: { latestQuarter: derived.latestQuarter, score: derived.score, qualityLabel: derived.qualityLabel } }).slice(0, 12000) },
       ],
-    }),
-  });
+    }, { task: "long", label: "minervini-analysis" });
   if (!res.ok) return report;
   const j = await res.json().catch(() => null);
   const content = j?.choices?.[0]?.message?.content;

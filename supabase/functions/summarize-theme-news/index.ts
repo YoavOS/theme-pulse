@@ -3,6 +3,7 @@ const corsHeaders = {
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
+import { hasAnyLlm, llmFetch } from "../_shared/llm.ts";
 
 const SYSTEM_PROMPT = `You are a market analyst summarizing news for a specific investment theme.
 You receive a curated list of the most recent and most relevant headlines (with source, snippet, date, and ticker context) drawn from BOTH company-specific feeds (Finnhub) and broad thematic/geopolitical feeds (NewsData.io).
@@ -78,9 +79,8 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const GROQ_API_KEY = Deno.env.get("GROQ_API_KEY");
-    if (!GROQ_API_KEY) {
-      return jsonResponse({ error: "config_error", message: "GROQ_API_KEY not configured" }, 500);
+    if (!hasAnyLlm()) {
+      return jsonResponse({ error: "config_error", message: "No AI provider configured (set GEMINI_API_KEY or GROQ_API_KEY)" }, 500);
     }
 
     let payload: any;
@@ -119,21 +119,14 @@ Deno.serve(async (req) => {
 
     let response: Response;
     try {
-      response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${GROQ_API_KEY}`,
-        },
-        body: JSON.stringify({
+      response = await llmFetch({
           model: "openai/gpt-oss-120b", reasoning_effort: "low",
           max_tokens: 1200,
           messages: [
             { role: "system", content: SYSTEM_PROMPT },
             { role: "user", content: userMessage },
           ],
-        }),
-      });
+        }, { task: "long", label: "summarize-theme-news" });
     } catch (fetchErr) {
       console.error("Groq fetch error:", fetchErr);
       return jsonResponse({ error: "network_error", message: "Could not reach AI service" }, 503);

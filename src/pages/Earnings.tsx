@@ -380,7 +380,7 @@ export default function Earnings() {
               <label className="flex items-center gap-1 rounded-md border border-border bg-muted/30 px-2 py-0.5 text-[11px] cursor-pointer">
                 <input type="checkbox" checked={enableAi} onChange={(e) => setEnableAi(e.target.checked)} className="accent-primary" />
                 <Sparkles size={11} className="text-primary" />
-                <span className="text-foreground">Groq Analysis</span>
+                <span className="text-foreground">AI Analysis</span>
               </label>
 
               <button

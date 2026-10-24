@@ -1238,7 +1238,7 @@ export default function RsAlpha() {
                   <button
                     onClick={() => setThemeDistOpen(true)}
                     className="inline-flex items-center gap-1.5 rounded-md border border-primary/40 bg-primary/10 px-3 py-1.5 text-xs font-semibold text-foreground transition-colors hover:bg-primary/20"
-                    title="See how this list distributes across your curated themes + discover new themes with Groq"
+                    title="See how this list distributes across your curated themes + discover new themes with AI"
                   >
                     <PieChartIcon size={12} /> Theme Distribution
                   </button>

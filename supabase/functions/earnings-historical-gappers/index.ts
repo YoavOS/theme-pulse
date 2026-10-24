@@ -4,6 +4,7 @@
 // practical fallback when candle access is restricted. FMP remains profile fallback.
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { hasAnyLlm, llmFetch } from "../_shared/llm.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -222,17 +223,14 @@ async function fetchYahooDailyFallback(symbol: string, fromTs: number, toTs: num
   }
 }
 
-async function groqSummarize(g: Gapper, groqKey: string): Promise<string | null> {
+async function groqSummarize(g: Gapper): Promise<string | null> {
   const surprise = g.epsSurprisePct !== null ? `EPS surprise ${g.epsSurprisePct.toFixed(1)}%` : "EPS surprise N/A";
   const revSurprise = g.revenueSurprisePct !== null ? `, Revenue surprise ${g.revenueSurprisePct.toFixed(1)}%` : "";
   const prompt = `Stock ${g.symbol} (${g.company ?? "?"} — sector: ${g.sector ?? "?"}) gapped +${g.gapPct.toFixed(1)}% the day after reporting on ${g.reportDate} (${g.reportTime ?? "?"}). ${surprise}${revSurprise}.
 
 Write a single concise insight (max 2 sentences, ~35 words) covering: (1) the size of the beat, and (2) the most plausible catalyst type given the sector/numbers (e.g. guidance raise, product cycle, AI demand, contract win). Be specific. Don't invent press releases — speak in terms of likely drivers.`;
   try {
-    const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${groqKey}` },
-      body: JSON.stringify({
+    const res = await llmFetch({
         model: "openai/gpt-oss-120b", reasoning_effort: "low",
         max_tokens: 880,
         temperature: 0.35,
@@ -240,8 +238,7 @@ Write a single concise insight (max 2 sentences, ~35 words) covering: (1) the si
           { role: "system", content: "You are a sharp equity research analyst. Be concise, specific, and never fabricate facts." },
           { role: "user", content: prompt },
         ],
-      }),
-    });
+      }, { task: "long", label: "earnings-historical-gappers" });
     if (!res.ok) return null;
     const j = await res.json().catch(() => null);
     return j?.choices?.[0]?.message?.content?.trim() ?? null;
@@ -257,7 +254,6 @@ serve(async (req) => {
   try {
     const FINNHUB_API_KEY = Deno.env.get("FINNHUB_API_KEY") ?? "";
     const FMP_API_KEY = Deno.env.get("FMP_API_KEY");
-    const GROQ_API_KEY = Deno.env.get("GROQ_API_KEY") ?? "";
     if (!FINNHUB_API_KEY) return jsonResponse({ error: "FINNHUB_API_KEY not configured" }, 500);
 
     const body = await req.json().catch(() => ({}));
@@ -399,13 +395,13 @@ serve(async (req) => {
       .filter((g) => g.marketCap === null ? minMarketCap === 0 : g.marketCap >= minMarketCap)
       .slice(0, 80);
 
-    if (enableAi && GROQ_API_KEY && maxAiRows > 0 && gappers.length > 0) {
+    if (enableAi && hasAnyLlm() && maxAiRows > 0 && gappers.length > 0) {
       const top = gappers.slice(0, maxAiRows);
       let aiIdx = 0;
       async function aiWorker() {
         while (aiIdx < top.length && !deadlineExceeded(startedAt)) {
           const g = top[aiIdx++];
-          g.aiAnalysis = await groqSummarize(g, GROQ_API_KEY);
+          g.aiAnalysis = await groqSummarize(g);
           await sleep(120);
         }
       }
