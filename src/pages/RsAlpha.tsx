@@ -552,8 +552,8 @@ export default function RsAlpha() {
 
   return (
     <div className="min-h-screen bg-background">
-      <header className="sticky top-0 z-30 border-b border-border bg-background/80 backdrop-blur-md">
-        <div className="container flex items-center justify-between py-3">
+      <header className="z-30 border-b border-border bg-background/80 backdrop-blur-md md:sticky md:top-0">
+        <div className="container flex flex-wrap items-center justify-between gap-y-2 py-3">
           <div className="flex items-center gap-3">
             <Link to="/" className="rounded-md border border-border p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground">
               <ArrowLeft size={16} />
@@ -576,7 +576,7 @@ export default function RsAlpha() {
               </Tooltip>
             </TooltipProvider>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             {/* Start / Resume / Continue */}
             {!isRebuilding && (
               <button
@@ -1100,12 +1100,12 @@ export default function RsAlpha() {
 
         {/* Tabs */}
         <div className="container pb-2">
-          <div className="flex items-center gap-1 rounded-lg bg-muted/30 p-1 w-fit">
+          <div className="flex max-w-full items-center gap-1 overflow-x-auto rounded-lg bg-muted/30 p-1 w-fit">
             {TABS.map(tab => (
               <button
                 key={tab.id}
                 onClick={() => { setActiveTab(tab.id); setSortField("rs"); setSortDir("desc"); }}
-                className={`relative rounded-md px-3.5 py-1.5 text-xs font-medium transition-all ${
+                className={`relative shrink-0 whitespace-nowrap rounded-md px-3.5 py-1.5 text-xs font-medium transition-all ${
                   activeTab === tab.id ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
                 }`}
               >
@@ -1185,7 +1185,7 @@ export default function RsAlpha() {
                     )}
                   </span>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   <button
                     onClick={async () => {
                       const symbols = sortedStocks.map(s => s.symbol);

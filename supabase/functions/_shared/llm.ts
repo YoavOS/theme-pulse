@@ -34,7 +34,11 @@ const GROQ_MODEL = env("GROQ_MODEL") || "openai/gpt-oss-120b";
 const CEREBRAS_MODEL = env("CEREBRAS_MODEL") || "gpt-oss-120b";
 const OPENROUTER_MODEL = env("OPENROUTER_MODEL") || "openai/gpt-oss-120b:free";
 
-const TIMEOUT_MS = 55_000;
+// Per-attempt timeouts, and a budget for the whole call so a chain of slow
+// providers can't run past the edge function's wall-clock limit.
+const GEMINI_TIMEOUT_MS = 30_000;
+const OTHER_TIMEOUT_MS = 40_000;
+const TOTAL_BUDGET_MS = 110_000;
 
 // Gemini models that answered "not found" in this worker — skipped afterwards.
 const deadGemini = new Set<string>();
@@ -54,20 +58,21 @@ class ProviderError extends Error {
   constructor(public status: number, message: string) { super(message); }
 }
 
-async function withTimeout(url: string, init: RequestInit): Promise<Response> {
+async function withTimeout(url: string, init: RequestInit, ms: number): Promise<Response> {
+  if (ms < 1500) throw new ProviderError(0, "out of time");
   const ctrl = new AbortController();
-  const t = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
+  const t = setTimeout(() => ctrl.abort(), ms);
   try { return await fetch(url, { ...init, signal: ctrl.signal }); }
   finally { clearTimeout(t); }
 }
 
 /** OpenAI-compatible chat call (Groq, Cerebras, OpenRouter, Gemini's compat endpoint). */
-async function openAiCompatible(url: string, key: string, body: Body, extraHeaders: Record<string, string> = {}): Promise<Body> {
+async function openAiCompatible(url: string, key: string, body: Body, ms: number, extraHeaders: Record<string, string> = {}): Promise<Body> {
   const res = await withTimeout(url, {
     method: "POST",
     headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json", ...extraHeaders },
     body: JSON.stringify(body),
-  });
+  }, ms);
   if (!res.ok) throw new ProviderError(res.status, (await res.text().catch(() => "")).slice(0, 400));
   const j = await res.json();
   const msg = j?.choices?.[0]?.message;
@@ -75,23 +80,25 @@ async function openAiCompatible(url: string, key: string, body: Body, extraHeade
   return j;
 }
 
-function stripForGemini(body: Body): Body {
-  // Gemini's OpenAI-compatible endpoint rejects some Groq-only fields, and its
-  // "thinking" counts against max_tokens — give it headroom so answers aren't cut off.
-  const { reasoning_effort: _r, model: _m, ...rest } = body;
-  const out: Body = { ...rest };
+function forGemini(body: Body): Body {
+  // Gemini 3 models think at full depth unless told otherwise, which made long
+  // calls take ~a minute: ask for low effort (the compat endpoint maps it to
+  // thinking_level). Thinking also counts against max_tokens, so add headroom.
+  const { model: _m, ...rest } = body;
+  const out: Body = { ...rest, reasoning_effort: ["low", "medium", "high"].includes(body.reasoning_effort) ? body.reasoning_effort : "low" };
   if (typeof out.max_tokens === "number") out.max_tokens = out.max_tokens + 4096;
   return out;
 }
+const left = (deadline: number, cap: number) => Math.min(cap, deadline - Date.now());
 
-async function callGemini(body: Body): Promise<{ json: Body; model: string }> {
+async function callGemini(body: Body, deadline: number): Promise<{ json: Body; model: string }> {
   const key = env("GEMINI_API_KEY");
   if (!key) throw new ProviderError(0, "GEMINI_API_KEY not set");
   let last: ProviderError | null = null;
   for (const model of GEMINI_MODELS) {
     if (deadGemini.has(model)) continue;
     try {
-      const json = await openAiCompatible("https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", key, { ...stripForGemini(body), model });
+      const json = await openAiCompatible("https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", key, { ...forGemini(body), model }, left(deadline, GEMINI_TIMEOUT_MS));
       return { json, model };
     } catch (e) {
       last = e instanceof ProviderError ? e : new ProviderError(0, String(e));
@@ -105,7 +112,7 @@ async function callGemini(body: Body): Promise<{ json: Body; model: string }> {
 }
 
 /** Gemini with Google Search grounding (native API; plain text out, plus the web sources it used). */
-async function callGeminiGrounded(body: Body): Promise<{ json: Body; model: string }> {
+async function callGeminiGrounded(body: Body, deadline: number): Promise<{ json: Body; model: string }> {
   const key = env("GEMINI_API_KEY");
   if (!key) throw new ProviderError(0, "GEMINI_API_KEY not set");
   // deno-lint-ignore no-explicit-any
@@ -119,8 +126,11 @@ async function callGeminiGrounded(body: Body): Promise<{ json: Body; model: stri
   const generationConfig: Body = {};
   if (typeof body.temperature === "number") generationConfig.temperature = body.temperature;
   if (typeof body.max_tokens === "number") generationConfig.maxOutputTokens = body.max_tokens + 4096;
+  // Low thinking keeps grounded answers fast; dropped if a model rejects the field.
+  let thinking = true;
   let last: ProviderError | null = null;
-  for (const model of GEMINI_MODELS) {
+  for (let i = 0; i < GEMINI_MODELS.length; i++) {
+    const model = GEMINI_MODELS[i];
     if (deadGemini.has(model)) continue;
     try {
       const res = await withTimeout(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
@@ -130,9 +140,9 @@ async function callGeminiGrounded(body: Body): Promise<{ json: Body; model: stri
           ...(system ? { systemInstruction: { parts: [{ text: system + (wantsJson ? "\n\nReply with a single JSON object only, no markdown fences." : "") }] } } : {}),
           contents,
           tools: [{ google_search: {} }],
-          generationConfig,
+          generationConfig: thinking ? { ...generationConfig, thinkingConfig: { thinkingLevel: "low" } } : generationConfig,
         }),
-      });
+      }, left(deadline, GEMINI_TIMEOUT_MS));
       if (!res.ok) throw new ProviderError(res.status, (await res.text().catch(() => "")).slice(0, 400));
       const j = await res.json();
       const cand = j?.candidates?.[0];
@@ -144,6 +154,7 @@ async function callGeminiGrounded(body: Body): Promise<{ json: Body; model: stri
       return { json: { choices: [{ message: { role: "assistant", content: wantsJson ? extractJson(text) : text } }], sources }, model };
     } catch (e) {
       last = e instanceof ProviderError ? e : new ProviderError(0, String(e));
+      if (last.status === 400 && thinking && /thinking/i.test(last.message)) { thinking = false; i--; continue; }
       if (last.status === 404) { deadGemini.add(model); continue; }
       if (last.status === 429 || last.status >= 500) continue;
       throw last;
@@ -160,23 +171,24 @@ export function extractJson(text: string): string {
   return a >= 0 && b > a ? s.slice(a, b + 1) : s.trim();
 }
 
-async function callProvider(p: Provider, body: Body): Promise<{ json: Body; model: string }> {
+async function callProvider(p: Provider, body: Body, deadline: number): Promise<{ json: Body; model: string }> {
+  const ms = left(deadline, OTHER_TIMEOUT_MS);
   switch (p) {
-    case "gemini": return callGemini(body);
+    case "gemini": return callGemini(body, deadline);
     case "groq": {
       const key = env("GROQ_API_KEY");
       if (!key) throw new ProviderError(0, "GROQ_API_KEY not set");
-      return { json: await openAiCompatible("https://api.groq.com/openai/v1/chat/completions", key, { ...body, model: GROQ_MODEL }), model: GROQ_MODEL };
+      return { json: await openAiCompatible("https://api.groq.com/openai/v1/chat/completions", key, { ...body, model: GROQ_MODEL }, ms), model: GROQ_MODEL };
     }
     case "cerebras": {
       const key = env("CEREBRAS_API_KEY");
       if (!key) throw new ProviderError(0, "CEREBRAS_API_KEY not set");
-      return { json: await openAiCompatible("https://api.cerebras.ai/v1/chat/completions", key, { ...body, model: CEREBRAS_MODEL }), model: CEREBRAS_MODEL };
+      return { json: await openAiCompatible("https://api.cerebras.ai/v1/chat/completions", key, { ...body, model: CEREBRAS_MODEL }, ms), model: CEREBRAS_MODEL };
     }
     case "openrouter": {
       const key = env("OPENROUTER_API_KEY");
       if (!key) throw new ProviderError(0, "OPENROUTER_API_KEY not set");
-      return { json: await openAiCompatible("https://openrouter.ai/api/v1/chat/completions", key, { ...body, model: OPENROUTER_MODEL }, { "X-Title": "Theme Pulse" }), model: OPENROUTER_MODEL };
+      return { json: await openAiCompatible("https://openrouter.ai/api/v1/chat/completions", key, { ...body, model: OPENROUTER_MODEL }, ms, { "X-Title": "Theme Pulse" }), model: OPENROUTER_MODEL };
     }
   }
 }
@@ -193,6 +205,7 @@ const CHAINS: Record<Exclude<LlmTask, "grounded">, Provider[]> = {
  */
 export async function llmFetch(body: Body, opts: { task: LlmTask; label?: string } = { task: "long" }): Promise<Response> {
   const attempts: string[] = [];
+  const deadline = Date.now() + TOTAL_BUDGET_MS;
   let limited = 0, failed = 0;
   const wantsJson = body.response_format?.type === "json_object";
   const ok = (json: Body, provider: string, model: string) => {
@@ -204,7 +217,7 @@ export async function llmFetch(body: Body, opts: { task: LlmTask; label?: string
 
   if (opts.task === "grounded" && !body.tools) {
     try {
-      const r = await callGeminiGrounded(body);
+      const r = await callGeminiGrounded(body, deadline);
       return ok(r.json, "gemini+search", r.model);
     } catch (e) {
       const pe = e instanceof ProviderError ? e : new ProviderError(0, String(e));
@@ -220,7 +233,7 @@ export async function llmFetch(body: Body, opts: { task: LlmTask; label?: string
     const until = cooling.get(p);
     if (until && until > Date.now()) { attempts.push(`${p} cooling`); continue; }
     try {
-      const r = await callProvider(p, body);
+      const r = await callProvider(p, body, deadline);
       return ok(r.json, p, r.model);
     } catch (e) {
       const pe = e instanceof ProviderError ? e : new ProviderError(0, String(e));

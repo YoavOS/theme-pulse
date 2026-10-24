@@ -27,7 +27,19 @@ function writeCache(k: string, v: Breadth) {
   try { const all = readCache(); all[k] = v; sessionStorage.setItem(CACHE_KEY, JSON.stringify(all)); } catch { /* ignore */ }
 }
 
-async function load(index: string, tf: Tf): Promise<Breadth | null> {
+// One request per index+timeframe at a time: the strip and the Brief panel both ask for
+// "today" on load, and each request makes the backend check ~600 stocks.
+const inflight = new Map<string, Promise<Breadth | null>>();
+function load(index: string, tf: Tf): Promise<Breadth | null> {
+  const k = `${index}:${tf}`;
+  const running = inflight.get(k);
+  if (running) return running;
+  const p = loadOnce(index, tf).finally(() => inflight.delete(k));
+  inflight.set(k, p);
+  return p;
+}
+
+async function loadOnce(index: string, tf: Tf): Promise<Breadth | null> {
   const base = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/index-drivers`;
   const res = await fetch(`${base}?index=${index}&timeframe=${tf}`, {
     headers: { Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}` },

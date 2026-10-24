@@ -119,6 +119,7 @@ export default function BriefPanel({ data, themes, timeframe, groupLabel, onOpen
     if (!r || !sc) return;
     const onWheel = (e: WheelEvent) => {
       if (e.ctrlKey) return; // pinch-zoom
+      if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) return; // sideways swipes (e.g. the section chips)
       const t = e.target as HTMLElement | null;
       if (t && sc.contains(t)) {
         // Inside the list: let it scroll, but never hand the leftover to the page.
@@ -259,7 +260,11 @@ export default function BriefPanel({ data, themes, timeframe, groupLabel, onOpen
         <section ref={refs.news} className="scroll-mt-2">
           <H sub={data.digestAt ? `AI digest · ${fmtEtTime(data.digestAt)} ET` : "AI digest"}>News</H>
           {data.digest.length === 0 ? (
-            <p className="py-2 text-[11.5px] text-muted-foreground">{data.digestLoading || !data.marketNews?.length ? "Loading market news…" : "No digest yet."}</p>
+            <p className="py-2 text-[11.5px] text-muted-foreground">
+              {data.digestLoading ? "Summarizing today's news…"
+                : data.digestError ? <>Couldn't summarize the news. <button onClick={data.retryDigest} className="font-medium text-primary hover:underline">Try again</button></>
+                  : !data.marketNews?.length ? "Loading market news…" : "No summary yet."}
+            </p>
           ) : (
             <div className="space-y-2">
               {data.digest.map((g, i) => (

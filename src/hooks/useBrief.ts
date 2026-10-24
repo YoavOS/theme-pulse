@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useThemeNews, type NewsArticle } from "@/hooks/useThemeNews";
 import { useIndexBreadth } from "@/components/dashboard/IndexBreadthStrip";
@@ -76,7 +77,9 @@ export function useNow(ms = 30_000) {
   return now;
 }
 
-export function useBriefData(enabled: boolean) {
+/** `news`: also build the AI news digest (an AI call) — only while the panel is actually open. */
+export function useBriefData(enabled: boolean, opts: { news?: boolean } = {}) {
+  const wantNews = enabled && (opts.news ?? true);
   const [events, setEvents] = useState<EconEvent[]>(() => {
     const c = read<{ day: string; at: string; events: EconEvent[] }>(EVENTS_KEY);
     return c && c.day === etDay() ? c.events : [];
@@ -93,6 +96,8 @@ export function useBriefData(enabled: boolean) {
   });
   const [digestAt, setDigestAt] = useState<string | null>(() => read<{ fetchedAt: string }>(DIGEST_KEY)?.fetchedAt ?? null);
   const [digestLoading, setDigestLoading] = useState(false);
+  const [digestError, setDigestError] = useState<string | null>(null);
+  const digestInflight = useRef(false);
   const [earnings, setEarnings] = useState<EarningsRow[]>(() => {
     const c = read<{ day: string; at: string; rows: EarningsRow[] }>(EARNINGS_KEY);
     return c && c.day === etDay() ? c.rows : [];
@@ -131,15 +136,23 @@ export function useBriefData(enabled: boolean) {
   const loadDigest = useCallback(async (articles: NewsArticle[] | null | undefined, force = false) => {
     const c = read<{ fetchedAt: string }>(DIGEST_KEY);
     if (!force && c && age(c.fetchedAt) < 2 * HOUR) return;
-    if (!articles || articles.length === 0) return;
-    setDigestLoading(true);
+    if (!articles || articles.length === 0 || digestInflight.current) return;
+    digestInflight.current = true;
+    setDigestLoading(true); setDigestError(null);
     try {
-      const { data } = await supabase.functions.invoke("news-digest", { body: { articles } });
+      const { data, error } = await supabase.functions.invoke("news-digest", { body: { articles } });
       const groups: DigestGroup[] = data?.groups || [];
+      if (error || !groups.length) {
+        // Don't cache a failed/empty digest — it used to stick for 2 hours.
+        setDigestError(error?.message || data?.error || "The AI returned no summary.");
+        return;
+      }
       const fetchedAt = data?.generatedAt || new Date().toISOString();
       setDigest(groups); setDigestAt(fetchedAt);
       write(DIGEST_KEY, { groups, fetchedAt });
-    } catch (e) { console.warn("digest failed", e); } finally { setDigestLoading(false); }
+    } catch (e) {
+      setDigestError(e instanceof Error ? e.message : "News summary failed.");
+    } finally { digestInflight.current = false; setDigestLoading(false); }
   }, []);
 
   const loadEarnings = useCallback(async (force = false) => {
@@ -164,8 +177,8 @@ export function useBriefData(enabled: boolean) {
   }, [enabled, loadEvents, loadEarnings, fetchMarketNews]);
 
   useEffect(() => {
-    if (enabled && marketNews && marketNews.length > 0) void loadDigest(marketNews, false);
-  }, [enabled, marketNews, loadDigest]);
+    if (wantNews && marketNews && marketNews.length > 0) void loadDigest(marketNews, false);
+  }, [wantNews, marketNews, loadDigest]);
 
   const refreshAll = useCallback(() => {
     void loadEvents(true);
@@ -177,7 +190,8 @@ export function useBriefData(enabled: boolean) {
 
   return {
     events, eventsLoading, upcoming, upcomingLoading, loadUpcoming,
-    digest, digestAt, digestLoading, marketNews,
+    digest, digestAt, digestLoading, digestError, marketNews,
+    retryDigest: () => { if (marketNews && marketNews.length) void loadDigest(marketNews, true); else fetchMarketNews(); },
     earnings, earningsLoading,
     spy: breadth.spy, qqq: breadth.qqq, breadthLoading: breadth.loading,
     refreshAll,
@@ -242,6 +256,7 @@ export function useExplain() {
       write(EXPLAIN_KEY, Object.fromEntries(entries));
     } catch (e) {
       console.error("explain failed", e);
+      toast.error("Couldn't get an explanation right now — try again in a moment.");
       setTarget(null);
     } finally { setLoading(false); }
   }, []);

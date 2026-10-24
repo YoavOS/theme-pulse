@@ -4,15 +4,35 @@
 // fresh cache row, falls back to Yahoo (throttled, concurrency 10) and upserts
 // the canonical 1y row for future calls.
 //
-// Cache strategy: relaxed 7-day TTL — the "last 52w high" doesn't change
-// materially unless a new high just printed. Client-side hook adds an
-// additional localStorage layer so a full universe scan runs at most once/day.
+// Cache strategy: a cached row counts as fresh only if it was saved after the
+// most recent regular-session close (or, while the market is open, within the
+// last 2 hours) — "new high today / this week" needs the latest bars. Older rows
+// (up to 7 days) are refetched first; if the deadline hits, they are still used,
+// marked `stale`, so a stock is never dropped just because Yahoo was slow.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
 import { corsHeaders } from "../_shared/cors.ts";
 
 const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36";
-const CACHE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+const CACHE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000; // 7 days — oldest row still usable as a stale fallback
+const INTRADAY_FRESH_MS = 2 * 60 * 60 * 1000;     // while the market is open
+
+/** Oldest `fetched_at` that still contains the latest bars (holidays not known). */
+function freshCutoffMs(now = new Date()): number {
+  // New York wall-clock parts, then plain UTC arithmetic (no local-timezone/DST surprises).
+  const p = Object.fromEntries(new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23",
+  }).formatToParts(now).map((x) => [x.type, x.value]));
+  const wall = Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour, +p.minute); // ET wall clock, as if UTC
+  const offset = now.getTime() - wall;                                        // ET → UTC shift (4h or 5h)
+  const dow = new Date(wall).getUTCDay();
+  const mins = +p.hour * 60 + +p.minute;
+  if (dow !== 0 && dow !== 6 && mins >= 570 && mins < 960) return now.getTime() - INTRADAY_FRESH_MS;
+  let close = Date.UTC(+p.year, +p.month - 1, +p.day, 16, 5); // a few minutes after the close
+  if (wall < close) close -= 86400000;
+  while ([0, 6].includes(new Date(close).getUTCDay())) close -= 86400000;
+  return close + offset;
+}
 const CONCURRENCY = 10;
 const MAX_SYMBOLS = 1500;
 const DEADLINE_MS = 125_000;
@@ -48,6 +68,10 @@ interface Row {
   coilMonthly?: number | null;   // last 3 monthly ranges avg / previous 9 monthly ranges avg
   lastLowDaysAgo?: number | null; // days since the most recent bar at the 52W low
   rangePos?: number | null;       // 0..100 position of latest close inside the 52W range
+  lastHighTs?: number | null;     // unix seconds of that bar — lets the app compute "days ago" later
+  lastLowTs?: number | null;
+  asOfTs?: number | null;         // unix seconds of the latest bar used
+  stale?: boolean;                // computed from an older cached history (refresh ran out of time)
 }
 
 function json(body: unknown, status = 200) {
@@ -191,6 +215,9 @@ function computeFromOhlc(symbol: string, ohlc: OHLCBar[], source: Row["source"],
     coilWeekly: coilRatio(bars, weekKey, coil.weeklyRecent, coil.weeklyBase),
     coilMonthly: coilRatio(bars, monthKey, coil.monthlyRecent, coil.monthlyBase),
     lastLowDaysAgo: lowDaysAgo,
+    lastHighTs: lastHighTs || null,
+    lastLowTs: lastLowTs || null,
+    asOfTs: bars[bars.length - 1]?.ts ?? null,
     rangePos: lastClose && lowFinite !== null && high > lowFinite
       ? round2(((lastClose - lowFinite) / (high - lowFinite)) * 100)
       : null,
@@ -242,8 +269,10 @@ Deno.serve(async (req) => {
 
     const rows = new Map<string, Row>();
 
-    // Step 1: read cached 1y rows in chunks.
+    // Step 1: read cached 1y rows in chunks; split into fresh and stale (refetch first).
     const cacheHits = new Map<string, OHLCBar[]>();
+    const staleHits = new Map<string, OHLCBar[]>();
+    const freshCutoff = freshCutoffMs();
     for (let i = 0; i < symbols.length; i += 500) {
       const slice = symbols.slice(i, i + 500);
       const { data } = await sb
@@ -253,7 +282,10 @@ Deno.serve(async (req) => {
         .gte("fetched_at", new Date(Date.now() - CACHE_MAX_AGE_MS).toISOString())
         .in("symbol", slice);
       for (const r of data ?? []) {
-        if (Array.isArray(r.ohlc)) cacheHits.set(String(r.symbol).toUpperCase(), r.ohlc as OHLCBar[]);
+        if (!Array.isArray(r.ohlc)) continue;
+        const sym = String(r.symbol).toUpperCase();
+        if (new Date(r.fetched_at).getTime() >= freshCutoff) cacheHits.set(sym, r.ohlc as OHLCBar[]);
+        else staleHits.set(sym, r.ohlc as OHLCBar[]);
       }
     }
     for (const s of symbols) {
@@ -261,8 +293,9 @@ Deno.serve(async (req) => {
       if (c?.length) rows.set(s, computeFromOhlc(s, c, "cache", coil));
     }
 
-    // Step 2: fetch missing from Yahoo (throttled, deadline-aware).
-    const missing = symbols.filter(s => !rows.has(s));
+    // Step 2: fetch from Yahoo (throttled, deadline-aware) — symbols with no history first,
+    // then the stale ones.
+    const missing = [...symbols.filter(s => !rows.has(s) && !staleHits.has(s)), ...symbols.filter(s => !rows.has(s) && staleHits.has(s))];
     let idx = 0;
     let fetched = 0;
     const worker = async () => {
@@ -270,7 +303,8 @@ Deno.serve(async (req) => {
         const s = missing[idx++];
         const ohlc = await fetchYahoo1y(s);
         if (!ohlc) {
-          rows.set(s, { symbol: s, high52w: null, latestClose: null, lastHighDaysAgo: null, pctBelowHigh: null, source: "none", error: "no_history" });
+          const old = staleHits.get(s);
+          rows.set(s, old ? { ...computeFromOhlc(s, old, "cache", coil), stale: true } : { symbol: s, high52w: null, latestClose: null, lastHighDaysAgo: null, pctBelowHigh: null, source: "none", error: "no_history" });
           continue;
         }
         fetched++;
@@ -293,6 +327,9 @@ Deno.serve(async (req) => {
     };
     await Promise.all(Array.from({ length: Math.min(CONCURRENCY, Math.max(1, missing.length)) }, worker));
 
+    // Deadline hit: fall back to the stale histories rather than dropping those stocks.
+    for (const [s, old] of staleHits) if (!rows.has(s)) rows.set(s, { ...computeFromOhlc(s, old, "cache", coil), stale: true });
+
     const resultRows = symbols.map(s => rows.get(s) ?? {
       symbol: s, high52w: null, latestClose: null, lastHighDaysAgo: null, pctBelowHigh: null, source: "none" as const, error: "not_processed",
     });
@@ -301,6 +338,7 @@ Deno.serve(async (req) => {
       total: symbols.length,
       coil,
       cacheHits: cacheHits.size,
+      stale: resultRows.filter(r => (r as Row).stale).length,
       fetched,
       computed: resultRows.filter(r => r.high52w !== null).length,
       partial: resultRows.some(r => r.error === "not_processed"),

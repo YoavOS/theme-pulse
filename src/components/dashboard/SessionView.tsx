@@ -14,7 +14,7 @@ import { marketClock, useLiveSession, type SessionQuote } from "@/hooks/useLiveS
  */
 
 type Outcome = "bought" | "go" | "sold" | "fade";
-const FLAT = 0.15; // % — a gap this small is shown as "flat"
+const FLAT = 0.15; // % — a gap this small is shown muted (it still decides the box by its sign)
 
 const OUTCOME: Record<Outcome, { title: string; meaning: string; color: string }> = {
   bought: { title: "Gapped down, bought", meaning: "Opened lower, buyers stepped in", color: "hsl(200, 85%, 64%)" },
@@ -105,7 +105,7 @@ export default function SessionView({ groupMode, baseThemes, industryBySymbol, o
                   {r.name}
                   {r.sector && <span className="ml-1.5 text-[10.5px] text-muted-foreground">{r.sector}</span>}
                 </span>
-                <span className={`text-right font-mono text-[11.5px] tabular-nums ${Math.abs(r.gap) < FLAT ? "text-muted-foreground" : tone(r.gap)}`}>{Math.abs(r.gap) < FLAT ? "flat" : fmt(r.gap)}</span>
+                <span className={`text-right font-mono text-[11.5px] tabular-nums ${Math.abs(r.gap) < FLAT ? "text-muted-foreground" : tone(r.gap)}`}>{fmt(r.gap)}</span>
                 <span className={`text-right font-mono text-[13px] font-semibold tabular-nums ${tone(r.open)}`}>{fmt(r.open)}</span>
               </button>
             ))}
