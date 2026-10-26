@@ -5,7 +5,7 @@
 import { corsHeaders } from "../_shared/cors.ts";
 
 const env = (k: string) => (Deno.env.get(k) ?? "").trim();
-const GEMINI_MODELS = (env("GEMINI_MODELS") || "gemini-3.8-flash,gemini-3.6-flash,gemini-3.5-flash-lite").split(",").map((s) => s.trim()).filter(Boolean);
+const GEMINI_MODELS = (env("GEMINI_MODELS") || "gemini-3.6-flash,gemini-3.5-flash,gemini-3.5-flash-lite,gemini-3.7-flash,gemini-3.8-flash").split(",").map((s) => s.trim()).filter(Boolean);
 const PROMPT = "Reply with the single word: ok";
 
 async function timed(label: string, url: string, init: RequestInit, pick: (j: any) => string) { // deno-lint-ignore no-explicit-any

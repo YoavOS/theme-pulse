@@ -45,7 +45,10 @@ function regimeLine(spy: Breadth | null | undefined, qqq: Breadth | null | undef
       : p > 0.15 && s < 0.55 ? "Narrow tape."
         : p < -0.15 && s <= 0.4 ? "Broad selling."
           : p < -0.15 && s > 0.45 ? "Index down, stocks holding up."
-            : "Mixed, little direction.";
+            : p > 0.15 ? "Index up, mixed stocks."
+              : s >= 0.6 ? "Flat index, most stocks up."
+                : s <= 0.4 ? "Flat index, most stocks down."
+                  : "Mixed, little direction.";
   const q = upShare(qqq);
   const tail = `S&P ${pctTxt(spy.indexPct, 2)} with ${Math.round(s * 100)}% of members up` +
     (qqq && q !== null ? `; Nasdaq 100 ${pctTxt(qqq.indexPct, 2)} with ${Math.round(q * 100)}% up.` : ".");
@@ -308,6 +311,7 @@ export default function BriefPanel({ data, themes, timeframe, groupLabel, onOpen
               <button onClick={writeBrief} disabled={ai.loading} className="inline-flex items-center gap-1.5 rounded-md border border-primary/40 bg-primary/10 px-3 py-1.5 text-[11.5px] font-semibold text-primary hover:bg-primary/20 disabled:opacity-50">
                 {ai.loading ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />} {ai.loading ? "Writing…" : "Write today's brief"}
               </button>
+              {ai.loading && <p className="mt-1.5 text-[10.5px]">Usually 5–20 seconds.</p>}
             </div>
           )}
           {ai.error && <p className="mt-1.5 text-[11px] text-loss-medium">{ai.error}</p>}
