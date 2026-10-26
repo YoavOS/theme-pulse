@@ -89,21 +89,37 @@ export function useIndexBreadth(tf: Tf | undefined) {
   return { spy: data.SPY, qqq: data.QQQ, data, loading, refresh: () => run(true) };
 }
 
+/** Is the US market closed right now (after 16:00 ET, before 09:30 ET, or a weekend)? */
+function marketClosedNow(): boolean {
+  const parts = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", weekday: "short", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).formatToParts(new Date());
+  const get = (t: string) => parts.find(p => p.type === t)?.value ?? "";
+  const mins = Number(get("hour")) * 60 + Number(get("minute"));
+  return get("weekday") === "Sat" || get("weekday") === "Sun" || mins >= 16 * 60 || mins < 9 * 60 + 30;
+}
+const timeOf = (ms: number) => new Date(ms).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+
 export default function IndexBreadthStrip({ timeframe }: { timeframe: string }) {
   const tf = TF_OF[timeframe];
   const { data, loading, refresh } = useIndexBreadth(tf);
+  // Clicking refresh after the close returns the same (final) numbers, so say when we last checked.
+  const [checkedAt, setCheckedAt] = useState<number | null>(null);
+  const at = Math.max(checkedAt ?? 0, ...Object.values(data).map(b => b?.at ?? 0));
 
   if (!tf) return null;
+  const closedNote = tf === "today" && marketClosedNow() ? "final numbers for the last session" : null;
 
   return (
     <section className="mt-6 rounded-lg border border-border bg-card px-4 py-3" aria-label="Index breadth">
-      <div className="mb-2.5 flex items-center gap-2">
+      <div className="mb-2.5 flex flex-wrap items-center gap-x-2 gap-y-1">
         <h2 className="font-display text-[13px] font-semibold tracking-tight">Index breadth</h2>
         <span className="text-[11px] text-muted-foreground">Members that rose vs fell {TF_LONG[tf]}</span>
+        <span className="ml-auto text-[10.5px] text-muted-foreground">
+          {loading ? "Updating…" : at > 0 ? `Updated ${timeOf(at)}${closedNote ? ` · ${closedNote}` : ""}` : ""}
+        </span>
         <button
-          onClick={() => void refresh()}
+          onClick={() => { void refresh().then(() => setCheckedAt(Date.now())); }}
           disabled={loading}
-          className="ml-auto rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-50"
+          className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-50"
           title="Refresh"
           aria-label="Refresh index breadth"
         >
