@@ -2,6 +2,20 @@ import { useMemo, useState, useCallback } from "react";
 import { Info } from "lucide-react";
 import { ThemeData } from "@/data/themeData";
 import { ThemeDemandSignals, TickerVolume } from "@/hooks/useVolumeData";
+import {
+  groupVolume, readBreadth, volumeBasisFor, BREADTH_LABEL, BREADTH_HELP,
+  type BreadthKind, type VolumeStrength,
+} from "@/lib/groupSignals";
+import VolumeBar from "@/components/dashboard/VolumeBar";
+
+type BreadthFilter = "all" | "broad-up" | "narrow-up" | "broad-down";
+const FILTERS: { key: BreadthFilter; label: string; tip: string }[] = [
+  { key: "all", label: "All", tip: "Show every group" },
+  { key: "broad-up", label: "Broad rallies", tip: BREADTH_HELP["broad-up"] },
+  { key: "narrow-up", label: "Led by a few", tip: BREADTH_HELP["narrow-up"] },
+  { key: "broad-down", label: "Broad selling", tip: BREADTH_HELP["broad-down"] },
+];
+
 
 const DM_MONO = "'DM Mono', monospace";
 const TOOLTIP_WIDTH = 280;
@@ -61,6 +75,7 @@ export default function HeatmapGridView({
   getThemeSignals,
   volumeMap,
   dimmedThemes,
+  timeframe = "Today",
 }: {
   themes: ThemeData[];
   onCardClick?: (theme: ThemeData) => void;
@@ -68,13 +83,43 @@ export default function HeatmapGridView({
   getThemeSignals?: (symbols: string[]) => ThemeDemandSignals;
   volumeMap?: Record<string, TickerVolume>;
   dimmedThemes?: Set<string> | null;
+  timeframe?: string;
 }) {
+  const [breadthFilter, setBreadthFilter] = useState<BreadthFilter>("all");
   const [hoveredTheme, setHoveredTheme] = useState<string | null>(null);
   const [tooltipPos, setTooltipPos] = useState<TooltipPosition | null>(null);
 
   const sorted = useMemo(() => {
     return [...themes].sort((a, b) => b.performance_pct - a.performance_pct);
   }, [themes]);
+
+  // Breadth read + volume strength per group (median stock, so one outlier can't dominate).
+  const signals = useMemo(() => {
+    const m = new Map<string, { breadth: ReturnType<typeof readBreadth>; vol: VolumeStrength | null }>();
+    for (const t of themes) {
+      const valid = t.tickers.filter(tk => !tk.skipped);
+      m.set(t.theme_name, {
+        breadth: readBreadth(valid.map(tk => tk.pct), t.performance_pct),
+        vol: groupVolume(valid.map(tk => tk.symbol), volumeMap, timeframe),
+      });
+    }
+    return m;
+  }, [themes, volumeMap, timeframe]);
+
+  const summary = useMemo(() => {
+    let groupsUp = 0, stocksUp = 0, stocks = 0;
+    const counts: Record<BreadthKind, number> = { "broad-up": 0, "narrow-up": 0, "broad-down": 0, "narrow-down": 0, mixed: 0 };
+    for (const t of themes) {
+      if (t.performance_pct > 0) groupsUp++;
+      const b = signals.get(t.theme_name)?.breadth;
+      if (!b) continue;
+      stocksUp += b.up; stocks += b.total;
+      if (b.kind) counts[b.kind]++;
+    }
+    return { groupsUp, stocksPct: stocks ? Math.round((stocksUp / stocks) * 100) : 0, counts };
+  }, [themes, signals]);
+  const hasVolume = useMemo(() => [...signals.values()].some(x => x.vol), [signals]);
+  const volBasis = volumeBasisFor(timeframe);
 
   const handleMouseMove = useCallback((e: React.MouseEvent, themeName: string) => {
     const mouseX = e.clientX;
@@ -135,6 +180,41 @@ export default function HeatmapGridView({
           ))}
         </div>
         <span>↑ Strong</span>
+        {hasVolume && (
+          <span className="ml-3 hidden sm:inline-flex items-center gap-1.5" title={volBasis === "today" ? "Bar at the bottom of each box: today's volume vs its 20-day average (median stock). The tick marks normal volume; a full bar is 3× or more." : "Bar at the bottom of each box: the last 2 weeks' volume vs the 3-month average (median stock). The tick marks normal; a full bar is 3× or more."}>
+            <span className="relative inline-block h-[3px] w-10 rounded-full bg-white/15">
+              <span className="absolute inset-y-0 left-0 w-[60%] rounded-full bg-white/75" />
+              <span className="absolute -top-[2px] h-[7px] w-px bg-white/60" style={{ left: "33.333%" }} />
+            </span>
+            {volBasis === "today" ? "Volume vs 20-day avg" : "2-week volume vs 3-month avg"} · tick = normal
+          </span>
+        )}
+      </div>
+
+      {/* Breadth: how many groups / stocks are rising, and which moves are broad vs carried by a few */}
+      <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-2 px-1">
+        <span className="text-[11px] text-muted-foreground">
+          <span className="text-foreground font-medium">{summary.groupsUp}</span> of {themes.length} groups up ·{" "}
+          <span className="text-foreground font-medium">{summary.stocksPct}%</span> of their stocks rising
+        </span>
+        <div className="inline-flex items-center gap-0.5 rounded-md border border-border bg-muted/20 p-0.5" role="group" aria-label="Breadth filter">
+          {FILTERS.map(f => {
+            const n = f.key === "all" ? null : summary.counts[f.key];
+            const on = breadthFilter === f.key;
+            return (
+              <button
+                key={f.key}
+                type="button"
+                title={f.tip}
+                aria-pressed={on}
+                onClick={() => setBreadthFilter(f.key)}
+                className={`rounded px-2.5 py-1 text-[11px] font-medium transition ${on ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}
+              >
+                {f.label}{n !== null && <span className="ml-1 opacity-70" style={{ fontFamily: DM_MONO }}>{n}</span>}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {/* Grid */}
@@ -144,14 +224,15 @@ export default function HeatmapGridView({
         style={{ gridTemplateColumns: "repeat(auto-fill, minmax(max(104px, calc((100% - 28px) / 8)), 1fr))" }}
       >
         {sorted.map((t) => {
-          const isDimmed = dimmedThemes ? !dimmedThemes.has(t.theme_name.toLowerCase()) : false;
+          const sig = signals.get(t.theme_name);
+          const kind = sig?.breadth.kind ?? null;
+          const isDimmed = (dimmedThemes ? !dimmedThemes.has(t.theme_name.toLowerCase()) : false)
+            || (breadthFilter !== "all" && kind !== breadthFilter);
           const isHovered = hoveredTheme === t.theme_name;
           const validTickers = t.tickers.filter(tk => !tk.skipped);
           const total = validTickers.length;
           const up = validTickers.filter(tk => tk.pct > 0).length;
           const breadthPct = total > 0 ? Math.round((up / total) * 100) : 0;
-          const symbols = t.tickers.map(tk => tk.symbol);
-          const signals = getThemeSignals ? getThemeSignals(symbols) : null;
           const sign = t.performance_pct >= 0 ? "+" : "";
 
           // Top 3 movers by absolute performance — uses cached data only.
@@ -181,7 +262,7 @@ export default function HeatmapGridView({
               onMouseMove={(e) => handleMouseMove(e, t.theme_name)}
               onMouseLeave={handleMouseLeave}
             >
-              <div className="flex flex-col items-center justify-center h-full p-1.5 text-center">
+              <div className={`flex flex-col items-center justify-center h-full p-1.5 text-center ${sig?.vol ? "pb-4" : ""}`}>
                 <span className="text-[10px] font-medium text-white/70 leading-tight line-clamp-3 [overflow-wrap:anywhere]" title={t.theme_name}>
                   {truncateThemeName(t.theme_name)}
                 </span>
@@ -191,7 +272,14 @@ export default function HeatmapGridView({
                 >
                   {sign}{t.performance_pct.toFixed(1)}%
                 </span>
+                {(total > 0 || sig?.vol) && (
+                  <span className="mt-0.5 flex items-center gap-1.5 text-[9.5px] text-white/65 tabular-nums" style={{ fontFamily: DM_MONO }}>
+                    {total > 0 && <span title={`${up} of ${total} stocks up`}>{up}/{total} up</span>}
+                    {sig?.vol && <span title="Volume vs normal (median stock)">· {sig.vol.ratio.toFixed(1)}×</span>}
+                  </span>
+                )}
               </div>
+              {sig?.vol && <VolumeBar v={sig.vol} />}
 
               {/* "i" Info button — opens the Theme Momentum Index slide-in */}
               {onInfoClick && (
@@ -234,8 +322,9 @@ export default function HeatmapGridView({
                   <div className="mt-1.5 space-y-0.5" style={{ fontFamily: DM_MONO }}>
                     <div className="text-muted-foreground">Perf: <span style={{ color: getPerfColor(t.performance_pct) }}>{sign}{t.performance_pct.toFixed(2)}%</span></div>
                     <div className="text-muted-foreground">Breadth: <span style={{ color: getBreadthColor(breadthPct) }}>{breadthPct}%</span> ({up}/{total})</div>
-                    <div className="text-muted-foreground">Rel Vol: {signals?.relVol != null ? <span style={{ color: getRelVolColor(signals.relVol) }}>{signals.relVol.toFixed(1)}×</span> : "—"}</div>
-                    <div className="text-muted-foreground">Sustained Vol: {signals?.sustainedVol != null ? <span style={{ color: getSustainedVolColor(signals.sustainedVol) }}>{signals.sustainedVol >= 0 ? "+" : ""}{signals.sustainedVol.toFixed(0)}%</span> : "—"}</div>
+                    {kind && <div className="text-muted-foreground">Read: <span className="text-foreground">{BREADTH_LABEL[kind]}</span></div>}
+                    {sig?.breadth.medianPct != null && <div className="text-muted-foreground">Typical stock: <span style={{ color: getPerfColor(sig.breadth.medianPct) }}>{sig.breadth.medianPct >= 0 ? "+" : ""}{sig.breadth.medianPct.toFixed(2)}%</span></div>}
+                    <div className="text-muted-foreground">Volume: {sig?.vol ? <span style={{ color: getRelVolColor(sig.vol.ratio) }}>{sig.vol.ratio.toFixed(1)}× {sig.vol.basis === "today" ? "20-day avg" : "3-month avg (2 wk)"}</span> : "—"}</div>
                   </div>
                   {topMovers.length > 0 && (
                     <div className="mt-2 pt-1.5 border-t border-white/10">

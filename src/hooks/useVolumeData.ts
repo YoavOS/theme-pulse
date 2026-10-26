@@ -69,34 +69,36 @@ export function useVolumeData() {
 
     setLoadingSymbols(prev => new Set([...prev, ...symbols]));
 
-    // Batch in groups of 15
+    // Batches of 15, six at a time: the whole stock list (~1,500 symbols in
+    // Industry / Sector modes) loads in a few seconds instead of half a minute.
     const batchSize = 15;
-    for (let i = 0; i < symbols.length; i += batchSize) {
-      const batch = symbols.slice(i, i + batchSize);
-      try {
-        const res = await fetch(
-          `${supabaseUrl}/functions/v1/fetch-volume?symbols=${batch.join(",")}`,
-          { headers: { apikey: anonKey, Authorization: `Bearer ${anonKey}` } }
-        );
-        if (res.ok) {
+    const batches: string[][] = [];
+    for (let i = 0; i < symbols.length; i += batchSize) batches.push(symbols.slice(i, i + batchSize));
+    let next = 0;
+    const worker = async () => {
+      while (next < batches.length) {
+        const batch = batches[next++];
+        try {
+          const res = await fetch(
+            `${supabaseUrl}/functions/v1/fetch-volume?symbols=${batch.join(",")}`,
+            { headers: { apikey: anonKey, Authorization: `Bearer ${anonKey}` } }
+          );
+          if (!res.ok) continue;
           const data = await res.json();
-          if (data.results) {
-            const updates: Record<string, TickerVolume> = {};
-            for (const r of data.results) {
-              updates[r.symbol] = r;
-              volumeMapRef.current[r.symbol] = r;
-            }
-            setVolumeMap(prev => {
-              const next = { ...prev, ...updates };
-              saveLocalCache(next);
-              return next;
-            });
+          if (!data.results) continue;
+          const updates: Record<string, TickerVolume> = {};
+          for (const r of data.results) {
+            updates[r.symbol] = r;
+            volumeMapRef.current[r.symbol] = r;
           }
+          setVolumeMap(prev => ({ ...prev, ...updates }));
+        } catch (e) {
+          console.error("Volume fetch error:", e);
         }
-      } catch (e) {
-        console.error("Volume fetch error:", e);
       }
-    }
+    };
+    await Promise.all(Array.from({ length: Math.min(6, batches.length) }, worker));
+    saveLocalCache({ ...volumeMapRef.current });
 
     setLoadingSymbols(prev => {
       const next = new Set(prev);
