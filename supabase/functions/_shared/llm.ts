@@ -28,7 +28,7 @@ type Provider = "gemini" | "groq" | "cerebras" | "openrouter";
 
 const env = (k: string) => (Deno.env.get(k) ?? "").trim();
 
-const GEMINI_MODELS = (env("GEMINI_MODELS") || "gemini-3.8-flash,gemini-3.6-flash,gemini-3.5-flash-lite")
+const GEMINI_MODELS = (env("GEMINI_MODELS") || "gemini-3.6-flash,gemini-3.5-flash,gemini-3.5-flash-lite")
   .split(",").map((s) => s.trim()).filter(Boolean);
 const GROQ_MODEL = env("GROQ_MODEL") || "openai/gpt-oss-120b";
 const CEREBRAS_MODEL = env("CEREBRAS_MODEL") || "gpt-oss-120b";
@@ -42,13 +42,20 @@ const TOTAL_BUDGET_MS = 110_000;
 
 // Gemini models that answered "not found" in this worker — skipped afterwards.
 const deadGemini = new Set<string>();
+// Gemini models that timed out (e.g. an overloaded preview model) — skipped for a while.
+const slowGemini = new Map<string, number>();
+const SLOW_SKIP_MS = 30 * 60_000;
+// Google Search grounding refused for quota — skipped for an hour (free keys may have none).
+let groundingBlockedUntil = 0;
+const usable = (m: string) => !deadGemini.has(m) && !((slowGemini.get(m) ?? 0) > Date.now());
+const isTimeout = (e: ProviderError) => e.status === 0 && /abort|timed? ?out/i.test(e.message);
 // Providers that rate-limited us recently: provider → retry-after timestamp.
 const cooling = new Map<Provider, number>();
 
 const KEY_OF: Record<Provider, string> = { gemini: "GEMINI_API_KEY", groq: "GROQ_API_KEY", cerebras: "CEREBRAS_API_KEY", openrouter: "OPENROUTER_API_KEY" };
 
 /** Test hook: forget rate-limit cool-downs and missing Gemini models. */
-export function _resetLlmState() { cooling.clear(); deadGemini.clear(); }
+export function _resetLlmState() { cooling.clear(); deadGemini.clear(); slowGemini.clear(); groundingBlockedUntil = 0; }
 
 export function hasAnyLlm(): boolean {
   return !!(env("GEMINI_API_KEY") || env("GROQ_API_KEY") || env("CEREBRAS_API_KEY") || env("OPENROUTER_API_KEY"));
@@ -96,7 +103,7 @@ async function callGemini(body: Body, deadline: number): Promise<{ json: Body; m
   if (!key) throw new ProviderError(0, "GEMINI_API_KEY not set");
   let last: ProviderError | null = null;
   for (const model of GEMINI_MODELS) {
-    if (deadGemini.has(model)) continue;
+    if (!usable(model)) continue;
     try {
       const json = await openAiCompatible("https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", key, { ...forGemini(body), model }, left(deadline, GEMINI_TIMEOUT_MS));
       return { json, model };
@@ -104,6 +111,7 @@ async function callGemini(body: Body, deadline: number): Promise<{ json: Body; m
       last = e instanceof ProviderError ? e : new ProviderError(0, String(e));
       if (last.status === 404) { deadGemini.add(model); continue; }
       if (last.status === 400 && /model/i.test(last.message)) { deadGemini.add(model); continue; }
+      if (isTimeout(last)) { slowGemini.set(model, Date.now() + SLOW_SKIP_MS); continue; }
       if (last.status === 429 || last.status >= 500) continue; // next model has its own quota
       throw last;
     }
@@ -131,7 +139,7 @@ async function callGeminiGrounded(body: Body, deadline: number): Promise<{ json:
   let last: ProviderError | null = null;
   for (let i = 0; i < GEMINI_MODELS.length; i++) {
     const model = GEMINI_MODELS[i];
-    if (deadGemini.has(model)) continue;
+    if (!usable(model)) continue;
     try {
       const res = await withTimeout(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
         method: "POST",
@@ -156,6 +164,9 @@ async function callGeminiGrounded(body: Body, deadline: number): Promise<{ json:
       last = e instanceof ProviderError ? e : new ProviderError(0, String(e));
       if (last.status === 400 && thinking && /thinking/i.test(last.message)) { thinking = false; i--; continue; }
       if (last.status === 404) { deadGemini.add(model); continue; }
+      if (isTimeout(last)) { slowGemini.set(model, Date.now() + SLOW_SKIP_MS); continue; }
+      // Search quota is shared across models: once refused, stop trying it for a while.
+      if (last.status === 429 && /quota/i.test(last.message)) { groundingBlockedUntil = Date.now() + 60 * 60_000; throw last; }
       if (last.status === 429 || last.status >= 500) continue;
       throw last;
     }
@@ -215,7 +226,8 @@ export async function llmFetch(body: Body, opts: { task: LlmTask; label?: string
     return new Response(JSON.stringify({ ...json, provider, model }), { status: 200, headers: { "Content-Type": "application/json" } });
   };
 
-  if (opts.task === "grounded" && !body.tools) {
+  if (opts.task === "grounded" && !body.tools && groundingBlockedUntil > Date.now()) attempts.push("gemini+search skipped (quota)");
+  else if (opts.task === "grounded" && !body.tools) {
     try {
       const r = await callGeminiGrounded(body, deadline);
       return ok(r.json, "gemini+search", r.model);
@@ -223,7 +235,7 @@ export async function llmFetch(body: Body, opts: { task: LlmTask; label?: string
       const pe = e instanceof ProviderError ? e : new ProviderError(0, String(e));
       attempts.push(`gemini+search ${pe.status || ""} ${pe.message.slice(0, 120)}`);
       // Search grounding shares Gemini's quota: a 429 here means plain Gemini is limited too.
-      if (pe.status === 429) { limited++; cooling.set("gemini", Date.now() + 20_000); } else if (!/not set/.test(pe.message)) failed++;
+      if (pe.status === 429) { limited++; if (groundingBlockedUntil <= Date.now()) cooling.set("gemini", Date.now() + 20_000); } else if (!/not set/.test(pe.message)) failed++;
     }
   }
 
