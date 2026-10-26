@@ -6,7 +6,7 @@ import ThemeDrilldownModal from "@/components/ThemeDrilldownModal";
 import ValidateTickersDialog from "@/components/ValidateTickersDialog";
 import {
   RefreshCw, Download, Wifi, WifiOff, Loader2, Settings, ScanLine, X,
-  ShieldCheck, Brain, ChevronDown, LayoutDashboard, AlertTriangle,
+  ShieldCheck, ChevronDown, LayoutDashboard, AlertTriangle,
   Zap, Activity, DollarSign, Sun, Database, Trophy,
   Share2, Flag, Layers, Boxes,
 } from "lucide-react";
@@ -132,8 +132,16 @@ export default function Index() {
   const { fetchVolume, getThemeSignals, volumeMap } = useVolumeData();
   const {
     fetchThemeNews, prefetchTopThemes, getThemeArticles,
-    getAiSummary, getThemeSentiment,
+    getAiSummary, getAiSummaryFull, getThemeSentiment,
   } = useThemeNews();
+  // Stable loader for the drill-down's AI summary (news headlines → short summary).
+  const newsFnsRef = useRef({ fetchThemeNews, getAiSummaryFull });
+  newsFnsRef.current = { fetchThemeNews, getAiSummaryFull };
+  const loadAiRead = useCallback(async (t: ThemeData) => {
+    const articles = await newsFnsRef.current.fetchThemeNews(t.tickers.filter(tk => !tk.skipped).map(tk => tk.symbol));
+    const r = await newsFnsRef.current.getAiSummaryFull(t.theme_name, articles);
+    return { summary: r?.summary ?? null, sentiment: r?.sentiment ?? null, headlines: articles.length };
+  }, []);
   const [newsPanelTheme, setNewsPanelTheme] = useState<ThemeData | null>(null);
   const [newsPanelSummary, setNewsPanelSummary] = useState<string | null>(null);
   const [newsPanelSummaryLoading, setNewsPanelSummaryLoading] = useState(false);
@@ -333,17 +341,17 @@ export default function Index() {
     URL.revokeObjectURL(url);
   };
 
-  // Trigger volume fetch once themes are loaded so signals are populated.
+  // Volume for every stock in the groups on screen (themes, or the whole list in
+  // Industry / Sector modes) — feeds the volume bar on each box. Cached for 4h.
   useEffect(() => {
-    if (!isLive || baseThemes.length === 0) return;
-    const allSymbols = baseThemes.flatMap(t => t.tickers.filter(tk => !tk.skipped).map(tk => tk.symbol));
+    if (themes.length === 0 || (!isLive && groupMode === "theme")) return;
+    const allSymbols = [...new Set(themes.flatMap(t => t.tickers.filter(tk => !tk.skipped).map(tk => tk.symbol.toUpperCase())))];
     if (allSymbols.length > 0) fetchVolume(allSymbols);
-  }, [isLive, baseThemes, fetchVolume]);
+  }, [isLive, groupMode, themes, fetchVolume]);
 
   const dashboardTabs = [
     { to: "/", label: "Dashboard", icon: <LayoutDashboard size={14} />, active: true, color: "" },
     { to: "/market-flag", label: "Market Flag", icon: <Flag size={14} />, active: false, color: "text-[hsl(150,70%,45%)]" },
-    { to: "/intelligence", label: "Intelligence", icon: <Brain size={14} />, active: false, color: "text-primary" },
     { to: "/rs-alpha", label: "RS Alpha", icon: <Zap size={14} />, active: false, color: "text-[hsl(280,70%,60%)]" },
     { to: "/stages", label: "Stages", icon: <Layers size={14} />, active: false, color: "text-[hsl(222,82%,64%)]" },
     { to: "/bases", label: "Bases", icon: <Boxes size={14} />, active: false, color: "text-[hsl(174,70%,50%)]" },
@@ -775,7 +783,7 @@ export default function Index() {
             onThemeClick={setDrilldownTheme}
           />
         ) : isMixed ? (
-          <SectorIndustryHeatmap industries={themes} sectorOf={sectorOf} onOpen={setDrilldownTheme} />
+          <SectorIndustryHeatmap industries={themes} sectorOf={sectorOf} onOpen={setDrilldownTheme} volumeMap={volumeMap} timeframe={activeTimeframe} />
         ) : (
           <HeatmapGridView
             themes={themes}
@@ -784,6 +792,7 @@ export default function Index() {
             getThemeSignals={getThemeSignals}
             volumeMap={volumeMap}
             dimmedThemes={groupMode === "theme" ? searchMatchSet : null}
+            timeframe={activeTimeframe}
           />
         )}
 
@@ -824,6 +833,9 @@ export default function Index() {
         fetchFundamentals={fetchFundamentals}
         isFundamentalsLoading={drilldownTheme ? isFundLoading(drilldownTheme.tickers.filter(t => !t.skipped).map(t => t.symbol)) : false}
         defaultTab={drilldownDefaultTab}
+        timeframe={activeTimeframe}
+        volumeMap={volumeMap}
+        loadAiRead={loadAiRead}
       />
 
       <ThemeStrengthMeter

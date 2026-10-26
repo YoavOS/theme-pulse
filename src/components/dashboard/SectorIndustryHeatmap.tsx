@@ -1,6 +1,9 @@
 import { useMemo } from "react";
 import type { ThemeData } from "@/data/themeData";
 import { heatFill } from "@/components/dashboard/TrackerDisplays";
+import VolumeBar from "@/components/dashboard/VolumeBar";
+import { groupVolume } from "@/lib/groupSignals";
+import type { TickerVolume } from "@/hooks/useVolumeData";
 
 /**
  * Sector + Industry heatmap: one row per sector (ranked by its stock-weighted average move),
@@ -47,8 +50,10 @@ export function heatScale(values: number[]) {
   return steps.find((s) => s >= p90) ?? 100;
 }
 
-export default function SectorIndustryHeatmap({ industries, sectorOf, onOpen, label = "%" }: {
+export default function SectorIndustryHeatmap({ industries, sectorOf, onOpen, label = "%", volumeMap, timeframe = "Today" }: {
   industries: ThemeData[];
+  volumeMap?: Record<string, TickerVolume>;
+  timeframe?: string;
   sectorOf: (industry: string) => string;
   onOpen: (t: ThemeData) => void;
   label?: string;
@@ -81,19 +86,21 @@ export default function SectorIndustryHeatmap({ industries, sectorOf, onOpen, la
           <div className="flex flex-wrap gap-1">
             {b.industries.map((t) => {
               const n = validOf(t);
+              const vol = groupVolume(t.tickers.filter(tk => !tk.skipped).map(tk => tk.symbol), volumeMap, timeframe);
               return (
                 <button
                   key={t.theme_name}
                   onClick={() => onOpen(t)}
-                  title={`${t.theme_name}: ${fmt(t.performance_pct)} · ${t.up_count} of ${n} stocks up — click to open`}
-                  className="flex h-[58px] min-w-0 flex-col justify-between rounded-md px-2 py-1.5 text-left text-white ring-inset transition hover:ring-1 hover:ring-white/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                  title={`${t.theme_name}: ${fmt(t.performance_pct)} · ${t.up_count} of ${n} stocks up${vol ? ` · volume ${vol.ratio.toFixed(1)}× normal` : ""} — click to open`}
+                  className="relative flex h-[62px] min-w-0 flex-col justify-between rounded-md px-2 pb-3 pt-1.5 text-left text-white ring-inset transition hover:ring-1 hover:ring-white/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                   style={{ flex: `${Math.max(1, n)} 1 ${Math.min(220, 96 + n * 3)}px`, background: heatFill(t.performance_pct, scale) }}
                 >
                   <span className="line-clamp-2 text-[11px] font-medium leading-tight">{t.theme_name}</span>
-                  <span className="flex items-end justify-between gap-1">
-                    <span className="font-mono text-[13px] font-semibold tabular-nums">{fmt(t.performance_pct)}</span>
-                    <span className="font-mono text-[9.5px] opacity-75">{t.up_count}/{n}↑</span>
+                  <span className="flex min-w-0 items-end justify-between gap-1">
+                    <span className="shrink-0 font-mono text-[13px] font-semibold tabular-nums">{fmt(t.performance_pct)}</span>
+                    <span className="min-w-0 truncate whitespace-nowrap font-mono text-[9.5px] opacity-75">{t.up_count}/{n}↑{vol ? ` · ${vol.ratio.toFixed(1)}×` : ""}</span>
                   </span>
+                  {vol && <VolumeBar v={vol} />}
                 </button>
               );
             })}

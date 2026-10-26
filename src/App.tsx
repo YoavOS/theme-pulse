@@ -7,7 +7,6 @@ import { AuthProvider } from "@/hooks/useAuth";
 import Index from "./pages/Index";
 import Login from "./pages/Login";
 import Admin from "./pages/Admin";
-import ThemeIntelligence from "./pages/ThemeIntelligence";
 import RsAlpha from "./pages/RsAlpha";
 import LiveExecution from "./pages/LiveExecution";
 import Earnings from "./pages/Earnings";
@@ -43,7 +42,7 @@ const App = () => (
             <Route path="/" element={<Index />} />
             <Route path="/login" element={<Login />} />
             <Route path="/admin" element={<Admin />} />
-            <Route path="/intelligence" element={<ThemeIntelligence />} />
+            <Route path="/intelligence" element={<Navigate to="/" replace />} />
             <Route path="/rs-alpha" element={<RsAlpha />} />
             <Route path="/live" element={<LiveExecution />} />
             <Route path="/earnings" element={<Earnings />} />
