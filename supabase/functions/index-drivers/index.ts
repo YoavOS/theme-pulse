@@ -795,6 +795,8 @@ Deno.serve(async (req) => {
       top10ContributionPct,
       breadth: { advancers, decliners, total: enriched.length, known: enriched.filter((r) => r.pctChange !== null).length },
       lastUpdated: new Date().toISOString(),
+      // Bump when the calculation changes, so a stale deployment is easy to spot.
+      version: "2026-10-27-daily-change",
     });
   } catch (e) {
     console.error("index-drivers error:", e);

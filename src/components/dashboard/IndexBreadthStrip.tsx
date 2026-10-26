@@ -17,7 +17,7 @@ const INDEXES = [
 
 export interface Breadth { indexPct: number | null; up: number; down: number; known: number; at: number }
 
-const CACHE_KEY = "index_breadth_v1";
+const CACHE_KEY = "index_breadth_v2";
 const ttlFor = (tf: Tf) => (tf === "today" ? 5 * 60_000 : 60 * 60_000);
 
 function readCache(): Record<string, Breadth> {
@@ -48,6 +48,8 @@ async function loadOnce(index: string, tf: Tf): Promise<Breadth | null> {
   const j = await res.json();
   const b = j?.breadth;
   if (!b) return null;
+  // Older deployments of index-drivers returned the 5-day change as "today".
+  if (tf === "today" && !j.version) console.warn("index-drivers is an old deployment: Today shows the 1-week change. Redeploy it.");
   return {
     indexPct: typeof j.indexPct === "number" ? j.indexPct : null,
     up: Number(b.advancers) || 0,
