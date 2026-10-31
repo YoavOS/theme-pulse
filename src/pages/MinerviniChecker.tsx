@@ -188,7 +188,7 @@ function StockHeader({ multi, header, fromCache, loading, onRefresh }: {
   );
 }
 
-const CACHE_KEY = (sym: string) => `minervini:v13-profiles:${sym}`;
+const CACHE_KEY = (sym: string) => `minervini:v14-profiles:${sym}`;
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 
 
