@@ -666,7 +666,7 @@ function BreakdownPanel({ loading, breakdown, profiles, thresholds, price }: {
         crit: p.parts.map((x) => [x.label, `${x.value} · ${x.earned}/${x.max}`, x.good === true ? 1 : x.good === false ? -1 : 0] as [string, string, number]) };
     }
     const b = breakdown?.[k];
-    if (!b) return { k, label: def.label, score: null, note: loading ? undefined : "Not scored yet. Run Update now.", crit: [] as [string, string, number][] };
+    if (!b) return { k, label: def.label, score: null, note: loading ? undefined : "No details saved for this score yet. They're added the next time the stock is scored.", crit: [] as [string, string, number][] };
     return { k, label: def.label, score: b.s, note: b.n ?? (b.s === null ? "Not enough filing history." : undefined), crit: b.c ?? [] };
   }).filter(Boolean) as { k: ProfileKey; label: string; score: number | null; note?: string; crit: [string, string, number][] }[];
 
