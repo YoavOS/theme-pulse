@@ -1266,7 +1266,7 @@ export default function RsAlpha() {
                   <button
                     onClick={() => setSuperperfScanOpen(true)}
                     className="inline-flex items-center gap-1.5 rounded-md border border-[hsl(40,90%,55%)]/60 bg-[hsl(40,90%,55%)]/15 px-3 py-1.5 text-xs font-semibold text-[hsl(40,90%,65%)] transition-colors hover:bg-[hsl(40,90%,55%)]/25"
-                    title="Manually scan the qualified universe through Minervini — saves stocks scoring ≥ 80"
+                    title="Score your stock list against growth-stock profiles (Minervini, O'Neil, Ryan, Current). Update only rescans stocks that are new or not scored in 2 weeks."
                   >
                     <Trophy size={12} /> Scan for Superperformance Stocks
                     {superperfSet.size > 0 && (

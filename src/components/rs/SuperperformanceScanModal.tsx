@@ -13,6 +13,7 @@ import type { StockFundamentals } from "@/hooks/useStockFundamentalsMap";
 import type { FiftyTwoWeekHigh } from "@/hooks/useFiftyTwoWeekHighs";
 import SectorDistributionModal from "@/components/rs/SectorDistributionModal";
 import CustomTradingViewListModal, { type CoilScoreInfo, type EmaDistanceInfo } from "@/components/rs/CustomTradingViewListModal";
+import { loadStages, STAGE_COLORS, STAGE_NAMES, type StockStage } from "@/lib/stageAnalysis";
 
 interface Props {
   open: boolean;
@@ -42,10 +43,23 @@ const PROFILE_OPTIONS: { key: SuperperformanceProfileKey; label: string; col: "m
 ];
 
 type Thresholds = Record<SuperperformanceProfileKey, number>;
-const DEFAULT_THRESHOLDS: Thresholds = { current: 80, minervini: 80, oneil: 80, ryan: 80 };
-const THRESHOLDS_KEY = "superperf_thresholds_v1";
-/** Never persist rows scoring under this — keeps the table small regardless of thresholds. */
-const PERSIST_FLOOR = 60;
+const DEFAULT_THRESHOLDS: Thresholds = { current: 80, minervini: 80, oneil: 80, ryan: 65 };
+const THRESHOLDS_KEY = "superperf_thresholds_v2";
+/** A score older than this is due for an update (fundamentals only change with earnings reports). */
+const STALE_DAYS = 14;
+const STALE_MS = STALE_DAYS * 24 * 60 * 60 * 1000;
+/** Stocks scored at the same time. Each one takes ~2 s on the server. */
+const CONCURRENCY = 4;
+type ScanMode = "update" | "full";
+
+const PROFILE_HELP: Record<SuperperformanceProfileKey, string> = {
+  current: "Growth right now: the last few quarters' earnings and sales.",
+  minervini: "Mark Minervini's SEPA fundamentals: accelerating earnings and sales, margins, ROE.",
+  oneil: "William O'Neil's CAN SLIM: current-quarter and annual earnings growth.",
+  ryan: "David Ryan's strict checklist. It rarely scores above 75, so its default bar is lower.",
+};
+const daysAgo = (iso: string) => Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000);
+const fmtAgo = (iso: string) => { const d = daysAgo(iso); return d <= 0 ? "today" : d === 1 ? "yesterday" : d < 14 ? `${d} days ago` : `${Math.round(d / 7)} weeks ago`; };
 
 function loadThresholds(): Thresholds {
   if (typeof window === "undefined") return { ...DEFAULT_THRESHOLDS };
@@ -113,6 +127,16 @@ export default function SuperperformanceScanModal({
   const pauseRef = useRef(false);
   const qualifierSymbolsRef = useRef<Set<string>>(new Set());
   const breakdownCache = useRef<Map<string, Record<string, BreakdownReport>>>(new Map());
+  const [mode, setMode] = useState<ScanMode>("update");
+  const [queue, setQueue] = useState<string[]>([]);
+  const [showDropped, setShowDropped] = useState(false);
+  const [stages, setStages] = useState<Map<string, StockStage>>(new Map());
+
+  // Stage of each stock (from the Stages scan), for the saved list.
+  useEffect(() => {
+    if (!open) return;
+    loadStages().then((rows) => setStages(new Map(rows.map((r) => [r.symbol.toUpperCase(), r])))).catch(() => undefined);
+  }, [open]);
 
   // Reset on close
   useEffect(() => {
@@ -124,125 +148,108 @@ export default function SuperperformanceScanModal({
 
   useEffect(() => { saveThresholds(thresholds); }, [thresholds]);
 
-  const total = universe.length;
-
   const toggleProfile = (key: SuperperformanceProfileKey) => {
     setSelectedProfiles((prev) => prev.includes(key) ? prev.filter((p) => p !== key) : [...prev, key]);
   };
 
-  const persistFloor = useMemo(
-    () => Math.min(PERSIST_FLOOR, ...PROFILE_OPTIONS.map((p) => thresholds[p.key])),
-    [thresholds],
-  );
+  const universeSet = useMemo(() => new Set(universe), [universe]);
+  const bySymbol = useMemo(() => new Map(rows.map((r) => [r.symbol, r])), [rows]);
 
-  const runScan = async (fromIndex = 0) => {
-    if (total === 0) {
-      toast.error("Universe is empty — rebuild RS Alpha first.");
-      return;
+  /** Stocks that need scoring: never scored, scored more than 2 weeks ago, or missing a selected profile. */
+  const dueSymbols = useMemo(() => universe.filter((sym) => {
+    const r = bySymbol.get(sym);
+    if (!r || Date.now() - new Date(r.last_scanned).getTime() > STALE_MS) return true;
+    return selectedProfiles.some((p) => typeof (r as any)[PROFILE_OPTIONS.find((o) => o.key === p)!.col] !== "number");
+  }), [universe, bySymbol, selectedProfiles]);
+
+  /** Freshness of the scores for stocks currently in the list. */
+  const freshness = useMemo(() => {
+    let scored = 0, fresh = 0, newest: string | null = null;
+    for (const sym of universe) {
+      const r = bySymbol.get(sym);
+      if (!r) continue;
+      scored++;
+      if (Date.now() - new Date(r.last_scanned).getTime() <= STALE_MS) fresh++;
+      if (!newest || r.last_scanned > newest) newest = r.last_scanned;
     }
-    if (selectedProfiles.length === 0) {
-      toast.error("Select at least one profile to scan.");
-      return;
+    return { scored, fresh, newest };
+  }, [universe, bySymbol]);
+
+  const total = queue.length;
+
+  const scoreOne = async (sym: string) => {
+    const { data, error } = await supabase.functions.invoke("minervini-analysis", {
+      body: { symbol: sym, minimal: true, profiles: selectedProfiles },
+    });
+    if (error) throw new Error(error.message);
+    if (data?.error) throw new Error(data.error);
+    const scores = normalizeScores(data, selectedProfiles);
+    // Keep every scored stock (a few bytes each) so the next Update knows what is already fresh.
+    // Only the selected profiles' columns change; the others keep their earlier scores.
+    const payload: Record<string, any> = { symbol: sym, last_scanned: new Date().toISOString() };
+    let qualified = false;
+    for (const p of selectedProfiles) {
+      const v = typeof scores[p] === "number" ? scores[p] : null;
+      payload[PROFILE_OPTIONS.find((o) => o.key === p)!.col] = v;
+      if (v !== null && v >= thresholds[p]) qualified = true;
     }
-    cancelRef.current = false;
-    pauseRef.current = false;
-    setStatus("running");
-    setIndex(fromIndex);
-    if (fromIndex === 0) {
-      qualifierSymbolsRef.current = new Set();
-      setQualifierCount(0);
-      setFailed([]);
+    const { error: upErr } = await supabase.from("superperformance_stocks" as any).upsert(payload, { onConflict: "symbol" });
+    if (upErr) throw new Error(upErr.message);
+    if (qualified) {
+      qualifierSymbolsRef.current.add(sym);
+      setQualifierCount(qualifierSymbolsRef.current.size);
     }
-
-    const existingBySymbol = new Map<string, any>(rows.map((r) => [r.symbol, { ...r }]));
-
-    for (let i = fromIndex; i < total; i++) {
-      if (cancelRef.current) { setStatus("cancelled"); setCurrentSymbol(null); return; }
-      while (pauseRef.current) {
-        setStatus("paused");
-        await new Promise((r) => setTimeout(r, 250));
-        if (cancelRef.current) { setStatus("cancelled"); setCurrentSymbol(null); return; }
-      }
-      setStatus("running");
-
-      const sym = universe[i];
-      setIndex(i);
-      setCurrentSymbol(sym);
-
-      try {
-        const { data, error } = await supabase.functions.invoke("minervini-analysis", {
-          body: { symbol: sym, minimal: true, profiles: selectedProfiles },
-        });
-        if (error) throw new Error(error.message);
-        if (data?.error) throw new Error(data.error);
-        const scores = normalizeScores(data, selectedProfiles);
-
-        // Build the upsert payload — only columns for selected profiles get updated.
-        const payload: Record<string, any> = {
-          symbol: sym,
-          last_scanned: new Date().toISOString(),
-        };
-        let anyQualified = false;   // meets the user's threshold for at least one selected profile
-        let anyPersistable = false; // worth keeping in the table at all
-        for (const p of selectedProfiles) {
-          const s = typeof scores[p] === "number" ? scores[p] : null;
-          const col = PROFILE_OPTIONS.find((o) => o.key === p)!.col;
-          payload[col] = s;
-          if (s !== null && s >= thresholds[p]) anyQualified = true;
-          if (s !== null && s >= persistFloor) anyPersistable = true;
-        }
-
-        if (anyPersistable) {
-          await supabase
-            .from("superperformance_stocks" as any)
-            .upsert(payload, { onConflict: "symbol" });
-          if (anyQualified) {
-            qualifierSymbolsRef.current.add(sym);
-            setQualifierCount(qualifierSymbolsRef.current.size);
-          }
-          existingBySymbol.set(sym, { ...(existingBySymbol.get(sym) ?? {}), ...payload });
-        } else {
-          const existing = existingBySymbol.get(sym);
-          const otherProfileKeeps = existing
-            ? PROFILE_OPTIONS
-                .filter((o) => !selectedProfiles.includes(o.key))
-                .some((o) => {
-                  const v = (existing as any)[o.col];
-                  return typeof v === "number" && v >= persistFloor;
-                })
-            : false;
-          if (otherProfileKeeps) {
-            await supabase
-              .from("superperformance_stocks" as any)
-              .update(payload)
-              .eq("symbol", sym);
-            existingBySymbol.set(sym, { ...existing, ...payload });
-          } else {
-            await supabase
-              .from("superperformance_stocks" as any)
-              .delete()
-              .eq("symbol", sym);
-            existingBySymbol.delete(sym);
-          }
-        }
-      } catch (e) {
-        setFailed((f) => [...f, sym]);
-        console.warn("superperformance scan: failed", sym, e);
-      }
-
-      // Light pacing to stay friendly with upstream APIs (FMP/Yahoo/Finnhub).
-      await new Promise((r) => setTimeout(r, 150));
-    }
-
-    setCurrentSymbol(null);
-    setStatus("done");
-    await reload();
-    toast.success("Superperformance scan complete");
   };
 
-  const handleStart = () => runScan(0);
-  const handlePause = () => { pauseRef.current = true; };
-  const handleResume = () => { pauseRef.current = false; runScan(index); };
+  /** Scores a list of stocks, a few at a time. Pause/Cancel take effect between stocks. */
+  const runScan = async (list: string[]) => {
+    if (universe.length === 0) { toast.error("Your stock list is empty. Run 'Update Stock List' first."); return; }
+    if (selectedProfiles.length === 0) { toast.error("Select at least one profile to score."); return; }
+    if (list.length === 0) { toast.success("Every stock was scored in the last 2 weeks. Nothing to update."); return; }
+    cancelRef.current = false;
+    pauseRef.current = false;
+    qualifierSymbolsRef.current = new Set();
+    setQualifierCount(0);
+    setFailed([]);
+    setQueue(list);
+    setIndex(0);
+    setStatus("running");
+
+    let next = 0, done = 0;
+    const failedNow: string[] = [];
+    const worker = async () => {
+      while (next < list.length) {
+        while (pauseRef.current && !cancelRef.current) await new Promise((r) => setTimeout(r, 250));
+        if (cancelRef.current) return;
+        const sym = list[next++];
+        setCurrentSymbol(sym);
+        try { await scoreOne(sym); }
+        catch (e) { failedNow.push(sym); console.warn("superperformance scan: failed", sym, e); }
+        done++;
+        setIndex(done);
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(CONCURRENCY, list.length) }, worker));
+
+    // One more try for the ones that failed (usually a brief rate limit upstream).
+    if (!cancelRef.current && failedNow.length) {
+      const retry = failedNow.splice(0);
+      for (const sym of retry) {
+        if (cancelRef.current) break;
+        try { await scoreOne(sym); } catch { failedNow.push(sym); }
+      }
+    }
+    setFailed(failedNow);
+    setCurrentSymbol(null);
+    await reload();
+    if (cancelRef.current) { setStatus("cancelled"); return; }
+    setStatus("done");
+    toast.success(`Scored ${list.length - failedNow.length} stocks${failedNow.length ? ` · ${failedNow.length} failed` : ""}`);
+  };
+
+  const handleStart = () => runScan(mode === "update" ? dueSymbols : universe);
+  const handlePause = () => { pauseRef.current = true; setStatus("paused"); };
+  const handleResume = () => { pauseRef.current = false; setStatus("running"); };
   const handleCancel = () => { cancelRef.current = true; pauseRef.current = false; };
 
   const handleClear = async () => {
@@ -267,8 +274,20 @@ export default function SuperperformanceScanModal({
         return typeof v === "number" ? v - thresholds[o.key] : -999;
       }),
     );
-    return rows.filter(meets).sort((a, b) => bestDelta(b) - bestDelta(a));
-  }, [rows, thresholds]);
+    return rows
+      .filter(meets)
+      .filter((r) => showDropped || universeSet.has(r.symbol))
+      .sort((a, b) => bestDelta(b) - bestDelta(a));
+  }, [rows, thresholds, showDropped, universeSet]);
+
+  /** Qualifiers that have since left the stock list (RS or liquidity fell below the list rules). */
+  const droppedCount = useMemo(() => rows.filter((r) => !universeSet.has(r.symbol) && PROFILE_OPTIONS.some((o) => {
+    const v = (r as any)[o.col];
+    return typeof v === "number" && v >= thresholds[o.key];
+  })).length, [rows, universeSet, thresholds]);
+
+  const ratingOf = (sym: string) => ratingMap?.get(sym) ?? null;
+  const nameOf = useMemo(() => new Map((universeStocks ?? []).map((u) => [u.symbol, u.companyName])), [universeStocks]);
 
   const qualifyingSymbols = useMemo(() => new Set(sortedRows.map((r) => r.symbol)), [sortedRows]);
 
@@ -347,43 +366,57 @@ export default function SuperperformanceScanModal({
   return (
     <>
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-5xl">
+      <DialogContent className="flex max-h-[92vh] w-[calc(100vw-1.5rem)] max-w-5xl flex-col gap-4 overflow-hidden">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Trophy size={18} className="text-[hsl(40,90%,55%)]" />
             Superperformance Stocks
           </DialogTitle>
           <DialogDescription>
-            Scans the qualified RS universe through each selected profile. Only the ticker, per-profile scores, and
-            last-scanned date are persisted — raw fundamentals are discarded after scoring.
+            Scores every stock in your list against growth-stock profiles, using its latest earnings reports.
+            Scores only change when a company reports, so an update every couple of weeks in earnings season is enough.
           </DialogDescription>
         </DialogHeader>
 
-        {/* Profile selector + thresholds */}
-        <div className="rounded-lg border border-border bg-card p-4 space-y-3">
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pr-1">
+        {/* Freshness */}
+        <div className={`flex flex-wrap items-center gap-x-4 gap-y-2 rounded-lg border px-4 py-3 text-sm ${dueSymbols.length > universe.length * 0.25 ? "border-[hsl(40,80%,50%)]/40 bg-[hsl(40,80%,50%)]/10" : "border-border bg-card"}`}>
+          <div className="min-w-0 flex-1">
+            <div className="font-medium">
+              {freshness.scored === 0
+                ? "No scores yet for the stocks in your list"
+                : `${freshness.fresh.toLocaleString()} of ${universe.length.toLocaleString()} stocks scored in the last ${STALE_DAYS} days`}
+            </div>
+            <div className="text-xs text-muted-foreground">
+              {freshness.newest ? `Latest scoring ${fmtAgo(freshness.newest)}. ` : ""}
+              {dueSymbols.length > 0
+                ? `${dueSymbols.length.toLocaleString()} need an update (new to the list, or not scored for ${STALE_DAYS}+ days).`
+                : "Everything is up to date."}
+            </div>
+          </div>
+        </div>
+
+        {/* Profiles + thresholds */}
+        <div className="space-y-3 rounded-lg border border-border bg-card p-4">
           <div className="flex items-center justify-between gap-2">
             <div className="text-xs uppercase tracking-wide text-muted-foreground">Profiles to score</div>
             <Button size="sm" variant="outline" onClick={() => setThresholdsOpen((v) => !v)}>
-              <Settings2 size={14} className="mr-1" /> Score Thresholds
+              <Settings2 size={14} className="mr-1" /> Score thresholds
             </Button>
           </div>
-          <div className="flex flex-wrap gap-3">
+          <div className="flex flex-wrap gap-2">
             {PROFILE_OPTIONS.map((p) => (
               <label
                 key={p.key}
-                className={`flex items-center gap-2 rounded-md border border-border bg-background px-3 py-1.5 text-sm ${scanning ? "opacity-60 cursor-not-allowed" : "cursor-pointer hover:bg-muted/50"}`}
+                title={PROFILE_HELP[p.key]}
+                className={`flex items-center gap-2 rounded-md border border-border bg-background px-3 py-1.5 text-sm ${scanning ? "cursor-not-allowed opacity-60" : "cursor-pointer hover:bg-muted/50"}`}
               >
-                <Checkbox
-                  checked={selectedProfiles.includes(p.key)}
-                  onCheckedChange={() => toggleProfile(p.key)}
-                  disabled={scanning}
-                />
+                <Checkbox checked={selectedProfiles.includes(p.key)} onCheckedChange={() => toggleProfile(p.key)} disabled={scanning} />
                 <span className="font-medium">{p.label}</span>
                 <span className="font-mono text-xs text-muted-foreground">≥{thresholds[p.key]}</span>
               </label>
             ))}
           </div>
-
           {thresholdsOpen && (
             <div className="grid gap-3 rounded-md border border-border bg-background p-3 sm:grid-cols-2">
               {PROFILE_OPTIONS.map((p) => (
@@ -392,17 +425,12 @@ export default function SuperperformanceScanModal({
                     <span className="font-medium">{p.label} minimum</span>
                     <span className="font-mono text-[hsl(40,90%,55%)]">≥ {thresholds[p.key]}</span>
                   </div>
-                  <Slider
-                    min={40}
-                    max={100}
-                    step={1}
-                    value={[thresholds[p.key]]}
-                    onValueChange={([v]) => setThresholds((t) => ({ ...t, [p.key]: v }))}
-                  />
+                  <Slider min={40} max={100} step={1} value={[thresholds[p.key]]} onValueChange={([v]) => setThresholds((t) => ({ ...t, [p.key]: v }))} />
+                  <div className="text-[11px] leading-snug text-muted-foreground">{PROFILE_HELP[p.key]}</div>
                 </div>
               ))}
-              <div className="sm:col-span-2 flex items-center justify-between text-[11px] text-muted-foreground">
-                <span>Thresholds are saved locally and re-filter the saved list instantly (no rescan needed).</span>
+              <div className="flex items-center justify-between text-[11px] text-muted-foreground sm:col-span-2">
+                <span>Thresholds only filter the saved list. No rescan needed.</span>
                 <Button size="sm" variant="ghost" onClick={() => setThresholds({ ...DEFAULT_THRESHOLDS })}>Reset</Button>
               </div>
             </div>
@@ -410,63 +438,81 @@ export default function SuperperformanceScanModal({
         </div>
 
         {/* Scan controls */}
-        <div className="rounded-lg border border-border bg-card p-4 space-y-3">
-          <div className="flex items-center justify-between gap-2">
-            <div className="text-sm">
-              Universe: <span className="font-mono font-bold">{total}</span> tickers
-              {status !== "idle" && (
-                <span className="ml-3 text-muted-foreground">
-                  · Scanned <span className="font-mono">{index}</span>/{total}
-                  · Qualifiers <span className="font-mono text-[hsl(40,90%,55%)]">{qualifierCount}</span>
-                  {failed.length > 0 && <> · Failed <span className="font-mono text-loss-medium">{failed.length}</span></>}
-                </span>
-              )}
+        <div className="space-y-3 rounded-lg border border-border bg-card p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="inline-flex items-center gap-0.5 rounded-md border border-border bg-muted/20 p-0.5" role="group" aria-label="What to score">
+              {([
+                ["update", `Update · ${dueSymbols.length.toLocaleString()}`, "Only stocks that are new to the list or weren't scored in the last 2 weeks"],
+                ["full", `Full rescan · ${universe.length.toLocaleString()}`, "Score every stock in the list again"],
+              ] as [ScanMode, string, string][]).map(([k, label, tip]) => (
+                <button
+                  key={k}
+                  type="button"
+                  title={tip}
+                  disabled={scanning}
+                  aria-pressed={mode === k}
+                  onClick={() => setMode(k)}
+                  className={`rounded px-3 py-1 text-xs font-medium transition disabled:opacity-60 ${mode === k ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}
+                >
+                  {label}
+                </button>
+              ))}
             </div>
             <div className="flex items-center gap-2">
-              {status === "idle" || status === "done" || status === "cancelled" ? (
-                <Button size="sm" onClick={handleStart} className="bg-[hsl(40,90%,55%)] text-black hover:bg-[hsl(40,90%,50%)] font-semibold">
-                  <Play size={14} className="mr-1" /> Start Scan
+              {!scanning ? (
+                <Button size="sm" onClick={handleStart} className="bg-[hsl(40,90%,55%)] font-semibold text-black hover:bg-[hsl(40,90%,50%)]">
+                  <Play size={14} className="mr-1" /> {mode === "update" ? "Update scores" : "Rescan all"}
                 </Button>
               ) : status === "running" ? (
                 <>
                   <Button size="sm" variant="outline" onClick={handlePause}><Pause size={14} className="mr-1" /> Pause</Button>
-                  <Button size="sm" variant="outline" onClick={handleCancel}><Square size={14} className="mr-1" /> Cancel</Button>
+                  <Button size="sm" variant="outline" onClick={handleCancel}><Square size={14} className="mr-1" /> Stop</Button>
                 </>
               ) : (
                 <>
                   <Button size="sm" onClick={handleResume}><Play size={14} className="mr-1" /> Resume</Button>
-                  <Button size="sm" variant="outline" onClick={handleCancel}><Square size={14} className="mr-1" /> Cancel</Button>
+                  <Button size="sm" variant="outline" onClick={handleCancel}><Square size={14} className="mr-1" /> Stop</Button>
                 </>
               )}
             </div>
           </div>
-
-          {(status === "running" || status === "paused") && (
+          {!scanning && (
+            <div className="text-xs text-muted-foreground">
+              {(mode === "update" ? dueSymbols.length : universe.length) === 0
+                ? "Nothing to update right now."
+                : `About ${Math.max(1, Math.round(((mode === "update" ? dueSymbols.length : universe.length) * 2.3) / CONCURRENCY / 60))} min. Keep this window open while it runs; stopping keeps everything scored so far.`}
+            </div>
+          )}
+          {status !== "idle" && (
             <>
-              <Progress value={progressPct} className="h-2" />
-              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              {scanning && <Progress value={progressPct} className="h-2" />}
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
                 {status === "running" && <Loader2 size={12} className="animate-spin" />}
-                {status === "paused" ? "Paused" : currentSymbol ? `Analyzing ${currentSymbol}…` : "Preparing…"}
+                <span>
+                  {status === "paused" ? "Paused" : status === "running" ? (currentSymbol ? `Scoring ${currentSymbol}…` : "Starting…") : status === "cancelled" ? "Stopped" : "Done"}
+                </span>
+                <span>· <span className="font-mono">{index}</span>/{total} scored</span>
+                <span>· <span className="font-mono text-[hsl(40,90%,55%)]">{qualifierCount}</span> qualify</span>
+                {failed.length > 0 && <span title={failed.join(", ")}>· <span className="font-mono text-loss-medium">{failed.length}</span> failed (no reliable fundamentals)</span>}
               </div>
             </>
           )}
         </div>
 
         {/* Saved list */}
-        <div className="rounded-lg border border-border bg-card p-4 space-y-3 max-h-[45vh] overflow-hidden flex flex-col">
-          <div className="flex items-center justify-between gap-2 flex-wrap">
+        <div className="space-y-3 rounded-lg border border-border bg-card p-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="text-sm font-semibold">
-              Saved Superperformance List
-              <span className="ml-2 text-muted-foreground font-normal">({sortedRows.length})</span>
+              Qualifying stocks <span className="ml-1 font-normal text-muted-foreground">({sortedRows.length})</span>
             </div>
-            <div className="flex items-center gap-2 flex-wrap">
+            <div className="flex flex-wrap items-center gap-2">
               <Button size="sm" variant="outline" onClick={() => setSectorOpen(true)} disabled={!analyticsReady || sortedRows.length === 0}>
                 <PieChartIcon size={14} className="mr-1" /> Sectors
               </Button>
               <Button size="sm" variant="outline" onClick={() => setFiltersOpen(true)} disabled={!analyticsReady || sortedRows.length === 0}>
-                <Settings2 size={14} className="mr-1" /> RS Filters
+                <Settings2 size={14} className="mr-1" /> RS filters
               </Button>
-              <Button size="sm" variant="ghost" onClick={() => reload()} disabled={loading}>
+              <Button size="sm" variant="ghost" onClick={() => reload()} disabled={loading} aria-label="Reload saved scores">
                 <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
               </Button>
               <Button size="sm" variant="outline" onClick={handleCopy} disabled={sortedRows.length === 0}>
@@ -475,49 +521,67 @@ export default function SuperperformanceScanModal({
               <Button size="sm" variant="outline" onClick={handleDownload} disabled={sortedRows.length === 0}>
                 <Download size={14} className="mr-1" /> .txt
               </Button>
-              <Button size="sm" variant="ghost" onClick={handleClear} disabled={rows.length === 0} className="text-loss-medium hover:text-loss-medium">
+              <Button size="sm" variant="ghost" onClick={handleClear} disabled={rows.length === 0} className="text-loss-medium hover:text-loss-medium" aria-label="Delete all saved scores">
                 <Trash2 size={14} />
               </Button>
             </div>
           </div>
-          <div className="overflow-y-auto">
+          {droppedCount > 0 && (
+            <label className="flex cursor-pointer items-center gap-2 text-xs text-muted-foreground">
+              <Checkbox checked={showDropped} onCheckedChange={(v) => setShowDropped(v === true)} />
+              Also show {droppedCount} that qualified but have since left your stock list
+            </label>
+          )}
+          <div className="overflow-x-auto">
             {sortedRows.length === 0 ? (
-              <div className="text-center text-sm text-muted-foreground py-6">
-                {rows.length > 0 ? "No stocks meet the current thresholds — lower them or run a scan." : "No qualifying stocks yet. Run a scan to populate."}
+              <div className="py-6 text-center text-sm text-muted-foreground">
+                {rows.length > 0 ? "No stocks meet the current thresholds. Lower them or update the scores." : "No scores yet. Run Update to score your list."}
               </div>
             ) : (
-              <table className="w-full text-sm">
+              <table className="w-full min-w-[720px] text-sm">
                 <thead className="text-xs text-muted-foreground">
                   <tr className="border-b border-border">
-                    <th className="text-left px-2 py-1.5">Ticker</th>
-                    <th className="text-right px-2 py-1.5">Current</th>
-                    <th className="text-right px-2 py-1.5">Minervini</th>
-                    <th className="text-right px-2 py-1.5">O'Neil</th>
-                    <th className="text-right px-2 py-1.5">Ryan</th>
-                    <th className="text-right px-2 py-1.5">Last Scanned</th>
+                    <th className="px-2 py-1.5 text-left font-medium">Stock</th>
+                    <th className="px-2 py-1.5 text-left font-medium">Stage</th>
+                    <th className="px-2 py-1.5 text-right font-medium" title="RS rating (overall), 1–99">RS</th>
+                    {PROFILE_OPTIONS.map((p) => <th key={p.key} className="px-2 py-1.5 text-right font-medium" title={PROFILE_HELP[p.key]}>{p.label}</th>)}
+                    <th className="px-2 py-1.5 text-right font-medium">Scored</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {sortedRows.map((r) => (
+                  {sortedRows.map((r) => {
+                    const st = stages.get(r.symbol.toUpperCase());
+                    const rs = ratingOf(r.symbol);
+                    const stale = Date.now() - new Date(r.last_scanned).getTime() > STALE_MS;
+                    const inList = universeSet.has(r.symbol);
+                    return (
                     <Fragment key={r.symbol}>
-                      <tr
-                        className="border-b border-border/40 hover:bg-muted/30 cursor-pointer"
-                        onClick={() => openBreakdown(r.symbol)}
-                        title="Click for score breakdown"
-                      >
-                        <td className="px-2 py-1 font-mono font-bold flex items-center gap-1">
-                          <ChevronRight size={12} className={`transition-transform ${breakdownSymbol === r.symbol ? "rotate-90" : ""}`} />
-                          {r.symbol}
+                      <tr className="cursor-pointer border-b border-border/40 hover:bg-muted/30" onClick={() => openBreakdown(r.symbol)} title="Click for the score breakdown">
+                        <td className="px-2 py-1.5">
+                          <div className="flex items-center gap-1">
+                            <ChevronRight size={12} className={`shrink-0 transition-transform ${breakdownSymbol === r.symbol ? "rotate-90" : ""}`} />
+                            <span className="font-mono font-bold">{r.symbol}</span>
+                            {nameOf.get(r.symbol) && <span className="ml-1 hidden max-w-[160px] truncate text-xs text-muted-foreground md:inline">{nameOf.get(r.symbol)}</span>}
+                            {!inList && <span className="ml-1 rounded bg-muted px-1 text-[10px] text-muted-foreground">left list</span>}
+                          </div>
                         </td>
-                        <td className="px-2 py-1 text-right">{renderScoreCell(r.current_score, "current")}</td>
-                        <td className="px-2 py-1 text-right">{renderScoreCell(r.minervini_score, "minervini")}</td>
-                        <td className="px-2 py-1 text-right">{renderScoreCell(r.oneil_score, "oneil")}</td>
-                        <td className="px-2 py-1 text-right">{renderScoreCell(r.ryan_score, "ryan")}</td>
-                        <td className="px-2 py-1 text-right text-xs text-muted-foreground">{new Date(r.last_scanned).toLocaleDateString()}</td>
+                        <td className="px-2 py-1.5">
+                          {st ? (
+                            <span className="inline-flex items-center gap-1.5 text-xs" title={STAGE_NAMES[st.stage]}>
+                              <span className="h-2 w-2 rounded-full" style={{ background: STAGE_COLORS[st.stage] }} />
+                              {st.stage === 0 ? "Transition" : `Stage ${st.stage}`}
+                            </span>
+                          ) : <span className="text-xs text-muted-foreground">—</span>}
+                        </td>
+                        <td className="px-2 py-1.5 text-right font-mono text-xs">{typeof rs === "number" ? rs : "—"}</td>
+                        {PROFILE_OPTIONS.map((p) => <td key={p.key} className="px-2 py-1.5 text-right">{renderScoreCell((r as any)[p.col], p.key)}</td>)}
+                        <td className={`px-2 py-1.5 text-right text-xs ${stale ? "text-[hsl(40,80%,55%)]" : "text-muted-foreground"}`} title={new Date(r.last_scanned).toLocaleString()}>
+                          {fmtAgo(r.last_scanned)}
+                        </td>
                       </tr>
                       {breakdownSymbol === r.symbol && (
                         <tr className="bg-muted/20">
-                          <td colSpan={6} className="px-3 py-3">
+                          <td colSpan={8} className="px-3 py-3">
                             {breakdownLoading ? (
                               <div className="flex items-center gap-2 text-xs text-muted-foreground">
                                 <Loader2 size={12} className="animate-spin" /> Loading score breakdown…
@@ -571,11 +635,13 @@ export default function SuperperformanceScanModal({
                         </tr>
                       )}
                     </Fragment>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             )}
           </div>
+        </div>
         </div>
       </DialogContent>
     </Dialog>
