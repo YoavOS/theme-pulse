@@ -49,7 +49,7 @@ export interface Extras {
 }
 export interface Part { label: string; earned: number; max: number; value: string; good: boolean | null; tested: boolean }
 export interface Profile {
-  key: "momentum" | "quality" | "growth" | "margins" | "cash"; label: string; horizon: string; question: string;
+  key: "momentum" | "quality" | "growth" | "margins" | "cash" | "turnaround"; label: string; horizon: string; question: string;
   score: number | null; coverage: number; verdict: "Strong" | "Mixed" | "Weak" | "Limited data";
   parts: Part[]; strengths: string[]; weaknesses: string[];
 }
@@ -64,6 +64,8 @@ export interface Features {
   revYoY0: number | null; revYoY1: number | null; revYoY2: number | null; revSeq: number | null;
   gm0: number | null; gm4: number | null; om4: number | null; om8: number | null; omUpShare: number | null;
   ocfTTM: number | null; ocfPrevTTM: number | null; fcfPrevTTM: number | null; salesPrevTTM: number | null;
+  // turnaround
+  netIncomePrevTTM: number | null; eps0: number | null; eps4: number | null; lossQuartersPrior: number | null;
 }
 
 const nn = (x: number | null | undefined): x is number => x !== null && x !== undefined && Number.isFinite(x);
@@ -80,6 +82,7 @@ export function fundamentalFeatures(q: FQ[], a: FQ[]): Features {
     salesTTM: null, netIncomeTTM: null, fcfTTM: null, shares: null, salesCagr: null,
     revYoY0: null, revYoY1: null, revYoY2: null, revSeq: null, gm0: null, gm4: null, om4: null, om8: null, omUpShare: null,
     ocfTTM: null, ocfPrevTTM: null, fcfPrevTTM: null, salesPrevTTM: null,
+    netIncomePrevTTM: null, eps0: null, eps4: null, lossQuartersPrior: null,
   };
   if (q.length) {
     const yoy = (k: keyof FQ, i: number) => (q[i + 4] ? growth(q[i][k] as number | null, q[i + 4][k] as number | null) : null);
@@ -115,6 +118,10 @@ export function fundamentalFeatures(q: FQ[], a: FQ[]): Features {
     const ups = Array.from({ length: 4 }, (_, i) => { const a = om(i), b = om(i + 4); return nn(a) && nn(b) ? (a > b ? 1 : 0) : null; }).filter((v): v is 0 | 1 => v !== null);
     if (ups.length >= 3) F.omUpShare = ups.reduce((x: number, y) => x + y, 0) / ups.length;
     F.ocfTTM = ocT; F.ocfPrevTTM = ttm("operatingCashFlow", 4); F.salesPrevTTM = sP;
+    F.netIncomePrevTTM = ttm("netIncome", 4); F.eps0 = q[0].eps; F.eps4 = q[4]?.eps ?? null;
+    // Quarters with a loss in the 2 years before the latest 4 (is there something to turn around?)
+    const prior = q.slice(4, 12).filter((x) => nn(x.netIncome) || nn(x.eps));
+    if (prior.length >= 3) F.lossQuartersPrior = prior.filter((x) => (nn(x.netIncome) ? x.netIncome! : x.eps!) <= 0).length;
     const cpP = ttm("capex", 4);
     if (nn(F.ocfPrevTTM) && nn(cpP)) F.fcfPrevTTM = F.ocfPrevTTM - Math.abs(cpP);
   }
@@ -238,6 +245,35 @@ export function cashProfile(F: Features): Profile {
   if (nn(F.fcfTTM)) p.push(part("Free cash flow over the last 12 months", 25, F.fcfTTM > 0 ? 25 : 0, F.fcfTTM > 0 ? "positive" : "negative", F.fcfTTM > 0));
   if (nn(F.ocfTTM) && nn(F.netIncomeTTM)) p.push(part("Cash flow above reported profit", 20, F.ocfTTM > F.netIncomeTTM ? 20 : 0, F.ocfTTM > F.netIncomeTTM ? "yes" : "no", F.ocfTTM > F.netIncomeTTM ? true : null));
   return finish("cash", "Cash flow", "fewer big losses", "Is the cash real?", p);
+}
+
+/**
+ * Turnaround: a business coming back from losses or a margin collapse. Only scored when there
+ * was something to turn around (losses in the prior two years, or a loss / negative margin a
+ * year ago); otherwise score is null ("Not a turnaround").
+ */
+export function turnaroundProfile(F: Features): Profile {
+  const hadTrouble = (nn(F.lossQuartersPrior) && F.lossQuartersPrior >= 2) || (nn(F.netIncomePrevTTM) && F.netIncomePrevTTM <= 0)
+    || (nn(F.eps4) && F.eps4 <= 0) || (nn(F.om4) && F.om4 < 0);
+  if (!hadTrouble) {
+    return { key: "turnaround", label: "Turnaround", horizon: "next 6–12 months", question: "Is a struggling business recovering?",
+      score: null, coverage: 0, verdict: "Limited data", parts: [], strengths: [], weaknesses: ["Not a turnaround: no recent losses or margin collapse"] };
+  }
+  const p: (Part | null)[] = [];
+  if (nn(F.eps0) && nn(F.eps4)) {
+    const flipped = F.eps4 <= 0 && F.eps0 > 0, better = F.eps0 > F.eps4;
+    p.push(part("Latest quarter EPS vs a year ago", 25, flipped ? 25 : better ? 14 : 0, `${F.eps0.toFixed(2)} vs ${F.eps4.toFixed(2)}`, flipped || better ? true : false));
+  }
+  if (nn(F.netIncomeTTM)) {
+    const prev = F.netIncomePrevTTM, nowPos = F.netIncomeTTM > 0;
+    p.push(part("Profitable over the last 12 months", 20, nowPos ? 20 : nn(prev) && F.netIncomeTTM > prev ? 8 : 0,
+      nowPos ? (nn(prev) && prev <= 0 ? "yes, after a loss the year before" : "yes") : nn(prev) && F.netIncomeTTM > prev ? "loss is shrinking" : "no", nowPos ? true : nn(prev) && F.netIncomeTTM > prev ? null : false));
+  }
+  if (nn(F.opMargin) && nn(F.om4)) { const d = F.opMargin - F.om4; p.push(part("Operating margin vs a year ago", 20, d >= 5 ? 20 : d >= 2 ? 12 : d > 0 ? 6 : 0, `${d >= 0 ? "+" : ""}${d.toFixed(1)} pts`, d >= 2 ? true : d < 0 ? false : null)); }
+  if (nn(F.revYoY0)) { const v = F.revYoY0, acc = nn(F.revYoY1) ? v - F.revYoY1 : null; p.push(part("Sales growing (and speeding up)", 15, v >= 10 && acc !== null && acc > 0 ? 15 : v >= 5 ? 9 : v > 0 ? 4 : 0, `${pf(v)}${acc !== null ? `, ${acc >= 0 ? "+" : ""}${acc.toFixed(0)} pts vs last quarter` : ""}`, v >= 5 ? true : v < 0 ? false : null)); }
+  if (nn(F.ocfTTM) && nn(F.ocfPrevTTM)) { const up = F.ocfTTM > F.ocfPrevTTM, pos = F.ocfTTM > 0; p.push(part("Operating cash flow improving", 15, pos && up ? 15 : up ? 8 : 0, pos ? (up ? "positive and rising" : "positive") : up ? "negative but improving" : "negative and falling", up ? true : false)); }
+  if (nn(F.shareIssue1y)) { const v = F.shareIssue1y; p.push(part("Not funding itself by selling shares", 5, v <= 3 ? 5 : v <= 10 ? 2 : 0, pf(v, 1), v <= 3 ? true : v > 10 ? false : null)); }
+  return finish("turnaround", "Turnaround", "next 6–12 months", "Is a struggling business recovering?", p);
 }
 
 export interface CompanyType { key: "speculative" | "established" | "large"; label: string; detail: string; winPct: number; lossPct: number; medianVsSpy: number }

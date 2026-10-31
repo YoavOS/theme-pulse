@@ -1,6 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
 import { fetchSecQuarters, type SecQuarter } from "../_shared/secFundamentals.ts";
-import { cashProfile, companyType, fundamentalFeatures, growthProfile, marginProfile, momentumProfile, qualityProfile, redFlags, type FQ } from "../_shared/fundamentalProfiles.ts";
+import { cashProfile, companyType, fundamentalFeatures, growthProfile, marginProfile, momentumProfile, qualityProfile, redFlags, turnaroundProfile, type FQ, type Profile as FProfile } from "../_shared/fundamentalProfiles.ts";
 import { measureEarnings, type DBar } from "../_shared/earningsFuel.ts";
 import { hasAnyLlm, llmFetch } from "../_shared/llm.ts";
 
@@ -1842,9 +1842,11 @@ async function buildBundle(symbol: string, force: boolean) {
     growth: growthProfile(feats),
     margins: marginProfile(feats),
     cash: cashProfile(feats),
+    turnaround: turnaroundProfile(feats),
     type: companyType(feats),
     redFlags: redFlags(feats, priceNow),
   };
+  (derived as any).lastReport = lastRep?.date ?? null;
   // Long history for the app's charts (newest first)
   (derived as any).history = {
     quarters: fq.slice(0, 24).map((q, i) => ({
@@ -1914,6 +1916,47 @@ function buildAll(symbol: string, profileMeta: any, derived: any): BundleRespons
 type ProfileKey = "minervini" | "oneil" | "ryan" | "current";
 const ALL_PROFILES: ProfileKey[] = ["minervini", "oneil", "ryan", "current"];
 
+/** Evidence-based profiles that the scan list can filter on (keys of derived.profiles). */
+const SCAN_PROFILE_KEYS = ["momentum", "growth", "margins", "cash", "quality", "turnaround"] as const;
+
+/** Scores for the scan list. null when a profile lacks data (fewer than half its points testable). */
+function scanScores(profiles: Record<string, FProfile> | null | undefined): Record<string, number | null> {
+  const out: Record<string, number | null> = {};
+  for (const k of SCAN_PROFILE_KEYS) {
+    const p = profiles?.[k];
+    out[k] = p && p.verdict !== "Limited data" ? p.score : null;
+  }
+  return out;
+}
+
+/** Small, storable breakdown: criterion label, value, and 1 / 0 / -1 for pass / neutral / fail. */
+function compactBreakdown(reports: Partial<Record<ProfileKey, MinerviniReport>>, profiles: Record<string, FProfile> | null | undefined) {
+  const b: Record<string, unknown> = {};
+  for (const [k, r] of Object.entries(reports)) {
+    if (!r) continue;
+    b[k] = { s: r.overallScore, h: r.headline, c: r.criteria.map((c) => [c.name, c.value, c.status === "pass" ? 1 : c.status === "fail" ? -1 : 0]) };
+  }
+  for (const k of SCAN_PROFILE_KEYS) {
+    const p = profiles?.[k];
+    if (!p) continue;
+    b[k] = {
+      s: p.verdict === "Limited data" ? null : p.score, v: p.verdict,
+      c: p.parts.map((x) => [x.label, x.value, x.good === true ? 1 : x.good === false ? -1 : 0]),
+      ...(p.parts.length === 0 && p.weaknesses.length ? { n: p.weaknesses[0] } : {}),
+    };
+  }
+  return b;
+}
+
+function reportFor(key: ProfileKey, symbol: string, profileMeta: any, derived: any): MinerviniReport {
+  switch (key) {
+    case "minervini": return makeReport(symbol, profileMeta, derived);
+    case "oneil": return makeOneilReport(symbol, profileMeta, derived);
+    case "ryan": return makeRyanReport(symbol, profileMeta, derived);
+    case "current": return makeCurrentReport(symbol, profileMeta, derived);
+  }
+}
+
 function scoreForProfile(key: ProfileKey, symbol: string, profileMeta: any, derived: any): number {
   switch (key) {
     case "minervini": return makeReport(symbol, profileMeta, derived).overallScore;
@@ -1931,10 +1974,13 @@ Deno.serve(async (req) => {
       force?: boolean;
       minimal?: boolean;
       profiles?: ProfileKey[];
+      /** minimal mode: also return a compact breakdown to store with the scores */
+      breakdown?: boolean;
     };
     const symbol = (body.symbol ?? "").toUpperCase().replace(/[^A-Z0-9.-]/g, "").trim();
     const force = !!body.force;
     const minimal = !!body.minimal;
+    const wantBreakdown = !!body.breakdown;
     const requested = Array.isArray(body.profiles) && body.profiles.length > 0
       ? body.profiles.filter((p): p is ProfileKey => ALL_PROFILES.includes(p as ProfileKey))
       : (["minervini"] as ProfileKey[]);
@@ -1947,9 +1993,16 @@ Deno.serve(async (req) => {
           const scores: Record<string, number> = {};
           for (const p of requested) scores[p] = hit.data.reports[p].overallScore;
           const qualifiedProfiles = requested.filter((p) => typeof scores[p] === "number" && scores[p] >= 80);
+          const series = (hit.data as { series?: { profiles?: Record<string, FProfile>; nextEarnings?: string | null; lastReport?: string | null } }).series;
+          const picked: Partial<Record<ProfileKey, MinerviniReport>> = {};
+          for (const p of requested) picked[p] = hit.data.reports[p];
           return jsonResponse({
             symbol,
             scores,
+            profileScores: scanScores(series?.profiles),
+            nextReport: series?.nextEarnings ?? null,
+            lastReport: series?.lastReport ?? null,
+            ...(wantBreakdown ? { breakdown: compactBreakdown(picked, series?.profiles) } : {}),
             qualifiedProfiles,
             qualifies: qualifiedProfiles.length > 0,
             minerviniScore: scores.minervini ?? null,
@@ -1967,14 +2020,28 @@ Deno.serve(async (req) => {
       // Lightweight path: compute only the requested profile scores, do NOT cache the full bundle,
       // and discard derived fundamentals immediately to keep memory minimal.
       const scores: Record<string, number> = {};
-      for (const p of requested) scores[p] = scoreForProfile(p, symbol, profile, derived);
+      const picked: Partial<Record<ProfileKey, MinerviniReport>> = {};
+      for (const p of requested) {
+        const r = reportFor(p, symbol, profile, derived);
+        picked[p] = r;
+        scores[p] = r.overallScore;
+      }
       const qualifiedProfiles = requested.filter((p) => typeof scores[p] === "number" && scores[p] >= 80);
+      const fprofiles = (derived as any).profiles as Record<string, FProfile> | undefined;
+      const extra = {
+        profileScores: scanScores(fprofiles),
+        nextReport: derived.nextEarnings ?? null,
+        lastReport: (derived as any).lastReport ?? null,
+        ...(wantBreakdown ? { breakdown: compactBreakdown(picked, fprofiles) } : {}),
+      };
       // Drop references so GC can reclaim the heavy quarterly/annual payloads.
       (derived as any).quarters = null;
       (derived as any).annual = null;
+      (derived as any).history = null;
       return jsonResponse({
         symbol,
         scores,
+        ...extra,
         qualifiedProfiles,
         qualifies: qualifiedProfiles.length > 0,
         minerviniScore: scores.minervini ?? null,
@@ -1991,7 +2058,7 @@ Deno.serve(async (req) => {
       })),
       code33: (derived as { code33?: unknown }).code33 ?? null, roePct: derived.roePct, debtToEquity: derived.debtToEquity,
       revisions: derived.revisions, shortInterest: derived.shortInterest, analystRec: derived.analystRec, revSurprises: derived.revSurprises,
-      nextEarnings: derived.nextEarnings, profiles: (derived as any).profiles ?? null, history: (derived as any).history ?? null, scoreParts: (derived as { scoreParts?: unknown }).scoreParts ?? null,
+      nextEarnings: derived.nextEarnings, lastReport: (derived as any).lastReport ?? null, profiles: (derived as any).profiles ?? null, history: (derived as any).history ?? null, scoreParts: (derived as { scoreParts?: unknown }).scoreParts ?? null,
       scoreCoveragePct: (derived as { scoreCoveragePct?: unknown }).scoreCoveragePct ?? null,
       surprises: derived.epsSurprisesRecent, beatRate: derived.epsBeatRatePct, institutionalPct: derived.institutionalOwnershipPct,
     };
