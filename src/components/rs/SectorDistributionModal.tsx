@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { PieChart as PieChartIcon, ChevronDown, Check } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Slider } from "@/components/ui/slider";
@@ -9,6 +9,9 @@ import { RsStock } from "@/hooks/useRsAlpha";
 import { ALL_GICS_SECTORS, GICS_SECTORS, buildGroupExcluder, gicsForIndustry } from "@/lib/sectorTaxonomy";
 import GroupConcentrationPanel, { type ConcentrationItem } from "@/components/shared/GroupConcentrationPanel";
 import type { GroupMode } from "@/lib/groupColors";
+import { History } from "lucide-react";
+import DistributionHistoryDialog from "@/components/shared/DistributionHistoryDialog";
+import { replay as replaySnapshot, type Snapshot } from "@/lib/rsHistory";
 import { useCuratedThemes } from "@/hooks/useCuratedThemes";
 
 
@@ -173,6 +176,19 @@ export default function SectorDistributionModal({
     [filteredStocks, themeBySymbol, ratingMap, getReturnField, tabId],
   );
 
+  // History chart: the same filters replayed on past weekly snapshots of the RS list.
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const replayHistory = useCallback((snap: Snapshot) => replaySnapshot(snap, {
+    tabId, getRsForTab: getRsForTab as never, isOtcSymbol, minRating, minAdr, topN, topNMax: TOPN_MAX,
+    acceleratingOnly, excludeOtc, themeBySymbol,
+    excludeSector: excludeSectorsOn && excludedSectors.size > 0 ? expandedExclusions : undefined,
+  }), [tabId, getRsForTab, isOtcSymbol, minRating, minAdr, topN, acceleratingOnly, excludeOtc, themeBySymbol, excludeSectorsOn, excludedSectors, expandedExclusions]);
+  const historyFilterLabel = [
+    topN >= TOPN_MAX ? "all stocks" : `top ${topN}`, `RS rating ≥ ${minRating}`, `ADR ≥ ${minAdr}%`,
+    acceleratingOnly ? "accelerating" : null, excludeOtc ? "no OTC" : null,
+    excludeSectorsOn && excludedSectors.size > 0 ? `${excludedSectors.size} excluded` : null,
+  ].filter(Boolean).join(" · ");
+
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -195,6 +211,15 @@ export default function SectorDistributionModal({
             onModeChange={setGroupMode}
             availableModes={["sector", "industry", "subIndustry", "theme"]}
             height={340}
+            headerExtra={
+              <button
+                onClick={() => setHistoryOpen(true)}
+                className="ml-auto inline-flex items-center gap-1 rounded-md border border-border bg-muted/20 px-2.5 py-1 text-[11px] font-medium text-foreground transition hover:border-primary/60 hover:text-primary"
+                title="How each group's share of this list changed over time"
+              >
+                <History size={12} /> Share over time
+              </button>
+            }
           />
 
 
@@ -329,6 +354,14 @@ export default function SectorDistributionModal({
             </div>
           </div>
         </div>
+        <DistributionHistoryDialog
+          open={historyOpen}
+          onOpenChange={setHistoryOpen}
+          mode={groupMode}
+          replay={replayHistory}
+          nowItems={panelItems}
+          filterLabel={historyFilterLabel}
+        />
       </DialogContent>
     </Dialog>
   );

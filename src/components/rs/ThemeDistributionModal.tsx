@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { invalidateThemeCatalog } from "@/lib/themeCatalog";
 import { Layers, Sparkles, Loader2, Plus, Check } from "lucide-react";
 import { toast } from "sonner";
@@ -10,6 +10,9 @@ import { RsStock } from "@/hooks/useRsAlpha";
 import { useCuratedThemes } from "@/hooks/useCuratedThemes";
 import GroupConcentrationPanel, { type ConcentrationItem } from "@/components/shared/GroupConcentrationPanel";
 import type { GroupMode } from "@/lib/groupColors";
+import { History } from "lucide-react";
+import DistributionHistoryDialog from "@/components/shared/DistributionHistoryDialog";
+import { replay as replaySnapshot, type Snapshot } from "@/lib/rsHistory";
 import type { SectorTab } from "@/components/rs/SectorDistributionModal";
 
 
@@ -188,6 +191,18 @@ export default function ThemeDistributionModal({
     [filteredStocks, themeBySymbol, ratingMap, getReturnField, tabId],
   );
 
+  // History chart: the same filters replayed on past weekly snapshots of the RS list.
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const replayHistory = useCallback((snap: Snapshot) => replaySnapshot(snap, {
+    tabId, getRsForTab: getRsForTab as never, isOtcSymbol, minRating, minAdr, topN, topNMax: TOPN_MAX,
+    acceleratingOnly, excludeOtc, themeBySymbol,
+      }), [tabId, getRsForTab, isOtcSymbol, minRating, minAdr, topN, acceleratingOnly, excludeOtc, themeBySymbol]);
+  const historyFilterLabel = [
+    topN >= TOPN_MAX ? "all stocks" : `top ${topN}`, `RS rating ≥ ${minRating}`, `ADR ≥ ${minAdr}%`,
+    acceleratingOnly ? "accelerating" : null, excludeOtc ? "no OTC" : null,
+    
+  ].filter(Boolean).join(" · ");
+
 
   const handleSuggest = async () => {
     if (unassignedSymbols.length < 3) { toast.info("Not enough unassigned tickers for AI suggestions."); return; }
@@ -289,6 +304,15 @@ export default function ThemeDistributionModal({
             onModeChange={setGroupMode}
             availableModes={["theme", "industry", "subIndustry", "sector"]}
             height={340}
+            headerExtra={
+              <button
+                onClick={() => setHistoryOpen(true)}
+                className="ml-auto inline-flex items-center gap-1 rounded-md border border-border bg-muted/20 px-2.5 py-1 text-[11px] font-medium text-foreground transition hover:border-primary/60 hover:text-primary"
+                title="How each group's share of this list changed over time"
+              >
+                <History size={12} /> Share over time
+              </button>
+            }
           />
 
 
@@ -451,6 +475,14 @@ export default function ThemeDistributionModal({
             )}
           </div>
         </div>
+        <DistributionHistoryDialog
+          open={historyOpen}
+          onOpenChange={setHistoryOpen}
+          mode={groupMode}
+          replay={replayHistory}
+          nowItems={panelItems}
+          filterLabel={historyFilterLabel}
+        />
       </DialogContent>
     </Dialog>
   );
