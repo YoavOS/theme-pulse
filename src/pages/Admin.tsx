@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { invalidateThemeCatalog } from "@/lib/themeCatalog";
 import { useAuth } from "@/hooks/useAuth";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -53,6 +54,9 @@ export default function Admin() {
   const [editingTheme, setEditingTheme] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
   const [editDesc, setEditDesc] = useState("");
+
+  // Theme edits here: make every other screen reload the theme list afterwards.
+  useEffect(() => () => invalidateThemeCatalog(), []);
 
   useEffect(() => {
     if (!authLoading && !user) {

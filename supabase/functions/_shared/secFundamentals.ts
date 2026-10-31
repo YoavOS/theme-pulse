@@ -1,3 +1,4 @@
+import { capMap } from "./boundedCache.ts";
 // ─────────────────────────────────────────────────────────────
 // SEC EDGAR XBRL "company facts" → clean 3-month quarters.
 //
@@ -247,6 +248,7 @@ export async function fetchSecQuarters(symbol: string): Promise<{ quarters: SecQ
     const q = adjustForSplits(parseCompanyFacts(j)), a = adjustForSplits(parseCompanyFactsAnnual(j));
     const v = { quarters: q, annual: a, status: q.length ? `ok (${q.length} quarters, ${a.length} years)` : "no quarterly data (20-F/40-F filer?)" };
     secCache.set(symbol, { at: Date.now(), v });
+    capMap(secCache, 300);
     return v;
   } catch (e) {
     return { quarters: [], annual: [], status: `error: ${e instanceof Error ? e.message : String(e)}` };

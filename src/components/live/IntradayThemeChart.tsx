@@ -86,7 +86,8 @@ export default function IntradayThemeChart({ open, symbols, themeLabel, onClose 
   // Optional 30s auto-refresh
   useEffect(() => {
     if (!open || !autoRefresh) return;
-    const id = setInterval(() => { fetchData(); }, 30000);
+    // Skip refreshes while the tab is hidden (no point downloading data nobody sees).
+    const id = setInterval(() => { if (document.visibilityState === "visible") fetchData(); }, 30000);
     return () => clearInterval(id);
   }, [open, autoRefresh, fetchData]);
 

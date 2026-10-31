@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { idbDel, idbGet, idbSet } from "@/lib/idbCache";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 // Client side of the Base Scanner (engine: supabase/functions/_shared/baseEngine.ts,
@@ -259,14 +260,19 @@ export function loadBases(force = false): Promise<StockBase[]> {
   return p;
 }
 
+let basesMem: { at: number; rows: StockBase[]; v: string | null } | null = null;
+const MEM_FRESH_MS = 2 * 60 * 1000;
+type BaseCache = { ts: number; rows: StockBase[]; v?: string | null };
+
 async function loadBasesImpl(force: boolean): Promise<StockBase[]> {
   if (!force) {
+    if (basesMem && Date.now() - basesMem.at < MEM_FRESH_MS) return basesMem.rows;
     try {
-      const raw = localStorage.getItem(CACHE_KEY);
-      if (raw) {
-        const p = JSON.parse(raw) as { ts: number; rows: StockBase[]; v?: string | null };
-        // Use the cache only while the server has nothing newer (a scan from another device or tab).
-        if (Date.now() - p.ts < CACHE_TTL && Array.isArray(p.rows) && await cacheStillFresh(p.v ?? null)) return p.rows;
+      const p = basesMem ? { ts: basesMem.at, rows: basesMem.rows, v: basesMem.v } : await idbGet<BaseCache>(CACHE_KEY);
+      // Use the cache only while the server has nothing newer (a scan from another device or tab).
+      if (p && Date.now() - p.ts < CACHE_TTL && Array.isArray(p.rows) && await cacheStillFresh(p.v ?? null)) {
+        basesMem = { at: Date.now(), rows: p.rows, v: p.v ?? null };
+        return p.rows;
       }
     } catch { /* ignore */ }
   }
@@ -284,12 +290,14 @@ async function loadBasesImpl(force: boolean): Promise<StockBase[]> {
     if (data.length < 1000) break;
   }
   const v = rows.reduce<string | null>((m, r) => (r.updated_at && (!m || r.updated_at > m) ? r.updated_at : m), null);
-  try { localStorage.setItem(CACHE_KEY, JSON.stringify({ ts: Date.now(), rows, v })); } catch { /* quota */ }
+  basesMem = { at: Date.now(), rows, v };
+  void idbSet(CACHE_KEY, { ts: Date.now(), rows, v });
   return rows;
 }
 
 export function clearBasesCache() {
-  try { localStorage.removeItem(CACHE_KEY); } catch { /* ignore */ }
+  basesMem = null;
+  void idbDel(CACHE_KEY);
 }
 
 /** Strict preset (research "strict" columns) applied on top of the balanced results. */

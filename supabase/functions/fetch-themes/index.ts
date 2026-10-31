@@ -112,16 +112,21 @@ async function fetchOverallQuote(
 ): Promise<QuoteResult> {
   let ohlc: any[] | null = null;
 
+  // A fresh 6-month row, or the 1-year row the 52-week scan stored (sliced to 6 months).
   const cached = await sb
     .from("yahoo_history_cache")
-    .select("ohlc")
+    .select("ohlc, period")
     .eq("symbol", symbol)
-    .eq("period", "6mo")
-    .gte("fetched_at", new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString())
-    .maybeSingle();
+    .in("period", ["6mo", "1y"])
+    .gte("fetched_at", new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString());
+  const six = cached.data?.find((r: any) => r.period === "6mo" && Array.isArray(r.ohlc));
+  const year = cached.data?.find((r: any) => r.period === "1y" && Array.isArray(r.ohlc));
+  const since = Math.floor(Date.now() / 1000) - 183 * 86400;
 
-  if (cached.data?.ohlc && Array.isArray(cached.data.ohlc)) {
-    ohlc = cached.data.ohlc;
+  if (six) {
+    ohlc = six.ohlc;
+  } else if (year && (year.ohlc as any[]).some((b) => typeof b?.ts === "number")) {
+    ohlc = (year.ohlc as any[]).filter((b) => typeof b?.ts !== "number" || b.ts >= since);
   } else {
     // Trigger a single 6mo fetch (writes cache). Reuse helper to share rate limiting.
     await getHistoricalData(sb, symbol, "6mo");

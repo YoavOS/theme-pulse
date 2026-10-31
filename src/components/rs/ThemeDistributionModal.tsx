@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { invalidateThemeCatalog } from "@/lib/themeCatalog";
 import { Layers, Sparkles, Loader2, Plus, Check } from "lucide-react";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
@@ -231,7 +232,8 @@ export default function ThemeDistributionModal({
       if (tErr) throw tErr;
       setCreated(prev => new Set(prev).add(s.theme_name));
       toast.success(`Added "${s.theme_name}" with ${s.tickers.length} tickers.`);
-      reloadThemes();
+      invalidateThemeCatalog();
+      reloadThemes(true);
     } catch (e: any) {
       const msg = e?.message?.includes("authent") || e?.code === "42501"
         ? "Sign in required to add themes." : (e?.message || "Failed to create theme.");
@@ -257,7 +259,8 @@ export default function ThemeDistributionModal({
       if (tErr) throw tErr;
       setAddedKeys(prev => new Set(prev).add(key));
       toast.success(`Added ${fresh.length} ticker${fresh.length === 1 ? "" : "s"} to "${theme.name}".`);
-      reloadThemes();
+      invalidateThemeCatalog();
+      reloadThemes(true);
     } catch (e: any) {
       const msg = e?.message?.includes("authent") || e?.code === "42501"
         ? "Sign in required to edit themes." : (e?.message || "Failed to add tickers.");
