@@ -36,6 +36,13 @@
       "when": 1792342717294,
       "tag": "0004_trade_positions",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1793490178472,
+      "tag": "0005_rs_history_snapshots",
+      "breakpoints": true
     }
   ]
 }
