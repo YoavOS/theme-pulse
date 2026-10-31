@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { idbDel, idbGet, idbSet } from "@/lib/idbCache";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { clearBasesCache } from "@/lib/bases";
 
@@ -138,14 +139,21 @@ export function loadStages(force = false): Promise<StockStage[]> {
   return p;
 }
 
+/** Last rows in memory, so several screens opening at once don't each re-read the cache. */
+let stagesMem: { at: number; rows: StockStage[]; v: string | null } | null = null;
+const MEM_FRESH_MS = 2 * 60 * 1000;
+type StageCache = { ts: number; rows: StockStage[]; v?: string | null };
+
 async function loadStagesImpl(force: boolean): Promise<StockStage[]> {
   if (!force) {
+    if (stagesMem && Date.now() - stagesMem.at < MEM_FRESH_MS) return stagesMem.rows;
     try {
-      const raw = localStorage.getItem(CACHE_KEY);
-      if (raw) {
-        const p = JSON.parse(raw) as { ts: number; rows: StockStage[]; v?: string | null };
-        // Use the cache only while the server has nothing newer (a scan from another device or tab).
-        if (Date.now() - p.ts < CACHE_TTL && Array.isArray(p.rows) && await cacheStillFresh(p.v ?? null)) return p.rows;
+      // Stored in IndexedDB (moved from localStorage, where 3 MB of stage rows crowded out every other cache).
+      const p = stagesMem ? { ts: stagesMem.at, rows: stagesMem.rows, v: stagesMem.v } : await idbGet<StageCache>(CACHE_KEY);
+      // Use the cache only while the server has nothing newer (a scan from another device or tab).
+      if (p && Date.now() - p.ts < CACHE_TTL && Array.isArray(p.rows) && await cacheStillFresh(p.v ?? null)) {
+        stagesMem = { at: Date.now(), rows: p.rows, v: p.v ?? null };
+        return p.rows;
       }
     } catch { /* ignore */ }
   }
@@ -162,7 +170,8 @@ async function loadStagesImpl(force: boolean): Promise<StockStage[]> {
     if (data.length < 1000) break;
   }
   const v = rows.reduce<string | null>((m, r) => (r.updated_at && (!m || r.updated_at > m) ? r.updated_at : m), null);
-  try { localStorage.setItem(CACHE_KEY, JSON.stringify({ ts: Date.now(), rows, v })); } catch { /* quota */ }
+  stagesMem = { at: Date.now(), rows, v };
+  void idbSet(CACHE_KEY, { ts: Date.now(), rows, v });
   return rows;
 }
 
@@ -216,7 +225,8 @@ export function runStageScan(onProgress?: (done: number, total: number) => void)
         console.warn("stage finalize failed", e);
       }
     }
-    try { localStorage.removeItem(CACHE_KEY); } catch { /* ignore */ }
+    stagesMem = null;
+    void idbDel(CACHE_KEY);
     clearBasesCache();
     window.dispatchEvent(new Event(EVENT));
     return { processed, failed };

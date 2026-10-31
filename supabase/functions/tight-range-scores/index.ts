@@ -154,6 +154,25 @@ Deno.serve(async (req) => {
       }
     }
 
+    // Reuse the 1-year history the 52-week-high scan already stored (it covers this period),
+    // instead of downloading and storing a second, shorter copy of the same bars.
+    const need = symbols.filter((s) => !cacheMap.has(s));
+    const sinceTs = Math.floor(Date.now() / 1000) - (period === "6mo" ? 183 : 92) * 86400;
+    for (let i = 0; i < need.length; i += 500) {
+      const slice = need.slice(i, i + 500);
+      const { data } = await supabase
+        .from("yahoo_history_cache")
+        .select("symbol, ohlc")
+        .eq("period", "1y")
+        .gte("fetched_at", new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString())
+        .in("symbol", slice);
+      for (const row of data ?? []) {
+        if (!Array.isArray(row.ohlc)) continue;
+        const bars = (row.ohlc as OHLCBar[]).filter((b) => b.ts >= sinceTs);
+        if (bars.length >= longDays) cacheMap.set(String(row.symbol).toUpperCase(), bars);
+      }
+    }
+
     for (const symbol of symbols) {
       const cached = cacheMap.get(symbol);
       if (cached?.length) rows.set(symbol, calcScore(symbol, cached, shortDays, longDays, "cache"));

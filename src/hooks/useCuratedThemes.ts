@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { loadThemeCatalog } from "@/lib/themeCatalog";
 
 export interface CuratedTheme {
   id: string;
@@ -11,32 +11,32 @@ export function useCuratedThemes() {
   const [themes, setThemes] = useState<CuratedTheme[]>([]);
   const [loading, setLoading] = useState(false);
 
-  const reload = useCallback(async () => {
+  const reload = useCallback(async (force = false) => {
     setLoading(true);
     try {
-      const [themesRes, tickersRes] = await Promise.all([
-        supabase.from("themes").select("id, name"),
-        supabase.from("theme_tickers").select("theme_id, ticker_symbol"),
-      ]);
+      // One shared copy for every screen and modal (see lib/themeCatalog).
+      const { themes: themeRows, tickers } = await loadThemeCatalog(force);
       const tickersByTheme = new Map<string, string[]>();
-      for (const r of tickersRes.data ?? []) {
+      for (const r of tickers) {
         const arr = tickersByTheme.get(r.theme_id) ?? [];
         arr.push(String(r.ticker_symbol).toUpperCase());
         tickersByTheme.set(r.theme_id, arr);
       }
-      const out: CuratedTheme[] = (themesRes.data ?? []).map(t => ({
+      const out: CuratedTheme[] = themeRows.map(t => ({
         id: t.id,
         name: t.name,
         symbols: tickersByTheme.get(t.id) ?? [],
       }));
       out.sort((a, b) => a.name.localeCompare(b.name));
       setThemes(out);
+    } catch {
+      /* keep the previous list */
     } finally {
       setLoading(false);
     }
   }, []);
 
-  useEffect(() => { reload(); }, [reload]);
+  useEffect(() => { void reload(); }, [reload]);
 
   return { themes, loading, reload };
 }

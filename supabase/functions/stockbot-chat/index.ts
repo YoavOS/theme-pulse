@@ -7,6 +7,7 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 import { hasAnyLlm, llmFetch } from "../_shared/llm.ts";
+import { capMap } from "../_shared/boundedCache.ts";
 const UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 StockBot/1.0";
 
 // ── Yahoo auth (warm-container cache) ───────────────────────────────────────
@@ -41,6 +42,7 @@ async function cached<T>(key: string, fn: () => Promise<T>): Promise<T> {
   if (hit && Date.now() - hit.ts < CACHE_MS) return hit.data as T;
   const data = await fn();
   memCache.set(key, { ts: Date.now(), data });
+  capMap(memCache, 200);
   return data;
 }
 

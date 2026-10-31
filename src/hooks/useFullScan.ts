@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from "react";
+import { loadThemeCatalog } from "@/lib/themeCatalog";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { ThemeData } from "@/data/themeData";
@@ -88,10 +89,10 @@ export function useFullScan(onComplete: (themes: ThemeData[], timeframe: string)
     timeframe: string = "Today",
     overallWeights?: { w1d: number; w1w: number; w1m: number; w3m: number },
   ): Promise<ThemeData[]> => {
-    const { data: dbThemes } = await supabase.from("themes").select("id, name, description");
-    const { data: dbTickers } = await supabase.from("theme_tickers").select("theme_id, ticker_symbol");
-
-    if (!dbThemes || !dbTickers) return [];
+    // Shared, cached theme list (switching timeframes no longer refetches both tables).
+    const catalog = await loadThemeCatalog().catch(() => null);
+    if (!catalog) return [];
+    const { themes: dbThemes, tickers: dbTickers } = catalog;
 
     const perfCache = await loadPerfMap();
     if (!perfCache) return [];

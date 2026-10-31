@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { loadThemeCatalog } from "@/lib/themeCatalog";
 import { Link } from "react-router-dom";
 import {
   ArrowLeft,
@@ -671,11 +672,9 @@ export default function LiveExecution() {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const [{ data: themes }, { data: tickers }] = await Promise.all([
-        supabase.from("themes").select("id, name"),
-        supabase.from("theme_tickers").select("theme_id, ticker_symbol"),
-      ]);
-      if (cancelled || !themes || !tickers) return;
+      const catalog = await loadThemeCatalog().catch(() => null);
+      if (cancelled || !catalog) return;
+      const { themes, tickers } = catalog;
       const idToName = new Map<string, string>();
       for (const t of themes) idToName.set(t.id, t.name);
       const symToTheme = new Map<string, string>();

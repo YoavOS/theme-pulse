@@ -3,6 +3,7 @@ import { fetchSecQuarters, type SecQuarter } from "../_shared/secFundamentals.ts
 import { cashProfile, companyType, fundamentalFeatures, growthProfile, marginProfile, momentumProfile, qualityProfile, redFlags, turnaroundProfile, type FQ, type Profile as FProfile } from "../_shared/fundamentalProfiles.ts";
 import { measureEarnings, type DBar } from "../_shared/earningsFuel.ts";
 import { hasAnyLlm, llmFetch } from "../_shared/llm.ts";
+import { capMap } from "../_shared/boundedCache.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -301,7 +302,7 @@ async function fetchQuoteSummary(symbol: string, quality: DataQuality) {
   if (!r.ok) return null;
   const j = await r.json().catch(() => null);
   const data = j?.quoteSummary?.result?.[0] ?? null;
-  if (data) quoteCache.set(symbol, { ts: Date.now(), data });
+  if (data) { quoteCache.set(symbol, { ts: Date.now(), data }); capMap(quoteCache, 300); }
   return data;
 }
 
@@ -346,7 +347,7 @@ async function fetchTimeseries(symbol: string, quality: DataQuality) {
   if (!r.ok) return null;
   const j = await r.json().catch(() => null);
   const data = mapTimeseries(j?.timeseries?.result ?? []);
-  if (Object.keys(data).length) timeseriesCache.set(symbol, { ts: Date.now(), data });
+  if (Object.keys(data).length) { timeseriesCache.set(symbol, { ts: Date.now(), data }); capMap(timeseriesCache, 300); }
   return Object.keys(data).length ? data : null;
 }
 
@@ -358,7 +359,7 @@ async function fetchFinnhubMetric(symbol: string, quality: DataQuality) {
   quality.finnhubCalls++;
   if (!r.ok) return null;
   const data = await r.json().catch(() => null);
-  if (data) finnhubCache.set(symbol, { ts: Date.now(), data });
+  if (data) { finnhubCache.set(symbol, { ts: Date.now(), data }); capMap(finnhubCache, 300); }
   return data;
 }
 
@@ -598,6 +599,7 @@ async function fetchFinnhubStatements(symbol: string, freq: "quarterly" | "annua
     for (const p of points) if (!byDate.has(p.date)) byDate.set(p.date, p);
     const out = [...byDate.values()];
     finnhubStatementCache.set(key, { ts: Date.now(), data: out });
+    capMap(finnhubStatementCache, 400);
     return out;
   } catch {
     return [];
@@ -620,6 +622,7 @@ async function fmpGet(path: string, quality: DataQuality, version: "v3" | "v4" =
     const j = await r.json().catch(() => null);
     if (j && !(j as any).Error && !(j as any)["Error Message"]) {
       fmpCache.set(key, { ts: Date.now(), data: j });
+      capMap(fmpCache, 600);
       return j;
     }
   } catch { /* ignore */ }
@@ -641,7 +644,7 @@ async function fmpStable(endpoint: string, params: string, quality: DataQuality)
     const j = r.ok ? await r.json().catch(() => null) : (await r.body?.cancel(), null);
     const ok = j && !(j as any).Error && !(j as any)["Error Message"] && (!Array.isArray(j) || j.length > 0);
     quality.sourceStatus[`FMP ${endpoint}`] = ok ? "ok" : `HTTP ${status}${j && (j as any)["Error Message"] ? ` (${String((j as any)["Error Message"]).slice(0, 60)})` : Array.isArray(j) ? " (empty)" : ""}`;
-    if (ok) { fmpCache.set(key, { ts: Date.now(), data: j }); return j; }
+    if (ok) { fmpCache.set(key, { ts: Date.now(), data: j }); capMap(fmpCache, 600); return j; }
   } catch (e) { quality.sourceStatus[`FMP ${endpoint}`] = `error: ${e instanceof Error ? e.message : e}`; }
   return null;
 }
@@ -2063,6 +2066,7 @@ Deno.serve(async (req) => {
       surprises: derived.epsSurprisesRecent, beatRate: derived.epsBeatRatePct, institutionalPct: derived.institutionalOwnershipPct,
     };
     multiReportCache.set(symbol, { ts: Date.now(), data, dataQuality: quality });
+    capMap(multiReportCache, 100);
     return jsonResponse({ ...data, cached: false, dataQuality: quality });
   } catch (e) {
     console.error("minervini-analysis error", e);
