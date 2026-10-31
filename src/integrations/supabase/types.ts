@@ -443,6 +443,27 @@ export type Database = {
         }
         Relationships: []
       }
+      rs_history_snapshots: {
+        Row: {
+          created_at: string
+          data: Json
+          day: string
+          source: string
+        }
+        Insert: {
+          created_at?: string
+          data: Json
+          day: string
+          source: string
+        }
+        Update: {
+          created_at?: string
+          data?: Json
+          day?: string
+          source?: string
+        }
+        Relationships: []
+      }
       rs_scan_progress: {
         Row: {
           failed: number
