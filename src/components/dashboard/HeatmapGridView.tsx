@@ -76,6 +76,7 @@ export default function HeatmapGridView({
   volumeMap,
   dimmedThemes,
   timeframe = "Today",
+  leaders,
 }: {
   themes: ThemeData[];
   onCardClick?: (theme: ThemeData) => void;
@@ -84,6 +85,8 @@ export default function HeatmapGridView({
   volumeMap?: Record<string, TickerVolume>;
   dimmedThemes?: Set<string> | null;
   timeframe?: string;
+  /** Superperformance stocks (upper-case symbols): counted on each box. */
+  leaders?: Set<string>;
 }) {
   const [breadthFilter, setBreadthFilter] = useState<BreadthFilter>("all");
   const [hoveredTheme, setHoveredTheme] = useState<string | null>(null);
@@ -225,6 +228,8 @@ export default function HeatmapGridView({
       >
         {sorted.map((t) => {
           const sig = signals.get(t.theme_name);
+          const leaderSyms = leaders ? t.tickers.filter(tk => !tk.skipped && leaders.has(tk.symbol.toUpperCase())).map(tk => tk.symbol) : [];
+          const leaderCount = leaderSyms.length;
           const kind = sig?.breadth.kind ?? null;
           const isDimmed = (dimmedThemes ? !dimmedThemes.has(t.theme_name.toLowerCase()) : false)
             || (breadthFilter !== "all" && kind !== breadthFilter);
@@ -275,6 +280,7 @@ export default function HeatmapGridView({
                 {(total > 0 || sig?.vol) && (
                   <span className="mt-0.5 flex items-center gap-1.5 text-[9.5px] text-white/65 tabular-nums" style={{ fontFamily: DM_MONO }}>
                     {total > 0 && <span title={`${up} of ${total} stocks up`}>{up}/{total} up</span>}
+                    {leaderCount > 0 && <span title={`${leaderCount} Superperformance stock${leaderCount === 1 ? "" : "s"}`}>· 🏆{leaderCount}</span>}
                     {sig?.vol && <span title="Volume vs normal (median stock)">· {sig.vol.ratio.toFixed(1)}×</span>}
                   </span>
                 )}
@@ -324,6 +330,7 @@ export default function HeatmapGridView({
                     <div className="text-muted-foreground">Breadth: <span style={{ color: getBreadthColor(breadthPct) }}>{breadthPct}%</span> ({up}/{total})</div>
                     {kind && <div className="text-muted-foreground">Read: <span className="text-foreground">{BREADTH_LABEL[kind]}</span></div>}
                     {sig?.breadth.medianPct != null && <div className="text-muted-foreground">Typical stock: <span style={{ color: getPerfColor(sig.breadth.medianPct) }}>{sig.breadth.medianPct >= 0 ? "+" : ""}{sig.breadth.medianPct.toFixed(2)}%</span></div>}
+                    {leaderCount > 0 && <div className="text-muted-foreground">Superperformance: <span className="text-[hsl(40,90%,60%)]">{leaderSyms.slice(0, 4).join(", ")}{leaderCount > 4 ? ` +${leaderCount - 4}` : ""}</span></div>}
                     <div className="text-muted-foreground">Volume: {sig?.vol ? <span style={{ color: getRelVolColor(sig.vol.ratio) }}>{sig.vol.ratio.toFixed(1)}× {sig.vol.basis === "today" ? "20-day avg" : "3-month avg (2 wk)"}</span> : "—"}</div>
                   </div>
                   {topMovers.length > 0 && (

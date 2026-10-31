@@ -176,13 +176,7 @@ export default function RsAlpha() {
   const [universeSettingsOpen, setUniverseSettingsOpen] = useState<null | "resume" | "restart">(null);
   const [superperfScanOpen, setSuperperfScanOpen] = useState(false);
   const [superperfFilterOn, setSuperperfFilterOn] = useState(false);
-  const { rows: superperfRows, sets: superperfSets } = useSuperperformance();
-  // Union of all qualifying tickers across profiles — used by the legacy RS Alpha filter toggle.
-  const superperfSet = useMemo(() => {
-    const u = new Set<string>();
-    (Object.values(superperfSets) as Set<string>[]).forEach((s) => s.forEach((t) => u.add(t)));
-    return u;
-  }, [superperfSets]);
+  const { sets: superperfSets, fundamentalQualifiers: superperfSet } = useSuperperformance();
   const [hideOtc, setHideOtc] = useState<boolean>(() => {
     const saved = typeof window !== "undefined" ? localStorage.getItem("rs-hide-otc") : null;
     return saved === null ? true : saved === "true";

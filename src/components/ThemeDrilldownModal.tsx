@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from "react";
 import { ThemeData } from "@/data/themeData";
 import { supabase } from "@/integrations/supabase/client";
-import { ExternalLink, ArrowDown, ArrowUp, Newspaper, BarChart3, List, Sparkles } from "lucide-react";
+import { ExternalLink, ArrowDown, ArrowUp, Newspaper, BarChart3, List, Sparkles, Trophy } from "lucide-react";
 import { NewsArticle, SentimentData } from "@/hooks/useThemeNews";
 import { NewsTabContent } from "@/components/NewsPanel";
 import { FundamentalsData } from "@/hooks/useFundamentals";
@@ -93,6 +93,7 @@ export default function ThemeDrilldownModal({
   timeframe = "Today",
   volumeMap,
   loadAiRead,
+  leaders,
 }: {
   theme: ThemeData | null;
   open: boolean;
@@ -108,6 +109,8 @@ export default function ThemeDrilldownModal({
   volumeMap?: Record<string, TickerVolume>;
   /** News headlines → short AI summary for this group (the summary that used to live in Intelligence → Money Flow). */
   loadAiRead?: (theme: ThemeData) => Promise<AiRead>;
+  /** Superperformance stocks (upper-case symbols) — marked with a trophy. */
+  leaders?: Set<string>;
 }) {
   const [sortKey, setSortKey] = useState<SortKey>(defaultSortKey === "relVol" ? "vol" : (defaultSortKey as SortKey) || "pct");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
@@ -235,6 +238,8 @@ export default function ThemeDrilldownModal({
     vol ? `${volumeWords(vol).charAt(0).toUpperCase()}${volumeWords(vol).slice(1)}.` : "",
   ].join("");
 
+  const leaderSyms = leaders ? valid.map(t => t.symbol).filter(sym => leaders.has(sym.toUpperCase())) : [];
+
   const aiText = ai?.summary ? firstSentences(ai.summary, 2) : null;
   const articles = newsArticles && newsArticles.length > 0 ? newsArticles : localNews;
 
@@ -314,6 +319,15 @@ export default function ThemeDrilldownModal({
           <section className="mx-5 mt-3 rounded-lg border border-border bg-background/40 px-4 py-3 sm:mx-6">
             <h3 className="text-xs font-semibold text-foreground">What's happening</h3>
             <p className="mt-1.5 text-[13px] leading-relaxed text-foreground/90">{dataRead}</p>
+            {leaderSyms.length > 0 && (
+              <p className="mt-1.5 flex items-start gap-1.5 text-[13px] leading-relaxed text-foreground/90">
+                <Trophy size={13} className="mt-0.5 shrink-0 text-[hsl(40,90%,55%)]" />
+                <span>
+                  {leaderSyms.length === 1 ? "1 stock is" : `${leaderSyms.length} stocks are`} on your Superperformance list:{" "}
+                  <span className="font-semibold" style={{ fontFamily: MONO }}>{leaderSyms.slice(0, 6).join(", ")}{leaderSyms.length > 6 ? "…" : ""}</span>
+                </span>
+              </p>
+            )}
             <div className="mt-3 border-t border-border/60 pt-3">
               <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
                 <Sparkles size={12} className="text-primary" />
@@ -408,6 +422,7 @@ export default function ThemeDrilldownModal({
                             className="group inline-flex min-w-0 items-baseline gap-2"
                           >
                             <span className="font-semibold text-foreground group-hover:text-primary" style={{ fontFamily: MONO }}>{t.symbol}</span>
+                            {leaders?.has(t.symbol.toUpperCase()) && <Trophy size={11} className="self-center text-[hsl(40,90%,55%)]" aria-label="Superperformance stock" />}
                             {t.name && <span className="hidden max-w-[180px] truncate text-[11px] text-muted-foreground sm:inline">{t.name}</span>}
                             <ExternalLink size={9} className="self-center text-muted-foreground opacity-0 group-hover:opacity-100" />
                           </a>
