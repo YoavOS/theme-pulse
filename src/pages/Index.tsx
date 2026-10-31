@@ -30,6 +30,7 @@ import { TooltipProvider, Tooltip, TooltipTrigger, TooltipContent } from "@/comp
 import { useSpyBenchmark } from "@/hooks/useSpyBenchmark";
 import { useFullScan } from "@/hooks/useFullScan";
 import { useVolumeData } from "@/hooks/useVolumeData";
+import { useSuperperformance } from "@/hooks/useSuperperformance";
 import { Link, useSearchParams } from "react-router-dom";
 import BriefPanel from "@/components/brief/BriefPanel";
 import BriefRail from "@/components/brief/BriefRail";
@@ -130,6 +131,7 @@ export default function Index() {
   }, [overallWeights]);
 
   const { fetchVolume, getThemeSignals, volumeMap } = useVolumeData();
+  const { fundamentalQualifiers: superperfLeaders } = useSuperperformance();
   const {
     fetchThemeNews, prefetchTopThemes, getThemeArticles,
     getAiSummary, getAiSummaryFull, getThemeSentiment,
@@ -793,6 +795,7 @@ export default function Index() {
             volumeMap={volumeMap}
             dimmedThemes={groupMode === "theme" ? searchMatchSet : null}
             timeframe={activeTimeframe}
+            leaders={superperfLeaders}
           />
         )}
 
@@ -836,6 +839,7 @@ export default function Index() {
         timeframe={activeTimeframe}
         volumeMap={volumeMap}
         loadAiRead={loadAiRead}
+        leaders={superperfLeaders}
       />
 
       <ThemeStrengthMeter

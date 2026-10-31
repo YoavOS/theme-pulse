@@ -10,6 +10,7 @@ import { computeLeadership, type GroupLead } from "@/lib/leadership";
 import { marketTypeFromCache, rsRanks, sepaPillars, type Mark } from "@/lib/sepa";
 import { EARN_LABELS, type StockBase } from "@/lib/bases";
 import type { StockStage } from "@/lib/stageAnalysis";
+import { breakoutSetup, shortTermMomentum } from "@/lib/superperfProfiles";
 import { ArrowLeft, Loader2, CheckCircle2, XCircle, MinusCircle, Search, Trophy, AlertTriangle, Info } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { WeekSpark } from "@/components/stages/StageStockTable";
@@ -76,7 +77,7 @@ interface HProfile {
 }
 interface RedFlag { key: string; label: string; detail: string; tested: boolean }
 interface CompanyType { key: "speculative" | "established" | "large"; label: string; detail: string; winPct: number; lossPct: number; medianVsSpy: number }
-interface Profiles { momentum?: HProfile; quality?: HProfile; growth?: HProfile; margins?: HProfile; cash?: HProfile; type?: CompanyType | null; redFlags?: RedFlag[] }
+interface Profiles { momentum?: HProfile; quality?: HProfile; growth?: HProfile; margins?: HProfile; cash?: HProfile; turnaround?: HProfile; type?: CompanyType | null; redFlags?: RedFlag[] }
 interface History {
   quarters: { end: string; revenue: number | null; eps: number | null; opMargin: number | null; revenueYoY: number | null; epsYoY: number | null }[];
   years: { end: string; revenue: number | null; eps: number | null; netIncome: number | null; fcf: number | null; opMargin: number | null; shares: number | null }[];
@@ -187,7 +188,7 @@ function StockHeader({ multi, header, fromCache, loading, onRefresh }: {
   );
 }
 
-const CACHE_KEY = (sym: string) => `minervini:v13-profiles:${sym}`;
+const CACHE_KEY = (sym: string) => `minervini:v14-profiles:${sym}`;
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 
 
@@ -450,7 +451,7 @@ export default function MinerviniChecker() {
               </TabsList>
 
               <TabsContent value="overview" className="mt-4 space-y-6">
-                {multi.series?.profiles?.momentum && <ProfileCards p={multi.series.profiles} />}
+                {multi.series?.profiles?.momentum && <ProfileCards p={multi.series.profiles} extra={priceCards(sepaProps.stage, sepaProps.rs)} />}
                 <SepaCard {...sepaProps} />
               </TabsContent>
 
@@ -809,6 +810,12 @@ function ScoreBuild({ s }: { s: Series }) {
 // Survivorship-biased (only names on today's list), so absolute returns look worse than reality;
 // the comparisons between groups are what matter.
 const EVIDENCE: Record<string, string> = {
+  turnaround:
+    "Scored only for companies that lost money (or had a negative operating margin) in the last two years. Checks whether EPS flipped positive, the last 12 months are profitable, margins and cash flow are improving and sales are growing. Rule-based, not backtested.",
+  st_momentum:
+    "Price strength over the last 1–4 weeks, from the weekly Stages scan's daily snapshot: return vs the market, RS rating, distance from the 52-week high, position vs the 21-day EMA (not stretched) and volume. Rule-based, not backtested.",
+  setup:
+    "A strong stock pausing in a tight base near its high: Stage 2, Minervini trend template, 10-day range vs normal daily range, distance to the top of the base, volume drying up, RS rating. Rule-based, not backtested.",
   momentum:
     "Tested twice. First test (450 companies, 2021–25): ranked stocks the right way at 13, 26 and 52 weeks; Strong beat Weak by a median 4 pts over 26 weeks. Second test (619 companies, 2019–25): still ranked the right way in both halves, Strong −3 vs Weak −5 vs SPY, with fewer big losses (20% vs 24%). Parts marked * are live data with no history to test (research-backed).",
   growth:
@@ -823,6 +830,26 @@ const EVIDENCE: Record<string, string> = {
     "Each flag raised the share of stocks that lagged SPY by 25+ pts over the next 26 weeks (all stocks: 22%). With 3+ flags it was 39%.",
 };
 const FLAG_EVIDENCE: Record<string, string> = { ps: "42% lagged SPY by 25+ pts (median −18)", assets: "35% lagged by 25+ pts (median −14)", dilution: "33% lagged by 25+ pts (median −10)", burn: "32% lagged by 25+ pts (median −7)", expect: "32% lagged by 25+ pts (median −8)" };
+
+/** Short-term momentum and breakout setup as profile cards (live, from the Stages data). */
+function priceCards(stage: StockStage | null, rs: number | null): HProfile[] {
+  if (!stage) return [];
+  const make = (key: "st_momentum" | "setup", label: string, horizon: string, question: string): HProfile | null => {
+    const r = key === "st_momentum" ? shortTermMomentum({ stage, rsRating: rs }) : breakoutSetup({ stage, rsRating: rs });
+    if (r.score === null) return null;
+    const verdict: HProfile["verdict"] = r.score >= 70 ? "Strong" : r.score >= 40 ? "Mixed" : "Weak";
+    return {
+      key, label, horizon, question, score: r.score, coverage: 100, verdict,
+      parts: r.parts.map((x) => ({ label: x.label, earned: x.earned, max: x.max, value: x.value, good: x.good })),
+      strengths: r.parts.filter((x) => x.good === true).map((x) => `${x.label}: ${x.value}`),
+      weaknesses: r.parts.filter((x) => x.good === false).map((x) => `${x.label}: ${x.value}`),
+    };
+  };
+  return [
+    make("st_momentum", "Short-term momentum", "next 1–4 weeks", "Is the price acting strong right now?"),
+    make("setup", "Breakout setup", "ready now?", "Is it pausing in a tight base near its high?"),
+  ].filter((x): x is HProfile => !!x);
+}
 
 const VERDICT_CLS: Record<HProfile["verdict"], string> = {
   Strong: "border-gain-medium/50 bg-gain-medium/10 text-gain-medium",
@@ -874,10 +901,12 @@ function SummaryLine({ p, sepa, base }: { p: Profiles | null; sepa: ReturnType<t
   );
 }
 
-function ProfileCards({ p }: { p: Profiles }) {
+function ProfileCards({ p, extra = [] }: { p: Profiles; extra?: HProfile[] }) {
   const [open, setOpen] = useState<string | null>(null);
   const flags = p.redFlags ?? [];
-  const cards = [p.momentum, p.growth, p.margins, p.cash, p.quality].filter((x): x is HProfile => !!x);
+  // Turnaround only when there was something to turn around; price profiles come from the Stages data.
+  const cards = [p.momentum, p.growth, p.margins, p.cash, p.quality, p.turnaround?.score != null ? p.turnaround : undefined, ...extra]
+    .filter((x): x is HProfile => !!x);
   const growthSet = [p.momentum, p.growth, p.margins, p.cash].filter((x): x is HProfile => !!x && x.verdict !== "Limited data");
   const strongN = growthSet.filter((x) => x.verdict === "Strong").length;
   return (
@@ -977,6 +1006,9 @@ const CAPTION: Record<string, string> = {
   margins: "Backtested: better returns, fewer big losses",
   cash: "Backtested: fewer big losses",
   quality: "Backtested: fewer big losses, not more return",
+  turnaround: "Rule-based (not backtested)",
+  st_momentum: "Live price check (not backtested)",
+  setup: "Live price check (not backtested)",
 };
 // Second test, 26 weeks ahead vs SPY: median, and share that lagged SPY by 25+ pts, by how many of the four growth checks were Strong.
 const AGREE_EVIDENCE = [
