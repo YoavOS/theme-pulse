@@ -233,7 +233,8 @@ export function runStageScan(onProgress?: (done: number, total: number) => void)
         console.warn("stage finalize failed", e);
       }
     }
-    // Market breadth (S&P 1500): light weekly classification; stocks just scanned above are copied.
+    // Market breadth (every US stock ≥ $300M): light weekly classification. Stocks just scanned above are
+    // copied, and stocks already current (weekend re-scans, a second scan the same evening) are skipped.
     let market = 0;
     try {
       const { symbols: mkt } = await invoke<{ symbols: string[] }>({ action: "market_symbols" });
@@ -253,7 +254,7 @@ export function runStageScan(onProgress?: (done: number, total: number) => void)
           onProgress?.(done, total);
         }
       };
-      await Promise.all([mlane(), mlane()]);
+      await Promise.all([mlane(), mlane(), mlane()]);
       if (market > 0) await invoke({ action: "market_finalize", startedAt }).catch(() => undefined);
     } catch (e) {
       console.warn("market breadth scan skipped", e);
@@ -269,12 +270,12 @@ export function runStageScan(onProgress?: (done: number, total: number) => void)
   return running;
 }
 
-// ── Market breadth (S&P 1500) ────────────────────────────────────────────────
+// ── Market breadth (whole US market) ────────────────────────────────────────────────
 export interface MarketMember { symbol: string; name: string | null; gics_sub: string | null; idx: string | null }
 const MARKET_KEY = "market_stages_v1";
 let marketMem: { at: number; rows: StockStage[]; members: MarketMember[]; v: string | null } | null = null;
 
-/** S&P 1500 stage rows + index membership (cached until the next scan). */
+/** Market stage rows + list membership (cached until the next scan). */
 export async function loadMarketStages(): Promise<{ rows: StockStage[]; members: MarketMember[] }> {
   if (marketMem && Date.now() - marketMem.at < MEM_FRESH_MS) return marketMem;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

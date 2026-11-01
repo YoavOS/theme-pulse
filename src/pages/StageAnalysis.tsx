@@ -112,7 +112,7 @@ const GROUP_PREVIEW = 15;
 
 export default function StageAnalysis() {
   const { rows: listAll, loading, error, reload } = useStockStages(true);
-  // Which stocks: your list, or the S&P 1500 for a market-wide picture.
+  // Which stocks: your list, or the whole US market (~2,700 stocks ≥ $300M) for a market-wide picture.
   const [scope, setScope] = useState<"list" | "market">(() => {
     try { return localStorage.getItem("stages_scope_v1") === "market" ? "market" : "list"; } catch { return "list"; }
   });
@@ -178,7 +178,7 @@ export default function StageAnalysis() {
     const m = new Map<string, string | null>();
     for (const r of extra) m.set(r.symbol.toUpperCase(), r.sector);
     for (const r of uni) m.set(r.symbol.toUpperCase(), r.sector);
-    // S&P 1500 stocks outside your list: GICS sub-industry from the index list.
+    // Market stocks outside your list: their label from the market list (GICS sub-industry).
     for (const r of marketData?.members ?? []) if (!m.get(r.symbol)) m.set(r.symbol, r.gics_sub);
     return m;
   }, [uni, extra, marketData]);
@@ -337,7 +337,7 @@ export default function StageAnalysis() {
         : after.live
           ? `The week isn't over, so the official stages stay on the week ending ${after.asOf ? fmt(after.asOf) : "—"}. "This week so far" now shows the market through ${fmt(after.live)}.`
           : `Week ending ${after.asOf ? fmt(after.asOf) : "—"} is complete and up to date — the next change comes after Friday's close.`;
-      toast.success(`Stages scanned · ${r.processed.toLocaleString("en-US")} stocks${r.market ? ` + ${r.market.toLocaleString("en-US")} S&P 1500` : ""}`, { description: `${what}${r.failed ? ` ${r.failed} unavailable.` : ""}`, duration: 9000 });
+      toast.success(`Stages scanned · ${r.processed.toLocaleString("en-US")} stocks${r.market ? ` + ${r.market.toLocaleString("en-US")} market` : ""}`, { description: `${what}${r.failed ? ` ${r.failed} unavailable.` : ""}`, duration: 9000 });
       if (after.live && after.asOf === before) setWeekView("live");
     } catch (e) {
       toast.error("Stage scan failed", { description: e instanceof Error ? e.message : String(e) });
@@ -397,7 +397,7 @@ export default function StageAnalysis() {
           <div className="ml-auto flex items-center gap-3">
             <Segmented<"list" | "market"> size="xs" value={scope} onChange={setScope} options={[
               { value: "list", label: "Your list", title: "Your RS list and theme stocks" },
-              { value: "market", label: "Market · S&P 1500", title: "S&P 500 + 400 + 600 — the broad market, for breadth" },
+              { value: "market", label: "Whole market", title: "Every US company listed on NYSE / Nasdaq with a market cap of $300M or more (~2,700 stocks), plus the S&P 1500 — for an honest picture of market breadth" },
             ]} />
             {hasLive && (
               <Segmented<"completed" | "live"> size="xs" value={weekView} onChange={setWeekView} options={[
@@ -432,7 +432,7 @@ export default function StageAnalysis() {
           <div className="rounded-lg border border-border bg-card p-4 text-center text-xs text-muted-foreground">
             {marketErr && /does not exist|schema cache/i.test(marketErr)
               ? "Market breadth isn't set up on the server yet."
-              : <>No S&amp;P 1500 stages yet — press <b>Scan Stages</b> once (the first market scan takes a few extra minutes).</>}
+              : <>No market stages yet — press <b>Scan Stages</b> once (the first market scan takes a few extra minutes).</>}
           </div>
         )}
         {showLive && (
@@ -462,7 +462,7 @@ export default function StageAnalysis() {
                 tone={regimeNow.color === "green" ? "good" : regimeNow.color === "red" ? "bad" : "warn"}
                 title={<>Breadth is <span className={regimeNow.color === "green" ? "text-gain-medium" : regimeNow.color === "red" ? "text-loss-medium" : "text-[hsl(40,90%,60%)]"}>{REGIME_TEXT[regimeNow.color].label.toLowerCase()}</span> — {REGIME_TEXT[regimeNow.color].short.replace(/^.*? — /, "")}</>}
                 lines={[
-                  breadth ? <>{breadth.now.toFixed(0)}% of {scope === "market" ? "S&P 1500 stocks" : "your stocks"} are in Stage 2 ({ordinal(breadth.pct)} percentile of the last {breadth.weeks} weeks{breadth.pct <= 10 ? " — a washout; leaders often rebound hardest from here" : breadth.pct >= 90 ? " — crowded" : ""}).</> : null,
+                  breadth ? <>{breadth.now.toFixed(0)}% of {scope === "market" ? "US stocks" : "your stocks"} are in Stage 2 ({ordinal(breadth.pct)} percentile of the last {breadth.weeks} weeks{breadth.pct <= 10 ? " — a washout; leaders often rebound hardest from here" : breadth.pct >= 90 ? " — crowded" : ""}).</> : null,
                   leaders.length
                     ? <>Leading {GROUP_MODE_LABEL[mode].toLowerCase()} groups: {leaders.slice(0, 4).map((g) => g.name).join(", ")}{leaders.length > 4 ? ` +${leaders.length - 4} more` : ""}. Look for setups here first.</>
                     : <>No {GROUP_MODE_LABEL[mode].toLowerCase()} group is clearly leading SPY right now.</>,
@@ -482,12 +482,12 @@ export default function StageAnalysis() {
               { id: "sa-groups", label: "By group" },
             ]} />
 
-            <div id="sa-breadth" className="scroll-mt-12"><RegimePanel rows={regimeRows} scopeLabel={scope === "market" ? "the S&P 1500" : "your list"} /></div>
+            <div id="sa-breadth" className="scroll-mt-12"><RegimePanel rows={regimeRows} scopeLabel={scope === "market" ? "the whole market" : "your list"} /></div>
 
             {/* Market overview */}
             <section id="sa-overview" className="scroll-mt-12 rounded-lg border border-border bg-card p-4">
               <SectionHead
-                title={scope === "market" ? "Stages across the S&P 1500" : "Stages across your list"}
+                title={scope === "market" ? "Stages across the whole market" : "Stages across your list"}
                 sub="Where every stock sits in Weinstein's four stages this week. Click a stage to see its stocks."
                 right={market && <span className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground">SPY <StageBadge r={market} /></span>}
               />

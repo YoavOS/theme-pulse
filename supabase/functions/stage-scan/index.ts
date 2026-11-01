@@ -1,10 +1,11 @@
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
 import { corsHeaders } from "../_shared/cors.ts";
-import { classifyStage, completedWeeks, lastWeekOpen, mergeWeeks, type Stage, type WeeklyBar } from "../_shared/stageEngine.ts";
+import { classifyStage, completedWeeks, lastWeekOpen, mergeWeeks, weekKey, type Stage, type WeeklyBar } from "../_shared/stageEngine.ts";
 import { detectBase, finalizeBase, type BaseFeatures, type DailyBar } from "../_shared/baseEngine.ts";
 import { logSignals, type BaseLogInfo } from "../_shared/signalLog.ts";
 import { dailySnapshot } from "../_shared/dailySnapshot.ts";
 import { fetchEarnGrowth, type EarnGrowth } from "../_shared/earningsGrowth.ts";
+import { resolveSubIndustry } from "../_shared/gicsTaxonomy.ts";
 import { fetchEarningsCalendar, measureEarnings, scoreFuel, type DBar, type EarnEvent, type EarnInfo } from "../_shared/earningsFuel.ts";
 
 /** ---------------------------------------------------------------
@@ -18,7 +19,9 @@ import { fetchEarningsCalendar, measureEarnings, scoreFuel, type DBar, type Earn
  *                                                 signal log snapshot + 4/8/13-week outcomes
  *   { action: "status" }                        → row counts + last week classified
  *   { action: "chart", symbol }                 → last 2 years of weekly bars + 30w MA (app charts)
- *   { action: "market_symbols" }                → S&P 1500 list (Wikipedia, refreshed weekly) for market breadth
+ *   { action: "market_symbols" }                → the market list for breadth (refreshed weekly): every US-listed
+ *                                                 US company ≥ $300M market cap (Nasdaq's free stock screener,
+ *                                                 ~3,000 stocks) plus the S&P 1500 (Wikipedia, GICS labels)
  *   { action: "market_chunk", symbols, startedAt } → light stage rows (weekly bars only) into market_stages
  *   { action: "market_finalize", startedAt }    → drop market rows that left the index
  *
@@ -180,6 +183,43 @@ async function fetchIndex(idx: string, page: string) {
   return out;
 }
 
+const NASDAQ_SECTOR: Record<string, string> = {
+  Technology: "Information Technology", Finance: "Financials", "Basic Materials": "Materials",
+  Telecommunications: "Communication Services", "Health Care": "Health Care", Industrials: "Industrials",
+  "Consumer Discretionary": "Consumer Discretionary", "Consumer Staples": "Consumer Staples",
+  Energy: "Energy", Utilities: "Utilities", "Real Estate": "Real Estate",
+};
+
+/**
+ * The broad market: Nasdaq's free stock screener (NYSE + Nasdaq + AMEX, ~7,000 listings) filtered
+ * to US companies' common stock with a market cap of at least $300M (~3,000 stocks).
+ */
+async function fetchNasdaqMarket() {
+  const r = await fetch("https://api.nasdaq.com/api/screener/stocks?tableonly=true&limit=25000&download=true", {
+    headers: { "User-Agent": UA, Accept: "application/json, text/plain, */*", "Accept-Language": "en-US,en;q=0.9", Origin: "https://www.nasdaq.com", Referer: "https://www.nasdaq.com/" },
+    signal: AbortSignal.timeout(25_000),
+  });
+  if (!r.ok) throw new Error(`nasdaq screener ${r.status}`);
+  const j = await r.json();
+  // deno-lint-ignore no-explicit-any
+  const rows: any[] = j?.data?.rows ?? [];
+  const out: { symbol: string; name: string | null; gics_sector: string | null; gics_sub: string | null; idx: string }[] = [];
+  for (const x of rows) {
+    const sym = String(x.symbol ?? "").trim().toUpperCase();
+    if (!/^[A-Z]{1,5}$/.test(sym)) continue;                         // drops preferreds (^), classes (/), units
+    if (String(x.country ?? "") !== "United States") continue;
+    const cap = Number(String(x.marketCap ?? "").replace(/[^0-9.]/g, ""));
+    if (!(cap >= 300e6)) continue;
+    const name = String(x.name ?? "");
+    if (/warrant|\bright|\bunits?\b|preferred|depositary|notes due|debenture|\betf\b|\bfund\b|trust units/i.test(name)) continue;
+    const ind = String(x.industry ?? "").trim();
+    const sector = NASDAQ_SECTOR[String(x.sector ?? "")] ?? null;
+    const sub = resolveSubIndustry(ind).sub ?? resolveSubIndustry(ind.split(":").pop() ?? "").sub;
+    out.push({ symbol: sym, name: name.replace(/\s+(Common Stock|Class [A-Z] Common Stock|Ordinary Shares)\s*$/i, "").trim() || null, gics_sector: sector, gics_sub: sub ?? sector, idx: "us" });
+  }
+  return out;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   const json = (b: unknown, s = 200) =>
@@ -298,9 +338,18 @@ Deno.serve(async (req) => {
       const age = newest?.[0]?.updated_at ? Date.now() - Date.parse(newest[0].updated_at) : Infinity;
       if (age > 7 * 86400_000) {
         try {
-          const lists = await Promise.all(SP_PAGES.map(([i, p]) => fetchIndex(i, p)));
+          // S&P 1500 first (best labels), then the rest of the US market from Nasdaq's screener.
+          const lists = await Promise.all(SP_PAGES.map(([i, p]) => fetchIndex(i, p).catch((e) => { console.warn(e); return []; })));
+          const wide = await fetchNasdaqMarket().catch((e) => { console.warn("nasdaq screener failed", e); return []; });
+          // The app's own permanent labels win over both (same groups as the rest of the app).
+          const own = new Map((await fetchAll<{ symbol: string; sub_industry: string | null; status: string }>(db, "ticker_classification", "symbol, sub_industry, status"))
+            .filter((r) => r.status === "done" && r.sub_industry).map((r) => [r.symbol.toUpperCase(), r.sub_industry as string]));
           const all = new Map<string, Record<string, unknown>>();
-          for (const l of lists) for (const r of l) if (!all.has(r.symbol)) all.set(r.symbol, { ...r, updated_at: new Date().toISOString() });
+          const now = new Date().toISOString();
+          for (const r of [...lists.flat(), ...wide]) {
+            if (all.has(r.symbol)) continue;
+            all.set(r.symbol, { ...r, gics_sub: own.get(r.symbol) ?? r.gics_sub, updated_at: now });
+          }
           if (all.size > 1200) {
             const rows = [...all.values()];
             for (let k = 0; k < rows.length; k += 500) {
@@ -327,9 +376,13 @@ Deno.serve(async (req) => {
         .select("symbol, stage, substage, confidence, quality, event, event_kind, event_weeks_ago, weeks_in_stage, history, features, as_of")
         .in("symbol", symbols).gte("updated_at", since);
       const doneBy = new Map(((done ?? []) as Record<string, unknown>[]).map((r) => [r.symbol as string, r]));
+      const { data: curRows } = await db.from("market_stages").select("symbol, as_of, updated_at, live_day:features->live->>day").in("symbol", symbols);
+      const curBy = new Map(((curRows ?? []) as { symbol: string; as_of: string; updated_at: string; live_day: string | null }[]).map((r) => [r.symbol, r]));
+      const benchAsOf = bench.bars.length ? new Date((weekKey(bench.bars[bench.bars.length - 1].t) + 4 * 86400) * 1000).toISOString().slice(0, 10) : null;
+      const benchLiveDay = bench.liveBars.length ? nyDay(Math.max(...bench.raw.map((b) => b.t))) : null;
       const rows: Record<string, unknown>[] = [];
       const failed: string[] = [];
-      let cursor = 0, copied = 0;
+      let cursor = 0, copied = 0, skipped = 0;
       const lite = (f: Record<string, unknown> | null | undefined) => {
         if (!f) return null;
         const { dly: _d, ern: _e, wc: _w, ...rest } = f as Record<string, unknown>;
@@ -344,6 +397,12 @@ Deno.serve(async (req) => {
             rows.push({ ...prev, features: lite(prev.features as Record<string, unknown>), updated_at: new Date().toISOString() });
             continue;
           }
+          // Already current? (weekend re-scans, or a second scan the same evening) — no download.
+          const cur = curBy.get(sym);
+          if (cur && cur.as_of === benchAsOf && (
+            !benchLiveDay ? Date.now() - Date.parse(cur.updated_at) < 7 * 86400_000
+              : cur.live_day === benchLiveDay && Date.now() - Date.parse(cur.updated_at) < 45 * 60_000
+          )) { skipped++; continue; }
           const raw = await fetchWeekly(sym);
           const bars = raw ? completedWeeks(raw) : null;
           const r = bars ? classifyStage(bars, bench.bars, bench.stage) : null;
@@ -361,7 +420,7 @@ Deno.serve(async (req) => {
         const { error } = await db.from("market_stages").upsert(rows, { onConflict: "symbol" });
         if (error) throw error;
       }
-      return json({ ok: true, processed: rows.length, copied, failed });
+      return json({ ok: true, processed: rows.length + skipped, fetched: rows.length - copied, copied, skipped, failed });
     }
 
     if (action === "market_finalize") {
