@@ -1,6 +1,7 @@
 // superperf-refresh — keeps the Superperformance list fresh in the background.
 //
-// Runs every 20 minutes (pg_cron, see migration 20261101090000). Each run rescores a small
+// Runs every 20 minutes between 22:00 and 23:40 UTC on weekdays (pg_cron, migrations 20261101090000
+// and 20261101130000), so the backend is idle the rest of the day. Each run rescores a small
 // batch of stocks that are due, by calling minervini-analysis in its quick "minimal" mode, and
 // stores every profile score + a compact breakdown + the company's report dates.
 //

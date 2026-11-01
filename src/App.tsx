@@ -7,18 +7,20 @@ import { AuthProvider } from "@/hooks/useAuth";
 import Index from "./pages/Index";
 // Every other page loads only when it is opened: the dashboard no longer downloads and keeps in
 // memory the code for RS Alpha, Stages, Bases, Earnings, Live Execution, Minervini, etc.
-const Login = lazy(() => import("./pages/Login"));
-const Admin = lazy(() => import("./pages/Admin"));
-const RsAlpha = lazy(() => import("./pages/RsAlpha"));
-const LiveExecution = lazy(() => import("./pages/LiveExecution"));
-const Earnings = lazy(() => import("./pages/Earnings"));
-const MarketFlag = lazy(() => import("./pages/MarketFlag"));
-const StorageManager = lazy(() => import("./pages/StorageManager"));
-const MinerviniChecker = lazy(() => import("./pages/MinerviniChecker"));
-const StageAnalysis = lazy(() => import("./pages/StageAnalysis"));
-const BaseScanner = lazy(() => import("./pages/BaseScanner"));
-const NotFound = lazy(() => import("./pages/NotFound"));
-import { lazy, Suspense, useEffect } from "react";
+const Login = lazyPage(() => import("./pages/Login"));
+const Admin = lazyPage(() => import("./pages/Admin"));
+const RsAlpha = lazyPage(() => import("./pages/RsAlpha"));
+const LiveExecution = lazyPage(() => import("./pages/LiveExecution"));
+const Earnings = lazyPage(() => import("./pages/Earnings"));
+const MarketFlag = lazyPage(() => import("./pages/MarketFlag"));
+const StorageManager = lazyPage(() => import("./pages/StorageManager"));
+const MinerviniChecker = lazyPage(() => import("./pages/MinerviniChecker"));
+const StageAnalysis = lazyPage(() => import("./pages/StageAnalysis"));
+const BaseScanner = lazyPage(() => import("./pages/BaseScanner"));
+const NotFound = lazyPage(() => import("./pages/NotFound"));
+import { Suspense, useEffect } from "react";
+import { lazyPage } from "@/lib/lazyPage";
+import AppErrorBoundary from "@/components/AppErrorBoundary";
 import { scheduleStorageCleanup } from "@/lib/storageHygiene";
 import { autoRunClassificationOncePerDay } from "@/lib/classification";
 
@@ -46,6 +48,7 @@ const App = () => (
         <Sonner />
         <ClassificationAutoRunner />
         <BrowserRouter>
+          <AppErrorBoundary>
           <Suspense fallback={<PageLoading />}>
           <Routes>
             <Route path="/" element={<Index />} />
@@ -65,6 +68,7 @@ const App = () => (
             <Route path="*" element={<NotFound />} />
           </Routes>
           </Suspense>
+          </AppErrorBoundary>
         </BrowserRouter>
       </TooltipProvider>
     </AuthProvider>
