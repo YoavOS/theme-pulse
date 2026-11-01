@@ -50,6 +50,13 @@
       "when": 1793491352469,
       "tag": "0006_superperformance_auth_writes",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1793491765320,
+      "tag": "0007_superperf_columns_cron_switch",
+      "breakpoints": true
     }
   ]
 }

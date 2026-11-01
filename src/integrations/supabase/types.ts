@@ -859,26 +859,38 @@ export type Database = {
       }
       superperformance_stocks: {
         Row: {
+          breakdown: Json | null
           current_score: number | null
+          last_report: string | null
           last_scanned: string
           minervini_score: number | null
+          next_report: string | null
           oneil_score: number | null
+          profile_scores: Json | null
           ryan_score: number | null
           symbol: string
         }
         Insert: {
+          breakdown?: Json | null
           current_score?: number | null
+          last_report?: string | null
           last_scanned?: string
           minervini_score?: number | null
+          next_report?: string | null
           oneil_score?: number | null
+          profile_scores?: Json | null
           ryan_score?: number | null
           symbol: string
         }
         Update: {
+          breakdown?: Json | null
           current_score?: number | null
+          last_report?: string | null
           last_scanned?: string
           minervini_score?: number | null
+          next_report?: string | null
           oneil_score?: number | null
+          profile_scores?: Json | null
           ryan_score?: number | null
           symbol?: string
         }
@@ -1152,6 +1164,7 @@ export type Database = {
           table_name: string
         }[]
       }
+      get_superperf_cron_active: { Args: never; Returns: boolean }
       get_yahoo_cache_breakdown: {
         Args: never
         Returns: {
@@ -1165,6 +1178,10 @@ export type Database = {
       recompute_rs_scan_progress: { Args: never; Returns: undefined }
       release_universe_scan_lock: { Args: never; Returns: undefined }
       set_fundamentals_cron_active: {
+        Args: { p_active: boolean }
+        Returns: undefined
+      }
+      set_superperf_cron_active: {
         Args: { p_active: boolean }
         Returns: undefined
       }
