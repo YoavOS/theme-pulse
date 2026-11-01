@@ -7,6 +7,7 @@ import {
   type BreadthKind, type VolumeStrength,
 } from "@/lib/groupSignals";
 import VolumeBar from "@/components/dashboard/VolumeBar";
+import { heatScale } from "@/components/dashboard/SectorIndustryHeatmap";
 
 type BreadthFilter = "all" | "broad-up" | "narrow-up" | "broad-down";
 const FILTERS: { key: BreadthFilter; label: string; tip: string }[] = [
@@ -21,18 +22,45 @@ const DM_MONO = "'DM Mono', monospace";
 const TOOLTIP_WIDTH = 280;
 const TOOLTIP_HEIGHT = 230;
 
+type Parts = { pct_1d?: number; pct_1w?: number; pct_1m?: number; pct_3m?: number };
+
+/** Overall tooltip: the group's average return over each timeframe that feeds the score. */
+function OverallParts({ tickers }: { tickers: Parts[] }) {
+  const avg = (k: keyof Parts) => {
+    const v = tickers.map((t) => t[k]).filter((x): x is number => typeof x === "number" && !Number.isNaN(x));
+    return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null;
+  };
+  const parts: [string, number | null][] = [["1D", avg("pct_1d")], ["1W", avg("pct_1w")], ["1M", avg("pct_1m")], ["3M", avg("pct_3m")]];
+  if (parts.every(([, v]) => v === null)) return null;
+  return (
+    <div className="text-muted-foreground">
+      {parts.map(([l, v], i) => (
+        <span key={l}>
+          {i > 0 && " · "}{l} <span style={{ color: v === null ? undefined : getPerfColor(v) }}>{v === null ? "—" : `${v >= 0 ? "+" : ""}${v.toFixed(1)}%`}</span>
+        </span>
+      ))}
+    </div>
+  );
+}
+
 interface TooltipPosition {
   x: number;
   y: number;
 }
 
-function getHeatColor(pct: number): string {
-  if (pct > 4) return "hsl(170, 90%, 45%)";
-  if (pct > 2) return "hsl(170, 70%, 35%)";
-  if (pct > 0.5) return "hsl(170, 50%, 25%)";
-  if (pct >= -0.5) return "hsl(220, 10%, 18%)";
-  if (pct >= -2) return "hsl(30, 60%, 25%)";
-  if (pct >= -4) return "hsl(15, 70%, 30%)";
+/**
+ * Box colour. `scale` is the move that counts as "strong": 4% for a single day, and for longer
+ * timeframes (1W / 1M / 3M / Overall) it follows the spread of the groups on screen, so a
+ * 3-month board isn't one solid colour.
+ */
+function getHeatColor(pct: number, scale = 4): string {
+  const k = scale / 4;
+  if (pct > 4 * k) return "hsl(170, 90%, 45%)";
+  if (pct > 2 * k) return "hsl(170, 70%, 35%)";
+  if (pct > 0.5 * k) return "hsl(170, 50%, 25%)";
+  if (pct >= -0.5 * k) return "hsl(220, 10%, 18%)";
+  if (pct >= -2 * k) return "hsl(30, 60%, 25%)";
+  if (pct >= -4 * k) return "hsl(15, 70%, 30%)";
   return "hsl(0, 70%, 35%)";
 }
 
@@ -95,6 +123,11 @@ export default function HeatmapGridView({
   const sorted = useMemo(() => {
     return [...themes].sort((a, b) => b.performance_pct - a.performance_pct);
   }, [themes]);
+  const isOverall = timeframe === "Overall";
+  const scale = useMemo(
+    () => (timeframe === "Today" ? 4 : Math.max(4, heatScale(themes.map((t) => t.performance_pct)))),
+    [themes, timeframe],
+  );
 
   // Breadth read + volume strength per group (median stock, so one outlier can't dominate).
   const signals = useMemo(() => {
@@ -168,7 +201,7 @@ export default function HeatmapGridView({
     <div>
       {/* Color legend */}
       <div className="mb-3 flex items-center gap-2 text-[10px] text-muted-foreground px-1" style={{ fontFamily: DM_MONO }}>
-        <span>Strong ↓</span>
+        <span>{scale === 4 ? "Strong ↓" : `−${scale}%`}</span>
         <div className="flex h-3 flex-1 max-w-[200px] rounded overflow-hidden">
           {[
             "hsl(0, 70%, 35%)",
@@ -182,7 +215,8 @@ export default function HeatmapGridView({
             <div key={i} className="flex-1" style={{ background: c }} />
           ))}
         </div>
-        <span>↑ Strong</span>
+        <span>{scale === 4 ? "↑ Strong" : `+${scale}%`}</span>
+        {isOverall && <span className="ml-2" title="Each box shows the group's weighted score: a blend of its 1D / 1W / 1M / 3M returns, using the Overall Weights.">weighted score</span>}
         {hasVolume && (
           <span className="ml-3 hidden sm:inline-flex items-center gap-1.5" title={volBasis === "today" ? "Bar at the bottom of each box: today's volume vs its 20-day average (median stock). The tick marks normal volume; a full bar is 3× or more." : "Bar at the bottom of each box: the last 2 weeks' volume vs the 3-month average (median stock). The tick marks normal; a full bar is 3× or more."}>
             <span className="relative inline-block h-[3px] w-10 rounded-full bg-white/15">
@@ -258,7 +292,7 @@ export default function HeatmapGridView({
               key={t.theme_name}
               className="relative rounded cursor-pointer transition-all hover:ring-1 hover:ring-primary/40 hover:z-10"
               style={{
-                background: getHeatColor(t.performance_pct),
+                background: getHeatColor(t.performance_pct, scale),
                 minHeight: 80,
                 opacity: isDimmed ? 0.3 : 1,
                 filter: isDimmed ? "grayscale(60%)" : undefined,
@@ -326,7 +360,8 @@ export default function HeatmapGridView({
                     </div>
                   )}
                   <div className="mt-1.5 space-y-0.5" style={{ fontFamily: DM_MONO }}>
-                    <div className="text-muted-foreground">Perf: <span style={{ color: getPerfColor(t.performance_pct) }}>{sign}{t.performance_pct.toFixed(2)}%</span></div>
+                    <div className="text-muted-foreground">{isOverall ? "Score" : "Perf"}: <span style={{ color: getPerfColor(t.performance_pct) }}>{sign}{t.performance_pct.toFixed(2)}%</span></div>
+                    {isOverall && <OverallParts tickers={validTickers} />}
                     <div className="text-muted-foreground">Breadth: <span style={{ color: getBreadthColor(breadthPct) }}>{breadthPct}%</span> ({up}/{total})</div>
                     {kind && <div className="text-muted-foreground">Read: <span className="text-foreground">{BREADTH_LABEL[kind]}</span></div>}
                     {sig?.breadth.medianPct != null && <div className="text-muted-foreground">Typical stock: <span style={{ color: getPerfColor(sig.breadth.medianPct) }}>{sig.breadth.medianPct >= 0 ? "+" : ""}{sig.breadth.medianPct.toFixed(2)}%</span></div>}

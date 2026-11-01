@@ -105,6 +105,13 @@ export default function Index() {
   useEffect(() => { try { localStorage.setItem("dashboard_mixed_v1", mixed ? "1" : "0"); } catch { /* ignore */ } }, [mixed]);
   const pickGroupMode = (m: GroupMode) => { setMixed(false); setGroupMode(m); };
   const pickMixed = () => { setMixed(true); setGroupMode("industry"); };
+  // Overall: heatmap (default) or the ranked table.
+  const [overallView, setOverallView] = useState<"heatmap" | "list">(() => {
+    try { return localStorage.getItem("overall_view_v1") === "list" ? "list" : "heatmap"; } catch { return "heatmap"; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem("overall_view_v1", overallView); } catch { /* ignore */ }
+  }, [overallView]);
   const [dashView, setDashView] = useState<"heatmap" | "tracker" | "session">(() => {
     try { const v = localStorage.getItem("dashboard_view_v1"); return v === "tracker" || v === "session" ? v : "heatmap"; } catch { return "heatmap"; }
   });
@@ -484,6 +491,19 @@ export default function Index() {
             </div>
 
             <div className="flex items-center gap-2">
+              {activeTimeframe === "Overall" && dashView === "heatmap" && (
+                <div className="inline-flex items-center gap-0.5 rounded-md border border-border bg-muted/20 p-0.5">
+                  {(["heatmap", "list"] as const).map((v) => (
+                    <button
+                      key={v}
+                      onClick={() => setOverallView(v)}
+                      className={`rounded px-2.5 py-1 text-[11px] font-medium transition ${overallView === v ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}
+                    >
+                      {v === "heatmap" ? "Boxes" : "Ranked list"}
+                    </button>
+                  ))}
+                </div>
+              )}
               {activeTimeframe === "Overall" && (
                 <DashboardWeightsPanel
                   weights={overallWeights}
@@ -778,14 +798,14 @@ export default function Index() {
             onOpen={setDrilldownTheme}
             sectorOf={isMixed ? sectorOf : undefined}
           />
-        ) : activeTimeframe === "Overall" ? (
+        ) : activeTimeframe === "Overall" && overallView === "list" ? (
           <OverallBestThemesList
             themes={groupMode === "theme" && searchMatchSet ? themes.filter(t => searchMatchSet.has(t.theme_name.toLowerCase())) : themes}
             weights={overallWeights}
             onThemeClick={setDrilldownTheme}
           />
         ) : isMixed ? (
-          <SectorIndustryHeatmap industries={themes} sectorOf={sectorOf} onOpen={setDrilldownTheme} volumeMap={volumeMap} timeframe={activeTimeframe} />
+          <SectorIndustryHeatmap industries={themes} sectorOf={sectorOf} onOpen={setDrilldownTheme} volumeMap={volumeMap} timeframe={activeTimeframe} label={activeTimeframe === "Overall" ? "% score" : "%"} />
         ) : (
           <HeatmapGridView
             themes={themes}
