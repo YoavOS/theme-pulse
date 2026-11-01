@@ -866,6 +866,7 @@ export default function Index() {
         theme={strengthMeterTheme}
         open={!!strengthMeterTheme}
         onOpenChange={(o) => { if (!o) setStrengthMeterTheme(null); }}
+        mode={isMixed ? "industry" : groupMode}
       />
 
       {newsPanelTheme && (

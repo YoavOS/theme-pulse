@@ -78,7 +78,8 @@ const START_FULL = 39;
 const MIN_WEEKS = 25;
 
 /** Drop the current, still-forming week (official labels use completed weeks only). */
-export function completedWeeks(bars: WeeklyBar[], nowSec = Date.now() / 1000): WeeklyBar[] {
+/** Weekly bars de-duplicated by week, oldest first — the current (unfinished) week included. */
+export function mergeWeeks(bars: WeeklyBar[]): WeeklyBar[] {
   const clean = bars.filter((b) => Number.isFinite(b.c) && b.c > 0 && Number.isFinite(b.h) && Number.isFinite(b.l));
   // De-duplicate by week. Yahoo appends the latest DAILY candle as an extra "live" bar inside
   // the last week (e.g. Friday 20:00 next to the Monday-stamped weekly bar). Keeping only that
@@ -91,12 +92,19 @@ export function completedWeeks(bars: WeeklyBar[], nowSec = Date.now() / 1000): W
       ? { t: prev.t, o: prev.o, h: Math.max(prev.h, b.h), l: Math.min(prev.l, b.l), c: b.c, v: Math.max(prev.v || 0, b.v || 0) }
       : b);
   }
-  const out = [...byWeek.values()].sort((a, b) => a.t - b.t);
-  if (out.length) {
-    const last = out[out.length - 1];
-    // A week is complete after Friday's close (20:00–21:00 UTC); 22:00 UTC leaves a margin.
-    if (nowSec < weekStart(last.t) + 4 * DAY + 22 * 3600) out.pop();
-  }
+  return [...byWeek.values()].sort((a, b) => a.t - b.t);
+}
+
+/** True while the last bar's week hasn't closed yet (Friday's close + a margin). */
+export function lastWeekOpen(bars: WeeklyBar[], nowSec = Date.now() / 1000): boolean {
+  if (!bars.length) return false;
+  // A week is complete after Friday's close (20:00–21:00 UTC); 22:00 UTC leaves a margin.
+  return nowSec < weekStart(bars[bars.length - 1].t) + 4 * DAY + 22 * 3600;
+}
+
+export function completedWeeks(bars: WeeklyBar[], nowSec = Date.now() / 1000): WeeklyBar[] {
+  const out = mergeWeeks(bars);
+  if (lastWeekOpen(out, nowSec)) out.pop();
   return out;
 }
 

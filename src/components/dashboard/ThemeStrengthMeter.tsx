@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { ThemeData } from "@/data/themeData";
 import { supabase as _supa } from "@/integrations/supabase/client";
+import ThemeStory from "@/components/dashboard/ThemeStory";
 import { Loader2, TrendingUp, TrendingDown, Minus, Sparkles, Zap } from "lucide-react";
 
 const supabase: any = _supa;
@@ -30,6 +31,8 @@ interface Props {
   theme: ThemeData | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** Grouping the box belongs to (theme / industry / subIndustry / sector), for the story. */
+  mode?: string;
 }
 
 function rsColor(v: number | null | undefined): string {
@@ -108,7 +111,7 @@ function VolumeSparkline({ points }: { points: number[] }) {
   );
 }
 
-export default function ThemeStrengthMeter({ theme, open, onOpenChange }: Props) {
+export default function ThemeStrengthMeter({ theme, open, onOpenChange, mode = "theme" }: Props) {
   const [rsRows, setRsRows] = useState<RsRow[]>([]);
   const [volRows, setVolRows] = useState<VolRow[]>([]);
   const [loading, setLoading] = useState(false);
@@ -264,7 +267,7 @@ export default function ThemeStrengthMeter({ theme, open, onOpenChange }: Props)
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="w-full sm:max-w-md overflow-y-auto p-0 bg-[#0B0E12] border-l border-white/10">
+      <SheetContent side="right" className="w-full sm:max-w-xl overflow-y-auto p-0 bg-[#0B0E12] border-l border-white/10">
         <SheetHeader className="px-5 pt-5 pb-3 border-b border-white/10">
           <SheetTitle className="font-['Syne',sans-serif] text-lg text-foreground pr-8">
             Theme Strength Meter
@@ -278,6 +281,7 @@ export default function ThemeStrengthMeter({ theme, open, onOpenChange }: Props)
         </SheetHeader>
 
         <div className="px-5 py-4 space-y-5">
+          <ThemeStory theme={theme} mode={mode} />
           {/* Key Signal */}
           {(keySignal || aiLoading) && (
             <div className="rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 flex items-center gap-2">

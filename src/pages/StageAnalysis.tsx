@@ -19,7 +19,7 @@ import RotationPanel from "@/components/stages/RotationPanel";
 import NewHighsLowsPanel from "@/components/stages/NewHighsLowsPanel";
 import StageStockTable, { StageBadge } from "@/components/stages/StageStockTable";
 import {
-  REGIME_TEXT, STAGE_COLORS, STAGE_NAMES, STAGE_TIPS, groupHealth, isStageScanRunning, regimeSeries, runStageScan, stageWeeksAgo,
+  REGIME_TEXT, STAGE_COLORS, applyLive, loadMarketStages, loadStages, onStagesUpdated, type MarketMember, STAGE_NAMES, STAGE_TIPS, groupHealth, isStageScanRunning, regimeSeries, runStageScan, stageWeeksAgo,
   type StageNum, type StockStage,
 } from "@/lib/stageAnalysis";
 
@@ -111,7 +111,33 @@ const TRANSITION_GROUPS: { key: string; label: string; color: StageNum; match: (
 const GROUP_PREVIEW = 15;
 
 export default function StageAnalysis() {
-  const { rows, loading, error, reload } = useStockStages(true);
+  const { rows: listAll, loading, error, reload } = useStockStages(true);
+  // Which stocks: your list, or the S&P 1500 for a market-wide picture.
+  const [scope, setScope] = useState<"list" | "market">(() => {
+    try { return localStorage.getItem("stages_scope_v1") === "market" ? "market" : "list"; } catch { return "list"; }
+  });
+  // Completed weeks (official) or this week so far (provisional, Mon–Fri only).
+  const [weekView, setWeekView] = useState<"completed" | "live">("completed");
+  useEffect(() => { try { localStorage.setItem("stages_scope_v1", scope); } catch { /* ignore */ } }, [scope]);
+  const [marketData, setMarketData] = useState<{ rows: StockStage[]; members: MarketMember[] } | null>(null);
+  const [marketErr, setMarketErr] = useState<string | null>(null);
+  useEffect(() => {
+    if (scope !== "market") return;
+    const load = () => loadMarketStages().then((d) => { setMarketData(d); setMarketErr(null); }).catch((e) => setMarketErr(e instanceof Error ? e.message : String(e)));
+    load();
+    return onStagesUpdated(load);
+  }, [scope]);
+  const baseRows = useMemo(() => {
+    if (scope === "list") return listAll;
+    const spy = listAll.find((r) => r.symbol === "SPY");
+    const m = (marketData?.rows ?? []).filter((r) => r.symbol !== "SPY");
+    return spy ? [...m, spy] : m;
+  }, [scope, listAll, marketData]);
+  const hasLive = useMemo(() => baseRows.some((r) => r.features?.live), [baseRows]);
+  const liveDay = useMemo(() => baseRows.reduce<string | null>((m, r) => { const d = r.features?.live?.day; return d && (!m || d > m) ? d : m; }, null), [baseRows]);
+  const showLive = weekView === "live" && hasLive;
+  const rows = useMemo(() => (showLive ? applyLive(baseRows) : baseRows), [showLive, baseRows]);
+  const lastScan = useMemo(() => listAll.reduce<string | null>((m, r) => (r.updated_at && (!m || r.updated_at > m) ? r.updated_at : m), null), [listAll]);
   const { rows: uni, extra, load: loadUni, loaded: uniLoaded } = useUniverseSectors();
   const [mode, setMode] = useState<GroupMode>(() => {
     try { return (localStorage.getItem(MODE_KEY) as GroupMode) || "industry"; } catch { return "industry"; }
@@ -152,8 +178,10 @@ export default function StageAnalysis() {
     const m = new Map<string, string | null>();
     for (const r of extra) m.set(r.symbol.toUpperCase(), r.sector);
     for (const r of uni) m.set(r.symbol.toUpperCase(), r.sector);
+    // S&P 1500 stocks outside your list: GICS sub-industry from the index list.
+    for (const r of marketData?.members ?? []) if (!m.get(r.symbol)) m.set(r.symbol, r.gics_sub);
     return m;
-  }, [uni, extra]);
+  }, [uni, extra, marketData]);
 
   const stocks = useMemo(() => rows.filter((r) => r.symbol !== "SPY"), [rows]);
   const market = useMemo(() => rows.find((r) => r.symbol === "SPY") ?? null, [rows]);
@@ -171,7 +199,11 @@ export default function StageAnalysis() {
     return m;
   }, [stocks]);
   const rsOf = (sym: string) => rsRank.get(sym) ?? null;
-  const nameBySymbol = useMemo(() => new Map(uni.map((r) => [r.symbol.toUpperCase(), r.name ?? null])), [uni]);
+  const nameBySymbol = useMemo(() => {
+    const m = new Map<string, string | null>((marketData?.members ?? []).map((r) => [r.symbol, r.name]));
+    for (const r of uni) m.set(r.symbol.toUpperCase(), r.name ?? null);
+    return m;
+  }, [uni, marketData]);
   const nameOf = (sym: string) => nameBySymbol.get(sym) ?? null;
 
   const groupsOf = useCallback((sym: string): string[] => {
@@ -291,9 +323,22 @@ export default function StageAnalysis() {
   const startScan = async () => {
     setScan({ done: 0, total: 0 });
     try {
+      const before = listAll.reduce<string | null>((m, r) => (!m || r.as_of > m ? r.as_of : m), null);
       const r = await runStageScan((done, total) => setScan({ done, total }));
-      toast.success(`Stages updated · ${r.processed.toLocaleString("en-US")} stocks`, r.failed ? { description: `${r.failed} unavailable` } : undefined);
-      await reload(true);
+      const fresh = await loadStages(true);
+      await reload(false);
+      const after = fresh.reduce<{ asOf: string | null; live: string | null }>((m, x) => ({
+        asOf: !m.asOf || x.as_of > m.asOf ? x.as_of : m.asOf,
+        live: x.features?.live?.day && (!m.live || x.features.live.day > m.live) ? x.features.live.day : m.live,
+      }), { asOf: null, live: null });
+      const fmt = (d: string) => new Date(d + "T12:00:00Z").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+      const what = after.asOf && after.asOf !== before
+        ? `New week: ending ${fmt(after.asOf)}.`
+        : after.live
+          ? `The week isn't over, so the official stages stay on the week ending ${after.asOf ? fmt(after.asOf) : "—"}. "This week so far" now shows the market through ${fmt(after.live)}.`
+          : `Week ending ${after.asOf ? fmt(after.asOf) : "—"} is complete and up to date — the next change comes after Friday's close.`;
+      toast.success(`Stages scanned · ${r.processed.toLocaleString("en-US")} stocks${r.market ? ` + ${r.market.toLocaleString("en-US")} S&P 1500` : ""}`, { description: `${what}${r.failed ? ` ${r.failed} unavailable.` : ""}`, duration: 9000 });
+      if (after.live && after.asOf === before) setWeekView("live");
     } catch (e) {
       toast.error("Stage scan failed", { description: e instanceof Error ? e.message : String(e) });
     } finally {
@@ -350,7 +395,25 @@ export default function StageAnalysis() {
             </TooltipContent>
           </Tooltip>
           <div className="ml-auto flex items-center gap-3">
-            {asOf && <span className="font-mono text-[11px] text-muted-foreground">week ending {new Date(asOf + "T12:00:00Z").toLocaleDateString("en-US", { month: "short", day: "numeric" })} · {stocks.length.toLocaleString("en-US")} stocks</span>}
+            <Segmented<"list" | "market"> size="xs" value={scope} onChange={setScope} options={[
+              { value: "list", label: "Your list", title: "Your RS list and theme stocks" },
+              { value: "market", label: "Market · S&P 1500", title: "S&P 500 + 400 + 600 — the broad market, for breadth" },
+            ]} />
+            {hasLive && (
+              <Segmented<"completed" | "live"> size="xs" value={weekView} onChange={setWeekView} options={[
+                { value: "completed", label: "Completed week", title: "Official stages, decided on finished weeks only" },
+                { value: "live", label: "This week so far", title: "Provisional: the unfinished week treated as if it closed at the last price. Can still change before Friday's close." },
+              ]} />
+            )}
+            {asOf && (
+              <span className="font-mono text-[11px] text-muted-foreground" title={lastScan ? `Last scan ${new Date(lastScan).toLocaleString()}` : undefined}>
+                {showLive
+                  ? <>this week through {new Date((liveDay ?? asOf) + "T12:00:00Z").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })} <span className="text-amber-400">· provisional</span></>
+                  : <>week ending {new Date(asOf + "T12:00:00Z").toLocaleDateString("en-US", { month: "short", day: "numeric" })}</>}
+                {" · "}{stocks.length.toLocaleString("en-US")} stocks
+                {lastScan && <> · scanned {new Date(lastScan).toLocaleDateString("en-US", { weekday: "short" })} {new Date(lastScan).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}</>}
+              </span>
+            )}
             <button
               onClick={startScan}
               disabled={!!scan}
@@ -365,6 +428,19 @@ export default function StageAnalysis() {
       </header>
 
       <main className="mx-auto max-w-6xl space-y-4 px-4 py-5">
+        {scope === "market" && (marketErr || (marketData && marketData.rows.length === 0)) && (
+          <div className="rounded-lg border border-border bg-card p-4 text-center text-xs text-muted-foreground">
+            {marketErr && /does not exist|schema cache/i.test(marketErr)
+              ? "Market breadth isn't set up on the server yet."
+              : <>No S&amp;P 1500 stages yet — press <b>Scan Stages</b> once (the first market scan takes a few extra minutes).</>}
+          </div>
+        )}
+        {showLive && (
+          <div className="rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-[11px] text-amber-200/90">
+            Provisional view: this week isn't finished, so each stock's stage is computed as if the week closed at its last price.
+            It can change until Friday's close; the official stages (Completed week) never use an unfinished week.
+          </div>
+        )}
         {error && !rows.length && (
           <div className="rounded-lg border border-border bg-card p-6 text-center text-sm text-muted-foreground">
             {error.includes("set up") || error.includes("does not exist") || error.includes("schema cache")
@@ -386,7 +462,7 @@ export default function StageAnalysis() {
                 tone={regimeNow.color === "green" ? "good" : regimeNow.color === "red" ? "bad" : "warn"}
                 title={<>Breadth is <span className={regimeNow.color === "green" ? "text-gain-medium" : regimeNow.color === "red" ? "text-loss-medium" : "text-[hsl(40,90%,60%)]"}>{REGIME_TEXT[regimeNow.color].label.toLowerCase()}</span> — {REGIME_TEXT[regimeNow.color].short.replace(/^.*? — /, "")}</>}
                 lines={[
-                  breadth ? <>{breadth.now.toFixed(0)}% of your stocks are in Stage 2 ({ordinal(breadth.pct)} percentile of the last {breadth.weeks} weeks{breadth.pct <= 10 ? " — a washout; leaders often rebound hardest from here" : breadth.pct >= 90 ? " — crowded" : ""}).</> : null,
+                  breadth ? <>{breadth.now.toFixed(0)}% of {scope === "market" ? "S&P 1500 stocks" : "your stocks"} are in Stage 2 ({ordinal(breadth.pct)} percentile of the last {breadth.weeks} weeks{breadth.pct <= 10 ? " — a washout; leaders often rebound hardest from here" : breadth.pct >= 90 ? " — crowded" : ""}).</> : null,
                   leaders.length
                     ? <>Leading {GROUP_MODE_LABEL[mode].toLowerCase()} groups: {leaders.slice(0, 4).map((g) => g.name).join(", ")}{leaders.length > 4 ? ` +${leaders.length - 4} more` : ""}. Look for setups here first.</>
                     : <>No {GROUP_MODE_LABEL[mode].toLowerCase()} group is clearly leading SPY right now.</>,
@@ -406,12 +482,12 @@ export default function StageAnalysis() {
               { id: "sa-groups", label: "By group" },
             ]} />
 
-            <div id="sa-breadth" className="scroll-mt-12"><RegimePanel rows={regimeRows} /></div>
+            <div id="sa-breadth" className="scroll-mt-12"><RegimePanel rows={regimeRows} scopeLabel={scope === "market" ? "the S&P 1500" : "your list"} /></div>
 
             {/* Market overview */}
             <section id="sa-overview" className="scroll-mt-12 rounded-lg border border-border bg-card p-4">
               <SectionHead
-                title="Stages across your list"
+                title={scope === "market" ? "Stages across the S&P 1500" : "Stages across your list"}
                 sub="Where every stock sits in Weinstein's four stages this week. Click a stage to see its stocks."
                 right={market && <span className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground">SPY <StageBadge r={market} /></span>}
               />
