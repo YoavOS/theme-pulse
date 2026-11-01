@@ -57,6 +57,13 @@
       "when": 1793491765320,
       "tag": "0007_superperf_columns_cron_switch",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1793491864241,
+      "tag": "0008_trim_yahoo_cache_v2",
+      "breakpoints": true
     }
   ]
 }
