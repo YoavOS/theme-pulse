@@ -1,6 +1,6 @@
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
 import { corsHeaders } from "../_shared/cors.ts";
-import { classifyStage, completedWeeks, type Stage, type WeeklyBar } from "../_shared/stageEngine.ts";
+import { classifyStage, completedWeeks, lastWeekOpen, mergeWeeks, type Stage, type WeeklyBar } from "../_shared/stageEngine.ts";
 import { detectBase, finalizeBase, type BaseFeatures, type DailyBar } from "../_shared/baseEngine.ts";
 import { logSignals, type BaseLogInfo } from "../_shared/signalLog.ts";
 import { dailySnapshot } from "../_shared/dailySnapshot.ts";
@@ -18,6 +18,13 @@ import { fetchEarningsCalendar, measureEarnings, scoreFuel, type DBar, type Earn
  *                                                 signal log snapshot + 4/8/13-week outcomes
  *   { action: "status" }                        → row counts + last week classified
  *   { action: "chart", symbol }                 → last 2 years of weekly bars + 30w MA (app charts)
+ *   { action: "market_symbols" }                → S&P 1500 list (Wikipedia, refreshed weekly) for market breadth
+ *   { action: "market_chunk", symbols, startedAt } → light stage rows (weekly bars only) into market_stages
+ *   { action: "market_finalize", startedAt }    → drop market rows that left the index
+ *
+ * Stages are decided on completed weeks only. While a week is still open (Mon–Fri), each row
+ * also gets features.live: the same engine run with the unfinished week as if it closed now,
+ * so the app can show "this week so far" without ever changing the official weekly result.
  *
  * One Yahoo call per stock (5 years of weekly bars — long warm-up for the stage state machine). Benchmark = SPY.
  * Daily bars (breakout timing + the screens' daily snapshot, features.dly) are read from the Full Scan's
@@ -84,15 +91,48 @@ async function fetchDaily(symbol: string, range = "6mo"): Promise<DailyBar[] | n
 }
 
 // Benchmark cached per warm instance (10 min).
-let benchCache: { at: number; bars: WeeklyBar[]; stage: Stage | null; substage: string | null } | null = null;
-async function getBench() {
+type Bench = { at: number; raw: WeeklyBar[]; bars: WeeklyBar[]; stage: Stage | null; substage: string | null; liveBars: WeeklyBar[]; liveStage: Stage | null };
+let benchCache: Bench | null = null;
+async function getBench(): Promise<Bench> {
   if (benchCache && Date.now() - benchCache.at < 10 * 60_000) return benchCache;
   const raw = await fetchWeekly(BENCH);
   const bars = raw ? completedWeeks(raw) : [];
   const r = bars.length ? classifyStage(bars, null, null) : null;
-  const out = { at: Date.now(), bars, stage: r?.stage ?? null, substage: r?.substage ?? null };
+  // The unfinished week (Mon–Fri), for the "this week so far" view.
+  const all = raw ? mergeWeeks(raw) : [];
+  const open = lastWeekOpen(all);
+  const rl = open ? classifyStage(all, null, null) : null;
+  const out: Bench = {
+    at: Date.now(), raw: raw ?? [], bars, stage: r?.stage ?? null, substage: r?.substage ?? null,
+    liveBars: open ? all : [], liveStage: rl?.stage ?? null,
+  };
   if (bars.length) benchCache = out; // never cache a failed benchmark fetch
   return out;
+}
+
+/** New York calendar date of a unix time (seconds). */
+function nyDay(t: number): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(t * 1000));
+}
+
+/**
+ * "This week so far": the engine on all bars including the unfinished week, as if it closed
+ * now. Null when the market week is complete (weekends) — then the official result is current.
+ */
+function liveResult(sym: string, raw: WeeklyBar[] | null, bench: Bench) {
+  if (!raw?.length) return null;
+  const all = sym === BENCH ? bench.liveBars : mergeWeeks(raw);
+  if (!all.length || !lastWeekOpen(all)) return null;
+  const r = sym === BENCH ? classifyStage(all, null, null) : classifyStage(all, bench.liveBars.length ? bench.liveBars : bench.bars, bench.liveStage ?? bench.stage);
+  if (!r) return null;
+  const lastT = Math.max(...raw.map((b) => b.t));
+  return {
+    stage: r.stage, substage: r.substage, confidence: r.confidence, quality: r.quality,
+    event: r.event, event_kind: r.eventKind, event_weeks_ago: r.eventWeeksAgo, weeks_in_stage: r.weeksInStage,
+    flag: (r.features as { flags?: string }).flags?.slice(-1) ?? null,
+    close: (r.features as { close?: number }).close ?? null,
+    day: nyDay(lastT),
+  };
 }
 
 async function fetchAll<T>(db: SupabaseClient, table: string, cols: string): Promise<T[]> {
@@ -111,6 +151,34 @@ const isMissingTable = (e: unknown) => {
   const m = String((e as { message?: string })?.message ?? e).toLowerCase();
   return m.includes("does not exist") || m.includes("schema cache") || m.includes("42p01");
 };
+
+// ── Market universe (S&P 1500) ───────────────────────────────────────────────
+const SP_PAGES: [string, string][] = [["500", "List_of_S&P_500_companies"], ["400", "List_of_S&P_400_companies"], ["600", "List_of_S&P_600_companies"]];
+const strip = (h: string) => h.replace(/<[^>]+>/g, "").replace(/&amp;/g, "&").replace(/&#160;|&nbsp;/g, " ").replace(/&#39;/g, "'").replace(/\s+/g, " ").trim();
+
+/** Constituents from Wikipedia's index pages (table#constituents: Symbol, Security, GICS Sector, GICS Sub-Industry). */
+async function fetchIndex(idx: string, page: string) {
+  const r = await fetch(`https://en.wikipedia.org/w/api.php?action=parse&format=json&prop=text&page=${encodeURIComponent(page)}`, { headers: { "User-Agent": "ThemePulse/1.0 (personal stock app)" } });
+  if (!r.ok) throw new Error(`wikipedia ${idx}: ${r.status}`);
+  const j = await r.json();
+  const html: string = j?.parse?.text?.["*"] ?? "";
+  const start = html.indexOf('id="constituents"');
+  if (start < 0) throw new Error(`wikipedia ${idx}: table not found`);
+  const table = html.slice(start, html.indexOf("</table>", start));
+  const rows = table.split(/<tr[\s>]/).slice(1);
+  const head = (rows[0].match(/<th[\s\S]*?<\/th>/g) ?? []).map(strip);
+  const col = (name: string) => head.findIndex((h) => h.toLowerCase() === name.toLowerCase());
+  const iSym = col("Symbol"), iName = col("Security"), iSec = col("GICS Sector"), iSub = col("GICS Sub-Industry");
+  if (iSym < 0 || iSub < 0) throw new Error(`wikipedia ${idx}: unexpected columns ${head.join("|")}`);
+  const out: { symbol: string; name: string | null; gics_sector: string | null; gics_sub: string | null; idx: string }[] = [];
+  for (const row of rows.slice(1)) {
+    const cells = (row.match(/<t[dh][\s\S]*?<\/t[dh]>/g) ?? []).map(strip);
+    const sym = (cells[iSym] ?? "").toUpperCase().replace(/\./g, "-");
+    if (!/^[A-Z][A-Z0-9-]{0,9}$/.test(sym)) continue;
+    out.push({ symbol: sym, name: cells[iName] ?? null, gics_sector: iSec >= 0 ? cells[iSec] ?? null : null, gics_sub: cells[iSub] ?? null, idx });
+  }
+  return out;
+}
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
@@ -176,10 +244,11 @@ Deno.serve(async (req) => {
           try { dly = sym === BENCH ? null : dailySnapshot(dailyBy.get(sym)); } catch { /* ignore */ }
           let ern: EarnGrowth | null = ernBy.get(sym) ?? null;
           if (!ern && sym !== BENCH) ern = await fetchEarnGrowth(sym);
+          const live = liveResult(sym, sym === BENCH ? bench.raw : raw, bench);
           rows.push({
             symbol: sym, stage: r.stage, substage: r.substage, confidence: r.confidence, quality: r.quality,
             event: r.event, event_kind: r.eventKind, event_weeks_ago: r.eventWeeksAgo, weeks_in_stage: r.weeksInStage,
-            last_directional: r.lastDirectional, history: r.history, features: { ...r.features, dly, ern }, reasons: r.reasons,
+            last_directional: r.lastDirectional, history: r.history, features: { ...r.features, dly, ern, live }, reasons: r.reasons,
             as_of: r.asOf, updated_at: new Date().toISOString(),
           });
           if (sym === BENCH || !bars) continue;
@@ -221,6 +290,89 @@ Deno.serve(async (req) => {
         if (error && !isMissingTable(error)) console.warn("stock_bases cleanup failed", error.message);
       }
       return json({ ok: true, processed: rows.length, bases: basesStored, failed, market: { stage: bench.stage, substage: bench.substage } });
+    }
+
+    if (action === "market_symbols") {
+      // Refresh the S&P 1500 list at most weekly; keep the old list if Wikipedia is unreachable.
+      const { data: newest } = await db.from("market_universe").select("updated_at").order("updated_at", { ascending: false }).limit(1);
+      const age = newest?.[0]?.updated_at ? Date.now() - Date.parse(newest[0].updated_at) : Infinity;
+      if (age > 7 * 86400_000) {
+        try {
+          const lists = await Promise.all(SP_PAGES.map(([i, p]) => fetchIndex(i, p)));
+          const all = new Map<string, Record<string, unknown>>();
+          for (const l of lists) for (const r of l) if (!all.has(r.symbol)) all.set(r.symbol, { ...r, updated_at: new Date().toISOString() });
+          if (all.size > 1200) {
+            const rows = [...all.values()];
+            for (let k = 0; k < rows.length; k += 500) {
+              const { error } = await db.from("market_universe").upsert(rows.slice(k, k + 500), { onConflict: "symbol" });
+              if (error) throw error;
+            }
+            await db.from("market_universe").delete().not("symbol", "in", `(${[...all.keys()].map((x) => `"${x}"`).join(",")})`);
+          }
+        } catch (e) {
+          console.warn("market universe refresh failed", e);
+        }
+      }
+      const uni = await fetchAll<{ symbol: string }>(db, "market_universe", "symbol");
+      return json({ ok: true, symbols: uni.map((u) => u.symbol).sort(), serverTime: new Date().toISOString() });
+    }
+
+    if (action === "market_chunk") {
+      // Light rows for market breadth: weekly bars only (no bases, earnings or daily data).
+      // Stocks the list scan just classified are copied instead of fetched again.
+      const symbols = [...new Set((body.symbols ?? []).map((x) => String(x).toUpperCase().trim()).filter(Boolean))].slice(0, MAX_CHUNK);
+      const since = body.startedAt ?? new Date(Date.now() - 3 * 3600_000).toISOString();
+      const bench = await getBench();
+      const { data: done } = await db.from("stock_stages")
+        .select("symbol, stage, substage, confidence, quality, event, event_kind, event_weeks_ago, weeks_in_stage, history, features, as_of")
+        .in("symbol", symbols).gte("updated_at", since);
+      const doneBy = new Map(((done ?? []) as Record<string, unknown>[]).map((r) => [r.symbol as string, r]));
+      const rows: Record<string, unknown>[] = [];
+      const failed: string[] = [];
+      let cursor = 0, copied = 0;
+      const lite = (f: Record<string, unknown> | null | undefined) => {
+        if (!f) return null;
+        const { dly: _d, ern: _e, wc: _w, ...rest } = f as Record<string, unknown>;
+        return rest;
+      };
+      const worker = async () => {
+        while (cursor < symbols.length) {
+          const sym = symbols[cursor++];
+          const prev = doneBy.get(sym);
+          if (prev) {
+            copied++;
+            rows.push({ ...prev, features: lite(prev.features as Record<string, unknown>), updated_at: new Date().toISOString() });
+            continue;
+          }
+          const raw = await fetchWeekly(sym);
+          const bars = raw ? completedWeeks(raw) : null;
+          const r = bars ? classifyStage(bars, bench.bars, bench.stage) : null;
+          if (!r) { failed.push(sym); continue; }
+          rows.push({
+            symbol: sym, stage: r.stage, substage: r.substage, confidence: r.confidence, quality: r.quality,
+            event: r.event, event_kind: r.eventKind, event_weeks_ago: r.eventWeeksAgo, weeks_in_stage: r.weeksInStage,
+            history: r.history, features: { ...lite(r.features as unknown as Record<string, unknown>), live: liveResult(sym, raw, bench) },
+            as_of: r.asOf, updated_at: new Date().toISOString(),
+          });
+        }
+      };
+      await Promise.all(Array.from({ length: Math.min(CONCURRENCY, symbols.length) }, worker));
+      if (rows.length) {
+        const { error } = await db.from("market_stages").upsert(rows, { onConflict: "symbol" });
+        if (error) throw error;
+      }
+      return json({ ok: true, processed: rows.length, copied, failed });
+    }
+
+    if (action === "market_finalize") {
+      if (!body.startedAt) return json({ ok: false, error: "startedAt required" }, 400);
+      const uni = new Set((await fetchAll<{ symbol: string }>(db, "market_universe", "symbol")).map((u) => u.symbol));
+      const stale = (await fetchAll<{ symbol: string; updated_at: string }>(db, "market_stages", "symbol, updated_at"))
+        .filter((r) => !uni.has(r.symbol) || r.updated_at < body.startedAt!).map((r) => r.symbol);
+      // Only drop stocks that left the index (a failed fetch keeps last week's row).
+      const gone = stale.filter((x) => !uni.has(x));
+      for (let k = 0; k < gone.length; k += 200) await db.from("market_stages").delete().in("symbol", gone.slice(k, k + 200));
+      return json({ ok: true, removed: gone.length });
     }
 
     if (action === "chart") {

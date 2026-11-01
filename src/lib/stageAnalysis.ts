@@ -34,6 +34,14 @@ export interface StageFeatures {
   dly?: DailySnap | null;
   /** earnings growth snapshot (Yahoo quarterly EPS / revenue, refreshed weekly) */
   ern?: EarnGrowth | null;
+  /** "This week so far": the engine run with the unfinished week as if it closed (null on weekends) */
+  live?: LiveStage | null;
+}
+
+export interface LiveStage {
+  stage: StageNum; substage: string; confidence: number; quality: StockStage["quality"];
+  event: string | null; event_kind: string | null; event_weeks_ago: number | null; weeks_in_stage: number | null;
+  flag: string | null; close: number | null; day: string;
 }
 
 export interface DailySnap {
@@ -180,14 +188,14 @@ export function onStagesUpdated(cb: () => void) {
   return () => window.removeEventListener(EVENT, cb);
 }
 
-let running: Promise<{ processed: number; failed: number }> | null = null;
+let running: Promise<{ processed: number; failed: number; market: number }> | null = null;
 export const isStageScanRunning = () => running !== null;
 
 /**
  * Classify the whole stock list. Calls `onProgress(done, total)` as chunks finish.
  * Only one scan runs at a time (a second caller gets the same promise).
  */
-export function runStageScan(onProgress?: (done: number, total: number) => void): Promise<{ processed: number; failed: number }> {
+export function runStageScan(onProgress?: (done: number, total: number) => void): Promise<{ processed: number; failed: number; market: number }> {
   if (running) return running;
   running = (async () => {
     const { symbols, serverTime } = await invoke<{ symbols: string[]; serverTime: string }>({ action: "symbols" });
@@ -225,13 +233,109 @@ export function runStageScan(onProgress?: (done: number, total: number) => void)
         console.warn("stage finalize failed", e);
       }
     }
+    // Market breadth (S&P 1500): light weekly classification; stocks just scanned above are copied.
+    let market = 0;
+    try {
+      const { symbols: mkt } = await invoke<{ symbols: string[] }>({ action: "market_symbols" });
+      const total = list.length + mkt.length;
+      onProgress?.(done, total);
+      const mchunks: string[][] = [];
+      for (let i = 0; i < mkt.length; i += CHUNK) mchunks.push(mkt.slice(i, i + CHUNK));
+      let mnext = 0;
+      const mlane = async () => {
+        while (mnext < mchunks.length) {
+          const ch = mchunks[mnext++];
+          try {
+            const r = await invoke<{ processed: number }>({ action: "market_chunk", symbols: ch, startedAt });
+            market += r.processed;
+          } catch (e) { console.warn("market chunk failed", e); }
+          done += ch.length;
+          onProgress?.(done, total);
+        }
+      };
+      await Promise.all([mlane(), mlane()]);
+      if (market > 0) await invoke({ action: "market_finalize", startedAt }).catch(() => undefined);
+    } catch (e) {
+      console.warn("market breadth scan skipped", e);
+    }
     stagesMem = null;
+    marketMem = null;
     void idbDel(CACHE_KEY);
+    void idbDel(MARKET_KEY);
     clearBasesCache();
     window.dispatchEvent(new Event(EVENT));
-    return { processed, failed };
+    return { processed, failed, market };
   })().finally(() => { running = null; });
   return running;
+}
+
+// ── Market breadth (S&P 1500) ────────────────────────────────────────────────
+export interface MarketMember { symbol: string; name: string | null; gics_sub: string | null; idx: string | null }
+const MARKET_KEY = "market_stages_v1";
+let marketMem: { at: number; rows: StockStage[]; members: MarketMember[]; v: string | null } | null = null;
+
+/** S&P 1500 stage rows + index membership (cached until the next scan). */
+export async function loadMarketStages(): Promise<{ rows: StockStage[]; members: MarketMember[] }> {
+  if (marketMem && Date.now() - marketMem.at < MEM_FRESH_MS) return marketMem;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const db = supabase as any;
+  let latest: string | null | undefined;
+  try {
+    const { data, error } = await db.from("market_stages").select("updated_at").order("updated_at", { ascending: false }).limit(1);
+    latest = error ? undefined : (data?.[0]?.updated_at ?? null);
+  } catch { latest = undefined; }
+  try {
+    const c = await idbGet<{ ts: number; rows: StockStage[]; members: MarketMember[]; v: string | null }>(MARKET_KEY);
+    if (c && Date.now() - c.ts < CACHE_TTL && (latest === undefined || latest === c.v)) {
+      marketMem = { at: Date.now(), rows: c.rows, members: c.members, v: c.v };
+      return marketMem;
+    }
+  } catch { /* ignore */ }
+  const rows: StockStage[] = [];
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await db.from("market_stages")
+      .select("symbol, stage, substage, confidence, quality, event, event_kind, event_weeks_ago, weeks_in_stage, history, features, as_of, updated_at")
+      .order("symbol").range(from, from + 999);
+    if (error) throw error;
+    if (!data?.length) break;
+    rows.push(...(data as StockStage[]).map((r) => ({ ...r, reasons: null })));
+    if (data.length < 1000) break;
+  }
+  const members: MarketMember[] = [];
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await db.from("market_universe").select("symbol, name, gics_sub, idx").order("symbol").range(from, from + 999);
+    if (error) throw error;
+    if (!data?.length) break;
+    members.push(...(data as MarketMember[]));
+    if (data.length < 1000) break;
+  }
+  const v = latest ?? null;
+  marketMem = { at: Date.now(), rows, members, v };
+  void idbSet(MARKET_KEY, { ts: Date.now(), rows, members, v });
+  return marketMem;
+}
+
+/**
+ * "This week so far": each stock's provisional result for the unfinished week, appended to its
+ * history as one more week. Stocks without a provisional result (halted, or the scan ran on a
+ * weekend when the week is already complete) are left out, so every history lines up.
+ */
+export function applyLive(rows: StockStage[]): StockStage[] {
+  const out: StockStage[] = [];
+  for (const r of rows) {
+    const l = r.features?.live;
+    if (!l) continue;
+    const ch = l.stage === 0 ? "T" : String(l.stage);
+    out.push({
+      ...r,
+      stage: l.stage, substage: l.substage, confidence: l.confidence, quality: l.quality,
+      event: l.event, event_kind: l.event_kind, event_weeks_ago: l.event_weeks_ago, weeks_in_stage: l.weeks_in_stage,
+      history: (r.history ?? "") + ch,
+      features: r.features ? { ...r.features, flags: r.features.flags && l.flag ? r.features.flags + l.flag : r.features.flags, close: l.close ?? r.features.close } : r.features,
+      as_of: l.day,
+    });
+  }
+  return out;
 }
 
 /** Health label for a group (see the Stage Analysis page legend). */
