@@ -43,6 +43,13 @@
       "when": 1793490178472,
       "tag": "0005_rs_history_snapshots",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1793491352469,
+      "tag": "0006_superperformance_auth_writes",
+      "breakpoints": true
     }
   ]
 }
