@@ -896,6 +896,36 @@ export type Database = {
         }
         Relationships: []
       }
+      theme_narratives: {
+        Row: {
+          created_at: string
+          key: string
+          mode: string
+          name: string
+          sources: Json | null
+          story: Json
+          version: number
+        }
+        Insert: {
+          created_at?: string
+          key: string
+          mode: string
+          name: string
+          sources?: Json | null
+          story: Json
+          version?: number
+        }
+        Update: {
+          created_at?: string
+          key?: string
+          mode?: string
+          name?: string
+          sources?: Json | null
+          story?: Json
+          version?: number
+        }
+        Relationships: []
+      }
       theme_tickers: {
         Row: {
           added_at: string
