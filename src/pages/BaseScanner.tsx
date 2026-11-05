@@ -262,7 +262,7 @@ export default function BaseScanner() {
               <BottomLine
                 tone={regimeNow.color === "green" ? "good" : regimeNow.color === "red" ? "bad" : "warn"}
                 title={regimeNow.color === "green"
-                  ? <>Good conditions for breakouts — {nearPivot.length} setup{nearPivot.length === 1 ? " is" : "s are"} near the buy point.</>
+                  ? <>Broad breadth — {nearPivot.length} setup{nearPivot.length === 1 ? " is" : "s are"} near the buy point. Check the Momentum gauge (Stages) before buying.</>
                   : regimeNow.color === "red"
                     ? <>Breadth is hostile — most breakouts fail now. If you buy at all, stick to Tier 1 with strong volume.</>
                     : <>Mixed breadth — be picky: Tier 1 setups at smaller size.</>}
