@@ -245,6 +245,81 @@ export type Database = {
         }
         Relationships: []
       }
+      market_stages: {
+        Row: {
+          as_of: string | null
+          confidence: number | null
+          event: string | null
+          event_kind: string | null
+          event_weeks_ago: number | null
+          features: Json | null
+          history: string | null
+          quality: string | null
+          stage: number
+          substage: string | null
+          symbol: string
+          updated_at: string
+          weeks_in_stage: number | null
+        }
+        Insert: {
+          as_of?: string | null
+          confidence?: number | null
+          event?: string | null
+          event_kind?: string | null
+          event_weeks_ago?: number | null
+          features?: Json | null
+          history?: string | null
+          quality?: string | null
+          stage: number
+          substage?: string | null
+          symbol: string
+          updated_at?: string
+          weeks_in_stage?: number | null
+        }
+        Update: {
+          as_of?: string | null
+          confidence?: number | null
+          event?: string | null
+          event_kind?: string | null
+          event_weeks_ago?: number | null
+          features?: Json | null
+          history?: string | null
+          quality?: string | null
+          stage?: number
+          substage?: string | null
+          symbol?: string
+          updated_at?: string
+          weeks_in_stage?: number | null
+        }
+        Relationships: []
+      }
+      market_universe: {
+        Row: {
+          gics_sector: string | null
+          gics_sub: string | null
+          idx: string | null
+          name: string | null
+          symbol: string
+          updated_at: string
+        }
+        Insert: {
+          gics_sector?: string | null
+          gics_sub?: string | null
+          idx?: string | null
+          name?: string | null
+          symbol: string
+          updated_at?: string
+        }
+        Update: {
+          gics_sector?: string | null
+          gics_sub?: string | null
+          idx?: string | null
+          name?: string | null
+          symbol?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       qualified_rs_universe: {
         Row: {
           adr_percent: number | null
@@ -893,6 +968,36 @@ export type Database = {
           profile_scores?: Json | null
           ryan_score?: number | null
           symbol?: string
+        }
+        Relationships: []
+      }
+      theme_narratives: {
+        Row: {
+          created_at: string
+          key: string
+          mode: string
+          name: string
+          sources: Json | null
+          story: Json
+          version: number
+        }
+        Insert: {
+          created_at?: string
+          key: string
+          mode: string
+          name: string
+          sources?: Json | null
+          story: Json
+          version?: number
+        }
+        Update: {
+          created_at?: string
+          key?: string
+          mode?: string
+          name?: string
+          sources?: Json | null
+          story?: Json
+          version?: number
         }
         Relationships: []
       }
