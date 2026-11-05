@@ -119,3 +119,6 @@ verify_jwt = false
 
 [functions.theme-story]
 verify_jwt = false
+
+[functions.market-pulse]
+verify_jwt = false

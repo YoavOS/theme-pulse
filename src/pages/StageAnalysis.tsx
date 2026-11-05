@@ -11,6 +11,8 @@ import { useStockStages } from "@/hooks/useStockStages";
 import { useUniverseSectors } from "@/hooks/useUniverseSectors";
 import { groupKeyForIndustry, GROUP_MODE_LABEL, type GroupMode } from "@/lib/groupColors";
 import RegimePanel from "@/components/stages/RegimePanel";
+import MomentumGauge from "@/components/stages/MomentumGauge";
+import { VERDICT_TEXT, type Verdict } from "@/lib/momentumGauge";
 import { BottomLine, HowItWorks, SectionHead, SectionNav, Segmented } from "@/components/Explainer";
 import { leadershipForGroups } from "@/lib/leadership";
 import TrackRecord from "@/components/stages/TrackRecord";
@@ -118,6 +120,9 @@ export default function StageAnalysis() {
   });
   // Completed weeks (official) or this week so far (provisional, Mon–Fri only).
   const [weekView, setWeekView] = useState<"completed" | "live">("completed");
+  // Momentum gauge verdict (market overall, and today after the live checks).
+  const [gauge, setGauge] = useState<{ verdict: Verdict; today: Verdict } | null>(null);
+  const onGauge = useCallback((verdict: Verdict, today: Verdict) => setGauge({ verdict, today }), []);
   useEffect(() => { try { localStorage.setItem("stages_scope_v1", scope); } catch { /* ignore */ } }, [scope]);
   const [marketData, setMarketData] = useState<{ rows: StockStage[]; members: MarketMember[] } | null>(null);
   const [marketErr, setMarketErr] = useState<string | null>(null);
@@ -457,11 +462,17 @@ export default function StageAnalysis() {
 
         {stocks.length > 0 && (
           <>
+            {/* The verdict comes from the momentum gauge (trend, volatility, momentum's own results,
+                stretch, daily breadth + today's checks), not from weekly breadth alone. */}
+            <MomentumGauge rows={listAll} onVerdict={onGauge} />
             {regimeNow && (
               <BottomLine
-                tone={regimeNow.color === "green" ? "good" : regimeNow.color === "red" ? "bad" : "warn"}
-                title={<>Breadth is <span className={regimeNow.color === "green" ? "text-gain-medium" : regimeNow.color === "red" ? "text-loss-medium" : "text-[hsl(40,90%,60%)]"}>{REGIME_TEXT[regimeNow.color].label.toLowerCase()}</span> — {REGIME_TEXT[regimeNow.color].short.replace(/^.*? — /, "")}</>}
+                tone={gauge ? VERDICT_TEXT[gauge.today].tone : regimeNow.color === "green" ? "good" : regimeNow.color === "red" ? "bad" : "warn"}
+                title={gauge
+                  ? <>{VERDICT_TEXT[gauge.today].label}{gauge.today !== gauge.verdict ? " today" : ""} — {VERDICT_TEXT[gauge.today].text}</>
+                  : <>Breadth is {REGIME_TEXT[regimeNow.color].label.toLowerCase()} — {REGIME_TEXT[regimeNow.color].short}</>}
                 lines={[
+                  <>Weekly breadth of {scope === "market" ? "the whole market" : "your list"}: {REGIME_TEXT[regimeNow.color].label.toLowerCase()}.</>,
                   breadth ? <>{breadth.now.toFixed(0)}% of {scope === "market" ? "US stocks" : "your stocks"} are in Stage 2 ({ordinal(breadth.pct)} percentile of the last {breadth.weeks} weeks{breadth.pct <= 10 ? " — a washout; leaders often rebound hardest from here" : breadth.pct >= 90 ? " — crowded" : ""}).</> : null,
                   leaders.length
                     ? <>Leading {GROUP_MODE_LABEL[mode].toLowerCase()} groups: {leaders.slice(0, 4).map((g) => g.name).join(", ")}{leaders.length > 4 ? ` +${leaders.length - 4} more` : ""}. Look for setups here first.</>

@@ -396,10 +396,12 @@ export function regimeSeries(rows: StockStage[]): RegimeWeek[] {
   });
 }
 
+// Weekly breadth only. Whether momentum / breakouts are working is the Momentum gauge's job
+// (trend, volatility, momentum's own results, stretch, daily breadth and today's checks).
 export const REGIME_TEXT: Record<RegimeColor, { label: string; short: string; tip: string }> = {
-  green: { label: "Breakout-friendly", short: "Most of your stocks are in uptrends — breakouts have their best odds.", tip: "Broad participation and a rising market: take qualified breakouts at normal size." },
-  yellow: { label: "Selective", short: "Breadth is mixed — fewer, better setups at smaller size.", tip: "Mixed breadth: smaller size, only the strongest setups, prefer tight early entries." },
-  red: { label: "Hostile", short: "Most of your stocks are below their trend — routine breakouts tend to fail.", tip: "Most stocks below their trend: avoid routine breakouts; wait for breadth to repair (a follow-through day or breadth thrust plus improving breadth)." },
+  green: { label: "Broad", short: "most stocks are in uptrends.", tip: "Broad participation: most stocks above their 10- and 40-week lines, more new highs than lows. Check the Momentum gauge for whether breakouts are working right now." },
+  yellow: { label: "Mixed", short: "participation is mixed.", tip: "Mixed participation. Check the Momentum gauge for whether breakouts are working right now." },
+  red: { label: "Weak", short: "most stocks are below their trend.", tip: "Most stocks below their trend: routine breakouts tend to fail; wait for breadth to repair." },
 };
 
 export function stageWeeksAgo(r: StockStage, weeks: number): StageNum | null {
