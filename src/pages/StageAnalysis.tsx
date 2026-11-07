@@ -217,12 +217,15 @@ export default function StageAnalysis() {
   }, [mode, themeMap, labelBySymbol]);
   const firstGroup = (sym: string) => groupsOf(sym)[0] ?? "—";
 
+  // Every card on the page counts the same rows: stocks on the latest week (stale rows from a failed
+  // fetch would otherwise make one card show two different Stage 2 shares).
+  const stale = stocks.length - aligned.length;
   const totals = useMemo(() => {
     const n: Record<StageNum, number> = { 0: 0, 1: 0, 2: 0, 3: 0, 4: 0 };
-    for (const r of stocks) n[r.stage as StageNum]++;
+    for (const r of aligned) n[r.stage as StageNum]++;
     const classified = n[1] + n[2] + n[3] + n[4];
     return { n, classified };
-  }, [stocks]);
+  }, [aligned]);
 
   const series = useMemo(() => breadthSeries(aligned), [aligned]);
   const regimeRows = useMemo(() => (market ? [...aligned, market] : aligned), [aligned, market]);
@@ -246,7 +249,7 @@ export default function StageAnalysis() {
   const groups: GroupRow[] = useMemo(() => {
     if (mode !== "theme" && !uniLoaded) return []; // don't show everything as "Unknown" while labels load
     const m = new Map<string, StockStage[]>();
-    for (const r of stocks) for (const g of groupsOf(r.symbol)) m.set(g, [...(m.get(g) ?? []), r]);
+    for (const r of aligned) for (const g of groupsOf(r.symbol)) m.set(g, [...(m.get(g) ?? []), r]);
     const out: GroupRow[] = [];
     m.forEach((members, name) => {
       const n: Record<StageNum, number> = { 0: 0, 1: 0, 2: 0, 3: 0, 4: 0 };
@@ -280,46 +283,51 @@ export default function StageAnalysis() {
     });
     return out;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stocks, mode, labelBySymbol, themeMap, sortCol, minGroupSize, asOf, uniLoaded]);
+  }, [aligned, mode, labelBySymbol, themeMap, sortCol, minGroupSize, asOf, uniLoaded]);
 
-  // ★ Best candidates: early-stage strength (fresh 2A with acceptable quality, or late-base 1B)
-  // with decent confidence, strong relative strength, in an industry where ≥35% of stocks are Stage 2
-  // — the research's "stock + group + RS alignment".
+  // Candidates: fresh 2A breakouts (acceptable quality) with decent confidence and strong relative
+  // strength, in an industry where ≥ 35% of the OTHER stocks are Stage 2 (the stock doesn't vote for
+  // itself) and at least 5 stocks are classified. Not validated yet — the track record will show.
+  // (Late-base 1B was dropped: the backtest found no edge in telling Stage 1 bases from Stage 3 tops.)
   const bestCandidates = useMemo(() => {
     const ind = new Map<string, { s2: number; tot: number }>();
-    for (const r of stocks) {
+    for (const r of aligned) {
       if (r.stage === 0) continue;
       const g = groupKeyForIndustry(labelBySymbol.get(r.symbol) ?? null, "industry");
       const e = ind.get(g) ?? { s2: 0, tot: 0 };
       e.tot++; if (r.stage === 2) e.s2++;
       ind.set(g, e);
     }
-    return stocks.filter((r) => {
-      const early = (r.substage === "2A" && r.quality !== "LOW") || r.substage === "1B";
+    return aligned.filter((r) => {
+      const early = r.substage === "2A" && r.quality !== "LOW";
       if (!early || r.confidence < 70 || (rsRank.get(r.symbol) ?? 0) < 70) return false;
       const g = ind.get(groupKeyForIndustry(labelBySymbol.get(r.symbol) ?? null, "industry"));
-      return !!g && g.tot >= 3 && g.s2 / g.tot >= 0.35;
+      if (!g) return false;
+      const others = g.tot - 1, otherS2 = g.s2 - (r.stage === 2 ? 1 : 0);
+      return others >= 4 && otherS2 / others >= 0.35;
     }).sort((a, b) => (rsRank.get(b.symbol) ?? 0) - (rsRank.get(a.symbol) ?? 0));
-  }, [stocks, labelBySymbol, rsRank]);
+  }, [aligned, labelBySymbol, rsRank]);
 
   // Stage 1 bases within 5% of their range high — the breakout watchlist (research §8: 1→2).
   const nearBreakout = useMemo(
-    () => stocks.filter((r) => r.stage === 1 && r.features?.pctToRangeHigh != null && r.features.pctToRangeHigh >= 0 && r.features.pctToRangeHigh <= 5)
+    () => aligned.filter((r) => r.stage === 1 && r.features?.pctToRangeHigh != null && r.features.pctToRangeHigh >= 0 && r.features.pctToRangeHigh <= 5)
       .sort((a, b) => (a.features!.pctToRangeHigh ?? 0) - (b.features!.pctToRangeHigh ?? 0)),
-    [stocks],
+    [aligned],
   );
 
   const transitions = useMemo(
     () => TRANSITION_GROUPS.map((g) => ({
       ...g,
-      rows: stocks.filter((r) => r.event_weeks_ago !== null && r.event_weeks_ago < transWindow && g.match(r))
+      rows: aligned.filter((r) => r.event_weeks_ago !== null && r.event_weeks_ago < transWindow && g.match(r))
         .sort((a, b) => b.confidence - a.confidence),
     })),
-    [stocks, transWindow],
+    [aligned, transWindow],
   );
 
   // ----- Bottom line: breadth regime, Stage 2 share, leading groups, watchlist -----
   const regimeNow = useMemo(() => { const s = regimeSeries(regimeRows); return s[s.length - 1] ?? null; }, [regimeRows]);
+  // Leadership needs each stock's weekly closes (features.wc); without them "no group leading" would be false.
+  const leadershipData = useMemo(() => aligned.filter((r) => (r.features as { wc?: unknown } | null)?.wc).length >= 20 && !!market, [aligned, market]);
   const leaders = useMemo(
     () => leadershipForGroups(groups, market, asOf, Math.max(5, minGroupSize)).filter((g) => g.state === "emerging" || g.state === "confirmed" || g.state === "mature"),
     [groups, market, asOf, minGroupSize],
@@ -415,7 +423,7 @@ export default function StageAnalysis() {
                 {showLive
                   ? <>this week through {new Date((liveDay ?? asOf) + "T12:00:00Z").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })} <span className="text-amber-400">· provisional</span></>
                   : <>week ending {new Date(asOf + "T12:00:00Z").toLocaleDateString("en-US", { month: "short", day: "numeric" })}</>}
-                {" · "}{stocks.length.toLocaleString("en-US")} stocks
+                {" · "}{aligned.length.toLocaleString("en-US")} stocks{stale > 0 ? ` (${stale} not updated this week, left out)` : ""}
                 {lastScan && <> · scanned {new Date(lastScan).toLocaleDateString("en-US", { weekday: "short" })} {new Date(lastScan).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}</>}
               </span>
             )}
@@ -473,12 +481,18 @@ export default function StageAnalysis() {
                   : <>Breadth is {REGIME_TEXT[regimeNow.color].label.toLowerCase()} — {REGIME_TEXT[regimeNow.color].short}</>}
                 lines={[
                   <>Weekly breadth of {scope === "market" ? "the whole market" : "your list"}: {REGIME_TEXT[regimeNow.color].label.toLowerCase()}.</>,
-                  breadth ? <>{breadth.now.toFixed(0)}% of {scope === "market" ? "US stocks" : "your stocks"} are in Stage 2 ({ordinal(breadth.pct)} percentile of the last {breadth.weeks} weeks{breadth.pct <= 10 ? " — a washout; leaders often rebound hardest from here" : breadth.pct >= 90 ? " — crowded" : ""}).</> : null,
+                  breadth
+                    ? scope === "market"
+                      ? <>{breadth.now.toFixed(0)}% of US stocks are in Stage 2 ({ordinal(breadth.pct)} percentile of the last {breadth.weeks} weeks — history rebuilt from today's members, so earlier weeks look healthier than they were).</>
+                      : <>{breadth.now.toFixed(0)}% of your stocks are in Stage 2. (Your list is picked by today's strength, so its own history isn't a fair yardstick — switch to Whole market for a percentile.)</>
+                    : null,
                   leaders.length
                     ? <>Leading {GROUP_MODE_LABEL[mode].toLowerCase()} groups: {leaders.slice(0, 4).map((g) => g.name).join(", ")}{leaders.length > 4 ? ` +${leaders.length - 4} more` : ""}. Look for setups here first.</>
-                    : <>No {GROUP_MODE_LABEL[mode].toLowerCase()} group is clearly leading SPY right now.</>,
+                    : leadershipData
+                      ? <>No {GROUP_MODE_LABEL[mode].toLowerCase()} group is clearly leading SPY right now.</>
+                      : <>Group leadership is unavailable for this view (no weekly price history yet — run Scan Stages).</>,
                   bestCandidates.length
-                    ? <>{bestCandidates.length} best candidates (fresh Stage 2 breakouts or late bases with strong RS in a healthy group): {bestCandidates.slice(0, 5).map((r) => r.symbol).join(", ")}.</>
+                    ? <>{bestCandidates.length} candidates (fresh Stage 2 breakouts with strong RS in an industry where many others are in Stage 2 — not yet validated by the track record): {bestCandidates.slice(0, 5).map((r) => r.symbol).join(", ")}.</>
                     : <>No stock meets the best-candidate rules this week.</>,
                 ]}
               />
@@ -525,7 +539,7 @@ export default function StageAnalysis() {
               <div className="mt-3 flex flex-wrap items-center justify-end gap-3 text-[10px] text-muted-foreground">
                 {breadth && (
                   <span className="mr-auto" title="Where this week's Stage 2 share sits within the chart's history. Very low readings (washouts) have tended to come before the strongest rebounds in leaders; very high readings mean a crowded, extended market — context, not a timing signal.">
-                    Stage 2 share <b className="text-foreground">{breadth.now.toFixed(0)}%</b> · {ordinal(breadth.pct)} percentile of the last {breadth.weeks} weeks (range {breadth.lo.toFixed(0)}–{breadth.hi.toFixed(0)}%)
+                    Stage 2 share <b className="text-foreground">{breadth.now.toFixed(0)}%</b>{scope === "market" && <> · {ordinal(breadth.pct)} percentile of the last {breadth.weeks} weeks (range {breadth.lo.toFixed(0)}–{breadth.hi.toFixed(0)}%, rebuilt from today's members)</>}
                     {breadth.pct <= 10 ? " · washout zone" : breadth.pct >= 90 ? " · crowded zone" : ""}
                   </span>
                 )}
@@ -553,10 +567,10 @@ export default function StageAnalysis() {
                   <TooltipTrigger asChild>
                     <button
                       disabled={!bestCandidates.length}
-                      onClick={() => { setSubFilter(null); setMinConf(0); setSearch(""); setList({ title: "★ Best candidates", rows: bestCandidates }); }}
+                      onClick={() => { setSubFilter(null); setMinConf(0); setSearch(""); setList({ title: "Candidates (not yet validated)", rows: bestCandidates }); }}
                       className="flex items-center gap-2 rounded-md border border-primary/40 bg-primary/10 px-2.5 py-1.5 text-left text-[11px] text-primary hover:bg-primary/20 disabled:opacity-40"
                     >
-                      ★ Best candidates <span className="font-mono font-semibold">{bestCandidates.length}</span>
+                      Candidates <span className="font-mono font-semibold">{bestCandidates.length}</span>
                       {bestCandidates.slice(0, 3).map((r) => <span key={r.symbol} className="font-mono opacity-80">{r.symbol}</span>)}
                     </button>
                   </TooltipTrigger>
@@ -742,7 +756,7 @@ export default function StageAnalysis() {
               className="h-7 w-44 rounded border border-border bg-background px-2 text-xs"
             />
           </div>
-          <StageStockTable rows={listRows} exportName={(list?.title ?? "Stages").replace("★", "Best")} groupOf={firstGroup} rsOf={rsOf} nameOf={nameOf} maxHeight={480} />
+          <StageStockTable rows={listRows} exportName={list?.title ?? "Stages"} groupOf={firstGroup} rsOf={rsOf} nameOf={nameOf} maxHeight={480} />
         </DialogContent>
       </Dialog>
     </div>

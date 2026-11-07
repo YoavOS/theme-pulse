@@ -22,31 +22,33 @@ const json = (b: unknown, s = 200) => new Response(JSON.stringify(b), { status: 
 
 interface Chart { closes: number[]; price: number | null; prevClose: number | null; time: number | null }
 
+/**
+ * Daily closes for `range`, plus the live price and the PREVIOUS SESSION's close. The previous close
+ * comes from a separate range=1d request, whose chartPreviousClose is the prior session's close for
+ * stocks, indexes and futures alike (deriving it from daily bars mixes up dates: futures sessions
+ * start the evening before, and UTC dates roll over at 20:00 New York time).
+ */
 async function chart(symbol: string, range: string): Promise<Chart | null> {
-  for (let attempt = 0; attempt < 2; attempt++) {
-    try {
-      const r = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=${range}&interval=1d`, { headers: { "User-Agent": UA } });
-      if (!r.ok) { await r.body?.cancel(); continue; }
-      const j = await r.json();
-      const res = j?.chart?.result?.[0];
-      const closes = ((res?.indicators?.quote?.[0]?.close ?? []) as (number | null)[]).filter((c): c is number => typeof c === "number" && Number.isFinite(c));
-      const m = res?.meta ?? {};
-      const price = typeof m.regularMarketPrice === "number" ? m.regularMarketPrice : closes[closes.length - 1] ?? null;
-      const time = typeof m.regularMarketTime === "number" ? m.regularMarketTime : null;
-      // Previous session's close: the daily bar before the bar that holds regularMarketTime.
-      let prevClose: number | null = typeof m.previousClose === "number" ? m.previousClose : null;
-      const ts: number[] = res?.timestamp ?? [];
-      if (prevClose === null && ts.length >= 2) {
-        const all = (res?.indicators?.quote?.[0]?.close ?? []) as (number | null)[];
-        const lastDay = time ? new Date(time * 1000).toISOString().slice(0, 10) : null;
-        const lastBarDay = new Date(ts[ts.length - 1] * 1000).toISOString().slice(0, 10);
-        const k = lastDay && lastDay === lastBarDay ? ts.length - 2 : ts.length - 1;
-        for (let i = k; i >= 0; i--) if (typeof all[i] === "number") { prevClose = all[i] as number; break; }
-      }
-      return { closes, price, prevClose, time };
-    } catch { /* retry */ }
-  }
-  return null;
+  const get = async (rng: string) => {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const r = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=${rng}&interval=1d`, { headers: { "User-Agent": UA } });
+        if (!r.ok) { await r.body?.cancel(); continue; }
+        const j = await r.json();
+        return j?.chart?.result?.[0] ?? null;
+      } catch { /* retry */ }
+    }
+    return null;
+  };
+  const [res, today] = await Promise.all([range === "1d" ? Promise.resolve(null) : get(range), get("1d")]);
+  const main = res ?? today;
+  if (!main) return null;
+  const closes = ((main?.indicators?.quote?.[0]?.close ?? []) as (number | null)[]).filter((c): c is number => typeof c === "number" && Number.isFinite(c));
+  const m = (today ?? main)?.meta ?? {};
+  const price = typeof m.regularMarketPrice === "number" ? m.regularMarketPrice : closes[closes.length - 1] ?? null;
+  const prevClose = typeof m.chartPreviousClose === "number" ? m.chartPreviousClose : typeof m.previousClose === "number" ? m.previousClose : null;
+  const time = typeof m.regularMarketTime === "number" ? m.regularMarketTime : null;
+  return { closes, price, prevClose, time };
 }
 
 function indexStats(c: Chart | null) {
@@ -101,6 +103,11 @@ function electionDay(year: number): string | null {
   d.setUTCDate(d.getUTCDate() + 1);
   return d.toISOString().slice(0, 10);
 }
+function prevWeekday(iso: string): string {
+  let d = shiftDay(iso, -1);
+  while ([0, 6].includes(new Date(d + "T12:00:00Z").getUTCDay())) d = shiftDay(d, -1);
+  return d;
+}
 const shiftDay = (iso: string, n: number) => new Date(Date.parse(iso + "T12:00:00Z") + n * 86400_000).toISOString().slice(0, 10);
 
 // The biggest Nasdaq-100 / S&P weights: their earnings move the whole index.
@@ -117,8 +124,8 @@ async function megaEarnings(today: string): Promise<{ symbol: string; date: stri
     return ((j?.earningsCalendar ?? []) as any[])
       .filter((e) => MEGA.includes(String(e.symbol).toUpperCase()))
       .map((e) => ({ symbol: String(e.symbol).toUpperCase(), date: String(e.date), hour: e.hour ? String(e.hour) : null }))
-      // Reports that move today's open: yesterday (or the last weekday) after the close, or today before the open.
-      .filter((e) => (e.date === today && e.hour !== "amc") || (e.date < today && e.hour === "amc" && e.date >= shiftDay(today, -3)));
+      // Reports that move today's open: the previous weekday after the close, or today before the open.
+      .filter((e) => (e.date === today && e.hour !== "amc") || (e.hour === "amc" && e.date === prevWeekday(today)));
   } catch { return []; }
 }
 
