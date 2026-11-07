@@ -114,6 +114,8 @@ export interface BaseFeatures {
     trend: number; rs: number; geometry: number; contraction: number; volume: number; pivotRisk: number; market: number;
   };
   marketStage: Stage | null;
+  /** Set by the scan when a recent breakout's base is carried forward (pivot kept, not re-armed). */
+  carried?: boolean;
   stageNow: Stage | null;     // the stock's own Weinstein stage at scan time
   dataNote: string | null;    // e.g. "no recent daily bars — weekly trigger only"
   gateFails: string[];        // generic base gates this base misses (shown as warnings)

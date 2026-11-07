@@ -323,9 +323,12 @@ export async function loadMarketStages(): Promise<{ rows: StockStage[]; members:
  */
 export function applyLive(rows: StockStage[]): StockStage[] {
   const out: StockStage[] = [];
+  // Only rows with a provisional result from the latest session: a row whose scan failed keeps an
+  // older "live" value, which would put its history one week out of line with the rest.
+  const latestDay = rows.reduce<string>((m, r) => (r.features?.live?.day && r.features.live.day > m ? r.features.live.day : m), "");
   for (const r of rows) {
     const l = r.features?.live;
-    if (!l) continue;
+    if (!l || l.day !== latestDay) continue;
     const ch = l.stage === 0 ? "T" : String(l.stage);
     out.push({
       ...r,
@@ -353,6 +356,9 @@ export type RegimeColor = "green" | "yellow" | "red";
 export interface RegimeWeek { p50: number; p200: number; hl: number; spyUp: boolean | null; color: RegimeColor; n: number }
 
 const flagBits = (ch: string | undefined) => (ch ? parseInt(ch, 32) : NaN);
+/** Weeks of price history behind the flag `ago` weeks back (flags cover the last ≤104 weeks; a
+ *  shorter string means the listing is younger than that, so its first char is its first week). */
+export const flagAge = (f: string, ago: number) => (f.length < 104 ? f.length - 1 - ago : Infinity);
 
 /**
  * Weekly market regime from every stock's breadth flags (aligned rows only, newest last).
@@ -370,19 +376,21 @@ export function regimeSeries(rows: StockStage[]): RegimeWeek[] {
   const raw: Omit<RegimeWeek, "color" | "hl">[] = [];
   const rh: number[] = [];
   for (let ago = len - 1; ago >= 0; ago--) {
-    let n = 0, a10 = 0, a40 = 0, nh = 0, nl = 0;
+    let n = 0, n10 = 0, n40 = 0, a10 = 0, a40 = 0, nh = 0, nl = 0;
     for (const r of stocks) {
       const f = r.features!.flags!;
       const b = flagBits(f[f.length - 1 - ago]);
       if (!Number.isFinite(b)) continue;
+      // A young listing has no 40-week MA / 52-week range yet: its bit is 0 because it can't be
+      // measured, not because the stock is weak — leave it out of that measure's denominator.
+      const age = flagAge(f, ago);
       n++;
-      if (b & 1) a10++;
-      if (b & 2) a40++;
-      if (b & 4) nh++;
-      if (b & 8) nl++;
+      if (age >= 9) { n10++; if (b & 1) a10++; }
+      if (age >= 39) { n40++; if (b & 2) a40++; }
+      if (age >= 52) { if (b & 4) nh++; if (b & 8) nl++; }
     }
     const sb = flagBits(spy[spy.length - 1 - ago]);
-    raw.push({ p50: n ? (a10 / n) * 100 : 0, p200: n ? (a40 / n) * 100 : 0, spyUp: Number.isFinite(sb) ? (sb & 2) !== 0 && (sb & 16) !== 0 : null, n });
+    raw.push({ p50: n10 ? (a10 / n10) * 100 : 0, p200: n40 ? (a40 / n40) * 100 : 0, spyUp: Number.isFinite(sb) ? (sb & 2) !== 0 && (sb & 16) !== 0 : null, n });
     rh.push(nh + nl ? (nh / (nh + nl)) * 100 : 50);
   }
   // High–Low index: record-high percent smoothed over 2 weeks (≈ the 10-day convention)
@@ -391,7 +399,8 @@ export function regimeSeries(rows: StockStage[]): RegimeWeek[] {
     const hlPrev = k > 2 ? (rh[k - 2] + rh[k - 3]) / 2 : hl;
     let color: RegimeColor = "yellow";
     if ((w.p200 < 40 && w.p50 < 40) || (hl < 40 && hl < hlPrev)) color = "red";
-    else if (w.spyUp !== false && w.p200 >= 50 && w.p50 >= 60 && hl >= 55) color = "green";
+    // Unknown SPY trend (no SPY row / not aligned) never counts as "up".
+    else if (w.spyUp === true && w.p200 >= 50 && w.p50 >= 60 && hl >= 55) color = "green";
     return { ...w, hl, color };
   });
 }

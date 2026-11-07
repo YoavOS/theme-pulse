@@ -51,13 +51,19 @@ const isOtc = (s: string) => /\.(PK|OTC|OB)$/i.test(s) || (/^[A-Z]{5}$/.test(s) 
 
 /**
  * The momentum factor in your own list: buy the top 10% by 3-month RS, short the bottom 10%,
- * hold 4 weeks. From the weekly RS snapshots: picks at week k−4, outcome = 1-month relative
- * return (rs_1m) at week k. Returns one value per week, oldest first (in %).
+ * hold ~4 weeks. From the RS snapshots: picks at the snapshot closest to 28 days before snapshot k
+ * (matched by DATE, ±4 days — snapshots are one per week but their weekdays vary), outcome = the
+ * 1-month relative return (rs_1m) at k. Medians, so one outlier can't swing it. In %.
  */
 export function momentumSeries(points: HistoryPoint[]): { day: string; spread: number; leaders: number }[] {
   const out: { day: string; spread: number; leaders: number }[] = [];
-  for (let k = 4; k < points.length; k++) {
-    const a = points[k - 4].snap, b = points[k].snap;
+  const t = points.map((p) => Date.parse(p.day + "T12:00:00Z"));
+  const med = (xs: number[]) => { const a = [...xs].sort((x, y) => x - y); const m = a.length >> 1; return a.length % 2 ? a[m] : (a[m - 1] + a[m]) / 2; };
+  for (let k = 1; k < points.length; k++) {
+    let j = -1, best = Infinity;
+    for (let i = 0; i < k; i++) { const d = Math.abs((t[k] - t[i]) / 86_400_000 - 28); if (d < best) { best = d; j = i; } }
+    if (j < 0 || best > 4) continue;
+    const a = points[j].snap, b = points[k].snap;
     const pick: { s: string; v: number }[] = [];
     a.s.forEach((s, i) => { const v = a.m3[i]; if (v !== null && v !== undefined && !isOtc(s)) pick.push({ s, v }); });
     if (pick.length < 200) continue;
@@ -65,15 +71,15 @@ export function momentumSeries(points: HistoryPoint[]): { day: string; spread: n
     const n = Math.max(10, Math.floor(pick.length / 10));
     const bottom = new Set(pick.slice(0, n).map((x) => x.s));
     const top = new Set(pick.slice(-n).map((x) => x.s));
-    let ts = 0, tn = 0, bs = 0, bn = 0, as = 0, an = 0;
+    const tv: number[] = [], bv: number[] = [], av: number[] = [];
     b.s.forEach((s, i) => {
       const v = b.m1[i];
       if (v === null || v === undefined) return;
-      as += v; an++;
-      if (top.has(s)) { ts += v; tn++; } else if (bottom.has(s)) { bs += v; bn++; }
+      av.push(v);
+      if (top.has(s)) tv.push(v); else if (bottom.has(s)) bv.push(v);
     });
-    if (tn < 5 || bn < 5) continue;
-    out.push({ day: points[k].day, spread: Math.round((ts / tn - bs / bn) * 10) / 10, leaders: Math.round((ts / tn - as / an) * 10) / 10 });
+    if (tv.length < 5 || bv.length < 5) continue;
+    out.push({ day: points[k].day, spread: Math.round((med(tv) - med(bv)) * 10) / 10, leaders: Math.round((med(tv) - med(av)) * 10) / 10 });
   }
   return out;
 }
@@ -97,7 +103,11 @@ export function dailyBreadth(rows: StockStage[]) {
 
 const fmt = (x: number | null | undefined, d = 1, sign = true) => (x === null || x === undefined ? "—" : `${sign && x > 0 ? "+" : ""}${x.toFixed(d)}`);
 
-export function buildGauge(pulse: Pulse | null, mom: { day: string; spread: number; leaders: number }[], breadth: ReturnType<typeof dailyBreadth>): Gauge {
+export function buildGauge(pulse: Pulse | null, mom: { day: string; spread: number; leaders: number }[], breadthIn: ReturnType<typeof dailyBreadth>): Gauge {
+  // Daily breadth older than ~4 days (no recent stage scan) is shown as unavailable, not used.
+  const ref = pulse?.day ?? new Date().toISOString().slice(0, 10);
+  const breadthStale = !!breadthIn && (Date.parse(ref) - Date.parse(breadthIn.date)) / 86_400_000 > 4;
+  const breadth = breadthStale ? null : breadthIn;
   const readings: Reading[] = [];
 
   // 1. Trend
@@ -130,7 +140,11 @@ export function buildGauge(pulse: Pulse | null, mom: { day: string; spread: numb
 
   // 3. Momentum's own recent results
   const last = mom[mom.length - 1] ?? null;
-  const prev = mom.length >= 5 ? mom[mom.length - 5] : null;
+  // the window before: the value closest to 28 days earlier (by date, not position)
+  const prev = last ? mom.reduce<typeof last | null>((m, x) => {
+    const d = Math.abs((Date.parse(last.day) - Date.parse(x.day)) / 86_400_000 - 28);
+    return d <= 5 && (!m || d < Math.abs((Date.parse(last.day) - Date.parse(m.day)) / 86_400_000 - 28)) ? x : m;
+  }, null) : null;
   let res: Level = "na";
   if (last) res = last.spread > 1 && (prev?.spread ?? 0) >= 0 ? "good" : last.spread < -1 || (last.spread < 0 && (prev?.spread ?? 0) < 0) ? "bad" : "mixed";
   readings.push({
@@ -145,7 +159,7 @@ export function buildGauge(pulse: Pulse | null, mom: { day: string; spread: numb
   if (breadth) stretch = breadth.stretch >= 30 ? "bad" : breadth.stretch >= 20 ? "mixed" : "good";
   readings.push({
     key: "stretch", name: "Leaders' stretch", level: stretch, weight: 0.5,
-    value: breadth ? `Leaders sit ${fmt(breadth.stretch, 0)} pts further above their 50-day than the typical stock` : "—",
+    value: breadth ? `Your list's leaders sit ${fmt(breadth.stretch, 0)} pts further above their 50-day than its typical stock` : breadthStale ? "Stale — run Scan Stages" : "—",
     meaning: "When the leaders are far more extended than everything else, the trade is crowded and pullbacks hit them hardest. In this app's data the June 2026 momentum crash came after the gap passed ~35 pts.",
     source: "Crowding research (MSCI); this app's data",
   });
@@ -155,7 +169,7 @@ export function buildGauge(pulse: Pulse | null, mom: { day: string; spread: numb
   if (breadth) br = breadth.p50 >= 55 && breadth.p21 >= 50 ? "good" : breadth.p50 < 40 ? "bad" : "mixed";
   readings.push({
     key: "breadth", name: "Breadth (daily)", level: br, weight: 0.5,
-    value: breadth ? `${breadth.p50.toFixed(0)}% above 50-day · ${breadth.p21.toFixed(0)}% above 21-day EMA` : "—",
+    value: breadth ? `Your list: ${breadth.p50.toFixed(0)}% above 50-day · ${breadth.p21.toFixed(0)}% above 21-day EMA` : breadthStale ? `Stale (last daily data ${breadthIn!.date}) — run Scan Stages` : "—",
     meaning: "How many of your stocks are in short-term uptrends. Helpful context, but weak on its own — after washouts, low breadth has come before strong rebounds.",
     source: "Practitioner breadth measures",
   });
@@ -165,7 +179,10 @@ export function buildGauge(pulse: Pulse | null, mom: { day: string; spread: numb
   const maxScore = readings.reduce((s, r) => s + r.weight, 0);
   const panic = vol === "bad" && (trend === "bad" || drawdown <= -8);
   const coreBad = [trend, vol, res].includes("bad");
-  const verdict: Verdict = panic ? "panic" : score >= 2.5 && !coreBad ? "on" : score <= -1.5 || (trend === "bad" && res === "bad") ? "off" : "selective";
+  // "Momentum on" needs the live market readings: without trend and volatility the other parts
+  // alone could reach the threshold blind.
+  const partial = trend === "na" || vol === "na";
+  const verdict: Verdict = panic ? "panic" : score >= 2.5 && !coreBad && !partial ? "on" : score <= -1.5 || (trend === "bad" && res === "bad") ? "off" : "selective";
 
   // Today layer: can only make it more cautious.
   const reasons: string[] = [];
@@ -173,8 +190,9 @@ export function buildGauge(pulse: Pulse | null, mom: { day: string; spread: numb
     const fut = Math.min(pulse.futures.NQ ?? 0, pulse.futures.ES ?? 0);
     const idx = Math.min(pulse.indexes.QQQ?.changePct ?? 0, pulse.indexes.SPY?.changePct ?? 0);
     const sessionMove = pulse.session === "regular" || pulse.session === "post" ? idx : fut;
-    if (sessionMove <= -1.5) reasons.push(`${pulse.session === "pre" || pulse.session === "closed" ? "Index futures" : "The indexes"} ${fmt(sessionMove)}% today`);
-    if ((pulse.vix?.changePct ?? 0) >= 15) reasons.push(`VIX ${fmt(pulse.vix!.changePct, 0)}% since yesterday`);
+    const weekend = [0, 6].includes(new Date(pulse.day + "T12:00:00Z").getUTCDay());
+    if (!weekend && sessionMove <= -1.5) reasons.push(`${pulse.session === "pre" || pulse.session === "closed" ? "Index futures" : "The indexes"} ${fmt(sessionMove)}% today`);
+    if (!weekend && (pulse.vix?.changePct ?? 0) >= 15) reasons.push(`VIX ${fmt(pulse.vix!.changePct, 0)}% since yesterday`);
     for (const e of pulse.events) reasons.push(e.label);
     if (pulse.session === "regular" && (pulse.minutesIntoSession ?? 0) < 30) reasons.push("First 30 minutes — opening moves often reverse");
   }
@@ -187,6 +205,7 @@ export function buildGauge(pulse: Pulse | null, mom: { day: string; spread: numb
     else if (reasons.length && verdict === "on") today = "selective";
   }
 
+  if (partial) reasons.push("Live market data missing — verdict capped at Selective");
   return { verdict, today, todayReasons: reasons, score, maxScore, readings, panic };
 }
 

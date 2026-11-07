@@ -74,8 +74,10 @@ const DAY = 86400;
 /** First week the engine can evaluate: MA30 exists from index 29 and the
  *  10-week persistence window needs MA30 at i−9 (and i−10 for crosses). */
 const START_FULL = 39;
-/** Young listings (25–44 completed weeks) are classified with a shorter MA instead of not at all. */
+/** Young listings (25–44 completed weeks) are classified from week 19 (≥ 10 weeks of MA + the
+ *  10-week persistence window), with an expanding MA. */
 const MIN_WEEKS = 25;
+const YOUNG_START = 19;
 
 /** Drop the current, still-forming week (official labels use completed weeks only). */
 /** Weekly bars de-duplicated by week, oldest first — the current (unfinished) week included. */
@@ -159,11 +161,13 @@ export function classifyStage(
   const bars = barsIn;
   const n = bars.length;
   if (n < MIN_WEEKS) return null;
-  // MA length: 30 weeks normally; a young listing uses what its history allows (≥ 10 weeks),
-  // flagged in the reasons and with capped confidence.
-  const L = n >= START_FULL + 6 ? 30 : Math.max(10, n - 15);
-  const START = L + 9;
-  const young = L < 30;
+  // MA: always the 30-week average; in a listing's first 30 weeks it averages every week since the
+  // listing (an expanding average). Each week's MA and START never depend on how much history came
+  // after it, so a young listing's past labels don't rewrite themselves every week (they did when
+  // the MA length was "history − 15"). Young listings are flagged and their confidence capped.
+  const L = 30;
+  const START = n >= START_FULL + 6 ? START_FULL : YOUNG_START;
+  const young = n < START_FULL + 6;
 
   const c = bars.map((b) => b.c), h = bars.map((b) => b.h), l = bars.map((b) => b.l), v = bars.map((b) => b.v || 0);
 
@@ -178,14 +182,16 @@ export function classifyStage(
     return bc && bc > 0 ? b.c / bc : null;
   });
 
-  const ma: number[] = c.map((_, i) => sma(c, i, L));
+  const ma: number[] = c.map((_, i) => sma(c, i, Math.min(L, i + 1)));
   const feat: (WeekFeat | null)[] = bars.map((_, i) => {
     if (i < START) return null;
     const m = ma[i];
     const atr = sma(tr, i, 20);
     const slope5 = m / ma[i - 5] - 1;
     const atrPct = atr / c[i];
-    const band = atrPct > 0.08 ? 0.015 : 0.01;      // widen "flat" for volatile names (§9.2)
+    // "Flat" band widens smoothly with volatility (1% for calm names → 1.5% at ATR ≥ 12% of price),
+    // instead of jumping from 1% to 1.5% at ATR = 8%.
+    const band = Math.min(0.015, Math.max(0.01, 0.01 + (atrPct - 0.04) * 0.0625));
     const rising = slope5 > band, falling = slope5 < -band, flat = !rising && !falling;
     const dist = c[i] - m;
     const clearlyAbove = dist > 0.2 * atr, clearlyBelow = dist < -0.2 * atr;
@@ -265,6 +271,7 @@ export function classifyStage(
       else if (f.down) setStage(4, i, "TREND");
       else if (f.neutral) { lastDir = ret26 > 0 ? 2 : 4; setStage(ret26 > 0.2 ? 3 : ret26 < -0.2 ? 1 : 0, i, "RANGE"); }
       else setStage(0, i, "RANGE");
+      if (stage === 0) segStart = i;           // setStage(0) from the initial 0 is a no-op
       if (stage === 2 || stage === 4) lastDir = stage;
       confirmed[i] = stage;
       continue;
@@ -273,9 +280,15 @@ export function classifyStage(
     // A neutral segment must be a real range before a break out of it counts.
     const segLen = segStart >= 0 ? i - segStart : 0;
     const fromNeutral = stage === 1 || stage === 3 || (stage === 0 && segLen >= 6);
-    // A Stage 2 breakout needs a real base (≥ 6 weeks) and an MA that has stopped falling —
+    // A Stage 2 breakout needs a real base (≥ 6 weeks) and an MA that is no longer falling —
     // a V-shaped rebound through a short range under a declining MA is still Stage 1.
-    const breakout = (stage === 1 || stage === 0) && segLen >= 6 && c[i] > res + buf && c[i] > f.ma && f.slope5 > -0.005;
+    // Weinstein: the 30-week MA must not be declining — flat or rising (≥ −0.2% over 5 weeks).
+    // The breakout level is the base's high EXCLUDING the last two weeks: a steady climb out of a
+    // base sets a new segment high every week, so measured against last week's high it never
+    // "breaks out" and stayed Stage 1 for the whole advance.
+    let baseHigh = -Infinity;
+    for (let k = segFrom; k < i - 2; k++) if (h[k] > baseHigh) baseHigh = h[k];
+    const breakout = (stage === 1 || stage === 0) && segLen >= 6 && c[i] > Math.min(res, baseHigh) + buf && c[i] > f.ma && f.slope5 >= -0.002;
     // Drawdown from the 26-week high / rally from the 26-week low (the 30-week MA lags a crash
     // or a squeeze by months, so price structure has to overrule it at the extremes).
     const hh26i = Math.max(...h.slice(Math.max(0, i - 25), i + 1)), ll26i = Math.min(...l.slice(Math.max(0, i - 25), i + 1));
@@ -338,8 +351,12 @@ export function classifyStage(
       // Stage 4 stock that turns up bases first (1) — no direct 2↔4 flips on a trend signal.
       // Going back the way it came (base → 4, top → 2) takes a break of the range itself
       // (failedBase / resumption above), not just a trend reading inside it.
-      else if (f.up || holdingUp) cand = stage === 4 ? 1 : stage === 3 ? 3 : 2;
-      else if (f.down || holdingDown) cand = stage === 2 ? 3 : stage === 1 ? 1 : 4;
+      // Entering a trend from a base / top takes the range break itself (breakout / breakdown /
+      // resumption / failed base above), never a trend reading alone — otherwise a V-shaped rebound
+      // became "Stage 2" without ever clearing its base. A transition period that interrupted a
+      // trend may resume that same trend on trend readings.
+      else if (f.up || holdingUp) cand = stage === 4 ? 1 : stage === 3 ? 3 : stage === 1 ? 1 : stage === 0 ? (lastDir === 2 ? 2 : 0) : 2;
+      else if (f.down || holdingDown) cand = stage === 2 ? 3 : stage === 1 ? 1 : stage === 3 ? 3 : stage === 0 ? (lastDir === 4 ? 4 : 0) : 4;
       else if (losingUp) cand = 3;
       else if (reclaimingDown) cand = 1;
       // A flat MA alone doesn't end a trend: Stage 2 → 3 needs the highs to stop rising,
@@ -562,7 +579,7 @@ export function classifyStage(
       close: round(c[i], 4),
       ma30: round(f.ma, 4),
       maSlope5Pct: round(f.slope5 * 100, 2),
-      closeVsMaAtr: round((c[i] - f.ma) / f.atr, 2),
+      closeVsMaAtr: f.atr > 0 ? round((c[i] - f.ma) / f.atr, 2) : 0,
       aboveFrac10: round(f.aboveFrac10, 2),
       rvol4AtEvent: rvolEv === null ? null : round(rvolEv, 2),
       rpSlope13: f.rpSlope13 === null ? null : round(f.rpSlope13, 4),
