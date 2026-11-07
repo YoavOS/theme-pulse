@@ -323,9 +323,12 @@ export async function loadMarketStages(): Promise<{ rows: StockStage[]; members:
  */
 export function applyLive(rows: StockStage[]): StockStage[] {
   const out: StockStage[] = [];
+  // Only rows with a provisional result from the latest session: a row whose scan failed keeps an
+  // older "live" value, which would put its history one week out of line with the rest.
+  const latestDay = rows.reduce<string>((m, r) => (r.features?.live?.day && r.features.live.day > m ? r.features.live.day : m), "");
   for (const r of rows) {
     const l = r.features?.live;
-    if (!l) continue;
+    if (!l || l.day !== latestDay) continue;
     const ch = l.stage === 0 ? "T" : String(l.stage);
     out.push({
       ...r,
@@ -391,7 +394,8 @@ export function regimeSeries(rows: StockStage[]): RegimeWeek[] {
     const hlPrev = k > 2 ? (rh[k - 2] + rh[k - 3]) / 2 : hl;
     let color: RegimeColor = "yellow";
     if ((w.p200 < 40 && w.p50 < 40) || (hl < 40 && hl < hlPrev)) color = "red";
-    else if (w.spyUp !== false && w.p200 >= 50 && w.p50 >= 60 && hl >= 55) color = "green";
+    // Unknown SPY trend (no SPY row / not aligned) never counts as "up".
+    else if (w.spyUp === true && w.p200 >= 50 && w.p50 >= 60 && hl >= 55) color = "green";
     return { ...w, hl, color };
   });
 }

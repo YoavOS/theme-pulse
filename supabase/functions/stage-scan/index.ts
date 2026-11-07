@@ -119,6 +119,54 @@ function nyDay(t: number): string {
 }
 
 /**
+ * Daily bars up to the last COMPLETED session. During market hours Yahoo's last daily bar is the
+ * unfinished day (live price, partial volume) — breakouts, volume and dry-up readings must not
+ * use it. A bar dated today (New York) is dropped until 16:15 ET.
+ */
+function completedDays(d: DailyBar[] | null | undefined): DailyBar[] | null {
+  if (!d?.length) return d ?? null;
+  const last = d[d.length - 1];
+  const now = Date.now() / 1000;
+  const today = nyDay(now);
+  if (nyDay(last.ts) !== today) return d;
+  const hm = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date(now * 1000));
+  const [hh, mm] = hm.split(":").map(Number);
+  return (hh % 24) * 60 + mm >= 16 * 60 + 15 ? d : d.slice(0, -1);
+}
+
+/**
+ * A breakout stays a breakout: for 5 weeks after the breakout day the base is carried forward
+ * (pivot unchanged) instead of being rebuilt over the breakout week with a higher pivot — which
+ * made already-moving stocks reappear as fresh "Ready" setups. Failure is sticky: one close more
+ * than 3% under the pivot since the breakout marks it failed for the rest of the window.
+ */
+const CARRY_DAYS = 35;
+function carryBreakout(prev: BaseFeatures | null | undefined, fresh: BaseFeatures | null, daily: DailyBar[] | null): BaseFeatures | null {
+  const t = prev?.trigger;
+  const days = (daily ?? []).filter((d): d is DailyBar & { close: number } => typeof d.close === "number" && d.close > 0);
+  if (!prev || !t || t.status === "none" || !t.date || !days.length) return fresh;
+  const last = days[days.length - 1];
+  const ageDays = (last.ts - Date.parse(t.date + "T20:00:00Z") / 1000) / 86400;
+  if (ageDays < 0 || ageDays > CARRY_DAYS) return fresh;
+  // The same breakout seen again by the engine (same pivot) — keep the engine's fresh reading.
+  if (fresh && fresh.trigger.status !== "none" && Math.abs(fresh.pivot / prev.pivot - 1) < 0.005) return fresh;
+  const piv = prev.pivot;
+  const since = days.filter((d) => d.ts >= Date.parse(t.date + "T00:00:00Z") / 1000);
+  const minClose = since.length ? Math.min(...since.map((d) => d.close)) : last.close;
+  const latest = last.close;
+  let status: BaseFeatures["trigger"]["status"] = t.status === "failed" || minClose < piv * 0.97 ? "failed" : latest > piv * 1.05 ? "extended" : "triggered";
+  if (status !== "failed" && latest < piv * 0.97) status = "failed";
+  return {
+    ...prev,
+    latestClose: latest,
+    latestDate: new Date(last.ts * 1000).toISOString().slice(0, 10),
+    distToPivotPct: Math.round((piv / latest - 1) * 1000) / 10,
+    trigger: { ...t, status, extensionPct: Math.round((latest / piv - 1) * 1000) / 10, retest: status !== "failed" && latest < piv },
+    carried: true,
+  } as BaseFeatures;
+}
+
+/**
  * "This week so far": the engine on all bars including the unfinished week, as if it closed
  * now. Null when the market week is complete (weekends) — then the official result is current.
  */
@@ -268,20 +316,43 @@ Deno.serve(async (req) => {
           if (r.ern?.at && Date.now() - Date.parse(r.ern.at) < 7 * 86400_000) ernBy.set(r.symbol, r.ern);
         }
       }
+      // Previous base rows (to carry breakouts forward instead of re-arming them).
+      const prevBaseBy = new Map<string, BaseFeatures>();
+      {
+        const { data } = await db.from("stock_bases").select("symbol, features").in("symbol", symbols);
+        for (const r of (data ?? []) as { symbol: string; features: BaseFeatures | null }[]) if (r.features) prevBaseBy.set(r.symbol, r.features);
+      }
+      const breakoutRows: Record<string, unknown>[] = [];
+      // One week cutoff for every stock in the scan: the benchmark's last completed week. A stock
+      // that already has a newer completed week than a (cached) benchmark refreshes it once.
+      let benchRefreshed = false;
+      const lastWeekOf = (b: WeeklyBar[]) => (b.length ? weekKey(b[b.length - 1].t) : 0);
       let cursor = 0;
       const worker = async () => {
         while (cursor < symbols.length) {
           const sym = symbols[cursor++];
           const raw = sym === BENCH ? bench.bars : await fetchWeekly(sym);
-          const bars = raw ? (sym === BENCH ? raw : completedWeeks(raw)) : null;
+          let bars = raw ? (sym === BENCH ? raw : completedWeeks(raw)) : null;
+          if (bars && sym !== BENCH && lastWeekOf(bars) > lastWeekOf(bench.bars) && !benchRefreshed) {
+            benchRefreshed = true;
+            benchCache = null;
+            const nb = await getBench();
+            if (nb.bars.length) Object.assign(bench, nb);
+          }
+          if (bars && sym !== BENCH && bench.bars.length) {
+            const cut = lastWeekOf(bench.bars);
+            bars = bars.filter((b) => weekKey(b.t) <= cut);
+          }
           const r = bars ? classifyStage(bars, sym === BENCH ? null : bench.bars, bench.stage) : null;
           if (!r) { failed.push(sym); continue; }
           // Daily bars: Full Scan cache first, otherwise one daily call (never fatal).
           if (sym !== BENCH && !dailyBy.has(sym)) {
             try { const d = await fetchDaily(sym); if (d?.length) dailyBy.set(sym, d); } catch { /* ignore */ }
           }
+          // Completed sessions only (no live intraday bar).
+          const daily = completedDays(dailyBy.get(sym));
           let dly = null;
-          try { dly = sym === BENCH ? null : dailySnapshot(dailyBy.get(sym)); } catch { /* ignore */ }
+          try { dly = sym === BENCH ? null : dailySnapshot(daily ?? undefined); } catch { /* ignore */ }
           let ern: EarnGrowth | null = ernBy.get(sym) ?? null;
           if (!ern && sym !== BENCH) ern = await fetchEarnGrowth(sym);
           const live = liveResult(sym, sym === BENCH ? bench.raw : raw, bench);
@@ -294,10 +365,18 @@ Deno.serve(async (req) => {
           if (sym === BENCH || !bars) continue;
           // Base candidate (never let a base-engine problem break the stage scan)
           try {
-            const b = detectBase({
-              weekly: bars, bench: bench.bars, daily: dailyBy.get(sym) ?? null,
+            const fresh = detectBase({
+              weekly: bars, bench: bench.bars, daily: daily ?? null,
               stage: { stage: r.stage, weeksInStage: r.weeksInStage }, marketStage: bench.stage,
             });
+            const b = carryBreakout(prevBaseBy.get(sym), fresh, daily ?? null);
+            if (b && b.trigger.status !== "none" && b.trigger.date) {
+              breakoutRows.push({
+                symbol: sym, breakout_date: b.trigger.date, pivot: b.pivot, label: b.labels?.[0] ?? null,
+                rvol: b.trigger.rvol, status: b.trigger.status, last_close: b.latestClose, last_date: b.latestDate,
+                ext_pct: b.trigger.extensionPct, updated_at: new Date().toISOString(),
+              });
+            }
             if (b) {
               baseRows.push({
                 symbol: sym, features: b, pivot: b.pivot, support: b.support, dist_to_pivot: b.distToPivotPct,
@@ -315,6 +394,24 @@ Deno.serve(async (req) => {
       if (rows.length) {
         const { error } = await db.from("stock_stages").upsert(rows, { onConflict: "symbol" });
         if (error) throw error;
+      }
+      // Breakout log (failure rate, honest "just broke out"): one row per symbol + breakout day.
+      // Failure is sticky — never overwrite a recorded failure with a later recovery.
+      if (breakoutRows.length) {
+        const { data: prior } = await db.from("base_breakouts").select("symbol, breakout_date, status, max_ext_pct, failed_date")
+          .in("symbol", breakoutRows.map((r) => r.symbol as string));
+        const byKey = new Map(((prior ?? []) as { symbol: string; breakout_date: string; status: string; max_ext_pct: number | null; failed_date: string | null }[])
+          .map((p) => [`${p.symbol}|${p.breakout_date}`, p]));
+        for (const r of breakoutRows) {
+          const p = byKey.get(`${r.symbol}|${r.breakout_date}`);
+          const ext = typeof r.ext_pct === "number" ? r.ext_pct : null;
+          r.max_ext_pct = Math.max(p?.max_ext_pct ?? -Infinity, ext ?? -Infinity);
+          if (!Number.isFinite(r.max_ext_pct as number)) r.max_ext_pct = null;
+          if (p?.status === "failed") { r.status = "failed"; r.failed_date = p.failed_date; }
+          else r.failed_date = r.status === "failed" ? r.last_date : null;
+        }
+        const { error } = await db.from("base_breakouts").upsert(breakoutRows, { onConflict: "symbol,breakout_date" });
+        if (error && !isMissingTable(error)) console.warn("base_breakouts upsert failed", error.message);
       }
       let basesStored = 0;
       if (baseRows.length) {
@@ -385,7 +482,8 @@ Deno.serve(async (req) => {
       let cursor = 0, copied = 0, skipped = 0;
       const lite = (f: Record<string, unknown> | null | undefined) => {
         if (!f) return null;
-        const { dly: _d, ern: _e, wc: _w, ...rest } = f as Record<string, unknown>;
+        // Keep the weekly closes (wc): group leadership needs them in the whole-market view.
+        const { dly: _d, ern: _e, ...rest } = f as Record<string, unknown>;
         return rest;
       };
       const worker = async () => {
@@ -559,6 +657,7 @@ Deno.serve(async (req) => {
             score: fin.score, state: fin.state, label: fin.primaryLabel, labels: fin.labels,
             tight: !!f.daily?.contracting, pivot: f.pivot, rvol: f.trigger?.rvol ?? null,
             earnFuel: f.earn?.fuel ?? null, earnLabel: f.earn?.label ?? null, volScore: f.trigger?.vol?.score ?? null,
+            signalDate: f.latestDate ?? null, signalClose: f.latestClose ?? null,
           });
           updates.push({
             symbol: row.symbol, features: f, as_of: row.as_of,
