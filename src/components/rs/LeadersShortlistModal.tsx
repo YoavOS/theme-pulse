@@ -10,6 +10,8 @@ import { useSuperperformance } from "@/hooks/useSuperperformance";
 import { loadStages, STAGE_COLORS, type StockStage } from "@/lib/stageAnalysis";
 import { groupKeyForIndustry } from "@/lib/groupColors";
 import { tvSectionsText } from "@/lib/tvSections";
+import { useInsiderBuys } from "@/hooks/useInsiderBuys";
+import InsiderBuyBadge from "@/components/rs/InsiderBuyBadge";
 import {
   FUNDAMENTAL_KEYS, MATCH_LABEL, PROFILE_BY_KEY, breakoutSetup, getMinCoverage, matchCount, savedScore, shortTermMomentum,
   type MatchMode, type ProfileKey,
@@ -37,6 +39,7 @@ interface Settings {
   earningsBuffer: number;    // days, 0 = off
   maxPerGroup: number;       // 0 = no cap
   maxSize: number; // 0 = no limit
+  insider: "off" | "any" | "cluster"; // open-market insider buying in the last 90 days
   sort: SortKey;
   weights: { fund: number; rs: number; momentum: number; setup: number };
 }
@@ -47,7 +50,7 @@ const DEFAULTS: Settings = {
   minRs: 85, stage2Only: true, includeLateBase: false,
   maxFromHigh: 15, maxTight: 0, notExtended: true,
   minMomentum: 0, minSetup: 0, earningsBuffer: 5,
-  maxPerGroup: 3, maxSize: 25, sort: "composite",
+  maxPerGroup: 3, maxSize: 25, insider: "off", sort: "composite",
   weights: { fund: 35, rs: 25, momentum: 20, setup: 20 },
 };
 
@@ -88,6 +91,7 @@ export default function LeadersShortlistModal({ open, onOpenChange, stocks, isOt
   isOtcSymbol: (sym: string) => boolean;
 }) {
   const { rows: saved, thresholds } = useSuperperformance();
+  const insiders = useInsiderBuys(open);
   const [st, setSt] = useState<Settings>(() => loadSettings());
   const [showSettings, setShowSettings] = useState(true);
   const [stages, setStages] = useState<Map<string, StockStage>>(new Map());
@@ -127,6 +131,10 @@ export default function LeadersShortlistModal({ open, onOpenChange, stocks, isOt
       const pass = (x: { k: ProfileKey; v: number | null }) => x.v !== null && x.v >= thresholds[x.k];
       const fundOk = st.profiles.length === 0 ? true : matchCount(st.match, fs.filter(pass).length, fs.length);
       if (!fundOk) continue;
+      if (st.insider !== "off") {
+        const ins = insiders.get(sym);
+        if (!ins || ins.buyers === 0 || (st.insider === "cluster" && !ins.cluster)) continue;
+      }
       counts.fund++;
       // 2) Relative strength.
       const rs = rating.get(s.symbol) ?? null;
@@ -174,7 +182,7 @@ export default function LeadersShortlistModal({ open, onOpenChange, stocks, isOt
       return true;
     });
     return { rows: st.maxSize > 0 ? capped.slice(0, st.maxSize) : capped, counts };
-  }, [stocks, isOtcSymbol, savedBy, st, thresholds, rating, stages]);
+  }, [stocks, isOtcSymbol, savedBy, st, thresholds, rating, stages, insiders]);
 
   const copy = async (text: string, msg: string) => {
     try { await navigator.clipboard.writeText(text); toast.success(msg); } catch { toast.error("Copy failed"); }
@@ -239,6 +247,16 @@ export default function LeadersShortlistModal({ open, onOpenChange, stocks, isOt
                         className={`rounded px-2 py-0.5 ${st.match === m ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}>{MATCH_LABEL[m]}</button>
                     ))}
                     <span className="text-muted-foreground">· thresholds{getMinCoverage() > 0 ? ` and the ${getMinCoverage()}% minimum data` : ""} come from the Superperformance window</span>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2 text-xs">
+                    <span className="text-muted-foreground" title="Open-market purchases on SEC Form 4, last 90 days. Buys under $10k or under a 10b5-1 plan don't count. Several insiders buying close together is the stronger signal in the research.">Insider buying (90 days)</span>
+                    {(["off", "any", "cluster"] as const).map((m) => (
+                      <button key={m} type="button" aria-pressed={st.insider === m} onClick={() => set("insider", m)}
+                        className={`rounded px-2 py-0.5 ${st.insider === m ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}>
+                        {m === "off" ? "not required" : m === "any" ? "any insider" : "2+ insiders"}
+                      </button>
+                    ))}
+                    {insiders.size === 0 && <span className="text-muted-foreground">· no insider data yet (filled nightly)</span>}
                   </div>
                   <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">2 · Relative strength</div>
                   {st.minRs > 0 && <Range label="Minimum RS rating (overall)" value={st.minRs} min={50} max={99} fmt={(v) => `${v}+`} onChange={(v) => set("minRs", v)} />}
@@ -326,6 +344,7 @@ export default function LeadersShortlistModal({ open, onOpenChange, stocks, isOt
                             {r.s.companyName && <span className="hidden max-w-[140px] truncate text-xs text-muted-foreground lg:inline">{r.s.companyName}</span>}
                           </a>
                           {r.erDays !== null && r.erDays >= 0 && r.erDays <= 21 && <span className="ml-1.5 rounded bg-[hsl(40,80%,50%)]/15 px-1 text-[10px] text-[hsl(40,90%,62%)]">ER {r.erDays}d</span>}
+                          <span className="ml-1.5 align-middle"><InsiderBuyBadge info={insiders.get(r.s.symbol.toUpperCase())} /></span>
                         </td>
                         <td className="max-w-[160px] truncate px-2 py-1.5 text-xs text-muted-foreground" title={r.group}>{r.group}</td>
                         <td className="px-2 py-1.5 text-xs">

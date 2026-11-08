@@ -6,7 +6,9 @@
 // stores every profile score + a compact breakdown + the company's report dates.
 //
 // A stock is due when (most urgent first):
-//   1. it reported earnings since its last score (next_report has passed),
+//   1. it reported earnings since its last score (next_report has passed), or filed a new 10-Q /
+//      10-K / 20-F / 40-F since then (sec_filings, read nightly by sec-filings-watch — SEC's
+//      quarterly numbers only appear once that report is filed, often weeks after the earnings date),
 //   2. it was never scored, or is missing the newer profile scores,
 //   3. its score is more than 30 days old.
 // When nothing is due the run ends after two small reads.
@@ -61,19 +63,46 @@ async function readAll<T>(sb: any, table: string, cols: string): Promise<T[]> {
   return out;
 }
 
+/**
+ * Newest periodic report (last 60 days) per symbol: the end of its filing day and when
+ * sec-filings-watch recorded it, as epoch ms (empty before the sec_filings migration).
+ */
+// deno-lint-ignore no-explicit-any
+async function latestFilings(sb: any): Promise<Map<string, { dayEnd: number; seen: number }>> { // eslint-disable-line @typescript-eslint/no-explicit-any
+  const out = new Map<string, { dayEnd: number; seen: number }>();
+  const since = new Date(Date.now() - 60 * DAY_MS).toISOString().slice(0, 10);
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await sb.from("sec_filings").select("symbol, filed, created_at")
+      .in("form", ["10-Q", "10-K", "20-F", "40-F"]).gte("filed", since).range(from, from + 999);
+    if (error) return out;                       // table not there yet: ignore
+    for (const r of (data ?? []) as { symbol: string; filed: string; created_at: string }[]) {
+      const dayEnd = Date.parse(r.filed + "T00:00:00Z") + DAY_MS, seen = Date.parse(r.created_at);
+      if (Number.isFinite(dayEnd) && Number.isFinite(seen) && dayEnd > (out.get(r.symbol)?.dayEnd ?? 0)) out.set(r.symbol, { dayEnd, seen });
+    }
+    if (!data || data.length < 1000) break;
+  }
+  return out;
+}
+
 /** Ordered list of due symbols, with the reason (for the status call). */
-function dueList(universe: string[], rows: Map<string, Row>, now: number) {
+function dueList(universe: string[], rows: Map<string, Row>, now: number, filed: Map<string, { dayEnd: number; seen: number }> = new Map()) {
   const reported: string[] = [], missing: string[] = [], old: { s: string; t: number }[] = [];
+  let newFiling = 0;
   for (const s of universe) {
     const r = rows.get(s);
     if (!r || !r.last_scanned || !r.profile_scores) { missing.push(s); continue; }
     const last = Date.parse(r.last_scanned);
     // Reported since the last score: the report day has passed (give data a day to land).
     if (r.next_report && Date.parse(r.next_report) + DAY_MS <= now && last < Date.parse(r.next_report) + DAY_MS) { reported.push(s); continue; }
+    // A new 10-Q / 10-K: last scored before the filing day ended AND before sec-filings-watch saw it.
+    // (The first condition stops the nightly back-fill of older filings from marking everything due;
+    // the second stops a stock rescored on its filing day from being picked again every 20 minutes.)
+    const f = filed.get(s);
+    if (f && last < f.dayEnd && last < f.seen) { reported.push(s); newFiling++; continue; }
     if (now - last > MAX_AGE_MS) old.push({ s, t: last });
   }
   old.sort((a, b) => a.t - b.t);
-  return { reported, missing, old: old.map((x) => x.s), all: [...reported, ...missing, ...old.map((x) => x.s)] };
+  return { reported, newFiling, missing, old: old.map((x) => x.s), all: [...reported, ...missing, ...old.map((x) => x.s)] };
 }
 
 async function scoreOne(symbol: string) {
@@ -109,19 +138,20 @@ Deno.serve(async (req) => {
       return json({ ok: true, active: body.action === "resume" });
     }
 
-    const [uni, rows] = await Promise.all([
+    const [uni, rows, filed] = await Promise.all([
       readAll<{ symbol: string }>(sb, "qualified_rs_universe", "symbol"),
       readAll<Row>(sb, "superperformance_stocks", "symbol, last_scanned, next_report, profile_scores"),
+      latestFilings(sb),
     ]);
     const universe = uni.map((u) => u.symbol).filter((s) => s && !isOtc(s));
     const bySym = new Map(rows.map((r) => [r.symbol, r]));
-    const due = dueList(universe, bySym, Date.now());
+    const due = dueList(universe, bySym, Date.now(), filed);
 
     if (body.action === "status") {
       const { data: active } = await sb.rpc("get_superperf_cron_active");
       return json({
         ok: true, active: active !== false, universe: universe.length,
-        due: due.all.length, reportedSince: due.reported.length, neverScored: due.missing.length, older30d: due.old.length,
+        due: due.all.length, reportedSince: due.reported.length, newFilingSince: due.newFiling, neverScored: due.missing.length, older30d: due.old.length,
       });
     }
 

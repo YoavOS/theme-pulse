@@ -32,6 +32,8 @@ import ThemeSetupAnalyzer from "@/components/rs/ThemeSetupAnalyzer";
 import { GROUP_MODE_LABEL, groupKeyForIndustry, type GroupMode } from "@/lib/groupColors";
 import { EXPORT_FORMAT_LABEL, type ExportFormat } from "@/lib/tvSections";
 import { useCuratedThemes } from "@/hooks/useCuratedThemes";
+import { useInsiderBuys } from "@/hooks/useInsiderBuys";
+import InsiderBuyBadge from "@/components/rs/InsiderBuyBadge";
 
 
 export type AnalyzerTab = "overall" | "1d" | "1w" | "1m" | "3m" | "6m";
@@ -437,6 +439,7 @@ export default function CustomListAnalyzerModal({
   useEffect(() => { try { localStorage.setItem("rs-analyzer-format", fmt); localStorage.setItem("rs-analyzer-group", groupBy); } catch { /* ignore */ } }, [fmt, groupBy]);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const { themes: curatedThemes } = useCuratedThemes();
+  const insiders = useInsiderBuys(open && analyzed);
   const sections = useMemo(() => {
     if (fmt !== "sections") return [];
     const themeOf = new Map<string, string>();
@@ -916,7 +919,7 @@ export default function CustomListAnalyzerModal({
                       return (
                         <tr key={s.symbol} className="border-b border-border/40 hover:bg-muted/20">
                           <td className="px-2 py-1.5 text-muted-foreground">{idx + 1}</td>
-                          <td className="px-2 py-1.5 font-mono font-semibold">{s.symbol}</td>
+                          <td className="px-2 py-1.5 font-mono font-semibold"><span className="inline-flex items-center gap-1.5">{s.symbol}<InsiderBuyBadge info={insiders.get(s.symbol.toUpperCase())} /></span></td>
                           <td className="px-2 py-1.5 text-center"><RsRatingBadge rating={rating} /></td>
                           <td className="px-2 py-1.5 max-w-[200px] truncate text-muted-foreground" title={s.companyName ?? ""}>{s.companyName ?? "—"}</td>
                           <td className={`px-2 py-1.5 text-right font-mono ${rs !== null && rs >= 0 ? "text-[hsl(160,60%,55%)]" : "text-destructive/80"}`}>{pctDisplay(rs)}</td>

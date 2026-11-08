@@ -114,6 +114,9 @@ verify_jwt = false
 [functions.superperf-refresh]
 verify_jwt = false
 
+[functions.sec-filings-watch]
+verify_jwt = false
+
 [functions.rs-history]
 verify_jwt = false
 
