@@ -36,14 +36,19 @@ const r2 = (x: number) => Math.round(x * 100) / 100;
 export function latestRegime(rows: StageRowLite[]) {
   const bit = (f: string | undefined, ago: number) => (f && f.length > ago ? parseInt(f[f.length - 1 - ago], 32) : NaN);
   const week = (ago: number) => {
-    let n = 0, a10 = 0, a40 = 0, nh = 0, nl = 0;
+    let n10 = 0, n40 = 0, a10 = 0, a40 = 0, nh = 0, nl = 0;
     for (const r of rows) {
       if (r.symbol === "SPY") continue;
-      const b = bit(r.features?.flags, ago);
-      if (!Number.isFinite(b)) continue;
-      n++; if (b & 1) a10++; if (b & 2) a40++; if (b & 4) nh++; if (b & 8) nl++;
+      const f = r.features?.flags;
+      const b = bit(f, ago);
+      if (!f || !Number.isFinite(b)) continue;
+      // Young listings can't have a 40-week MA / 52-week range yet: leave them out of that measure.
+      const age = f.length < 104 ? f.length - 1 - ago : Infinity;
+      if (age >= 9) { n10++; if (b & 1) a10++; }
+      if (age >= 39) { n40++; if (b & 2) a40++; }
+      if (age >= 52) { if (b & 4) nh++; if (b & 8) nl++; }
     }
-    return { p50: n ? (a10 / n) * 100 : 0, p200: n ? (a40 / n) * 100 : 0, rh: nh + nl ? (nh / (nh + nl)) * 100 : 50 };
+    return { p50: n10 ? (a10 / n10) * 100 : 0, p200: n40 ? (a40 / n40) * 100 : 0, rh: nh + nl ? (nh / (nh + nl)) * 100 : 50 };
   };
   const w0 = week(0), w1 = week(1), w2 = week(2), w3 = week(3);
   const hl = (w0.rh + w1.rh) / 2, hlPrev = (w2.rh + w3.rh) / 2;

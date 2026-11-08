@@ -10,6 +10,7 @@ import { STAGE_COLORS, stageWeeksAgo, type StockStage } from "@/lib/stageAnalysi
  */
 
 const WINDOWS = [2, 4, 8, 13];
+const ROT_MIN = 8;
 
 interface RotRow { name: string; n: number; now: number; then: number; rankNow: number; rankThen: number; spark: number[] }
 
@@ -20,7 +21,9 @@ function share(members: StockStage[], ago: number) {
     if (s === null || s === 0) continue;
     tot++; if (s === 2) s2++;
   }
-  return tot >= 3 ? { pct: (s2 / tot) * 100, tot } : null;
+  // With fewer than 8 measured stocks one stock changing stage moves the share by 12+ points —
+  // noise, not rotation.
+  return tot >= ROT_MIN ? { pct: (s2 / tot) * 100, tot } : null;
 }
 
 export default function RotationPanel({ groups, asOf, modeLabel, minMembers, onOpen }: {
@@ -37,7 +40,7 @@ export default function RotationPanel({ groups, asOf, modeLabel, minMembers, onO
     for (const g of groups) {
       if (g.name === "Unknown" || g.name === "Other") continue;
       const aligned = g.members.filter((r) => r.as_of === asOf);
-      if (aligned.length < Math.max(3, minMembers)) continue;
+      if (aligned.length < Math.max(ROT_MIN, minMembers)) continue;
       const now = share(aligned, 0), then = share(aligned, win);
       if (!now || !then) continue;
       const spark: number[] = [];
@@ -53,9 +56,9 @@ export default function RotationPanel({ groups, asOf, modeLabel, minMembers, onO
     return list.map((r) => ({ ...r, rankNow: rn.get(r.name)!, rankThen: rt.get(r.name)! }));
   }, [groups, asOf, win, minMembers]);
 
-  const climbers = useMemo(() => rows.filter((r) => r.rankThen - r.rankNow > 0 && r.now - r.then >= 5)
+  const climbers = useMemo(() => rows.filter((r) => r.rankThen - r.rankNow > 0 && r.now - r.then >= Math.max(5, 200 / r.n))
     .sort((a, b) => (b.rankThen - b.rankNow) - (a.rankThen - a.rankNow) || (b.now - b.then) - (a.now - a.then)).slice(0, 6), [rows]);
-  const fallers = useMemo(() => rows.filter((r) => r.rankNow - r.rankThen > 0 && r.then - r.now >= 5)
+  const fallers = useMemo(() => rows.filter((r) => r.rankNow - r.rankThen > 0 && r.then - r.now >= Math.max(5, 200 / r.n))
     .sort((a, b) => (b.rankNow - b.rankThen) - (a.rankNow - a.rankThen) || (b.then - b.now) - (a.then - a.now)).slice(0, 6), [rows]);
 
   const byName = useMemo(() => new Map(groups.map((g) => [g.name, g.members])), [groups]);
@@ -116,7 +119,7 @@ export default function RotationPanel({ groups, asOf, modeLabel, minMembers, onO
       )}
       <p className="mt-3 text-[10.5px] leading-relaxed text-muted-foreground">
         A group climbing many spots while its Stage 2 share jumps is where new uptrends are forming — often before its returns lead.
-        Groups need at least {Math.max(3, minMembers)} stocks. Spark = Stage 2 share over the last {Math.max(12, win)} weeks. Click a group for its stocks.
+        Groups need at least {Math.max(ROT_MIN, minMembers)} stocks; only moves of two or more stocks count. Spark = Stage 2 share over the last {Math.max(12, win)} weeks. Click a group for its stocks.
       </p>
     </section>
   );
