@@ -26,7 +26,7 @@ type SortKey = "composite" | "rs" | "fund" | "momentum" | "setup";
 interface Settings {
   profiles: ProfileKey[];
   match: "any" | "all";
-  minRs: number;
+  minRs: number; // 0 = off (no RS condition)
   stage2Only: boolean;
   includeLateBase: boolean;
   maxFromHigh: number;       // %, 0 = off
@@ -130,7 +130,7 @@ export default function LeadersShortlistModal({ open, onOpenChange, stocks, isOt
       counts.fund++;
       // 2) Relative strength.
       const rs = rating.get(s.symbol) ?? null;
-      if (rs === null || rs < st.minRs) continue;
+      if (st.minRs > 0 && (rs === null || rs < st.minRs)) continue;
       counts.rs++;
       // 3) Trend.
       const stage = stages.get(sym) ?? null;
@@ -241,7 +241,8 @@ export default function LeadersShortlistModal({ open, onOpenChange, stocks, isOt
                     <span className="text-muted-foreground">· thresholds come from the Superperformance window</span>
                   </div>
                   <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">2 · Relative strength</div>
-                  <Range label="Minimum RS rating (overall)" value={st.minRs} min={50} max={99} fmt={(v) => `${v}+`} onChange={(v) => set("minRs", v)} />
+                  {st.minRs > 0 && <Range label="Minimum RS rating (overall)" value={st.minRs} min={50} max={99} fmt={(v) => `${v}+`} onChange={(v) => set("minRs", v)} />}
+                  <Toggle on={st.minRs === 0} onChange={(v) => set("minRs", v ? 0 : DEFAULTS.minRs)}>No RS condition — don't filter by RS rating</Toggle>
                   <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">3 · Trend</div>
                   <Toggle on={st.stage2Only} onChange={(v) => set("stage2Only", v)}>Stage 2 only</Toggle>
                   {st.stage2Only && <Toggle on={st.includeLateBase} onChange={(v) => set("includeLateBase", v)}>Also late bases about to break out (1B)</Toggle>}
