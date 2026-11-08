@@ -11,8 +11,8 @@ import { loadStages, STAGE_COLORS, type StockStage } from "@/lib/stageAnalysis";
 import { groupKeyForIndustry } from "@/lib/groupColors";
 import { tvSectionsText } from "@/lib/tvSections";
 import {
-  FUNDAMENTAL_KEYS, PROFILE_BY_KEY, breakoutSetup, savedScore, shortTermMomentum,
-  type ProfileKey,
+  FUNDAMENTAL_KEYS, MATCH_LABEL, PROFILE_BY_KEY, breakoutSetup, getMinCoverage, matchCount, savedScore, shortTermMomentum,
+  type MatchMode, type ProfileKey,
 } from "@/lib/superperfProfiles";
 
 /**
@@ -25,7 +25,7 @@ type SortKey = "composite" | "rs" | "fund" | "momentum" | "setup";
 
 interface Settings {
   profiles: ProfileKey[];
-  match: "any" | "all";
+  match: MatchMode;
   minRs: number; // 0 = off (no RS condition)
   stage2Only: boolean;
   includeLateBase: boolean;
@@ -125,7 +125,7 @@ export default function LeadersShortlistModal({ open, onOpenChange, stocks, isOt
       // 1) Earnings: pass the chosen Superperformance profiles.
       const fs = st.profiles.map((k) => ({ k, v: savedScore(row, k) }));
       const pass = (x: { k: ProfileKey; v: number | null }) => x.v !== null && x.v >= thresholds[x.k];
-      const fundOk = st.profiles.length === 0 ? true : st.match === "all" ? fs.every(pass) : fs.some(pass);
+      const fundOk = st.profiles.length === 0 ? true : matchCount(st.match, fs.filter(pass).length, fs.length);
       if (!fundOk) continue;
       counts.fund++;
       // 2) Relative strength.
@@ -234,11 +234,11 @@ export default function LeadersShortlistModal({ open, onOpenChange, stocks, isOt
                   </div>
                   <div className="flex items-center gap-2 text-xs">
                     <span className="text-muted-foreground">Must pass</span>
-                    {(["any", "all"] as const).map((m) => (
+                    {(["any", "two", "all"] as const).map((m) => (
                       <button key={m} type="button" aria-pressed={st.match === m} onClick={() => set("match", m)}
-                        className={`rounded px-2 py-0.5 ${st.match === m ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}>{m === "any" ? "any" : "all"}</button>
+                        className={`rounded px-2 py-0.5 ${st.match === m ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}>{MATCH_LABEL[m]}</button>
                     ))}
-                    <span className="text-muted-foreground">· thresholds come from the Superperformance window</span>
+                    <span className="text-muted-foreground">· thresholds{getMinCoverage() > 0 ? ` and the ${getMinCoverage()}% minimum data` : ""} come from the Superperformance window</span>
                   </div>
                   <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">2 · Relative strength</div>
                   {st.minRs > 0 && <Range label="Minimum RS rating (overall)" value={st.minRs} min={50} max={99} fmt={(v) => `${v}+`} onChange={(v) => set("minRs", v)} />}

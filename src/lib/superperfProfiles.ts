@@ -71,8 +71,10 @@ export function saveThresholds(t: Thresholds) {
   try { localStorage.setItem(THRESHOLDS_KEY, JSON.stringify(t)); } catch { /* ignore */ }
 }
 
-/** Which profiles define "a Superperformance stock", and whether it must pass any or all of them. */
-export interface ListSettings { profiles: ProfileKey[]; match: "any" | "all" }
+/** Which profiles define "a Superperformance stock", and how many of them it must pass. */
+export type MatchMode = "any" | "two" | "all";
+export const MATCH_LABEL: Record<MatchMode, string> = { any: "any", two: "at least 2", all: "all" };
+export interface ListSettings { profiles: ProfileKey[]; match: MatchMode }
 export const DEFAULT_LIST: ListSettings = { profiles: ["current", "minervini"], match: "any" };
 export function loadListSettings(): ListSettings {
   try {
@@ -80,11 +82,30 @@ export function loadListSettings(): ListSettings {
     if (!raw) return { ...DEFAULT_LIST };
     const p = JSON.parse(raw) as ListSettings;
     const profiles = (p.profiles ?? []).filter((k) => PROFILE_BY_KEY.has(k));
-    return { profiles: profiles.length ? profiles : DEFAULT_LIST.profiles, match: p.match === "all" ? "all" : "any" };
+    return { profiles: profiles.length ? profiles : DEFAULT_LIST.profiles, match: p.match === "all" || p.match === "two" ? p.match : "any" };
   } catch { return { ...DEFAULT_LIST }; }
 }
 export function saveListSettings(s: ListSettings) {
   try { localStorage.setItem(LIST_KEY, JSON.stringify(s)); } catch { /* ignore */ }
+  try { window.dispatchEvent(new Event("superperf-settings")); } catch { /* ignore */ }
+}
+
+// ── Data coverage ─────────────────────────────────────────────────────────────
+// Each saved score carries the % of its points that had data behind them. A score built on
+// too little data (e.g. 3 of 20 inputs) is ignored everywhere — lists, filters, the shortlist —
+// instead of counting as a pass. 0 = off. Scores saved before coverage existed always count.
+
+const MIN_COV_KEY = "superperf_min_coverage_v1";
+export const DEFAULT_MIN_COVERAGE = 60;
+function readMinCoverage(): number {
+  try { const v = Number(localStorage.getItem(MIN_COV_KEY)); return localStorage.getItem(MIN_COV_KEY) === null || !Number.isFinite(v) ? DEFAULT_MIN_COVERAGE : Math.max(0, Math.min(100, v)); }
+  catch { return DEFAULT_MIN_COVERAGE; }
+}
+let minCoverage = readMinCoverage();
+export function getMinCoverage(): number { return minCoverage; }
+export function setMinCoverage(v: number) {
+  minCoverage = Math.max(0, Math.min(100, Math.round(v)));
+  try { localStorage.setItem(MIN_COV_KEY, String(minCoverage)); } catch { /* ignore */ }
   try { window.dispatchEvent(new Event("superperf-settings")); } catch { /* ignore */ }
 }
 
@@ -97,21 +118,40 @@ export interface SavedRow {
   oneil_score: number | null;
   ryan_score: number | null;
   last_scanned: string;
-  profile_scores?: Partial<Record<ProfileKey, number | null>> | null;
+  profile_scores?: (Partial<Record<ProfileKey, number | null>> & { cov?: Partial<Record<ProfileKey, number>> }) | null;
   breakdown?: Breakdown | null;
   last_report?: string | null;
   next_report?: string | null;
 }
 
 /** Compact breakdown stored with a score: criterion label, value, and 1 / 0 / -1 for pass / neutral / fail. */
-export type Breakdown = Partial<Record<ProfileKey, { s: number | null; h?: string; v?: string; n?: string; c: [string, string, number][] }>> & { err?: string };
+export type Breakdown = Partial<Record<ProfileKey, { s: number | null; h?: string; v?: string; n?: string; cov?: number; c: [string, string, number][] }>> & { err?: string };
 
-export function savedScore(row: SavedRow | undefined, key: ProfileKey): number | null {
+/** The saved score as stored, ignoring data coverage (for display). */
+export function savedScoreRaw(row: SavedRow | undefined, key: ProfileKey): number | null {
   if (!row) return null;
   const def = PROFILE_BY_KEY.get(key);
   if (!def || def.source !== "fundamental") return null;
   const v = def.column ? row[def.column] : row.profile_scores?.[key];
   return typeof v === "number" && Number.isFinite(v) ? v : null;
+}
+
+/** % of the score's points that had data (null = scored before coverage was saved). */
+export function savedCoverage(row: SavedRow | undefined, key: ProfileKey): number | null {
+  const v = row?.profile_scores?.cov?.[key];
+  return typeof v === "number" && Number.isFinite(v) ? v : null;
+}
+
+/** True when the score exists but rests on less data than the minimum-coverage setting. */
+export function isLowCoverage(row: SavedRow | undefined, key: ProfileKey): boolean {
+  const c = savedCoverage(row, key);
+  return minCoverage > 0 && c !== null && c < minCoverage;
+}
+
+/** The saved score used for filtering: null when missing or built on too little data. */
+export function savedScore(row: SavedRow | undefined, key: ProfileKey): number | null {
+  const v = savedScoreRaw(row, key);
+  return v !== null && isLowCoverage(row, key) ? null : v;
 }
 
 // ── Price profiles (live) ────────────────────────────────────────────────────
@@ -200,5 +240,12 @@ export function scoreOf(key: ProfileKey, row: SavedRow | undefined, price: Price
 export function passes(settings: ListSettings, thresholds: Thresholds, score: (k: ProfileKey) => number | null): boolean {
   if (!settings.profiles.length) return false;
   const ok = (k: ProfileKey) => { const v = score(k); return v !== null && v >= thresholds[k]; };
-  return settings.match === "all" ? settings.profiles.every(ok) : settings.profiles.some(ok);
+  return matchCount(settings.match, settings.profiles.filter(ok).length, settings.profiles.length);
+}
+
+/** Does `passed` out of `total` profiles satisfy the match mode? ("at least 2" = all when only one is chosen.) */
+export function matchCount(match: MatchMode, passed: number, total: number): boolean {
+  if (match === "all") return passed === total;
+  if (match === "two") return passed >= Math.min(2, total);
+  return passed > 0;
 }
