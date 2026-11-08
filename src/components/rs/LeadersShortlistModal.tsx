@@ -36,7 +36,7 @@ interface Settings {
   minSetup: number;          // 0 = off
   earningsBuffer: number;    // days, 0 = off
   maxPerGroup: number;       // 0 = no cap
-  maxSize: number;
+  maxSize: number; // 0 = no limit
   sort: SortKey;
   weights: { fund: number; rs: number; momentum: number; setup: number };
 }
@@ -173,7 +173,7 @@ export default function LeadersShortlistModal({ open, onOpenChange, stocks, isOt
       perGroup.set(r.group, n + 1);
       return true;
     });
-    return { rows: capped.slice(0, st.maxSize), counts };
+    return { rows: st.maxSize > 0 ? capped.slice(0, st.maxSize) : capped, counts };
   }, [stocks, isOtcSymbol, savedBy, st, thresholds, rating, stages]);
 
   const copy = async (text: string, msg: string) => {
@@ -256,7 +256,8 @@ export default function LeadersShortlistModal({ open, onOpenChange, stocks, isOt
                   <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">5 · Risk and size</div>
                   <Range label="Skip stocks reporting earnings within" value={st.earningsBuffer} min={0} max={21} off fmt={(v) => `${v} day${v === 1 ? "" : "s"}`} onChange={(v) => set("earningsBuffer", v)} />
                   <Range label="Max stocks per industry" value={st.maxPerGroup} min={0} max={10} off fmt={(v) => String(v)} onChange={(v) => set("maxPerGroup", v)} />
-                  <Range label="List size" value={st.maxSize} min={5} max={100} step={5} fmt={(v) => String(v)} onChange={(v) => set("maxSize", v)} />
+                  {st.maxSize > 0 && <Range label="List size" value={st.maxSize} min={5} max={100} step={5} fmt={(v) => String(v)} onChange={(v) => set("maxSize", v)} />}
+                  <Toggle on={st.maxSize === 0} onChange={(v) => set("maxSize", v ? 0 : DEFAULTS.maxSize)}>No size limit — show every stock that passes the filters</Toggle>
                 </div>
                 <div className="space-y-2 md:col-span-2">
                   <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Combined score weights</div>
