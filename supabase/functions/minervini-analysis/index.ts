@@ -47,6 +47,13 @@ const pctGrowth = (now: number | null, prior: number | null): number | null => {
 /** EPS growth is undefined when the base is a loss or zero — a turnaround, not "+500%". */
 const epsGrowth = (now: number | null, prior: number | null): number | null =>
   prior === null || now === null || prior <= 0 ? null : pctGrowth(now, prior);
+/** Share (0–100) of a checklist's points whose inputs exist. items: [points, input present]. */
+const coverageOf = (items: [number, boolean][]) => {
+  const total = items.reduce((t, [w]) => t + w, 0);
+  return total ? Math.round((items.filter(([, ok]) => ok).reduce((t, [w]) => t + w, 0) / total) * 100) : 0;
+};
+const has = (v: unknown) => v !== null && v !== undefined && (typeof v !== "number" || Number.isFinite(v));
+const hasN = (xs: (number | null)[], n: number) => xs.filter((v) => has(v)).length >= n;
 const avg = (values: (number | null)[]) => {
   const clean = values.filter((v): v is number => v !== null && Number.isFinite(v));
   return clean.length ? round(clean.reduce((s, v) => s + v, 0) / clean.length) : null;
@@ -118,6 +125,8 @@ interface MinerviniReport {
   bearCase: string[];
   finalVerdict: string;
   subScores?: { label: string; score: number; max: number }[];
+  /** % of the checklist's points that had data behind them (low = score built on little data). */
+  coverage?: number;
 }
 
 
@@ -1047,6 +1056,7 @@ function makeReport(symbol: string, profile: any, derived: any): MinerviniReport
     profile: "minervini",
     profileLabel: "Mark Minervini (SEPA Fundamentals)",
     overallScore: derived.score,
+    coverage: derived.scoreCoveragePct ?? undefined,
     verdict,
     headline: `${symbol} scores ${derived.score}/100: ${derived.qualityLabel}. Latest quarter ${latest?.date ?? "N/A"} shows sales ${fmtPct(revTrend[0])} and normalized EPS ${fmtPct(epsTrend[0])}.`,
     criteria,
@@ -1095,6 +1105,11 @@ function makeOneilReport(symbol: string, profile: any, derived: any): MinerviniR
   const missingO = (derived.roePct === null ? 8 : 0) + (derived.debtToEquity === null ? 6 : 0) + (derived.institutionalOwnershipPct === null ? 7 : 0) + (derived.epsBeatRatePct === null ? 7 : 0);
   score = (score / (100 - missingO)) * 100;
   score = Math.max(0, Math.min(100, Math.round(score)));
+  const coverageO = coverageOf([
+    [18, has(epsTrend[0])], [8, hasN(epsTrend, 3)], [12, has(revTrend[0])], [6, hasN(revTrend, 3)],
+    [12, hasN(annEps, 1)], [8, hasN(annRev, 1)], [8, has(derived.roePct)], [8, has(opMargin[0])],
+    [6, has(derived.debtToEquity)], [7, has(derived.institutionalOwnershipPct)], [7, has(derived.epsBeatRatePct)],
+  ]);
 
   const criteria: Criterion[] = [
     { name: "Current Quarter EPS Growth", value: fmtPct(epsTrend[0]), target: "≥25% YoY, accelerating",
@@ -1140,7 +1155,7 @@ function makeOneilReport(symbol: string, profile: any, derived: any): MinerviniR
   return {
     symbol, companyName: profile.name ?? symbol, sector: profile.sector ?? null,
     profile: "oneil", profileLabel: "William O'Neil (CAN SLIM Fundamentals)",
-    overallScore: score, verdict,
+    overallScore: score, verdict, coverage: coverageO,
     headline: `${symbol} scores ${score}/100 on CAN SLIM fundamentals. EPS ${fmtPct(epsTrend[0])} (${epsAccel}), sales ${fmtPct(revTrend[0])} (${revAccel}), ROE ${fmtPct(derived.roePct)}.`,
     criteria, bullCase, bearCase,
     finalVerdict: verdict === "PASS"
@@ -1190,6 +1205,11 @@ function makeRyanReport(symbol: string, profile: any, derived: any): MinerviniRe
   const missingR = (surprisesCount === 0 ? 10 : 0) + (derived.roePct === null ? 8 : 0) + (derived.epsBeatRatePct === null ? 5 : 0);
   score = (score / (100 - missingR)) * 100;
   score = Math.max(0, Math.min(100, Math.round(score)));
+  const coverageR = coverageOf([
+    [14, has(epsTrend[0]) && has(epsTrend[1])], [10, has(epsTrend[0]) && has(epsTrend[4])], [14, hasN(epsTrend, 3)],
+    [10, has(epsTrend[0])], [10, hasN(revTrend, 3)], [6, has(revTrend[0])], [10, surprisesCount > 0],
+    [8, has(derived.roePct)], [8, has(opMargin[0])], [5, has(derived.epsBeatRatePct)],
+  ]);
 
   const criteria: Criterion[] = [
     { name: "EPS vs. Prior Quarter (Acceleration)", value: epsThisVsPrior === null ? "N/A" : `${epsThisVsPrior > 0 ? "+" : ""}${epsThisVsPrior} pp`, target: "Latest > prior quarter YoY",
@@ -1235,7 +1255,7 @@ function makeRyanReport(symbol: string, profile: any, derived: any): MinerviniRe
   return {
     symbol, companyName: profile.name ?? symbol, sector: profile.sector ?? null,
     profile: "ryan", profileLabel: "David Ryan (Earnings Momentum & Acceleration)",
-    overallScore: score, verdict,
+    overallScore: score, verdict, coverage: coverageR,
     headline: `${symbol} scores ${score}/100 on Ryan momentum: ${consecutiveAccelQ} consecutive accelerating EPS quarters, latest EPS ${fmtPct(epsTrend[0])}, sales ${revAccel}.`,
     criteria, bullCase, bearCase,
     finalVerdict: verdict === "PASS"
@@ -1364,6 +1384,10 @@ function makeCurrentReport(symbol: string, profile: any, derived: any): Minervin
   rel = Math.min(reliabilityMax, rel);
 
   const score = Math.max(0, Math.min(100, recent + core + rel));
+  const coverageC = coverageOf([
+    [20, has(qEps0)], [20, has(qRev0)], [10, usableQuarters >= 4], [10, has(annEpsAvg)], [10, has(annRevAvg)],
+    [8, has(derived.roePct)], [7, has(derived.debtToEquity)], [8, ocfSeries.length > 0], [7, recentSurprises.length > 0],
+  ]);
 
   // Criteria list
   const criteria: Criterion[] = [
@@ -1481,6 +1505,7 @@ function makeCurrentReport(symbol: string, profile: any, derived: any): Minervin
     profile: "current",
     profileLabel: "Current Fundamentals Strength",
     overallScore: score,
+    coverage: coverageC,
     verdict,
     headline: `${symbol} scores ${score}/100 (${usableQuarters}Q data). ${summary}`,
     criteria,
@@ -1923,12 +1948,17 @@ const ALL_PROFILES: ProfileKey[] = ["minervini", "oneil", "ryan", "current"];
 const SCAN_PROFILE_KEYS = ["momentum", "growth", "margins", "cash", "quality", "turnaround"] as const;
 
 /** Scores for the scan list. null when a profile lacks data (fewer than half its points testable). */
-function scanScores(profiles: Record<string, FProfile> | null | undefined): Record<string, number | null> {
-  const out: Record<string, number | null> = {};
+function scanScores(profiles: Record<string, FProfile> | null | undefined, reports?: Partial<Record<ProfileKey, MinerviniReport>>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  // cov: % of each profile's points that had data — the app ignores scores built on too little data.
+  const cov: Record<string, number> = {};
   for (const k of SCAN_PROFILE_KEYS) {
     const p = profiles?.[k];
     out[k] = p && p.verdict !== "Limited data" ? p.score : null;
+    if (p && p.score !== null && Number.isFinite(p.coverage)) cov[k] = p.coverage;
   }
+  for (const [k, r] of Object.entries(reports ?? {})) if (r && typeof r.coverage === "number") cov[k] = r.coverage;
+  out.cov = cov;
   return out;
 }
 
@@ -1937,13 +1967,13 @@ function compactBreakdown(reports: Partial<Record<ProfileKey, MinerviniReport>>,
   const b: Record<string, unknown> = {};
   for (const [k, r] of Object.entries(reports)) {
     if (!r) continue;
-    b[k] = { s: r.overallScore, h: r.headline, c: r.criteria.map((c) => [c.name, c.value, c.status === "pass" ? 1 : c.status === "fail" ? -1 : 0]) };
+    b[k] = { s: r.overallScore, h: r.headline, ...(typeof r.coverage === "number" ? { cov: r.coverage } : {}), c: r.criteria.map((c) => [c.name, c.value, c.status === "pass" ? 1 : c.status === "fail" ? -1 : 0]) };
   }
   for (const k of SCAN_PROFILE_KEYS) {
     const p = profiles?.[k];
     if (!p) continue;
     b[k] = {
-      s: p.verdict === "Limited data" ? null : p.score, v: p.verdict,
+      s: p.verdict === "Limited data" ? null : p.score, v: p.verdict, cov: p.coverage,
       c: p.parts.map((x) => [x.label, x.value, x.good === true ? 1 : x.good === false ? -1 : 0]),
       ...(p.parts.length === 0 && p.weaknesses.length ? { n: p.weaknesses[0] } : {}),
     };
@@ -2002,7 +2032,7 @@ Deno.serve(async (req) => {
           return jsonResponse({
             symbol,
             scores,
-            profileScores: scanScores(series?.profiles),
+            profileScores: scanScores(series?.profiles, picked),
             nextReport: series?.nextEarnings ?? null,
             lastReport: series?.lastReport ?? null,
             ...(wantBreakdown ? { breakdown: compactBreakdown(picked, series?.profiles) } : {}),
@@ -2032,7 +2062,7 @@ Deno.serve(async (req) => {
       const qualifiedProfiles = requested.filter((p) => typeof scores[p] === "number" && scores[p] >= 80);
       const fprofiles = (derived as any).profiles as Record<string, FProfile> | undefined;
       const extra = {
-        profileScores: scanScores(fprofiles),
+        profileScores: scanScores(fprofiles, picked),
         nextReport: derived.nextEarnings ?? null,
         lastReport: (derived as any).lastReport ?? null,
         ...(wantBreakdown ? { breakdown: compactBreakdown(picked, fprofiles) } : {}),

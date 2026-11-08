@@ -15,7 +15,7 @@ import SectorDistributionModal from "@/components/rs/SectorDistributionModal";
 import CustomTradingViewListModal, { type CoilScoreInfo, type EmaDistanceInfo } from "@/components/rs/CustomTradingViewListModal";
 import { loadStages, STAGE_COLORS, STAGE_NAMES, type StockStage } from "@/lib/stageAnalysis";
 import {
-  DEFAULT_THRESHOLDS, PROFILES, PROFILE_BY_KEY, passes, priceProfile, saveListSettings, saveThresholds, scoreOf,
+  DEFAULT_THRESHOLDS, DEFAULT_MIN_COVERAGE, PROFILES, PROFILE_BY_KEY, getMinCoverage, isLowCoverage, passes, priceProfile, savedCoverage, savedScoreRaw, saveListSettings, saveThresholds, scoreOf, setMinCoverage,
   type Breakdown, type ListSettings, type PriceInputs, type ProfileKey, type SavedRow, type Thresholds,
 } from "@/lib/superperfProfiles";
 
@@ -89,6 +89,8 @@ export default function SuperperformanceScanModal({
 
   useEffect(() => { if (!open) { cancelRef.current = true; pauseRef.current = false; } }, [open]);
   useEffect(() => { saveThresholds(thresholds); saveListSettings(list); }, [thresholds, list]);
+  const [minCov, setMinCov] = useState<number>(() => getMinCoverage());
+  const changeMinCov = (v: number) => { setMinCov(v); setMinCoverage(v); };
 
   // Stage of each stock (from the Stages scan): shown in the list and used by the price profiles.
   useEffect(() => {
@@ -255,11 +257,13 @@ export default function SuperperformanceScanModal({
     }
     return out.sort((a, b) => b.best - a.best);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [candidates, list, thresholds, bySymbol, stages, ratingMap, stockBySymbol]);
+  }, [candidates, list, thresholds, bySymbol, stages, ratingMap, stockBySymbol, minCov]);
 
   const droppedCount = useMemo(() => rows.filter((r) => !universeSet.has(r.symbol)
     && passes(list, thresholds, (k) => (PROFILE_BY_KEY.get(k)?.source === "fundamental" ? scoreOf(k, r, null) : null))).length,
-  [rows, universeSet, list, thresholds]);
+  // minCov is read inside scoreOf (module setting), so the linter can't see it.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  [rows, universeSet, list, thresholds, minCov]);
 
   const qualifyingSymbols = useMemo(() => new Set(sortedRows.map((r) => r.symbol)), [sortedRows]);
   const qualifyingStocks = useMemo(() => (universeStocks ?? []).filter((s) => qualifyingSymbols.has(s.symbol)), [universeStocks, qualifyingSymbols]);
@@ -321,7 +325,12 @@ export default function SuperperformanceScanModal({
     }
   };
 
-  const renderScore = (val: number | null | undefined, key: ProfileKey) => {
+  const renderScore = (val: number | null | undefined, key: ProfileKey, sym?: string) => {
+    const row = sym ? bySymbol.get(sym) : undefined;
+    if (typeof val !== "number" && row && isLowCoverage(row, key)) {
+      const raw = savedScoreRaw(row, key), cov = savedCoverage(row, key);
+      return <span className="font-mono text-muted-foreground/70 line-through decoration-dotted" title={`Score ${raw} rests on only ${cov}% of the data — below your ${minCov}% minimum, so it doesn't count.`}>{raw}</span>;
+    }
     if (typeof val !== "number") return <span className="text-muted-foreground">—</span>;
     const cls = val >= thresholds[key] ? "text-[hsl(40,90%,55%)] font-bold" : val >= thresholds[key] - 15 ? "text-foreground" : "text-muted-foreground";
     return <span className={`font-mono ${cls}`}>{val}</span>;
@@ -392,10 +401,11 @@ export default function SuperperformanceScanModal({
             <div className="text-xs uppercase tracking-wide text-muted-foreground">A stock qualifies when it passes</div>
             <div className="flex items-center gap-2">
               <div className="inline-flex items-center gap-0.5 rounded-md border border-border bg-muted/20 p-0.5" role="group" aria-label="Match">
-                {(["any", "all"] as const).map((m) => (
+                {(["any", "two", "all"] as const).map((m) => (
                   <button key={m} type="button" aria-pressed={list.match === m} onClick={() => setList((l) => ({ ...l, match: m }))}
+                    title={m === "two" ? "Passes at least 2 of the chosen profiles — stricter than any, looser than all." : undefined}
                     className={`rounded px-2.5 py-1 text-xs font-medium transition ${list.match === m ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}>
-                    {m === "any" ? "Any of them" : "All of them"}
+                    {m === "any" ? "Any of them" : m === "two" ? "At least 2" : "All of them"}
                   </button>
                 ))}
               </div>
@@ -433,6 +443,16 @@ export default function SuperperformanceScanModal({
                   <div className="text-[11px] leading-snug text-muted-foreground">{p.help}</div>
                 </div>
               ))}
+              <div className="space-y-1 border-t border-border pt-3 sm:col-span-2">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-medium">Minimum data behind an earnings score</span>
+                  <span className="font-mono text-[hsl(40,90%,55%)]">{minCov > 0 ? `${minCov}%` : "off"}</span>
+                </div>
+                <Slider min={0} max={90} step={5} value={[minCov]} onValueChange={([v]) => changeMinCov(v)} />
+                <div className="text-[11px] leading-snug text-muted-foreground">
+                  A score built on too few inputs (say, 3 of 20 metrics) can still read 80+. Scores resting on less than this share of their data are ignored in every list and filter, and shown crossed out. Default {DEFAULT_MIN_COVERAGE}%; 0 = off. Stocks scored before this setting existed always count until they're rescored.
+                </div>
+              </div>
               <div className="flex items-center justify-between text-[11px] text-muted-foreground sm:col-span-2">
                 <span>Thresholds only filter the list. No rescan needed.</span>
                 <Button size="sm" variant="ghost" onClick={() => setThresholds({ ...DEFAULT_THRESHOLDS })}>Reset</Button>
@@ -570,7 +590,7 @@ export default function SuperperformanceScanModal({
                             ) : <span className="text-xs text-muted-foreground">—</span>}
                           </td>
                           <td className="px-2 py-1.5 text-right font-mono text-xs">{typeof rs === "number" ? rs : "—"}</td>
-                          {list.profiles.map((k) => <td key={k} className="px-2 py-1.5 text-right">{renderScore(scores[k], k)}</td>)}
+                          {list.profiles.map((k) => <td key={k} className="px-2 py-1.5 text-right">{renderScore(scores[k], k, symbol)}</td>)}
                           <td className={`px-2 py-1.5 text-right text-xs ${stale ? "text-[hsl(40,80%,55%)]" : "text-muted-foreground"}`} title={saved ? new Date(saved.last_scanned).toLocaleString() : "Not scored on earnings yet"}>
                             {saved ? fmtAgo(saved.last_scanned) : "—"}
                           </td>
@@ -667,8 +687,9 @@ function BreakdownPanel({ loading, breakdown, profiles, thresholds, price }: {
     }
     const b = breakdown?.[k];
     if (!b) return { k, label: def.label, score: null, note: loading ? undefined : "No details saved for this score yet. They're added the next time the stock is scored.", crit: [] as [string, string, number][] };
-    return { k, label: def.label, score: b.s, note: b.n ?? (b.s === null ? "Not enough filing history." : undefined), crit: b.c ?? [] };
-  }).filter(Boolean) as { k: ProfileKey; label: string; score: number | null; note?: string; crit: [string, string, number][] }[];
+    return { k, label: def.label, score: b.s, cov: typeof b.cov === "number" ? b.cov : undefined, note: b.n ?? (b.s === null ? "Not enough filing history." : undefined), crit: b.c ?? [] };
+  }).filter(Boolean) as { k: ProfileKey; label: string; score: number | null; cov?: number; note?: string; crit: [string, string, number][] }[];
+  const minCov = getMinCoverage();
 
   return (
     <div className="space-y-2">
@@ -679,8 +700,19 @@ function BreakdownPanel({ loading, breakdown, profiles, thresholds, price }: {
           <div key={c.k} className="space-y-2 rounded-md border border-border bg-background p-3">
             <div className="flex items-center justify-between">
               <span className="text-xs font-semibold">{c.label}</span>
-              <span className={`font-mono text-sm ${c.score !== null && c.score >= thresholds[c.k] ? "font-bold text-[hsl(40,90%,55%)]" : "text-muted-foreground"}`}>{c.score ?? "—"}</span>
+              <span className="flex items-center gap-2">
+                {c.cov !== undefined && (
+                  <span title="Share of this checklist's points that had data behind them"
+                    className={`rounded px-1.5 py-0.5 font-mono text-[10px] ${minCov > 0 && c.cov < minCov ? "bg-loss-medium/15 text-loss-medium" : c.cov >= 80 ? "bg-muted text-muted-foreground" : "bg-[hsl(40,90%,55%)]/15 text-[hsl(40,90%,65%)]"}`}>
+                    data {c.cov}%
+                  </span>
+                )}
+                <span className={`font-mono text-sm ${c.score !== null && c.score >= thresholds[c.k] && !(minCov > 0 && c.cov !== undefined && c.cov < minCov) ? "font-bold text-[hsl(40,90%,55%)]" : "text-muted-foreground"}`}>{c.score ?? "—"}</span>
+              </span>
             </div>
+            {c.score !== null && minCov > 0 && c.cov !== undefined && c.cov < minCov && (
+              <div className="text-[11px] text-loss-medium">Too little data for this score to count (minimum {minCov}%).</div>
+            )}
             {c.note && <div className="text-[11px] text-muted-foreground">{c.note}</div>}
             {c.crit.length > 0 && (
               <div className="max-h-44 space-y-1 overflow-y-auto pr-1">
