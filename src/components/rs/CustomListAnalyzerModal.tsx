@@ -29,6 +29,9 @@ import RsRatingBadge from "@/components/rs/RsRatingBadge";
 import { useDailyCandles } from "@/hooks/useDailyCandles";
 import CandleSummaryBar from "@/components/rs/CandleSummaryBar";
 import ThemeSetupAnalyzer from "@/components/rs/ThemeSetupAnalyzer";
+import { GROUP_MODE_LABEL, groupKeyForIndustry, type GroupMode } from "@/lib/groupColors";
+import { EXPORT_FORMAT_LABEL, type ExportFormat } from "@/lib/tvSections";
+import { useCuratedThemes } from "@/hooks/useCuratedThemes";
 
 
 export type AnalyzerTab = "overall" | "1d" | "1w" | "1m" | "3m" | "6m";
@@ -425,7 +428,36 @@ export default function CustomListAnalyzerModal({
   ]);
 
   const visibleMissing = hideMissing ? [] : missing;
-  const exportSymbols = rows.map((s) => s.symbol);
+
+  // Sections view — like the Custom TradingView list: each industry (or sector / sub-industry / theme)
+  // gets its own ###heading. Groups with the highest average RS come first; inside a group the
+  // stocks keep the Sort By order chosen above.
+  const [fmt, setFmt] = useState<ExportFormat>(() => { try { return (localStorage.getItem("rs-analyzer-format") as ExportFormat) || "lines"; } catch { return "lines"; } });
+  const [groupBy, setGroupBy] = useState<GroupMode>(() => { try { return (localStorage.getItem("rs-analyzer-group") as GroupMode) || "industry"; } catch { return "industry"; } });
+  useEffect(() => { try { localStorage.setItem("rs-analyzer-format", fmt); localStorage.setItem("rs-analyzer-group", groupBy); } catch { /* ignore */ } }, [fmt, groupBy]);
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const { themes: curatedThemes } = useCuratedThemes();
+  const sections = useMemo(() => {
+    if (fmt !== "sections") return [];
+    const themeOf = new Map<string, string>();
+    if (groupBy === "theme") for (const t of curatedThemes) for (const sym of t.symbols) if (!themeOf.has(sym.toUpperCase())) themeOf.set(sym.toUpperCase(), t.name);
+    const m = new Map<string, RsStock[]>();
+    for (const s of rows) {
+      const g = groupBy === "theme" ? (themeOf.get(s.symbol.toUpperCase()) ?? "No theme") : groupKeyForIndustry(s.sector, groupBy);
+      const arr = m.get(g);
+      if (arr) arr.push(s); else m.set(g, [s]);
+    }
+    return [...m.entries()].map(([name, stocks]) => {
+      const sc = stocks.map((s) => getRsForTab(s, filterRsTab)).filter((v): v is number => typeof v === "number" && Number.isFinite(v));
+      return { name, stocks, avg: sc.length ? sc.reduce((a, b) => a + b, 0) / sc.length : null };
+    }).sort((a, b) => (b.avg ?? -Infinity) - (a.avg ?? -Infinity) || b.stocks.length - a.stocks.length);
+  }, [fmt, groupBy, rows, curatedThemes, getRsForTab, filterRsTab]);
+  const exportSymbols = fmt === "sections" ? sections.flatMap((g) => g.stocks.map((s) => s.symbol)) : rows.map((s) => s.symbol);
+  const exportText = (sep: string) =>
+    fmt === "sections"
+      ? sections.map((g) => `###${g.name.replace(/[,\n]/g, " ")}\n${g.stocks.map((s) => s.symbol).join("\n")}`).join("\n")
+      : exportSymbols.join(sep);
+  const toggleSection = (name: string) => setCollapsed((prev) => { const n = new Set(prev); if (n.has(name)) n.delete(name); else n.add(name); return n; });
 
   const handleAnalyze = () => {
     if (inputTickers.length === 0) { toast.error("Paste at least one ticker."); return; }
@@ -437,16 +469,20 @@ export default function CustomListAnalyzerModal({
 
   const handleCopy = async () => {
     try {
-      await navigator.clipboard.writeText(exportSymbols.join(","));
-      toast.success(`${exportSymbols.length} symbols copied.`, { description: "Paste into TradingView → Import symbols." });
+      await navigator.clipboard.writeText(exportText(","));
+      toast.success(`${exportSymbols.length} symbols copied.`, {
+        description: fmt === "sections"
+          ? `${sections.length} ${GROUP_MODE_LABEL[groupBy].toLowerCase()} sections — paste into TradingView → Import symbols.`
+          : "Paste into TradingView → Import symbols.",
+      });
     } catch { toast.error("Could not copy."); }
   };
 
   const handleDownload = () => {
-    const blob = new Blob([exportSymbols.join("\n") + "\n"], { type: "text/plain;charset=utf-8" });
+    const blob = new Blob([exportText("\n") + "\n"], { type: "text/plain;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
-    a.href = url; a.download = `Analyzed_List_${exportSymbols.length}tickers.txt`;
+    a.href = url; a.download = `Analyzed_List_${exportSymbols.length}tickers${fmt === "sections" ? `_by${groupBy}` : ""}.txt`;
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
     URL.revokeObjectURL(url);
     toast.success(`Downloaded ${exportSymbols.length} symbols.`);
@@ -456,7 +492,7 @@ export default function CustomListAnalyzerModal({
     if (exportSymbols.length === 0) { toast.error("Nothing to open."); return; }
     const first = exportSymbols[0];
     window.open(`https://www.tradingview.com/chart/?symbol=${encodeURIComponent(first)}`, "_blank", "noopener,noreferrer");
-    void navigator.clipboard?.writeText(exportSymbols.join(",")).then(() => {
+    void navigator.clipboard?.writeText(exportText(",")).then(() => {
       toast.success("List copied — paste into TradingView Watchlist.");
     }).catch(() => {});
   };
@@ -781,6 +817,41 @@ export default function CustomListAnalyzerModal({
               </div>
             </div>
 
+            {/* View / export format — plain list or TradingView sections */}
+            <div className="flex flex-wrap items-center gap-2 rounded-md border border-border bg-card/40 px-3 py-2">
+              <span className="text-xs font-semibold">View</span>
+              {(["lines", "sections"] as ExportFormat[]).map((f) => (
+                <button
+                  key={f}
+                  onClick={() => setFmt(f)}
+                  className={`rounded-md border px-3 py-1 text-xs font-medium transition-colors ${fmt === f ? "border-primary bg-primary/15 text-primary" : "border-border text-muted-foreground hover:bg-accent hover:text-foreground"}`}
+                >
+                  {EXPORT_FORMAT_LABEL[f]}
+                </button>
+              ))}
+              {fmt === "sections" && (
+                <>
+                  <select value={groupBy} onChange={(e) => setGroupBy(e.target.value as GroupMode)} className="h-7 rounded-md border border-border bg-background px-2 text-xs" aria-label="Sections by">
+                    {(["industry", "subIndustry", "sector", "theme"] as GroupMode[]).map((m) => <option key={m} value={m}>by {GROUP_MODE_LABEL[m]}</option>)}
+                  </select>
+                  <span className="text-[11px] text-muted-foreground">{sections.length} sections</span>
+                  {sections.length > 0 && (
+                    <button
+                      onClick={() => setCollapsed(collapsed.size > 0 ? new Set() : new Set(sections.map((g) => g.name)))}
+                      className="ml-auto rounded-md border border-border px-2 py-1 text-[11px] text-muted-foreground hover:bg-accent hover:text-foreground"
+                    >
+                      {collapsed.size > 0 ? "Expand all" : "Collapse all"}
+                    </button>
+                  )}
+                </>
+              )}
+              <p className="basis-full text-[11px] text-muted-foreground">
+                {fmt === "sections"
+                  ? "Each group gets its own heading — the same ###sections TradingView uses. Groups with the highest average RS come first; inside a group stocks follow the Sort By order. Copy, .txt and Open in TradingView export the sections."
+                  : "A plain list, one ticker per line, in the Sort By order."}
+              </p>
+            </div>
+
             {/* Preview table */}
             <div className="overflow-hidden rounded-lg border border-border bg-card">
               <div className="max-h-[420px] overflow-auto">
@@ -804,7 +875,33 @@ export default function CustomListAnalyzerModal({
                     </tr>
                   </thead>
                   <tbody>
-                    {rows.map((s, idx) => {
+                    {(fmt === "sections"
+                      ? sections.flatMap((g) => [
+                          { kind: "head" as const, g },
+                          ...(collapsed.has(g.name) ? [] : g.stocks.map((s, i) => ({ kind: "row" as const, s, idx: i }))),
+                        ])
+                      : rows.map((s, i) => ({ kind: "row" as const, s, idx: i }))
+                    ).map((item) => {
+                      if (item.kind === "head") {
+                        const g = item.g;
+                        const closed = collapsed.has(g.name);
+                        return (
+                          <tr key={`h-${g.name}`} className="sticky top-[33px] z-[1] cursor-pointer border-b border-border bg-muted/60 backdrop-blur hover:bg-muted" onClick={() => toggleSection(g.name)}>
+                            <td colSpan={14} className="px-2 py-1.5">
+                              <span className="inline-flex items-center gap-2 text-[11px]">
+                                <span className="w-3 text-muted-foreground">{closed ? "▸" : "▾"}</span>
+                                <span className="font-mono text-muted-foreground">###</span>
+                                <span className="font-semibold text-foreground">{g.name}</span>
+                                <span className="rounded-full bg-background px-1.5 font-mono text-[10px] text-muted-foreground">{g.stocks.length}</span>
+                                {g.avg !== null && (
+                                  <span className={`font-mono text-[10px] ${g.avg >= 0 ? "text-[hsl(160,60%,55%)]" : "text-destructive/80"}`}>avg RS {pctDisplay(g.avg)}</span>
+                                )}
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      }
+                      const { s, idx } = item;
                       const rs = getRsForTab(s, filterRsTab);
                       const ret = getReturnField(s, filterRsTab);
                       const rating = ratingMap.get(s.symbol) ?? null;
