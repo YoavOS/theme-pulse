@@ -14,7 +14,7 @@ import { breakoutSetup, savedCoverage, savedScore, type ProfileKey } from "@/lib
 import { GROUP_MODE_LABEL, groupKeyForIndustry, type GroupMode } from "@/lib/groupColors";
 import { STAGE_COLORS, type StockStage } from "@/lib/stageAnalysis";
 import { STATE_NAMES, type StockBase } from "@/lib/bases";
-import { BUCKET_INFO, LEADER_PCT, MIN_COVERAGE, PILLARS, rankIndustries, type IndustrySummary, type LeaderInputs, type LeaderRow } from "@/lib/industryLeaders";
+import { BUCKET_INFO, LEADER_PCT, MIN_COVERAGE, PILLARS, buildLeaderInputs, rankIndustries, rsRatings, type IndustrySummary, type LeaderRow } from "@/lib/industryLeaders";
 
 /**
  * Industry Leaders — the best businesses in each industry, ranked against their own peers.
@@ -90,24 +90,10 @@ export default function IndustryLeadersModal({ open, onOpenChange, stocks, isOtc
   const bySym = useMemo(() => new Map(universe.map((s) => [s.symbol.toUpperCase(), s])), [universe]);
   const savedBy = useMemo(() => new Map(saved.map((r) => [r.symbol.toUpperCase(), r])), [saved]);
 
-  /** RS rating 1–99 across the universe (rank of rsOverall). */
-  const rating = useMemo(() => {
-    const vals = universe.filter((s) => typeof s.rsOverall === "number").sort((a, b) => (a.rsOverall as number) - (b.rsOverall as number));
-    const m = new Map<string, number>();
-    vals.forEach((s, i) => m.set(s.symbol.toUpperCase(), Math.max(1, Math.min(99, Math.round(((i + 1) / vals.length) * 99)))));
-    return m;
-  }, [universe]);
+  const rating = useMemo(() => rsRatings(universe), [universe]);
 
   const industries = useMemo<IndustrySummary[]>(() => {
-    const items: LeaderInputs[] = universe.map((s) => {
-      const sym = s.symbol.toUpperCase(), f = fundamentalsMap.get(s.symbol) ?? fundamentalsMap.get(sym), row = savedBy.get(sym);
-      const sc = (k: ProfileKey) => savedScore(row, k);
-      return {
-        symbol: sym, group: groupKeyForIndustry(s.sector, mode), rsRating: rating.get(sym) ?? null,
-        epsQ: f?.eps_quarterly_yoy ?? null, revQ: f?.revenue_quarterly_yoy ?? null, roe: f?.roe ?? null, netMargin: f?.net_margin ?? null,
-        momentum: sc("momentum"), growthProfile: sc("growth"), margins: sc("margins"), quality: sc("quality"), current: sc("current"),
-      };
-    });
+    const items = buildLeaderInputs(universe, (s) => groupKeyForIndustry(s.sector, mode), fundamentalsMap, savedBy, rating);
     return rankIndustries(items).filter((g) => !/^(unknown|other|n\/a|—)$/i.test(g.group.trim()));
     // thresholds: savedScore depends on the minimum-coverage setting, which refreshes `thresholds`.
     // eslint-disable-next-line react-hooks/exhaustive-deps
