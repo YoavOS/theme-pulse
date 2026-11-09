@@ -17,6 +17,8 @@
 // coverage counts as missing.
 // ─────────────────────────────────────────────────────────────
 
+import { savedScore, type ProfileKey, type SavedRow } from "@/lib/superperfProfiles";
+
 export type PillarKey = "growth" | "trend" | "quality" | "strength";
 export const PILLARS: { key: PillarKey; label: string; weight: number; tip: string }[] = [
   { key: "growth", label: "Growth", weight: 0.35, tip: "Quarterly EPS and revenue growth vs last year, and the Earnings-momentum profile — ranked within the industry." },
@@ -137,4 +139,32 @@ export function rankIndustries(items: LeaderInputs[], minMembers = 3): IndustryS
   out.sort((a, b) => (b.rsMedian ?? -1) - (a.rsMedian ?? -1) || b.members - a.members);
   out.forEach((g, i) => { g.rsRank = i + 1; });
   return out;
+}
+
+// ── Shared input building (Industry Leaders panel and the ranked export) ───────
+
+interface StockLike { symbol: string; sector: string | null; rsOverall: number | null }
+interface FundLike { eps_quarterly_yoy: number | null; revenue_quarterly_yoy: number | null; roe: number | null; net_margin: number | null }
+
+/** RS rating 1–99 across the given stocks (rank of rsOverall), keyed by upper-case symbol. */
+export function rsRatings(stocks: StockLike[]): Map<string, number> {
+  const vals = stocks.filter((s) => fin(s.rsOverall)).sort((a, b) => (a.rsOverall as number) - (b.rsOverall as number));
+  const m = new Map<string, number>();
+  vals.forEach((s, i) => m.set(s.symbol.toUpperCase(), Math.max(1, Math.min(99, Math.round(((i + 1) / vals.length) * 99)))));
+  return m;
+}
+
+export function buildLeaderInputs<S extends StockLike>(
+  stocks: S[], groupOf: (s: S) => string, fundamentals: Map<string, FundLike>,
+  savedBy: Map<string, SavedRow>, rating: Map<string, number>,
+): LeaderInputs[] {
+  return stocks.map((s) => {
+    const sym = s.symbol.toUpperCase(), f = fundamentals.get(s.symbol) ?? fundamentals.get(sym), row = savedBy.get(sym);
+    const sc = (k: ProfileKey) => savedScore(row, k);
+    return {
+      symbol: sym, group: groupOf(s), rsRating: rating.get(sym) ?? null,
+      epsQ: f?.eps_quarterly_yoy ?? null, revQ: f?.revenue_quarterly_yoy ?? null, roe: f?.roe ?? null, netMargin: f?.net_margin ?? null,
+      momentum: sc("momentum"), growthProfile: sc("growth"), margins: sc("margins"), quality: sc("quality"), current: sc("current"),
+    };
+  });
 }

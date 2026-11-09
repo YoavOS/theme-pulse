@@ -16,6 +16,7 @@ import Clean21EmaScanModal from "@/components/rs/Clean21EmaScanModal";
 import SuperperformanceScanModal from "@/components/rs/SuperperformanceScanModal";
 import LeadersShortlistModal from "@/components/rs/LeadersShortlistModal";
 import IndustryLeadersModal from "@/components/rs/IndustryLeadersModal";
+import RankedIndustriesExportModal from "@/components/rs/RankedIndustriesExportModal";
 import { useSuperperformance } from "@/hooks/useSuperperformance";
 import SetupAnalyzerModal from "@/components/rs/SetupAnalyzerModal";
 import HighsLowsPanel, { hlWindowDays, type HlStock, type HlWindow } from "@/components/rs/HighsLowsPanel";
@@ -179,6 +180,7 @@ export default function RsAlpha() {
   const [superperfScanOpen, setSuperperfScanOpen] = useState(false);
   const [leadersOpen, setLeadersOpen] = useState(false);
   const [industryLeadersOpen, setIndustryLeadersOpen] = useState(false);
+  const [rankedExportOpen, setRankedExportOpen] = useState(false);
   const [superperfFilterOn, setSuperperfFilterOn] = useState(false);
   const { sets: superperfSets, fundamentalQualifiers: superperfSet } = useSuperperformance();
   const [hideOtc, setHideOtc] = useState<boolean>(() => {
@@ -1276,6 +1278,13 @@ export default function RsAlpha() {
                     <Crown size={12} /> Industry leaders
                   </button>
                   <button
+                    onClick={() => setRankedExportOpen(true)}
+                    className="inline-flex items-center gap-1.5 rounded-md border border-[hsl(199,85%,62%)]/60 bg-[hsl(199,85%,62%)]/15 px-3 py-1.5 text-xs font-semibold text-[hsl(199,85%,72%)] transition-colors hover:bg-[hsl(199,85%,62%)]/25"
+                    title="TradingView list: industries from strongest to weakest on a timeframe you pick, and inside each one, stocks from best to worst fundamentals vs their peers"
+                  >
+                    <Download size={12} /> Ranked industries list
+                  </button>
+                  <button
                     onClick={() => setSuperperfScanOpen(true)}
                     className="inline-flex items-center gap-1.5 rounded-md border border-[hsl(40,90%,55%)]/60 bg-[hsl(40,90%,55%)]/15 px-3 py-1.5 text-xs font-semibold text-[hsl(40,90%,65%)] transition-colors hover:bg-[hsl(40,90%,55%)]/25"
                     title="Score your stock list against growth-stock profiles (Minervini, O'Neil, Ryan, Current). Update only rescans stocks that are new or not scored in 2 weeks."
@@ -1541,6 +1550,14 @@ export default function RsAlpha() {
           if (!confirm("Start a fresh universe scan? This wipes the current scan queue and reseeds the full US market. Your live universe keeps serving reads until the new scan finishes and publishes.")) return;
           rebuildUniverse(mode, filters as unknown as Record<string, unknown>);
         }}
+      />
+
+      <RankedIndustriesExportModal
+        open={rankedExportOpen}
+        onOpenChange={setRankedExportOpen}
+        stocks={stocks}
+        isOtcSymbol={isOtcSymbol}
+        fundamentalsMap={fundamentalsMap}
       />
 
       <IndustryLeadersModal
