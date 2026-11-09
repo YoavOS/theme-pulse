@@ -392,6 +392,10 @@ export default function RsAlpha() {
     return Math.round(parts.reduce((sum, p) => sum + p.v * (p.w / tw), 0) * 100) / 100;
   };
 
+  // Stable reference for the ranked-industries export (recomputes only when the weights change).
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const overallRsForExport = useCallback((s: RsStock) => computeCustomOverall(s), [weights]);
+
   const getRsForTab = (s: RsStock, tab: TabId): number | null => {
     if (tab === "overall") return computeCustomOverall(s);
     return getRsField(s, tab);
@@ -1555,6 +1559,7 @@ export default function RsAlpha() {
       <RankedIndustriesExportModal
         open={rankedExportOpen}
         onOpenChange={setRankedExportOpen}
+        overallRs={overallRsForExport}
         stocks={stocks}
         isOtcSymbol={isOtcSymbol}
         fundamentalsMap={fundamentalsMap}

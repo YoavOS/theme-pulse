@@ -40,12 +40,14 @@ const load = (): Settings => { try { return { ...DEFAULTS, ...JSON.parse(localSt
 
 const ALL = 0; // slider value meaning "all"
 
-export default function RankedIndustriesExportModal({ open, onOpenChange, stocks, isOtcSymbol, fundamentalsMap }: {
+export default function RankedIndustriesExportModal({ open, onOpenChange, stocks, isOtcSymbol, fundamentalsMap, overallRs }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
   stocks: RsStock[];
   isOtcSymbol: (sym: string) => boolean;
   fundamentalsMap: Map<string, StockFundamentals>;
+  /** The stock's Overall RS with the user's RS Alpha weights. */
+  overallRs: (s: RsStock) => number | null;
 }) {
   const { rows: saved, thresholds } = useSuperperformance();
   const [st, setSt] = useState<Settings>(load);
@@ -61,10 +63,10 @@ export default function RankedIndustriesExportModal({ open, onOpenChange, stocks
   const groups = useMemo(() => {
     const items: RsInput[] = universe.map((s) => ({
       symbol: s.symbol.toUpperCase(), group: groupOf(s),
-      rs: { "1d": s.rs1d, "1w": s.rs1w, "1m": s.rs1m, "3m": s.rs3m, "6m": s.rs6m },
+      rs: { "1d": s.rs1d, "1w": s.rs1w, "1m": s.rs1m, "3m": s.rs3m, "6m": s.rs6m, overall: overallRs(s) },
     }));
     return rankGroups(items, st.tf, st.minMembers).filter((g) => !isJunkGroup(g.group));
-  }, [universe, groupOf, st.tf, st.minMembers]);
+  }, [universe, groupOf, st.tf, st.minMembers, overallRs]);
 
   // 2) Stocks inside each industry.
   const rating = useMemo(() => rsRatings(universe), [universe]);
@@ -79,7 +81,7 @@ export default function RankedIndustriesExportModal({ open, onOpenChange, stocks
   const tfRs = (sym: string): number | null => {
     const s = bySym.get(sym);
     if (!s) return null;
-    const v = st.tf === "1d" ? s.rs1d : st.tf === "1w" ? s.rs1w : st.tf === "1m" ? s.rs1m : st.tf === "3m" ? s.rs3m : st.tf === "6m" ? s.rs6m : s.rsOverall;
+    const v = st.tf === "1d" ? s.rs1d : st.tf === "1w" ? s.rs1w : st.tf === "1m" ? s.rs1m : st.tf === "3m" ? s.rs3m : st.tf === "6m" ? s.rs6m : overallRs(s);
     return typeof v === "number" && Number.isFinite(v) ? v : null;
   };
 
@@ -146,7 +148,7 @@ export default function RankedIndustriesExportModal({ open, onOpenChange, stocks
             <div className="flex flex-wrap gap-1">
               {TIMEFRAMES.map((t) => (
                 <button key={t.key} type="button" aria-pressed={st.tf === t.key} onClick={() => set("tf", t.key)}
-                  title={t.movers ? "Short-term movers: noisy — no evidence these ranks persist" : t.key === "overall" ? "Blend: 20% 1M, 40% 3M, 40% 6M" : undefined}
+                  title={t.movers ? "Short-term movers: noisy — no evidence these ranks persist" : t.tip}
                   className={`rounded-md border px-2.5 py-1 font-medium ${st.tf === t.key ? "border-primary bg-primary/15 text-primary" : "border-border text-muted-foreground hover:text-foreground"}`}>
                   {t.label}
                 </button>
@@ -206,7 +208,7 @@ export default function RankedIndustriesExportModal({ open, onOpenChange, stocks
                   <th className="px-2 py-1.5 text-left">#</th>
                   <th className="px-2 py-1.5 text-left">{GROUP_MODE_LABEL[st.mode]}</th>
                   <th className="px-2 py-1.5 text-right" title="1–99 among industries on this timeframe">Score</th>
-                  <th className="px-2 py-1.5 text-right" title={st.tf === "overall" ? "" : "Average RS of the members (return minus SPY, %), before shrinking"}>Avg RS</th>
+                  <th className="px-2 py-1.5 text-right" title={st.tf === "blend" ? "" : "Average RS of the members (return minus SPY, %), before shrinking"}>Avg RS</th>
                   <th className="px-2 py-1.5 text-right" title="Share of members beating SPY on this timeframe">Breadth</th>
                   <th className="px-2 py-1.5 text-left">Stocks, in export order</th>
                 </tr>
