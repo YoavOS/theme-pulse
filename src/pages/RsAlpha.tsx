@@ -16,7 +16,6 @@ import Clean21EmaScanModal from "@/components/rs/Clean21EmaScanModal";
 import SuperperformanceScanModal from "@/components/rs/SuperperformanceScanModal";
 import LeadersShortlistModal from "@/components/rs/LeadersShortlistModal";
 import IndustryLeadersModal from "@/components/rs/IndustryLeadersModal";
-import RankedIndustriesExportModal from "@/components/rs/RankedIndustriesExportModal";
 import { useSuperperformance } from "@/hooks/useSuperperformance";
 import SetupAnalyzerModal from "@/components/rs/SetupAnalyzerModal";
 import HighsLowsPanel, { hlWindowDays, type HlStock, type HlWindow } from "@/components/rs/HighsLowsPanel";
@@ -180,7 +179,6 @@ export default function RsAlpha() {
   const [superperfScanOpen, setSuperperfScanOpen] = useState(false);
   const [leadersOpen, setLeadersOpen] = useState(false);
   const [industryLeadersOpen, setIndustryLeadersOpen] = useState(false);
-  const [rankedExportOpen, setRankedExportOpen] = useState(false);
   const [superperfFilterOn, setSuperperfFilterOn] = useState(false);
   const { sets: superperfSets, fundamentalQualifiers: superperfSet } = useSuperperformance();
   const [hideOtc, setHideOtc] = useState<boolean>(() => {
@@ -1277,16 +1275,9 @@ export default function RsAlpha() {
                   <button
                     onClick={() => setIndustryLeadersOpen(true)}
                     className="inline-flex items-center gap-1.5 rounded-md border border-[hsl(199,85%,62%)]/60 bg-[hsl(199,85%,62%)]/15 px-3 py-1.5 text-xs font-semibold text-[hsl(199,85%,72%)] transition-colors hover:bg-[hsl(199,85%,62%)]/25"
-                    title="The best businesses in each industry, ranked against their own peers — with RS, stage and setup, so you know which stock to focus on when a group leads"
+                    title="Industries ranked by strength on a timeframe you pick, the best businesses in each one vs their peers — and a ranked TradingView export"
                   >
                     <Crown size={12} /> Industry leaders
-                  </button>
-                  <button
-                    onClick={() => setRankedExportOpen(true)}
-                    className="inline-flex items-center gap-1.5 rounded-md border border-[hsl(199,85%,62%)]/60 bg-[hsl(199,85%,62%)]/15 px-3 py-1.5 text-xs font-semibold text-[hsl(199,85%,72%)] transition-colors hover:bg-[hsl(199,85%,62%)]/25"
-                    title="TradingView list: industries from strongest to weakest on a timeframe you pick, and inside each one, stocks from best to worst fundamentals vs their peers"
-                  >
-                    <Download size={12} /> Ranked industries list
                   </button>
                   <button
                     onClick={() => setSuperperfScanOpen(true)}
@@ -1556,16 +1547,8 @@ export default function RsAlpha() {
         }}
       />
 
-      <RankedIndustriesExportModal
-        open={rankedExportOpen}
-        onOpenChange={setRankedExportOpen}
-        overallRs={overallRsForExport}
-        stocks={stocks}
-        isOtcSymbol={isOtcSymbol}
-        fundamentalsMap={fundamentalsMap}
-      />
-
       <IndustryLeadersModal
+        overallRs={overallRsForExport}
         open={industryLeadersOpen}
         onOpenChange={setIndustryLeadersOpen}
         stocks={stocks}
