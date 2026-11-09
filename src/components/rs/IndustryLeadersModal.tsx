@@ -1,6 +1,5 @@
-import { useMemo, useState } from "react";
-import { ArrowLeft, ChevronDown, ChevronRight, Copy, Crown, ExternalLink, Search } from "lucide-react";
-import { toast } from "sonner";
+import { useCallback, useMemo, useState } from "react";
+import { AlertTriangle, ArrowLeft, ChevronDown, ChevronRight, Crown, Download, ExternalLink, LayoutList, Search } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import type { RsStock } from "@/hooks/useRsAlpha";
@@ -15,13 +14,17 @@ import { GROUP_MODE_LABEL, groupKeyForIndustry, type GroupMode } from "@/lib/gro
 import { STAGE_COLORS, type StockStage } from "@/lib/stageAnalysis";
 import { STATE_NAMES, type StockBase } from "@/lib/bases";
 import { BUCKET_INFO, LEADER_PCT, MIN_COVERAGE, PILLARS, buildLeaderInputs, rankIndustries, rsRatings, type IndustrySummary, type LeaderRow } from "@/lib/industryLeaders";
+import { TIMEFRAMES, rankGroups, type GroupRank, type RsInput, type Timeframe } from "@/lib/industryRanking";
+import IndustryExportTab from "@/components/rs/IndustryExportTab";
 
 /**
  * Industry Leaders — the best businesses in each industry, ranked against their own peers.
  * Purpose: when an industry is leading, focus on the setup of its fundamental leader.
- *   Overview: every industry (strongest RS first) with its #1 fundamental stock, that stock's RS,
- *             stage and setup, and the runners-up.
- *   Industry: all members ranked, with the four pillars, RS, stage, setup and base.
+ * One timeframe (header) orders the industries everywhere in the panel:
+ *   Industries tab: every industry (strongest first) with its #1 fundamental stock, that stock's RS,
+ *                   stage and setup, and the runners-up; click one for all its members ranked.
+ *   Export tab:     the same order as a TradingView watchlist, stocks inside each industry from
+ *                   best to worst fundamentals vs peers.
  */
 
 const fmtPct = (v: number | null | undefined, d = 0) => (typeof v === "number" && Number.isFinite(v) ? `${v > 0 ? "+" : ""}${v.toFixed(d)}%` : "—");
@@ -65,12 +68,14 @@ function BaseCell({ b }: { b: StockBase | undefined }) {
 
 const tv = (sym: string) => `https://www.tradingview.com/chart/?symbol=${encodeURIComponent(sym)}`;
 
-export default function IndustryLeadersModal({ open, onOpenChange, stocks, isOtcSymbol, fundamentalsMap }: {
+export default function IndustryLeadersModal({ open, onOpenChange, stocks, isOtcSymbol, fundamentalsMap, overallRs }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
   stocks: RsStock[];
   isOtcSymbol: (sym: string) => boolean;
   fundamentalsMap: Map<string, StockFundamentals>;
+  /** The stock's Overall RS with the user's RS Alpha weights. */
+  overallRs: (s: RsStock) => number | null;
 }) {
   const { rows: saved, thresholds } = useSuperperformance();
   const { bySymbol: stageMap } = useStockStages(open);
@@ -83,7 +88,9 @@ export default function IndustryLeadersModal({ open, onOpenChange, stocks, isOtc
   const [q, setQ] = useState("");
   const [leadingOnly, setLeadingOnly] = useState(false);
   const [confirmedOnly, setConfirmedOnly] = useState(false);
-  const [perGroup, setPerGroup] = useState(1);
+  const [tf, setTfState] = useState<Timeframe>(() => { try { return (localStorage.getItem("industry-leaders-tf") as Timeframe) || "3m"; } catch { return "3m"; } });
+  const setTf = (t: Timeframe) => { setTfState(t); try { localStorage.setItem("industry-leaders-tf", t); } catch { /* ignore */ } };
+  const [tab, setTab] = useState<"industries" | "export">("industries");
   const [expanded, setExpanded] = useState<string | null>(null);
 
   const universe = useMemo(() => stocks.filter((s) => !isOtcSymbol(s.symbol)), [stocks, isOtcSymbol]);
@@ -92,12 +99,38 @@ export default function IndustryLeadersModal({ open, onOpenChange, stocks, isOtc
 
   const rating = useMemo(() => rsRatings(universe), [universe]);
 
-  const industries = useMemo<IndustrySummary[]>(() => {
-    const items = buildLeaderInputs(universe, (s) => groupKeyForIndustry(s.sector, mode), fundamentalsMap, savedBy, rating);
-    return rankIndustries(items).filter((g) => !/^(unknown|other|n\/a|—)$/i.test(g.group.trim()));
+  const isJunk = (g: string) => /^(unknown|other|n\/a|—)$/i.test(g.trim());
+  const groupOf = useCallback((s: RsStock) => groupKeyForIndustry(s.sector, mode), [mode]);
+
+  // Fundamentals vs peers, per industry.
+  const fundBy = useMemo(() => {
+    const items = buildLeaderInputs(universe, groupOf, fundamentalsMap, savedBy, rating);
+    return new Map<string, IndustrySummary>(rankIndustries(items, 1).map((g) => [g.group, g]));
     // thresholds: savedScore depends on the minimum-coverage setting, which refreshes `thresholds`.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [universe, fundamentalsMap, savedBy, rating, mode, thresholds]);
+  }, [universe, groupOf, fundamentalsMap, savedBy, rating, thresholds]);
+
+  // Industry strength on the timeframe (shrunk, clipped equal-weight RS — lib/industryRanking).
+  const groups = useMemo<GroupRank[]>(() => {
+    const items: RsInput[] = universe.map((s) => ({
+      symbol: s.symbol.toUpperCase(), group: groupOf(s),
+      rs: { "1d": s.rs1d, "1w": s.rs1w, "1m": s.rs1m, "3m": s.rs3m, "6m": s.rs6m, overall: overallRs(s) },
+    }));
+    return rankGroups(items, tf, 3).filter((g) => !isJunk(g.group)).map((g, i, arr) => ({
+      ...g, rank: i + 1, pct: arr.length > 1 ? Math.max(1, Math.min(99, Math.round(((arr.length - 1 - i) / (arr.length - 1)) * 98 + 1))) : 99,
+    }));
+  }, [universe, groupOf, tf, overallRs]);
+
+  /** Industries in strength order, each with its fundamental ranking. */
+  const industries = useMemo(() => groups.map((g) => ({ g, f: fundBy.get(g.group) })).filter((x): x is { g: GroupRank; f: IndustrySummary } => !!x.f), [groups, fundBy]);
+  const membersOf = useCallback((group: string) => universe.filter((s) => groupOf(s) === group).map((s) => s.symbol.toUpperCase()), [universe, groupOf]);
+  const tfRs = useCallback((sym: string): number | null => {
+    const s = bySym.get(sym);
+    if (!s) return null;
+    const v = tf === "1d" ? s.rs1d : tf === "1w" ? s.rs1w : tf === "1m" ? s.rs1m : tf === "3m" ? s.rs3m : tf === "6m" ? s.rs6m : overallRs(s);
+    return typeof v === "number" && Number.isFinite(v) ? v : null;
+  }, [bySym, tf, overallRs]);
+  const tfInfo = TIMEFRAMES.find((t) => t.key === tf)!;
 
   const setupOf = (sym: string) => {
     const s = bySym.get(sym);
@@ -107,25 +140,20 @@ export default function IndustryLeadersModal({ open, onOpenChange, stocks, isOtc
   const leadingCut = Math.max(1, Math.ceil(industries.length * 0.25));
   const overview = useMemo(() => {
     const needle = q.trim().toLowerCase();
-    return industries.filter((g) =>
-      g.leaders.length > 0
-      && (!leadingOnly || g.rsRank <= leadingCut)
-      && (!confirmedOnly || g.leaders[0].bucket === "confirmed")
-      && (!needle || g.group.toLowerCase().includes(needle) || g.leaders.slice(0, 3).some((r) => r.symbol.toLowerCase().startsWith(needle))));
+    return industries.filter(({ g, f }) =>
+      f.leaders.length > 0
+      && (!leadingOnly || g.rank <= leadingCut)
+      && (!confirmedOnly || f.leaders[0].bucket === "confirmed")
+      && (!needle || g.group.toLowerCase().includes(needle) || f.leaders.slice(0, 3).some((r) => r.symbol.toLowerCase().startsWith(needle))));
   }, [industries, q, leadingOnly, confirmedOnly, leadingCut]);
 
-  const current = view ? industries.find((g) => g.group === view) ?? null : null;
+  const sel = view ? industries.find((x) => x.g.group === view) ?? null : null;
+  const current = sel?.f ?? null;
   const stats = useMemo(() => ({
     industries: industries.length,
-    ranked: industries.reduce((a, g) => a + g.ranked, 0),
-    confirmed: industries.filter((g) => g.leaders[0]?.bucket === "confirmed").length,
+    ranked: industries.reduce((a, x) => a + x.f.ranked, 0),
+    confirmed: industries.filter((x) => x.f.leaders[0]?.bucket === "confirmed").length,
   }), [industries]);
-
-  const copyLeaders = async () => {
-    const text = overview.map((g) => `###${g.group.replace(/[,\n]/g, " ")}\n${g.leaders.slice(0, perGroup).map((r) => r.symbol).join("\n")}`).join("\n");
-    try { await navigator.clipboard.writeText(text); toast.success(`Copied ${overview.length} industries × top ${perGroup}`, { description: "TradingView sections — paste into Import symbols." }); }
-    catch { toast.error("Clipboard blocked"); }
-  };
 
   const raw = (sym: string) => {
     const f = fundamentalsMap.get(sym), row = savedBy.get(sym);
@@ -158,39 +186,67 @@ export default function IndustryLeadersModal({ open, onOpenChange, stocks, isOtc
 
   return (
     <Dialog open={open} onOpenChange={(v) => { onOpenChange(v); if (!v) setExpanded(null); }}>
-      <DialogContent className="flex h-[92vh] w-[96vw] max-w-[1400px] flex-col gap-0 overflow-hidden p-0">
-        <DialogHeader className="border-b border-border px-5 py-3">
-          <DialogTitle className="flex items-center gap-2"><Crown size={16} className="text-[hsl(40,90%,60%)]" /> Industry Leaders</DialogTitle>
-          <DialogDescription className="text-xs">
-            The best businesses in each industry, ranked against their own peers. When an industry leads, focus on its fundamental leader's setup.
-          </DialogDescription>
+      <DialogContent onOpenAutoFocus={(e) => e.preventDefault()} className="flex h-[92vh] w-[96vw] max-w-[1400px] flex-col gap-0 overflow-hidden p-0">
+        <DialogHeader className="space-y-0 border-b border-border px-5 pb-0 pt-3">
+          <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-2 pr-8">
+            <div>
+              <DialogTitle className="flex items-center gap-2"><Crown size={16} className="text-[hsl(40,90%,60%)]" /> Industry Leaders</DialogTitle>
+              <DialogDescription className="mt-0.5 text-xs">
+                Industries ranked by strength, and the best businesses in each one compared with their own peers.
+              </DialogDescription>
+            </div>
+            {/* One timeframe + grouping for the whole panel */}
+            <div className="flex flex-wrap items-center gap-2 text-xs">
+              <span className="text-muted-foreground">Strength over</span>
+              <div className="inline-flex rounded-md border border-border p-0.5" role="group" aria-label="Timeframe">
+                {TIMEFRAMES.map((t) => (
+                  <button key={t.key} type="button" aria-pressed={tf === t.key} onClick={() => setTf(t.key)}
+                    title={t.movers ? "Short-term movers: noisy — no evidence these ranks persist" : t.tip}
+                    className={`rounded px-2 py-0.5 font-medium transition-colors ${tf === t.key ? "bg-primary/15 text-primary" : "text-muted-foreground hover:text-foreground"}`}>
+                    {t.label}
+                  </button>
+                ))}
+              </div>
+              <select value={mode} onChange={(e) => changeMode(e.target.value as GroupMode)} className="h-7 rounded-md border border-border bg-background px-2" aria-label="Group by">
+                {(["industry", "subIndustry", "sector"] as GroupMode[]).map((m) => <option key={m} value={m}>by {GROUP_MODE_LABEL[m]}</option>)}
+              </select>
+            </div>
+          </div>
+          {/* Tabs */}
+          <div className="mt-2 flex items-end gap-1 text-xs" role="tablist">
+            {([["industries", "Industries", LayoutList], ["export", "Export to TradingView", Download]] as const).map(([k, label, Icon]) => (
+              <button key={k} role="tab" aria-selected={tab === k} onClick={() => setTab(k)}
+                className={`-mb-px inline-flex items-center gap-1.5 border-b-2 px-3 py-2 font-medium transition-colors ${tab === k ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"}`}>
+                <Icon size={13} /> {label}
+              </button>
+            ))}
+            <span className="ml-auto pb-2 text-[11px] text-muted-foreground">{stats.industries} groups · {stats.ranked} stocks ranked · {stats.confirmed} confirmed leader{stats.confirmed === 1 ? "" : "s"}</span>
+          </div>
         </DialogHeader>
 
-        {/* Toolbar */}
-        <div className="flex flex-wrap items-center gap-2 border-b border-border bg-card/40 px-5 py-2 text-xs">
+        {tfInfo.movers && (
+          <div className="flex items-center gap-2 border-b border-border bg-[hsl(40,90%,55%)]/10 px-5 py-1.5 text-xs text-[hsl(40,90%,70%)]">
+            <AlertTriangle size={13} /> {tfInfo.label} shows short-term movers: it mostly reflects recent news, and there's no evidence these group ranks persist. Use 1M–6M or Overall for leadership.
+          </div>
+        )}
+
+        {tab === "export" ? (
+          <IndustryExportTab groups={groups.filter((g) => fundBy.has(g.group))} fundBy={fundBy} membersOf={membersOf} rating={rating} savedBy={savedBy} tfRs={tfRs} tfLabel={tfInfo.label} />
+        ) : (<>
+        {/* Industries tab: filters */}
+        <div className="flex flex-wrap items-center gap-3 border-b border-border px-5 py-2 text-xs">
           {view ? (
             <button onClick={() => { setView(null); setExpanded(null); }} className="inline-flex items-center gap-1 rounded-md border border-border px-2.5 py-1 hover:bg-accent"><ArrowLeft size={12} /> All industries</button>
           ) : (
             <>
               <span className="relative">
                 <Search size={12} className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Industry or ticker…" className="h-7 w-48 rounded-md border border-border bg-background pl-7 pr-2 text-xs" />
+                <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Industry or ticker…" className="h-7 w-52 rounded-md border border-border bg-background pl-7 pr-2 text-xs" />
               </span>
-              <label className="flex items-center gap-1.5" title={`Top 25% of industries by median RS rating (${leadingCut} of ${industries.length})`}><Checkbox checked={leadingOnly} onCheckedChange={(v) => setLeadingOnly(v === true)} /> Leading industries only</label>
+              <label className="flex items-center gap-1.5" title={`Top 25% of industries on ${tfInfo.label} (${leadingCut} of ${industries.length})`}><Checkbox checked={leadingOnly} onCheckedChange={(v) => setLeadingOnly(v === true)} /> Leading industries only</label>
               <label className="flex items-center gap-1.5" title={BUCKET_INFO.confirmed.tip}><Checkbox checked={confirmedOnly} onCheckedChange={(v) => setConfirmedOnly(v === true)} /> Leader is confirmed (RS 80+)</label>
+              <button onClick={() => setTab("export")} className="ml-auto inline-flex items-center gap-1 text-muted-foreground hover:text-foreground"><Download size={12} /> Export this order</button>
             </>
-          )}
-          <select value={mode} onChange={(e) => changeMode(e.target.value as GroupMode)} className="h-7 rounded-md border border-border bg-background px-2 text-xs" aria-label="Group by">
-            {(["industry", "subIndustry", "sector"] as GroupMode[]).map((m) => <option key={m} value={m}>by {GROUP_MODE_LABEL[m]}</option>)}
-          </select>
-          <span className="text-muted-foreground">{stats.industries} groups · {stats.ranked} stocks ranked · {stats.confirmed} confirmed leader{stats.confirmed === 1 ? "" : "s"}</span>
-          {!view && (
-            <span className="ml-auto inline-flex items-center gap-1.5">
-              <select value={perGroup} onChange={(e) => setPerGroup(Number(e.target.value))} className="h-7 rounded-md border border-border bg-background px-1.5 text-xs" aria-label="Leaders per industry to copy">
-                {[1, 2, 3, 5].map((n) => <option key={n} value={n}>top {n}</option>)}
-              </select>
-              <button onClick={copyLeaders} disabled={!overview.length} className="inline-flex items-center gap-1 rounded-md border border-border px-2.5 py-1 hover:bg-accent disabled:opacity-40"><Copy size={12} /> Copy for TradingView</button>
-            </span>
           )}
         </div>
 
@@ -202,9 +258,9 @@ export default function IndustryLeadersModal({ open, onOpenChange, stocks, isOtc
             <table className="w-full text-sm">
               <thead className="sticky top-0 z-[1] bg-background text-[11px] uppercase tracking-wide text-muted-foreground">
                 <tr className="border-b border-border">
-                  <th className="px-3 py-2 text-left" title="Industry rank by the median RS rating of its stocks">#</th>
+                  <th className="px-3 py-2 text-left" title={`Industry rank by strength on ${tfInfo.label}`}>#</th>
                   <th className="px-2 py-2 text-left">{GROUP_MODE_LABEL[mode]}</th>
-                  <th className="px-2 py-2 text-left" title="Median RS rating of the industry's stocks">Group RS</th>
+                  <th className="px-2 py-2 text-left" title={`Industry strength on ${tfInfo.label}, 1–99 among industries. Below: members' average RS and the share beating SPY.`}>Strength · {tfInfo.label}</th>
                   <th className="px-2 py-2 text-left">Fundamental leader</th>
                   <th className="px-2 py-2 text-left" title="Industry-relative fundamental score (0–100)">Fund.</th>
                   <th className="px-2 py-2 text-right">RS</th>
@@ -216,16 +272,19 @@ export default function IndustryLeadersModal({ open, onOpenChange, stocks, isOtc
                 </tr>
               </thead>
               <tbody>
-                {overview.map((g) => {
+                {overview.map(({ g: gr, f: g }) => {
                   const L = g.leaders[0], st = stageMap.get(L.symbol), fh = st?.features?.pctFrom52wHigh;
                   return (
-                    <tr key={g.group} onClick={() => setView(g.group)} className={`cursor-pointer border-b border-border/40 hover:bg-muted/30 ${g.rsRank <= leadingCut ? "" : "opacity-90"}`}>
-                      <td className="px-3 py-1.5 font-mono text-xs text-muted-foreground">{g.rsRank}</td>
+                    <tr key={g.group} onClick={() => setView(g.group)} className="cursor-pointer border-b border-border/40 hover:bg-muted/30">
+                      <td className="px-3 py-1.5 font-mono text-xs text-muted-foreground">{gr.rank}</td>
                       <td className="max-w-[240px] px-2 py-1.5">
                         <div className="truncate font-medium" title={g.group}>{g.group}</div>
-                        <div className="text-[11px] text-muted-foreground">{g.ranked} ranked · {g.members} stocks</div>
+                        <div className="text-[11px] text-muted-foreground">{g.ranked} ranked · {g.members} stocks{gr.lowConfidence ? <span className="text-[hsl(40,90%,62%)]" title="Fewer than 5 stocks: rank pulled toward the market average"> · small</span> : null}</div>
                       </td>
-                      <td className="px-2 py-1.5"><Bar v={g.rsMedian === null ? null : Math.round(g.rsMedian)} color="hsl(222,82%,64%)" /></td>
+                      <td className="px-2 py-1.5">
+                        <Bar v={gr.pct} color="hsl(222,82%,64%)" />
+                        <div className="mt-0.5 font-mono text-[10px] text-muted-foreground">{gr.rawMean !== null ? `avg ${gr.rawMean > 0 ? "+" : ""}${gr.rawMean.toFixed(1)} · ` : ""}{Math.round(gr.breadth)}% up</div>
+                      </td>
                       <td className="px-2 py-1.5">
                         <span className="inline-flex flex-wrap items-center gap-1.5">
                           <a href={tv(L.symbol)} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} className="font-mono font-bold hover:text-primary">{L.symbol}</a>
@@ -254,7 +313,7 @@ export default function IndustryLeadersModal({ open, onOpenChange, stocks, isOtc
             <div className="space-y-3 p-5">
               <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
                 <h3 className="text-lg font-semibold">{current.group}</h3>
-                <span className="text-xs text-muted-foreground">#{current.rsRank} of {industries.length} by group RS · median RS {current.rsMedian !== null ? Math.round(current.rsMedian) : "—"} · {current.members} stocks, {current.ranked} with enough data</span>
+                <span className="text-xs text-muted-foreground">#{sel?.g.rank} of {industries.length} on {tfInfo.label} · strength {sel?.g.pct} · {sel ? Math.round(sel.g.breadth) : "—"}% of members beating SPY · {current.members} stocks, {current.ranked} with enough data</span>
               </div>
 
               {(() => {
@@ -339,8 +398,9 @@ export default function IndustryLeadersModal({ open, onOpenChange, stocks, isOtc
         <div className="border-t border-border px-5 py-2 text-[11px] leading-snug text-muted-foreground">
           Fundamental score = industry percentile on Growth 35%, Trend 20%, Quality 25%, Strength 20% (hover the column names). Top fundamentals = score {LEADER_PCT}+ or #1 in the group.
           {" "}<b className="font-medium text-foreground">Confirmed</b> = top fundamentals + RS 80+ · <b className="font-medium text-foreground">Emerging</b> = top fundamentals, RS under 70 · <b className="font-medium text-foreground">Price only</b> = RS 80+ with bottom-half fundamentals.
-          {" "}Groups with fewer than 3 stocks are left out. Ranks are within this app's universe.
+          {" "}Industry strength = average RS of the members on the timeframe, outliers capped, small groups pulled toward the market average. Groups with fewer than 3 stocks are left out. Ranks are within this app's universe.
         </div>
+        </>)}
       </DialogContent>
     </Dialog>
   );
