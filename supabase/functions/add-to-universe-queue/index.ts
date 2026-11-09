@@ -16,13 +16,20 @@ const corsHeaders = {
 //   2) Pre-filter (price, ADR, $-volume)
 //   3) Finnhub profile2 → market cap, sector, OTC check
 //   4) Upsert directly into qualified_rs_universe
-//   5) Kick calculate-rs-scores so RS columns get filled
+//   5) Score RS for just the added symbols (calculate-rs-scores { symbols })
+//
+// Body: { symbols: string[], force?: boolean, pin?: boolean, source?: string }
+//   force — skip the qualification filters (price, ADR, $-volume, market cap, OTC): used when a
+//           list the user imports must show every stock. Tickers with no price data at all
+//           (typos, delisted) are still rejected.
+//   pin   — record the added symbols in universe_pins so a universe rebuild keeps them.
 // ============================================================
 
 const YAHOO_PARALLEL = 8;
 const FINNHUB_DELAY_MS = 1200;
 const ADR_LOOKBACK_DAYS = 14;
 const MAX_SYMBOLS = 100;
+const RS_BATCH = 15;
 
 const DEFAULT_FILTERS = {
   MIN_MARKET_CAP_M: 300,
@@ -110,6 +117,9 @@ Deno.serve(async (req) => {
     try { body = await req.json(); } catch (_) { /* */ }
 
     const rawSymbols: unknown = body?.symbols;
+    const force = body?.force === true;
+    const pin = body?.pin === true;
+    const source = typeof body?.source === "string" ? String(body.source).slice(0, 40) : "list";
     if (!Array.isArray(rawSymbols)) {
       return new Response(JSON.stringify({ error: "symbols[] required" }), {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -155,7 +165,8 @@ Deno.serve(async (req) => {
 
     for (const sym of toProcess) {
       const y = yahooMap[sym];
-      if (!y || y.price == null) { notQualified.push({ symbol: sym, reason: "no price data" }); continue; }
+      if (!y || y.price == null) { notQualified.push({ symbol: sym, reason: "no price data (check the ticker)" }); continue; }
+      if (force) { candidates.push(sym); continue; }
       if (y.price < FILTERS.MIN_PRICE) { notQualified.push({ symbol: sym, reason: `price < $${FILTERS.MIN_PRICE}` }); continue; }
       if (y.adrPct == null || y.adrPct < FILTERS.MIN_ADR_PCT) { notQualified.push({ symbol: sym, reason: `ADR < ${FILTERS.MIN_ADR_PCT}%` }); continue; }
       if (y.avgVolume10d == null) { notQualified.push({ symbol: sym, reason: "no volume data" }); continue; }
@@ -170,12 +181,14 @@ Deno.serve(async (req) => {
       const y = yahooMap[sym];
       try {
         const profRes = await fetch(`https://finnhub.io/api/v1/stock/profile2?symbol=${sym}&token=${FINNHUB_KEY}`);
+        let prof: any = null;
         if (profRes.status === 429) {
-          notQualified.push({ symbol: sym, reason: "finnhub rate limited" });
           await sleep(2000);
-          continue;
+          if (!force) { notQualified.push({ symbol: sym, reason: "finnhub rate limited" }); continue; }
+          // force: add it anyway, without company name / industry (filled by the next universe scan)
+        } else {
+          prof = await profRes.json().catch(() => null);
         }
-        const prof = await profRes.json();
         await sleep(FINNHUB_DELAY_MS);
 
         const exch = String(prof?.exchange ?? "").toUpperCase();
@@ -184,21 +197,21 @@ Deno.serve(async (req) => {
           (/^[A-Z]{5}$/.test(sym) && sym.endsWith("F"));
         const mcM = prof?.marketCapitalization;
 
-        if (isOtc && FILTERS.EXCLUDE_OTC) {
+        if (isOtc && FILTERS.EXCLUDE_OTC && !force) {
           notQualified.push({ symbol: sym, reason: `OTC (${exch})` });
           continue;
         }
-        if (FILTERS.MIN_MARKET_CAP_M > 0 && (!mcM || mcM < FILTERS.MIN_MARKET_CAP_M)) {
+        if (!force && FILTERS.MIN_MARKET_CAP_M > 0 && (!mcM || mcM < FILTERS.MIN_MARKET_CAP_M)) {
           notQualified.push({ symbol: sym, reason: `market cap < $${FILTERS.MIN_MARKET_CAP_M}M` });
           continue;
         }
 
-        const dollarVolume = (y.avgVolume10d as number) * (y.price as number);
+        const dollarVolume = y.avgVolume10d != null && y.price != null ? y.avgVolume10d * y.price : null;
         const { error: upsertErr } = await supabase.from("qualified_rs_universe").upsert({
           symbol: sym,
           company_name: prof?.name || sym,
           sector: prof?.finnhubIndustry || null,
-          market_cap: mcM,
+          market_cap: mcM ?? null,
           current_price: y.price,
           avg_dollar_volume: dollarVolume,
           adr_percent: y.adrPct,
@@ -215,28 +228,27 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Kick RS recalculation in the background so the newly added rows
-    // get RS / return columns filled. Don't await.
-    if (added.length > 0) {
-      (async () => {
-        try {
-          let offset = 0;
-          for (let i = 0; i < 500; i++) {
-            const { data: rsData, error: rsErr } = await supabase.functions.invoke(
-              "calculate-rs-scores", { body: { offset } },
-            );
-            if (rsErr) { console.error("calculate-rs-scores invoke error:", rsErr); break; }
-            if (rsData?.done || rsData?.next_offset == null) break;
-            offset = rsData.next_offset;
-          }
-        } catch (e) { console.error("RS recalc loop error:", e); }
-      })();
+    // Keep them through universe rebuilds (swap_qualified_rs_universe re-adds pinned symbols).
+    if (pin && added.length > 0) {
+      const { error: pinErr } = await supabase.from("universe_pins")
+        .upsert(added.map((symbol) => ({ symbol, source })), { onConflict: "symbol", ignoreDuplicates: true });
+      if (pinErr) console.error("universe_pins upsert error:", pinErr);
+    }
+
+    // Score RS / returns for just the added rows, before answering, so the app can show them
+    // straight away. (RS = own return − SPY's, independent of the rest of the universe.)
+    let rsScored = 0;
+    for (let i = 0; i < added.length; i += RS_BATCH) {
+      const { error: rsErr } = await supabase.functions.invoke("calculate-rs-scores", { body: { symbols: added.slice(i, i + RS_BATCH) } });
+      if (rsErr) { console.error("calculate-rs-scores invoke error:", rsErr); break; }
+      rsScored += Math.min(RS_BATCH, added.length - i);
     }
 
     return new Response(JSON.stringify({
       ok: true,
       added: added.length,
       addedSymbols: added,
+      rsScored,
       alreadyInUniverse: Array.from(alreadyInUniverse),
       notQualified,
     }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });

@@ -105,6 +105,8 @@ interface Props {
   emaDistances?: Map<string, EmaDistanceInfo>;
   /** Per-profile sets of tickers qualifying (score ≥ 80) in the Superperformance Stocks list. */
   superperfSets?: Partial<Record<"minervini" | "oneil" | "ryan" | "current", Set<string>>>;
+  /** Reload the universe (after tickers from the list were added to it). */
+  onUniverseChanged?: () => void | Promise<void>;
 }
 
 // Strip exchange prefixes (NYSE:, NASDAQ:, AMEX:, BATS:, ARCA:, CBOE:, OTC:, etc.)
@@ -172,7 +174,7 @@ function emaColor(d: number | null | undefined): string {
 export default function CustomListAnalyzerModal({
   open, onOpenChange, tabId, tabLabel, universe,
   getRsForTab, getReturnField, isOtcSymbol, fundamentalsMap,
-  coilScores, coilShortDays, coilLongDays, superperfSets,
+  coilScores, coilShortDays, coilLongDays, superperfSets, onUniverseChanged,
 }: Props) {
   const [raw, setRaw] = useState<string>("");
   const [analyzed, setAnalyzed] = useState<boolean>(false);
@@ -431,6 +433,53 @@ export default function CustomListAnalyzerModal({
 
   const visibleMissing = hideMissing ? [] : missing;
 
+  // ── Add the list's tickers that aren't in the universe yet ─────────────────────
+  // So the whole imported list can be sorted and filtered, missing tickers are added to the
+  // universe (skipping the universe filters), pinned so a universe rebuild keeps them, and given RS
+  // scores straight away. Tickers with no price data at all (typos, delisted) can't be added.
+  const [autoAdd, setAutoAdd] = useState<boolean>(() => { try { return localStorage.getItem("rs-analyzer-auto-add") !== "0"; } catch { return true; } });
+  useEffect(() => { try { localStorage.setItem("rs-analyzer-auto-add", autoAdd ? "1" : "0"); } catch { /* ignore */ } }, [autoAdd]);
+  const [adding, setAdding] = useState<{ done: number; total: number } | null>(null);
+  const [addFailed, setAddFailed] = useState<Map<string, string>>(new Map());
+  const attemptedRef = useRef<Set<string>>(new Set());
+  const addMissingToUniverse = useCallback(async (symbols: string[]) => {
+    const todo = symbols.filter((t) => !attemptedRef.current.has(t));
+    if (!todo.length) return;
+    todo.forEach((t) => attemptedRef.current.add(t));
+    const CHUNK = 20;
+    let added = 0;
+    const failed = new Map<string, string>();
+    setAdding({ done: 0, total: todo.length });
+    for (let i = 0; i < todo.length; i += CHUNK) {
+      const slice = todo.slice(i, i + CHUNK);
+      try {
+        const { data, error } = await supabase.functions.invoke("add-to-universe-queue", {
+          body: { symbols: slice, force: true, pin: true, source: "list-analyzer" },
+        });
+        if (error) throw error;
+        added += Number(data?.added ?? 0);
+        for (const n of (data?.notQualified ?? []) as { symbol: string; reason: string }[]) failed.set(n.symbol, n.reason);
+        const seen = new Set<string>([...((data?.addedSymbols ?? []) as string[]), ...((data?.alreadyInUniverse ?? []) as string[]), ...failed.keys()]);
+        for (const t of slice) if (!seen.has(t)) failed.set(t, "not a valid ticker");
+      } catch (e) {
+        for (const t of slice) failed.set(t, e instanceof Error ? e.message : "request failed");
+      }
+      setAdding({ done: Math.min(i + CHUNK, todo.length), total: todo.length });
+    }
+    setAddFailed((prev) => new Map([...prev, ...failed]));
+    if (added > 0) await onUniverseChanged?.();
+    setAdding(null);
+    if (added > 0) toast.success(`Added ${added} new stock${added === 1 ? "" : "s"} to the universe.`, {
+      description: failed.size ? `${failed.size} couldn't be added (no price data — check the ticker).` : "They're pinned, so a universe rebuild keeps them.",
+    });
+    else if (failed.size) toast.error(`${failed.size} ticker${failed.size === 1 ? "" : "s"} couldn't be added.`, { description: [...failed.keys()].slice(0, 10).join(", ") });
+  }, [onUniverseChanged]);
+  useEffect(() => {
+    if (!open || !analyzed || !autoAdd || adding || universe.length === 0) return;
+    const todo = missing.filter((t) => !attemptedRef.current.has(t));
+    if (todo.length) void addMissingToUniverse(todo);
+  }, [open, analyzed, autoAdd, adding, universe.length, missing, addMissingToUniverse]);
+
   // Sections view — like the Custom TradingView list: each industry (or sector / sub-industry / theme)
   // gets its own ###heading. Groups with the highest average RS come first; inside a group the
   // stocks keep the Sort By order chosen above.
@@ -667,6 +716,9 @@ export default function CustomListAnalyzerModal({
                 <label className="flex items-center gap-2 text-xs">
                   <Checkbox checked={hideMissing} onCheckedChange={(v) => setHideMissing(!!v)} /> Hide unmatched tickers
                 </label>
+                <label className="flex items-center gap-2 text-xs" title="Tickers from the list that aren't in the universe are added to it (even if they don't pass the universe filters), get RS scores right away, and stay through universe rebuilds.">
+                  <Checkbox checked={autoAdd} onCheckedChange={(v) => setAutoAdd(!!v)} /> Add missing tickers to the universe
+                </label>
                 {([
                   { key: "current",   label: "Current ≥ 80" },
                   { key: "minervini", label: "Minervini ≥ 80" },
@@ -810,6 +862,17 @@ export default function CustomListAnalyzerModal({
               <div className="flex flex-wrap items-center gap-3">
                 <span><span className="font-semibold text-foreground">{rows.length}</span> shown</span>
                 <span className="text-muted-foreground">· {matched.length} matched in universe · {missing.length} unmatched · {inputTickers.length} input</span>
+                {adding && <span className="inline-flex items-center gap-1 text-primary"><Loader2 size={11} className="animate-spin" /> Adding {adding.total} new stock{adding.total === 1 ? "" : "s"} to the universe… {adding.done}/{adding.total}</span>}
+                {!adding && missing.length > 0 && !autoAdd && (
+                  <button onClick={() => { void addMissingToUniverse(missing); }} className="rounded-md border border-primary/50 px-2 py-0.5 text-primary hover:bg-primary/10">
+                    Add {missing.length} to the universe
+                  </button>
+                )}
+                {!adding && visibleMissing.length > 0 && (autoAdd || addFailed.size > 0) && (
+                  <span className="text-muted-foreground" title={visibleMissing.map((t) => `${t}: ${addFailed.get(t) ?? "not added yet"}`).join("\n")}>
+                    · not added: <span className="font-mono">{visibleMissing.slice(0, 6).join(", ")}{visibleMissing.length > 6 ? ` +${visibleMissing.length - 6}` : ""}</span>
+                  </span>
+                )}
                 {emaLoading && <span className="inline-flex items-center gap-1 text-muted-foreground"><Loader2 size={11} className="animate-spin" /> EMA distances loading…</span>}
               </div>
               <div className="flex flex-wrap items-center gap-2">

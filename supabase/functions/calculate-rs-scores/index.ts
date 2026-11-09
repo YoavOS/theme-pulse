@@ -71,13 +71,20 @@ Deno.serve(async (req) => {
 
     const body = await req.json().catch(() => ({}));
     const offset: number = body.offset ?? 0;
+    // Optional: score only these symbols (e.g. stocks just added from a list). RS is a stock's own
+    // return minus SPY's, so it doesn't depend on the rest of the universe.
+    const only: string[] | null = Array.isArray(body.symbols)
+      ? [...new Set((body.symbols as unknown[]).filter((x): x is string => typeof x === "string").map((x) => x.trim().toUpperCase()).filter(Boolean))].slice(0, BATCH_PER_INVOCATION)
+      : null;
 
-    // 1. Load qualified universe (paged)
-    const { data: universe, count } = await supabase
-      .from("qualified_rs_universe")
-      .select("symbol, current_price", { count: "exact" })
-      .order("symbol")
-      .range(offset, offset + BATCH_PER_INVOCATION - 1);
+    // 1. Load qualified universe (paged, or just the requested symbols)
+    const { data: universe, count } = only
+      ? await supabase.from("qualified_rs_universe").select("symbol, current_price", { count: "exact" }).in("symbol", only.length ? only : ["__none__"])
+      : await supabase
+        .from("qualified_rs_universe")
+        .select("symbol, current_price", { count: "exact" })
+        .order("symbol")
+        .range(offset, offset + BATCH_PER_INVOCATION - 1);
 
     if (!universe || universe.length === 0) {
       return new Response(
@@ -207,7 +214,7 @@ Deno.serve(async (req) => {
     }
 
     const nextOffset = offset + universe.length;
-    const done = nextOffset >= (count ?? 0);
+    const done = only ? true : nextOffset >= (count ?? 0);
 
     return new Response(
       JSON.stringify({
