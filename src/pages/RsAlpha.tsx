@@ -1458,6 +1458,7 @@ export default function RsAlpha() {
       />
 
       <CustomListAnalyzerModal
+        onUniverseChanged={reloadUniverse}
         open={analyzerOpen}
         onOpenChange={setAnalyzerOpen}
         tabId={activeTab}
