@@ -8,27 +8,30 @@
 //   3. shrunk toward the universe mean for small groups (empirical Bayes):
 //        score = (n·mean + k·universeMean) / (n + k)
 //      k = 5 for 1M/3M/6M (a 5-stock group keeps half its own signal), 10 for the noisier 1D/1W.
-//   Overall = 0.2·z(1M) + 0.4·z(3M) + 0.4·z(6M) of the group scores (1D/1W left out: no evidence
-//   that short-term group ranks persist).
+//   Overall = the app's Overall RS per stock (the user's RS Alpha weights), ranked like any timeframe.
+//   Blend   = 0.2·z(1M) + 0.4·z(3M) + 0.4·z(6M) of the group scores (research default; 1D/1W left
+//             out: no evidence that short-term group ranks persist).
 // Breadth (shown, not scored) = (members beating SPY + 1) / (n + 2).
 // Groups with fewer than `minMembers` stocks are left out. Ties: more members, then breadth, then name.
 // The k values, clip bounds and Overall weights are judgment calls — kept as named constants.
 // ─────────────────────────────────────────────────────────────
 
-export type Timeframe = "1d" | "1w" | "1m" | "3m" | "6m" | "overall";
-export const TIMEFRAMES: { key: Timeframe; label: string; movers?: boolean }[] = [
+export type Timeframe = "1d" | "1w" | "1m" | "3m" | "6m" | "overall" | "blend";
+type StockTf = Exclude<Timeframe, "blend">;
+export const TIMEFRAMES: { key: Timeframe; label: string; movers?: boolean; tip?: string }[] = [
   { key: "1d", label: "1D", movers: true },
   { key: "1w", label: "1W", movers: true },
   { key: "1m", label: "1M" },
   { key: "3m", label: "3M" },
   { key: "6m", label: "6M" },
-  { key: "overall", label: "Overall" },
+  { key: "overall", label: "Overall", tip: "Your Overall RS — the same weights as the RS Alpha Overall tab" },
+  { key: "blend", label: "Blend", tip: "Research blend of the industry ranks: 20% 1M, 40% 3M, 40% 6M" },
 ];
-export const SHRINK_K: Record<Exclude<Timeframe, "overall">, number> = { "1d": 10, "1w": 10, "1m": 5, "3m": 5, "6m": 5 };
-export const OVERALL_WEIGHTS: [Exclude<Timeframe, "overall" | "1d" | "1w">, number][] = [["1m", 0.2], ["3m", 0.4], ["6m", 0.4]];
+export const SHRINK_K: Record<StockTf, number> = { "1d": 10, "1w": 10, "1m": 5, "3m": 5, "6m": 5, overall: 5 };
+export const BLEND_WEIGHTS: [Exclude<StockTf, "overall" | "1d" | "1w">, number][] = [["1m", 0.2], ["3m", 0.4], ["6m", 0.4]];
 const CLIP = [0.025, 0.975] as const;
 
-export interface RsInput { symbol: string; group: string; rs: Partial<Record<Exclude<Timeframe, "overall">, number | null>> }
+export interface RsInput { symbol: string; group: string; rs: Partial<Record<StockTf, number | null>> }
 
 export interface GroupRank {
   group: string;
@@ -38,7 +41,7 @@ export interface GroupRank {
   pct: number;          // 1–99 percentile among the ranked groups
   rank: number;         // 1 = strongest
   breadth: number;      // 0–100, shrunk share of members beating SPY
-  rawMean: number | null; // unshrunk mean of clipped RS (Overall: null)
+  rawMean: number | null; // unshrunk mean of clipped RS (Blend: null)
   lowConfidence: boolean; // 3–4 members
 }
 
@@ -49,7 +52,7 @@ function quantile(sorted: number[], q: number) {
   return sorted[lo] + (sorted[hi] - sorted[lo]) * (pos - lo);
 }
 
-function groupScores(items: RsInput[], tf: Exclude<Timeframe, "overall">, minMembers: number) {
+function groupScores(items: RsInput[], tf: StockTf, minMembers: number) {
   const vals = items.map((x) => x.rs[tf]).filter(fin).sort((a, b) => a - b);
   if (!vals.length) return new Map<string, { score: number; n: number; breadth: number; rawMean: number }>();
   const lo = quantile(vals, CLIP[0]), hi = quantile(vals, CLIP[1]);
@@ -72,12 +75,12 @@ export function rankGroups(items: RsInput[], tf: Timeframe, minMembers = 3): Gro
   const members = new Map<string, number>();
   for (const x of items) members.set(x.group, (members.get(x.group) ?? 0) + 1);
   let rows: Omit<GroupRank, "pct" | "rank">[];
-  if (tf !== "overall") {
+  if (tf !== "blend") {
     rows = [...groupScores(items, tf, minMembers)].map(([group, s]) => ({
       group, n: s.n, members: members.get(group) ?? s.n, score: s.score, breadth: s.breadth, rawMean: s.rawMean, lowConfidence: s.n < 5,
     }));
   } else {
-    const parts = OVERALL_WEIGHTS.map(([t, w]) => {
+    const parts = BLEND_WEIGHTS.map(([t, w]) => {
       const m = groupScores(items, t, minMembers);
       const xs = [...m.values()].map((s) => s.score);
       const mean = xs.reduce((a, b) => a + b, 0) / (xs.length || 1);
