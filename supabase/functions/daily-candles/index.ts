@@ -1,6 +1,11 @@
 // Fetch today's daily candle (open + close) for a list of symbols from Yahoo Finance.
 // POST { symbols: string[] }  (max 500)
 // Returns: { results: { [symbol]: { open: number, close: number } | null } }
+//
+// History mode (21 EMA pullback check in Live Execution):
+// POST { history: "NVDA" }
+// Returns: { symbol, bars: [{ t: "YYYY-MM-DD", o, h, l, c, v }] (≈9 months, oldest first), barInProgress }
+//   barInProgress = the last bar is today's and the regular session hasn't closed yet.
 
 import { corsHeaders } from "../_shared/cors.ts";
 
@@ -34,6 +39,27 @@ async function fetchOne(symbol: string): Promise<{ open: number; close: number }
   }
 }
 
+async function fetchHistory(symbol: string) {
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=9mo&interval=1d&includePrePost=false`;
+  const res = await fetch(url, { headers: { "User-Agent": UA, Accept: "application/json" } });
+  if (!res.ok) { await res.body?.cancel(); throw new Error(`Yahoo HTTP ${res.status}`); }
+  const json = await res.json();
+  const r = json?.chart?.result?.[0];
+  if (!r) throw new Error(json?.chart?.error?.description ?? "No data for this ticker");
+  const ts: number[] = r.timestamp ?? [];
+  const q = r.indicators?.quote?.[0] ?? {};
+  const gmtoff: number = r.meta?.gmtoffset ?? 0;
+  const bars = ts.map((t, i) => ({
+    t: new Date((t + gmtoff) * 1000).toISOString().slice(0, 10),
+    o: q.open?.[i], h: q.high?.[i], l: q.low?.[i], c: q.close?.[i], v: q.volume?.[i] ?? 0,
+  })).filter((b) => [b.o, b.h, b.l, b.c].every((x) => typeof x === "number" && Number.isFinite(x)));
+  const reg = r.meta?.currentTradingPeriod?.regular;
+  const now = Date.now() / 1000;
+  const today = new Date((now + gmtoff) * 1000).toISOString().slice(0, 10);
+  const barInProgress = !!reg && now >= reg.start && now < reg.end && bars.length > 0 && bars[bars.length - 1].t === today;
+  return { symbol, bars, barInProgress, currency: r.meta?.currency ?? null };
+}
+
 async function runPool<T, R>(items: T[], limit: number, worker: (it: T) => Promise<R>): Promise<R[]> {
   const out: R[] = new Array(items.length);
   let i = 0;
@@ -52,6 +78,14 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
   try {
     const body = await req.json().catch(() => ({}));
+    if (typeof body.history === "string" && body.history.trim()) {
+      const sym = body.history.trim().toUpperCase().replace(/[^A-Z0-9.\-^=]/g, "").slice(0, 15);
+      try {
+        return new Response(JSON.stringify(await fetchHistory(sym)), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      } catch (e) {
+        return new Response(JSON.stringify({ symbol: sym, error: e instanceof Error ? e.message : String(e) }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+    }
     const symbols: string[] = Array.isArray(body.symbols)
       ? Array.from(
           new Set<string>(
