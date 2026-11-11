@@ -38,6 +38,7 @@ import First30MinVolumeCard from "@/components/live/First30MinVolumeCard";
 import MarketDriversWidget from "@/components/live/MarketDriversWidget";
 import StockDriversPanel from "@/components/live/StockDriversPanel";
 import StockBotPanel from "@/components/live/StockBotPanel";
+import Pullback21Card from "@/components/live/Pullback21Card";
 import { LineChart as LineChartIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -1670,6 +1671,9 @@ export default function LiveExecution() {
               </p>
             )}
           </section>
+
+          {/* ── 21 EMA pullback check: follows the stock above, or type any ticker ── */}
+          <Pullback21Card symbol={activeSymbol} />
 
           {/*
             ── Compact 2-column layout ──
