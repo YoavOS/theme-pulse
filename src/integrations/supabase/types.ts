@@ -1327,6 +1327,24 @@ export type Database = {
         }
         Relationships: []
       }
+      universe_pins: {
+        Row: {
+          added_at: string
+          source: string
+          symbol: string
+        }
+        Insert: {
+          added_at?: string
+          source?: string
+          symbol: string
+        }
+        Update: {
+          added_at?: string
+          source?: string
+          symbol?: string
+        }
+        Relationships: []
+      }
       yahoo_history_cache: {
         Row: {
           data_points: number | null

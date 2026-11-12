@@ -85,6 +85,13 @@
       "when": 1794501277008,
       "tag": "0011_sec_filings",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1794501427281,
+      "tag": "0012_universe_pins",
+      "breakpoints": true
     }
   ]
 }
