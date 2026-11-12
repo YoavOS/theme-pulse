@@ -9,10 +9,11 @@
 // ─────────────────────────────────────────────────────────────
 
 import { CONCEPTS, CONCEPT_BY_ID, STAGES, lectureUrl, type Concept, type Lecture } from "./lensCurriculum.ts";
-import { classifyLifeCycle, computeMetrics, fmtPct, fmtX, median, percentileOf, type CompanyHistory, type LifeCycle, type MarketData, type Metric, type Stage } from "./lensMetrics.ts";
+import { classifyLifeCycle, computeMetrics, fmtPct, fmtPp, fmtX, median, percentileOf, type CompanyHistory, type LifeCycle, type MarketData, type Metric, type Stage } from "./lensMetrics.ts";
+import { benchValue, benchmarkFor, DATA_PAGE, type BenchIndex, type Benchmark, type IndustryProfile } from "./damodaran.ts";
 
 export const MIN_PEERS = 5;
-export const LENS_VERSION = 1;
+export const LENS_VERSION = 2;
 
 /** Peer-comparable metrics: lens metric id → data-provider column and its scale to the lens unit. */
 export const PEER_FIELDS: Record<string, { col: string; scale: number; unit: "pct" | "x" }> = {
@@ -62,7 +63,7 @@ export interface ConceptCard {
   id: string; pillar: string; title: string; question: string;
   what: string; why: string; industry: string; stageNote: string | null; caveats: string[];
   lectures: (Lecture & { url: string })[];
-  metrics: (Metric & { peer?: PeerStat })[];
+  metrics: (Metric & { peer?: PeerStat; bench?: Benchmark })[];
   primary: string;
   higherIsBetter: boolean | null;
 }
@@ -72,6 +73,8 @@ export interface LensPayload {
   company: string | null;
   classification: { sector: string; industry: string; subIndustry: string };
   financial: boolean;
+  /** Damodaran's industry group and its January figures (null until his data is loaded). */
+  damodaran: (IndustryProfile & { source: string }) | null;
   market: { price: number | null; marketCap: number | null; asOf: string | null };
   sec: { status: string; asOf: string | null; filed: string | null; ttmLabel: string };
   lifeCycle: (LifeCycle & { label: string; question: string; signature: string; pricing: string; leaningLabel: string | null; lectures: (Lecture & { url: string })[] }) | null;
@@ -87,29 +90,62 @@ const withUrl = (ls: Lecture[]) => ls.map((l) => ({ ...l, url: lectureUrl(l) }))
 export function buildPayload(a: {
   symbol: string; company: string | null; classification: LensPayload["classification"]; financial: boolean;
   history: CompanyHistory; market: MarketData & { asOf: string | null }; secStatus: string; peers: Record<string, PeerStat>;
+  bench?: { idx: BenchIndex; profile: IndustryProfile } | null;
 }): LensPayload {
   const mx = computeMetrics(a.history, a.market, { financial: a.financial });
+  if (a.bench) mx.metrics.push(...valueCreationMetrics(mx.metrics, a.bench.idx, a.bench.profile, a.financial, mx.ttmLabel));
   const lc = mx.metrics.length && a.history.quarters.length ? classifyLifeCycle(mx, a.history) : null;
   const byId = new Map(mx.metrics.map((m) => [m.id, m]));
   const stage = lc?.stage ?? null;
+  const withComparisons = (m: Metric): Metric & { peer?: PeerStat; bench?: Benchmark } => {
+    const out: Metric & { peer?: PeerStat; bench?: Benchmark } = { ...m };
+    if (a.peers[m.id]) out.peer = a.peers[m.id];
+    const b = a.bench && a.bench.profile.match !== "market" ? benchmarkFor(m.id, m.value, a.bench.idx, a.bench.profile.name, a.financial) : undefined;
+    if (b) out.bench = b;
+    return out;
+  };
   const card = (c: Concept): ConceptCard => ({
     id: c.id, pillar: c.pillar, title: c.title, question: c.question, what: c.what, why: c.why, industry: c.industry,
     stageNote: stage ? c.stages[stage] ?? null : null, caveats: c.caveats, lectures: withUrl(c.lectures),
-    metrics: c.metricIds.map((id) => byId.get(id)).filter((m): m is Metric => !!m).map((m) => (a.peers[m.id] ? { ...m, peer: a.peers[m.id] } : m)),
+    metrics: c.metricIds.map((id) => byId.get(id)).filter((m): m is Metric => !!m).map((m) => withComparisons(m)),
     primary: c.primary, higherIsBetter: c.higherIsBetter,
   });
   const cards = CONCEPTS.filter((c) => c.pillar !== "foundations").map(card).filter((c) => c.metrics.length);
   const foundations = CONCEPTS.filter((c) => c.pillar === "foundations").map(card);
   const s = stage ? STAGES[stage] : null;
   return {
-    version: 1, symbol: a.symbol, company: a.company, classification: a.classification, financial: a.financial,
+    version: LENS_VERSION, symbol: a.symbol, company: a.company, classification: a.classification, financial: a.financial,
+    damodaran: a.bench ? { ...a.bench.profile, source: DATA_PAGE } : null,
     market: { price: a.market.price, marketCap: a.market.marketCap, asOf: a.market.asOf },
     sec: { status: a.secStatus, asOf: mx.asOf, filed: mx.filed, ttmLabel: mx.ttmLabel },
     lifeCycle: lc && s ? { ...lc, label: s.label, question: s.question, signature: s.signature, pricing: s.pricing, leaningLabel: lc.leaning ? STAGES[lc.leaning].label : null, lectures: withUrl(s.lectures) } : null,
     story: storyLines(a.symbol, lc, byId, a.financial),
-    snapshot: (s?.focus ?? ["rev_growth_ttm", "op_margin", "fcf_margin", "roic"]).filter((id) => byId.has(id)),
+    snapshot: (s?.focus ?? ["rev_growth_ttm", "op_margin", "fcf_margin", "roic"]).map((id) => (id === "roic" && byId.has("excess_return") ? "excess_return" : id)).filter((id) => byId.has(id)),
     foundations, cards, computedAt: new Date().toISOString(),
   };
+}
+
+/** Damodaran's central test: does the return beat what the capital costs? Uses the INDUSTRY cost of
+ *  capital (his January figure) as the hurdle — a stand-in, since the company's own isn't computed. */
+export function valueCreationMetrics(ms: Metric[], idx: BenchIndex, prof: IndustryProfile, financial: boolean, ttmLabel: string): Metric[] {
+  if (prof.match === "market") return [];
+  const out: Metric[] = [];
+  const roic = ms.find((m) => m.id === "roic"), roe = ms.find((m) => m.id === "roe");
+  const wacc = benchValue(idx, prof.name, "cost_of_capital"), coe = benchValue(idx, prof.name, "cost_of_equity");
+  const src = `Damodaran, ${prof.name}, ${prof.asOf}`;
+  if (!financial && roic && fin(roic.value) && fin(wacc)) {
+    const v = roic.value - wacc;
+    out.push({ id: "excess_return", pillar: "profitability", label: "Return on capital minus cost of capital", unit: "pp", value: v, display: fmtPp(v), period: ttmLabel,
+      formula: "ROIC − the industry's cost of capital", inputs: [{ label: "ROIC", display: roic.display }, { label: `Cost of capital (${src})`, display: fmtPct(wacc) }], approx: true,
+      note: "Uses the industry's average cost of capital as the hurdle; a riskier or more indebted company has a different one." });
+  }
+  if (roe && fin(roe.value) && fin(coe) && (financial || !out.length)) {
+    const v = roe.value - coe;
+    out.push({ id: "equity_spread", pillar: "profitability", label: "Return on equity minus cost of equity", unit: "pp", value: v, display: fmtPp(v), period: ttmLabel,
+      formula: "ROE − the industry's cost of equity", inputs: [{ label: "ROE", display: roe.display }, { label: `Cost of equity (${src})`, display: fmtPct(coe) }], approx: true,
+      note: "Uses the industry's average cost of equity as the hurdle." });
+  }
+  return out;
 }
 
 /** Plain, templated summary — numbers only from metric display strings. */
@@ -126,6 +162,8 @@ export function storyLines(sym: string, lc: LifeCycle | null, byId: Map<string, 
   if (fin(fcf)) out.push(fcf >= 0 ? `It turns ${d("fcf_margin")} of revenue into free cash flow.` : `It is burning cash: free cash flow is ${d("fcf_margin")} of revenue.`);
   const roic = v("roic");
   if (!financial && fin(roic)) out.push(`Each dollar invested in the business earned ${d("roic")} after tax last year (ROIC).`);
+  const ex = v("excess_return");
+  if (fin(ex)) out.push(ex >= 0 ? `That is ${d("excess_return")} above what capital costs in its industry, so growth at these returns adds value.` : `That is ${d("excess_return")} versus what capital costs in its industry, so growth at these returns doesn't add value yet.`);
   return out;
 }
 
@@ -139,6 +177,11 @@ export function factsFor(p: LensPayload, conceptId: string): Fact[] {
   if (p.lifeCycle) facts.push({ id: "stage", label: "Life-cycle stage (app heuristic)", display: p.lifeCycle.label });
   facts.push({ id: "company", label: "Company", display: p.company ? `${p.company} (${p.symbol})` : p.symbol });
   facts.push({ id: "industry", label: "Industry", display: p.classification.subIndustry !== "Other" ? p.classification.subIndustry : p.classification.industry });
+  const dm = p.damodaran;
+  if (dm && dm.match !== "market") {
+    facts.push({ id: "damodaran_industry", label: `Damodaran industry group (${dm.asOf} data${dm.n ? `, ${dm.n} US firms` : ""})`, display: dm.name });
+    if (dm.costOfCapital) facts.push({ id: "industry_cost_of_capital", label: `Average cost of capital, ${dm.name} (Damodaran)`, display: dm.costOfCapital });
+  }
   const cards = conceptId === "story" ? p.cards.filter((c) => c.metrics.some((m) => p.snapshot.includes(m.id))) : p.cards.filter((c) => c.id === conceptId);
   for (const c of cards) for (const m of c.metrics) {
     if (conceptId === "story" && !p.snapshot.includes(m.id)) continue;
@@ -146,6 +189,11 @@ export function factsFor(p: LensPayload, conceptId: string): Fact[] {
     if (m.peer) {
       facts.push({ id: `${m.id}.peer_median`, label: `Median among ${m.peer.n} ${m.peer.group} peers (data-provider figures)`, display: m.peer.median });
       facts.push({ id: `${m.id}.peer_pct`, label: `Percentile among ${m.peer.group} peers`, display: `${m.peer.pct}th percentile` });
+    }
+    if (m.bench) {
+      facts.push({ id: `${m.id}.industry_avg`, label: `Industry average, ${m.bench.industry} (Damodaran, ${dm?.asOf ?? "January"})`, display: m.bench.display });
+      if (m.bench.market) facts.push({ id: `${m.id}.market_avg`, label: "Whole US market average (Damodaran)", display: m.bench.market });
+      if (m.bench.note) facts.push({ id: `${m.id}.bench_note`, label: "Definition difference", display: m.bench.note });
     }
     if (m.note) facts.push({ id: `${m.id}.note`, label: "Note", display: m.note });
   }
@@ -212,6 +260,7 @@ export function templateExplanation(p: LensPayload, conceptId: string): Explanat
     if (m) {
       out.push({ text: `${p.symbol}'s ${m.label.toLowerCase()} is ${m.display} (${m.period}).`, fact_ids: [m.id], kind: "this_company" });
       if (m.peer) out.push({ text: `That puts it at the ${m.peer.pct}th percentile of ${m.peer.n} ${m.peer.group} peers, whose median is ${m.peer.median}.`, fact_ids: [`${m.id}.peer_pct`, `${m.id}.peer_median`], kind: "vs_industry" });
+      if (m.bench) out.push({ text: `Across ${m.bench.industry} as a whole the figure is ${m.bench.display}${m.bench.market ? `, against ${m.bench.market} for the whole market` : ""}.`, fact_ids: [`${m.id}.industry_avg`, ...(m.bench.market ? [`${m.id}.market_avg`] : [])], kind: "vs_industry" });
       if (m.note) out.push({ text: m.note, fact_ids: [`${m.id}.note`], kind: "caveat" });
     }
     if (c.stageNote && p.lifeCycle) out.push({ text: `For a ${p.lifeCycle.label} company: ${c.stageNote}`, fact_ids: ["stage"], kind: "stage" });
@@ -229,7 +278,7 @@ export function explanationPrompt(p: LensPayload, conceptId: string, facts: Fact
     "Rules:",
     "- Use ONLY the facts provided. Copy numbers exactly as written in a fact's `display`; never calculate, round or invent a number.",
     "- Every sentence lists the ids of the facts it uses in `fact_ids`. A sentence without numbers may cite none.",
-    "- Explain what the number means for THIS company, how it compares with its peers and what is normal at its life-cycle stage, and one thing the number can't tell you.",
+    "- Explain what the number means for THIS company, how it compares with its peers and with Damodaran's industry average (and why the industry differs from the whole market, using the lesson's industry note), what is normal at its life-cycle stage, and one thing the number can't tell you.",
     "- No investment advice: never say buy, sell, cheap, undervalued, overvalued, or predict the price.",
     "- If something needed for a fair explanation is missing, list it in `missing` instead of guessing.",
     "- 3 to 5 short sentences. Do not quote Damodaran.",

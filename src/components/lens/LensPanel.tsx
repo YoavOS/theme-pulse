@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { BookOpen, ChevronDown, ExternalLink, GraduationCap, Info, Loader2, PanelRightOpen, RefreshCw, Search, Sparkles, X } from "lucide-react";
 import { useFundamentalsLens, useLensExplanation } from "@/hooks/useFundamentalsLens";
-import { PILLAR_INFO, STAGE_ORDER, STAGE_SHORT, type ConceptCard, type LensPayload, type Lecture, type Metric, type PeerStat } from "@/lib/lens/types";
+import { PILLAR_INFO, STAGE_ORDER, STAGE_SHORT, type Benchmark, type ConceptCard, type LensPayload, type Lecture, type Metric, type PeerStat } from "@/lib/lens/types";
 import { PROGRESS_EVENT, markConcept, readProgress } from "@/lib/lens/progress";
 
 /**
@@ -24,6 +24,7 @@ const SHORT: Record<string, string> = {
   roic: "Return on capital", roe: "Return on equity", fcf_margin: "Free cash flow margin", reinvestment_rate: "Reinvestment rate",
   sales_to_capital: "Sales to capital", sbc_intensity: "Stock comp % of revenue", cash_runway: "Cash runway", share_change: "Share count, 1 yr",
   interest_coverage: "Interest coverage", cash_return_vs_fcf: "Cash returned / FCF", cash_return: "Cash returned, 1 yr",
+  excess_return: "Return − cost of capital", equity_spread: "ROE − cost of equity",
 };
 const TRACK: Record<string, string> = { startup: "Start-up", young_growth: "Young", high_growth: "High", mature_growth: "Mature", mature_stable: "Stable", decline: "Decline" };
 const num = (s: string) => { const m = s.replace(/−/g, "-").match(/-?\d+(\.\d+)?/); return m ? Number(m[0]) : NaN; };
@@ -55,6 +56,27 @@ function PeerBar({ p, higherIsBetter }: { p: PeerStat; higherIsBetter: boolean |
         <span className={t.cls}>{t.words} of {p.group}</span>
         <span className="whitespace-nowrap font-mono">median {p.median} · n={p.n}</span>
       </div>
+    </div>
+  );
+}
+
+function benchTone(b: Benchmark, higherIsBetter: boolean | null) {
+  const words = b.position === "in line" ? `in line with ${b.industry}` : `${b.position} ${b.industry}`;
+  const cls = higherIsBetter === null || b.position === "in line" ? "text-[hsl(210,70%,72%)]"
+    : (b.position === "above") === higherIsBetter ? "text-[hsl(150,60%,58%)]" : "text-[hsl(25,90%,64%)]";
+  return { words, cls };
+}
+
+function BenchLine({ b, higherIsBetter, asOf }: { b: Benchmark; higherIsBetter: boolean | null; asOf: string | null }) {
+  const t = benchTone(b, higherIsBetter);
+  return (
+    <div className="space-y-0.5 text-[10.5px] leading-snug">
+      <div className="flex justify-between gap-2" title={`Damodaran's aggregate for ${b.industry}${b.n ? ` (${b.n} US firms)` : ""}${asOf ? `, ${asOf} data` : ""}. Whole market: ${b.market ?? "n/a"}.`}>
+        <span className={t.cls}>{t.words} avg</span>
+        <span className="whitespace-nowrap font-mono text-muted-foreground">industry {b.display}{b.market ? ` · market ${b.market}` : ""}</span>
+      </div>
+      {b.smallSample && <p className="text-muted-foreground">Only {b.n} firms in this industry — the average is noisy.</p>}
+      {b.note && <p className="text-muted-foreground">{b.note}</p>}
     </div>
   );
 }
@@ -95,7 +117,7 @@ function Explain({ symbol, conceptId, label }: { symbol: string; conceptId: stri
   );
 }
 
-function MetricLine({ m, higherIsBetter }: { m: Metric; higherIsBetter: boolean | null }) {
+function MetricLine({ m, higherIsBetter, asOf }: { m: Metric; higherIsBetter: boolean | null; asOf: string | null }) {
   return (
     <div className="space-y-1 py-1.5">
       <div className="flex items-baseline justify-between gap-3">
@@ -106,26 +128,83 @@ function MetricLine({ m, higherIsBetter }: { m: Metric; higherIsBetter: boolean 
       {m.peer && peerUsesOther(m) && (
         <p className="text-[10.5px] leading-snug text-muted-foreground">The peer rank uses the data provider's figure ({m.peer.own}) so every company is measured the same way; the {m.display} above is computed from the filings. Definitions differ slightly.</p>
       )}
+      {m.bench && <BenchLine b={m.bench} higherIsBetter={higherIsBetter} asOf={asOf} />}
       {m.note && <p className="text-[11px] leading-snug text-[hsl(40,90%,66%)]">{m.note}</p>}
     </div>
   );
 }
 
-function ConceptView({ c, symbol, stageLabel, seen }: { c: ConceptCard; symbol: string; stageLabel: string | null; seen: boolean }) {
+/** Damodaran's view of the industry: what capital costs there and how it differs from the market. */
+function IndustryCard({ p }: { p: LensPayload }) {
+  const [open, setOpen] = useState(false);
+  const d = p.damodaran;
+  if (!d || d.match === "market") return null;
+  const contrasts = ["gross_margin", "op_margin", "roic", "sales_to_capital", "reinvestment_rate", "debt_to_capital"]
+    .map((id) => p.cards.flatMap((c) => c.metrics).find((m) => m.id === id))
+    .filter((m): m is Metric => !!m?.bench?.market);
+  const how = d.match === "damodaran" ? "Damodaran's own classification of this company"
+    : `Mapped by the app from "${d.from}"${d.confidence === "approx" ? " — nearest of his groups, a judgement call" : ""}`;
+  return (
+    <section className="rounded-lg border border-[hsl(199,85%,62%)]/30 bg-[hsl(199,85%,62%)]/[0.04] p-3">
+      <div className="flex items-baseline justify-between gap-2">
+        <span className="text-[11px] font-semibold uppercase tracking-wide text-[hsl(199,85%,72%)]">Industry context</span>
+        <span className="text-[10.5px] text-muted-foreground">Damodaran · {d.asOf}</span>
+      </div>
+      <p className="mt-1 text-[13px] leading-snug"><span className="font-semibold">{d.name}</span>{d.n ? <span className="text-muted-foreground"> · {d.n} US firms</span> : null}</p>
+      <p className="text-[10.5px] text-muted-foreground">{how}.</p>
+      <div className="mt-2 grid grid-cols-3 gap-1.5 text-center">
+        {[["Cost of capital", d.costOfCapital, d.marketCostOfCapital ? `market ${d.marketCostOfCapital}` : null], ["Beta", d.beta, "market 1.00"], ["Losing money", d.pctMoneyLosing, "of firms"]].map(([k, v, sub]) => (
+          <div key={k} className="rounded-md bg-muted/25 px-1 py-1.5">
+            <div className="text-[10px] text-muted-foreground">{k}</div>
+            <div className="font-mono text-[13px] font-semibold tabular-nums">{v ?? "—"}</div>
+            {sub && <div className="text-[9.5px] text-muted-foreground">{sub}</div>}
+          </div>
+        ))}
+      </div>
+      {d.costOfCapital && !p.financial && (
+        <p className="mt-2 text-[12px] leading-snug">The hurdle: a business in this industry adds value only if its return on capital beats about <span className="font-mono">{d.costOfCapital}</span>, what investors require for its risk.</p>
+      )}
+      {d.costOfEquity && p.financial && (
+        <p className="mt-2 text-[12px] leading-snug">The hurdle for a financial company is on equity: return on equity has to beat about <span className="font-mono">{d.costOfEquity}</span>, the industry's cost of equity.</p>
+      )}
+      {contrasts.length > 0 && (
+        <>
+          <button onClick={() => setOpen(!open)} className="mt-1.5 flex items-center gap-1 text-[11.5px] text-[hsl(199,85%,72%)] hover:underline">
+            How this industry differs from the market <ChevronDown size={12} className={open ? "rotate-180" : ""} />
+          </button>
+          {open && (
+            <div className="mt-1 space-y-0.5">
+              {contrasts.map((m) => (
+                <div key={m.id} className="flex justify-between gap-2 text-[11.5px]">
+                  <span className="text-muted-foreground">{SHORT[m.id] ?? m.label}</span>
+                  <span className="whitespace-nowrap font-mono tabular-nums">{m.bench!.display} <span className="text-muted-foreground">vs {m.bench!.market}</span></span>
+                </div>
+              ))}
+              <p className="pt-1 text-[10.5px] leading-snug text-muted-foreground">Industry vs whole-market averages. Each concept card below explains why numbers like these differ between industries, and compares {p.symbol} with both.</p>
+            </div>
+          )}
+        </>
+      )}
+    </section>
+  );
+}
+
+function ConceptView({ c, symbol, stageLabel, seen, asOf = null }: { c: ConceptCard; symbol: string; stageLabel: string | null; seen: boolean; asOf?: string | null }) {
   const [open, setOpen] = useState(false);
   const [level, setLevel] = useState<1 | 2 | 3>(1);
   const [revealed, setRevealed] = useState(false);
   const prim = c.metrics.find((m) => m.id === c.primary) ?? c.metrics[0];
   const toggle = () => { const o = !open; setOpen(o); if (o) markConcept(c.id, symbol, 1); };
   const pick = (l: 1 | 2 | 3) => { setLevel(l); markConcept(c.id, symbol, l); };
-  const tone = prim?.peer ? peerTone(prim.peer, c.higherIsBetter) : null;
+  const tone = prim?.peer ? { ...peerTone(prim.peer, c.higherIsBetter), words: `${peerTone(prim.peer, c.higherIsBetter).words} of ${prim.peer.group}` }
+    : prim?.bench ? { ...benchTone(prim.bench, c.higherIsBetter), words: `${benchTone(prim.bench, c.higherIsBetter).words} avg` } : null;
   return (
     <div className="border-b border-border/50 last:border-0">
       <button onClick={toggle} aria-expanded={open} className="flex w-full items-center gap-2 px-3 py-2.5 text-left hover:bg-muted/30">
         {!seen && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-primary" title="Not opened yet" />}
         <span className="min-w-0 flex-1">
           <span className="block truncate text-[13px] font-medium">{c.title}</span>
-          {tone && <span className={`block truncate text-[10.5px] ${tone.cls}`}>{tone.words} of {prim!.peer!.group}</span>}
+          {tone && <span className={`block truncate text-[10.5px] ${tone.cls}`}>{tone.words}</span>}
         </span>
         {prim && <span className="shrink-0 font-mono text-sm tabular-nums">{prim.display}</span>}
         <ChevronDown size={14} className={`shrink-0 text-muted-foreground transition-transform ${open ? "rotate-180" : ""}`} />
@@ -153,7 +232,7 @@ function ConceptView({ c, symbol, stageLabel, seen }: { c: ConceptCard; symbol: 
               {c.metrics.length > 0 && (
                 <div className="rounded-md border border-border/60 px-2.5">
                   <div className="pt-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{symbol}</div>
-                  {c.metrics.map((m) => <MetricLine key={m.id} m={m} higherIsBetter={c.higherIsBetter} />)}
+                  {c.metrics.map((m) => <MetricLine key={m.id} m={m} higherIsBetter={c.higherIsBetter} asOf={asOf} />)}
                 </div>
               )}
               {c.stageNote && stageLabel && <p><span className="font-semibold text-[hsl(40,90%,66%)]">At the {stageLabel} stage: </span>{c.stageNote}</p>}
@@ -285,6 +364,8 @@ export default function LensPanel({ symbol: symbolProp, onSymbolChange, onClose,
   const seenCount = data ? [...data.cards, ...data.foundations].filter((c) => progress[c.id]).length : 0;
   const pillars = Object.keys(PILLAR_INFO) as (keyof typeof PILLAR_INFO)[];
   const stageLabel = data?.lifeCycle?.label ?? null;
+  const dm = data?.damodaran && data.damodaran.match !== "market" ? data.damodaran : null;
+  const asOf = dm?.asOf ?? null;
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-background text-foreground">
@@ -314,6 +395,7 @@ export default function LensPanel({ symbol: symbolProp, onSymbolChange, onClose,
             </div>
             <div className="flex flex-wrap gap-1 text-[10.5px]">
               <span className="rounded bg-muted/50 px-1.5 py-0.5" title={`${data.classification.sector} › ${data.classification.industry} › ${data.classification.subIndustry}`}>{data.classification.subIndustry !== "Other" ? data.classification.subIndustry : data.classification.industry}</span>
+              {dm && <span className="rounded bg-[hsl(199,85%,62%)]/15 px-1.5 py-0.5 text-[hsl(199,85%,72%)]" title={`Damodaran industry group (${dm.asOf})`}>{dm.name}</span>}
               {data.lifeCycle && <span className="rounded bg-[hsl(40,90%,55%)]/15 px-1.5 py-0.5 text-[hsl(40,90%,68%)]">{data.lifeCycle.label}</span>}
               {fmtMoney(data.market.marketCap) && <span className="rounded bg-muted/50 px-1.5 py-0.5 font-mono">cap {fmtMoney(data.market.marketCap)}</span>}
               {data.sec.asOf && <span className="rounded bg-muted/50 px-1.5 py-0.5" title={data.sec.filed ? `Filed ${data.sec.filed}` : undefined}>filings to {data.sec.asOf}</span>}
@@ -360,6 +442,7 @@ export default function LensPanel({ symbol: symbolProp, onSymbolChange, onClose,
                         <div className="truncate text-[10.5px] text-muted-foreground" title={hit.m.label}>{SHORT[id] ?? hit.m.label}</div>
                         <div className="font-mono text-[15px] font-semibold tabular-nums">{hit.m.display}</div>
                         {hit.m.peer && <div className={`truncate text-[10px] ${peerTone(hit.m.peer, hit.c.higherIsBetter).cls}`}>{peerTone(hit.m.peer, hit.c.higherIsBetter).words}</div>}
+                        {hit.m.bench && <div className="truncate text-[10px] text-muted-foreground" title={`${hit.m.bench.industry} average (Damodaran)`}>industry {hit.m.bench.display}</div>}
                       </div>
                     );
                   })}
@@ -368,6 +451,7 @@ export default function LensPanel({ symbol: symbolProp, onSymbolChange, onClose,
             )}
 
             {data.lifeCycle && <StageCard p={data} />}
+            <IndustryCard p={data} />
 
             {/* Foundations */}
             <section className="rounded-lg border border-border">
@@ -375,7 +459,7 @@ export default function LensPanel({ symbol: symbolProp, onSymbolChange, onClose,
                 <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Start here</span>
                 <span className="text-[10.5px] text-muted-foreground">{seenCount}/{totalConcepts} concepts explored</span>
               </div>
-              {data.foundations.map((c) => <ConceptView key={c.id} c={c} symbol={data.symbol} stageLabel={stageLabel} seen={!!progress[c.id]} />)}
+              {data.foundations.map((c) => <ConceptView key={c.id} c={c} symbol={data.symbol} stageLabel={stageLabel} seen={!!progress[c.id]} asOf={asOf} />)}
             </section>
 
             {/* Pillars */}
@@ -388,13 +472,14 @@ export default function LensPanel({ symbol: symbolProp, onSymbolChange, onClose,
                     <div className="text-[13px] font-semibold">{PILLAR_INFO[pk].label}</div>
                     <div className="text-[11px] text-muted-foreground">{PILLAR_INFO[pk].question}</div>
                   </div>
-                  <div className="mt-1">{cards.map((c) => <ConceptView key={c.id} c={c} symbol={data.symbol} stageLabel={stageLabel} seen={!!progress[c.id]} />)}</div>
+                  <div className="mt-1">{cards.map((c) => <ConceptView key={c.id} c={c} symbol={data.symbol} stageLabel={stageLabel} seen={!!progress[c.id]} asOf={asOf} />)}</div>
                 </section>
               );
             })}
 
             <footer className="space-y-1 pb-2 text-[10.5px] leading-snug text-muted-foreground">
               <p>Company numbers: SEC filings ({data.sec.ttmLabel}), computed by the app. Peer comparisons: data-provider figures for companies in the app's universe. Market cap{data.market.asOf ? ` as of ${data.market.asOf.slice(0, 10)}` : ""}.</p>
+              {dm && <p>Industry averages: Aswath Damodaran, <a href={dm.source} target="_blank" rel="noopener noreferrer" className="underline hover:text-foreground">NYU Stern data</a> ({dm.asOf}, US firms), shared freely by him. They're a year-start snapshot, so they lag the company's latest quarters.</p>}
               <p>Framework and lectures: Aswath Damodaran, NYU Stern (Valuation and Corporate Finance, Spring 2025). Summaries are the app's own words. Educational — not investment advice.</p>
             </footer>
           </>

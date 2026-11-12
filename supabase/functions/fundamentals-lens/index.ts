@@ -7,6 +7,9 @@
 // Peers come from the app's stock_fundamentals + GICS-style classification of the universe.
 // Explanations: the AI only verbalises the computed facts; _shared/lensPayload.ts validates every
 // number against them and falls back to a template sentence when it doesn't pass.
+// Industry averages: Aswath Damodaran's January data (damodaran_benchmarks, loaded yearly by the
+// damodaran-benchmarks function). His own company list picks the industry; otherwise the app's
+// GICS → Damodaran crosswalk (_shared/damodaranMap.ts).
 // Caches: lens_cache (12h per symbol), lens_explanations (per symbol + concept + facts hash).
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
@@ -18,12 +21,14 @@ import {
   LENS_VERSION, PEER_FIELDS, buildPayload, computePeers, explanationPrompt, factsFor, factsHash, templateExplanation, validateExplanation,
   type Explanation, type LensPayload, type PeerRow,
 } from "../_shared/lensPayload.ts";
+import { industryProfile, indexBenchmarks, TOTAL_MARKET, TOTAL_MARKET_EX_FIN, type BenchIndex, type IndustryProfile } from "../_shared/damodaran.ts";
+import { resolveDamodaranIndustry } from "../_shared/damodaranMap.ts";
 import { extractJson, hasAnyLlm, llmFetch } from "../_shared/llm.ts";
 
 const SB_URL = Deno.env.get("SUPABASE_URL")!;
 const SB_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const CACHE_MS = 12 * 3600_000;
-const PROMPT_VERSION = 1;
+const PROMPT_VERSION = 2;
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
@@ -59,6 +64,25 @@ async function fetchHistory(symbol: string): Promise<{ history: CompanyHistory; 
   return { history, status };
 }
 
+/** Damodaran's latest industry figures for this company's industry (null if not loaded yet). */
+async function loadBench(sb: Sb, symbol: string, subIndustry: string | null): Promise<{ idx: BenchIndex; profile: IndustryProfile } | null> {
+  const { data: latest } = await sb.from("damodaran_benchmarks").select("source_year, as_of").order("source_year", { ascending: false }).limit(1).maybeSingle();
+  if (!latest) return null;
+  const { data: own } = await sb.from("damodaran_tickers").select("industry").eq("symbol", symbol).maybeSingle();
+  const r = resolveDamodaranIndustry(own?.industry ?? null, subIndustry && subIndustry !== "Other" ? subIndustry : null);
+  const { data: rows, error } = await sb.from("damodaran_benchmarks").select("industry, metric, value, unit, n_firms")
+    .eq("source_year", latest.source_year).in("industry", [r.name, TOTAL_MARKET, TOTAL_MARKET_EX_FIN]);
+  if (error || !rows?.length) return null;
+  const idx = indexBenchmarks(rows);
+  // his list can name an industry spelled differently from the tables; fall back to the crosswalk
+  const res = idx.has(r.name) ? r : resolveDamodaranIndustry(null, subIndustry);
+  if (res !== r && res.match === "mapped" && !idx.has(res.name)) {
+    const { data: more } = await sb.from("damodaran_benchmarks").select("industry, metric, value, unit, n_firms").eq("source_year", latest.source_year).eq("industry", res.name);
+    for (const [k, v] of indexBenchmarks(more ?? [])) idx.set(k, v);
+  }
+  return { idx, profile: industryProfile(idx, res.name, res.match, res.confidence, res.from, latest.as_of ?? `January ${latest.source_year}`) };
+}
+
 async function buildLens(sb: Sb, symbol: string): Promise<LensPayload> {
   const [{ data: uRow }, { data: fRow }] = await Promise.all([
     sb.from("qualified_rs_universe").select("symbol, company_name, sector, market_cap, current_price").eq("symbol", symbol).maybeSingle(),
@@ -72,10 +96,11 @@ async function buildLens(sb: Sb, symbol: string): Promise<LensPayload> {
 
   // Peers: everyone in the universe with provider fundamentals, grouped by the same taxonomy.
   const cols = ["symbol", ...new Set(Object.values(PEER_FIELDS).map((f) => f.col))].join(", ");
-  const [uni, funds, hist] = await Promise.all([
+  const [uni, funds, hist, bench] = await Promise.all([
     readAll<{ symbol: string; sector: string | null }>(sb, "qualified_rs_universe", "symbol, sector"),
     readAll<Record<string, number | string | null>>(sb, "stock_fundamentals", cols),
     fetchHistory(symbol),
+    loadBench(sb, symbol, classification.subIndustry).catch((e) => { console.error("benchmarks", e); return null; }),
   ]);
   const sectorOf = new Map(uni.map((u) => [u.symbol.toUpperCase(), u.sector]));
   if (!sectorOf.has(symbol)) sectorOf.set(symbol, sectorLabel);
@@ -91,7 +116,7 @@ async function buildLens(sb: Sb, symbol: string): Promise<LensPayload> {
 
   return buildPayload({
     symbol, company: uRow?.company_name ?? fRow?.company_name ?? null, classification, financial,
-    history: hist.history, market: { price, marketCap, asOf: fRow?.fetched_at ?? null }, secStatus: hist.status, peers,
+    history: hist.history, market: { price, marketCap, asOf: fRow?.fetched_at ?? null }, secStatus: hist.status, peers, bench,
   });
 }
 
