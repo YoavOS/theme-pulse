@@ -78,6 +78,13 @@
       "when": 1793886980882,
       "tag": "0010_market_universe_stages",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1794501277008,
+      "tag": "0011_sec_filings",
+      "breakpoints": true
     }
   ]
 }

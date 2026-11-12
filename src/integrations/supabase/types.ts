@@ -245,6 +245,63 @@ export type Database = {
         }
         Relationships: []
       }
+      insider_trades: {
+        Row: {
+          accession: string
+          code: string
+          filed: string
+          is_director: boolean
+          is_officer: boolean
+          is_ten_pct: boolean
+          line: number
+          owner: string
+          owner_cik: number | null
+          plan_10b5_1: boolean
+          price: number | null
+          shares: number | null
+          symbol: string
+          title: string | null
+          trade_date: string | null
+          value: number | null
+        }
+        Insert: {
+          accession: string
+          code: string
+          filed: string
+          is_director?: boolean
+          is_officer?: boolean
+          is_ten_pct?: boolean
+          line: number
+          owner: string
+          owner_cik?: number | null
+          plan_10b5_1?: boolean
+          price?: number | null
+          shares?: number | null
+          symbol: string
+          title?: string | null
+          trade_date?: string | null
+          value?: number | null
+        }
+        Update: {
+          accession?: string
+          code?: string
+          filed?: string
+          is_director?: boolean
+          is_officer?: boolean
+          is_ten_pct?: boolean
+          line?: number
+          owner?: string
+          owner_cik?: number | null
+          plan_10b5_1?: boolean
+          price?: number | null
+          shares?: number | null
+          symbol?: string
+          title?: string | null
+          trade_date?: string | null
+          value?: number | null
+        }
+        Relationships: []
+      }
       market_stages: {
         Row: {
           as_of: string | null
@@ -572,6 +629,63 @@ export type Database = {
           started_at?: string | null
           status?: string
           total_queued?: number
+        }
+        Relationships: []
+      }
+      sec_filings: {
+        Row: {
+          accession: string
+          cik: number
+          created_at: string
+          filed: string
+          form: string
+          parse_error: string | null
+          parsed: boolean
+          path: string
+          symbol: string
+        }
+        Insert: {
+          accession: string
+          cik: number
+          created_at?: string
+          filed: string
+          form: string
+          parse_error?: string | null
+          parsed?: boolean
+          path: string
+          symbol: string
+        }
+        Update: {
+          accession?: string
+          cik?: number
+          created_at?: string
+          filed?: string
+          form?: string
+          parse_error?: string | null
+          parsed?: boolean
+          path?: string
+          symbol?: string
+        }
+        Relationships: []
+      }
+      sec_index_days: {
+        Row: {
+          day: string
+          processed_at: string
+          rows_kept: number
+          status: string
+        }
+        Insert: {
+          day: string
+          processed_at?: string
+          rows_kept?: number
+          status: string
+        }
+        Update: {
+          day?: string
+          processed_at?: string
+          rows_kept?: number
+          status?: string
         }
         Relationships: []
       }
