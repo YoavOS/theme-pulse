@@ -1,8 +1,11 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { BookOpen, ChevronDown, ExternalLink, GraduationCap, Info, Loader2, PanelRightOpen, RefreshCw, Search, Sparkles, X } from "lucide-react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { BookOpen, Brain, ChevronDown, ExternalLink, GraduationCap, Info, Loader2, PanelRightOpen, RefreshCw, Search, Sparkles, X } from "lucide-react";
 import { useFundamentalsLens, useLensExplanation } from "@/hooks/useFundamentalsLens";
 import { PILLAR_INFO, STAGE_ORDER, STAGE_SHORT, type Benchmark, type ConceptCard, type LensPayload, type Lecture, type Metric, type PeerStat } from "@/lib/lens/types";
 import { PROGRESS_EVENT, markConcept, readProgress } from "@/lib/lens/progress";
+import AdjustCard from "./AdjustCard";
+import ReviewView from "./ReviewView";
+import { dueQuestions } from "@/lib/lens/review";
 
 /**
  * Fundamentals Lens — a narrow (~400px) companion panel that teaches fundamentals on the stock you're
@@ -364,6 +367,11 @@ export default function LensPanel({ symbol: symbolProp, onSymbolChange, onClose,
   const seenCount = data ? [...data.cards, ...data.foundations].filter((c) => progress[c.id]).length : 0;
   const pillars = Object.keys(PILLAR_INFO) as (keyof typeof PILLAR_INFO)[];
   const stageLabel = data?.lifeCycle?.label ?? null;
+  const [reviewing, setReviewing] = useState(false);
+  const [reviewTick, setReviewTick] = useState(0);
+  const opened = useMemo(() => new Set(Object.keys(progress)), [progress]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const dueCount = useMemo(() => dueQuestions(opened).length, [opened, reviewTick]);
   const dm = data?.damodaran && data.damodaran.match !== "market" ? data.damodaran : null;
   const asOf = dm?.asOf ?? null;
 
@@ -383,6 +391,11 @@ export default function LensPanel({ symbol: symbolProp, onSymbolChange, onClose,
           </form>
           <button onClick={() => refresh()} disabled={!symbol || loading} title="Recompute from the latest filings" className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-40">
             <RefreshCw size={13} className={loading ? "animate-spin" : ""} />
+          </button>
+          <button onClick={() => { setReviewing(!reviewing); setReviewTick((t) => t + 1); }} title="Review what you've learned (spaced repetition)"
+            className={`relative rounded p-1 hover:bg-muted hover:text-foreground ${reviewing ? "text-primary" : "text-muted-foreground"}`}>
+            <Brain size={14} />
+            {dueCount > 0 && !reviewing && <span className="absolute -right-1 -top-1 min-w-[14px] rounded-full bg-primary px-0.5 text-center text-[9px] font-bold leading-[14px] text-primary-foreground">{dueCount > 9 ? "9+" : dueCount}</span>}
           </button>
           {onPopOut && <button onClick={onPopOut} title="Open in its own window — put it next to TradingView" className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"><PanelRightOpen size={13} /></button>}
           {onClose && <button onClick={onClose} aria-label="Close" className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"><X size={14} /></button>}
@@ -406,6 +419,8 @@ export default function LensPanel({ symbol: symbolProp, onSymbolChange, onClose,
 
       {/* Body */}
       <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-3 py-3">
+        {reviewing && <ReviewView opened={opened} payload={data} onExit={() => { setReviewing(false); setReviewTick((t) => t + 1); }} />}
+        {!reviewing && <>
         {!symbol && (
           <div className="space-y-2 py-6 text-center text-sm text-muted-foreground">
             <BookOpen size={22} className="mx-auto opacity-60" />
@@ -467,13 +482,16 @@ export default function LensPanel({ symbol: symbolProp, onSymbolChange, onClose,
               const cards = data.cards.filter((c) => c.pillar === pk);
               if (!cards.length) return null;
               return (
-                <section key={pk} className="rounded-lg border border-border">
+                <Fragment key={pk}>
+                <section className="rounded-lg border border-border">
                   <div className="px-3 pt-2">
                     <div className="text-[13px] font-semibold">{PILLAR_INFO[pk].label}</div>
                     <div className="text-[11px] text-muted-foreground">{PILLAR_INFO[pk].question}</div>
                   </div>
                   <div className="mt-1">{cards.map((c) => <ConceptView key={c.id} c={c} symbol={data.symbol} stageLabel={stageLabel} seen={!!progress[c.id]} asOf={asOf} />)}</div>
                 </section>
+                {pk === "profitability" && data.adjust && <AdjustCard a={data.adjust} symbol={data.symbol} />}
+                </Fragment>
               );
             })}
 
@@ -484,6 +502,7 @@ export default function LensPanel({ symbol: symbolProp, onSymbolChange, onClose,
             </footer>
           </>
         )}
+        </>}
       </div>
     </div>
   );

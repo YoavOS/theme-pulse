@@ -10,10 +10,10 @@
 
 import { CONCEPTS, CONCEPT_BY_ID, STAGES, lectureUrl, type Concept, type Lecture } from "./lensCurriculum.ts";
 import { classifyLifeCycle, computeMetrics, fmtPct, fmtPp, fmtX, median, percentileOf, type CompanyHistory, type LifeCycle, type MarketData, type Metric, type Stage } from "./lensMetrics.ts";
-import { benchValue, benchmarkFor, DATA_PAGE, type BenchIndex, type Benchmark, type IndustryProfile } from "./damodaran.ts";
+import { benchValue, benchmarkFor, defaultRndLife, DATA_PAGE, type BenchIndex, type Benchmark, type IndustryProfile } from "./damodaran.ts";
 
 export const MIN_PEERS = 5;
-export const LENS_VERSION = 2;
+export const LENS_VERSION = 3;
 
 /** Peer-comparable metrics: lens metric id → data-provider column and its scale to the lens unit. */
 export const PEER_FIELDS: Record<string, { col: string; scale: number; unit: "pct" | "x" }> = {
@@ -59,6 +59,16 @@ export function computePeers(selfSymbol: string, rows: PeerRow[]): Record<string
   return out;
 }
 
+export interface AdjustInputs {
+  ebitTtm: number | null; revenueTtm: number | null; rndTtm: number | null; taxRate: number;
+  icBase: number | null; leaseNow: number | null; leaseBase: number | null;
+  rndAnnual: { end: string; val: number }[];
+  costOfDebt: number; costOfDebtSource: string;
+  costOfCapital: number | null; industry: string | null;
+  industryMargin: string | null; industryAdjMargin: string | null;
+  defaultLife: number;
+}
+
 export interface ConceptCard {
   id: string; pillar: string; title: string; question: string;
   what: string; why: string; industry: string; stageNote: string | null; caveats: string[];
@@ -79,6 +89,8 @@ export interface LensPayload {
   sec: { status: string; asOf: string | null; filed: string | null; ttmLabel: string };
   lifeCycle: (LifeCycle & { label: string; question: string; signature: string; pricing: string; leaningLabel: string | null; lectures: (Lecture & { url: string })[] }) | null;
   story: string[];
+  /** Inputs for Damodaran's R&D and lease adjustments (computed in the panel so the R&D life can be changed). */
+  adjust: AdjustInputs | null;
   snapshot: string[];             // metric ids for the top strip (stage-specific)
   foundations: ConceptCard[];
   cards: ConceptCard[];
@@ -120,6 +132,7 @@ export function buildPayload(a: {
     sec: { status: a.secStatus, asOf: mx.asOf, filed: mx.filed, ttmLabel: mx.ttmLabel },
     lifeCycle: lc && s ? { ...lc, label: s.label, question: s.question, signature: s.signature, pricing: s.pricing, leaningLabel: lc.leaning ? STAGES[lc.leaning].label : null, lectures: withUrl(s.lectures) } : null,
     story: storyLines(a.symbol, lc, byId, a.financial),
+    adjust: a.financial || !mx.raw ? null : adjustInputs(mx.raw, mx.taxRate, a.history, a.bench ?? null, a.classification.sector),
     snapshot: (s?.focus ?? ["rev_growth_ttm", "op_margin", "fcf_margin", "roic"]).map((id) => (id === "roic" && byId.has("excess_return") ? "excess_return" : id)).filter((id) => byId.has(id)),
     foundations, cards, computedAt: new Date().toISOString(),
   };
@@ -146,6 +159,22 @@ export function valueCreationMetrics(ms: Metric[], idx: BenchIndex, prof: Indust
       note: "Uses the industry's average cost of equity as the hurdle." });
   }
   return out;
+}
+
+export function adjustInputs(raw: NonNullable<ReturnType<typeof computeMetrics>["raw"]>, taxRate: number | null, h: CompanyHistory,
+  bench: { idx: BenchIndex; profile: IndustryProfile } | null, sector: string): AdjustInputs | null {
+  if (!fin(raw.ebit) || !fin(raw.revenue) || raw.revenue <= 0) return null;
+  const ind = bench && bench.profile.match !== "market" ? bench.profile.name : null;
+  const cod = ind ? benchValue(bench!.idx, ind, "cost_of_debt") : null;
+  const fmt = (m: string) => { const v = ind ? benchValue(bench!.idx, ind, m) : null; return fin(v) ? fmtPct(v) : null; };
+  return {
+    ebitTtm: raw.ebit, revenueTtm: raw.revenue, rndTtm: raw.rndTtm, taxRate: taxRate ?? 0.25, icBase: raw.icBase, leaseNow: raw.leaseNow, leaseBase: raw.leaseBase,
+    rndAnnual: h.rndAnnual ?? [],
+    costOfDebt: fin(cod) ? cod : 5.5, costOfDebtSource: fin(cod) ? `pre-tax cost of debt, Damodaran ${bench!.profile.asOf}` : "pre-tax cost of debt, app assumption",
+    costOfCapital: ind ? benchValue(bench!.idx, ind, "cost_of_capital") : null, industry: ind,
+    industryMargin: fmt("op_margin"), industryAdjMargin: fmt("op_margin_adj"),
+    defaultLife: defaultRndLife(ind, sector),
+  };
 }
 
 /** Plain, templated summary — numbers only from metric display strings. */

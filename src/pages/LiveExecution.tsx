@@ -40,6 +40,8 @@ import StockDriversPanel from "@/components/live/StockDriversPanel";
 import StockBotPanel from "@/components/live/StockBotPanel";
 import Pullback21Card from "@/components/live/Pullback21Card";
 import LensPanel from "@/components/lens/LensPanel";
+import { LensPipPortal } from "@/components/lens/LensPip";
+import { useLensPip } from "@/hooks/useLensPip";
 import { openLensWindow, postLensSymbol } from "@/lib/lens/channel";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { LineChart as LineChartIcon } from "lucide-react";
@@ -662,6 +664,7 @@ export default function LiveExecution() {
   const [driversOpen, setDriversOpen] = useState(false);
   const [stockBotOpen, setStockBotOpen] = useState(false);
   const [lensOpen, setLensOpen] = useState(false);
+  const lensPip = useLensPip();
   const [benchmark, setBenchmark] = useState<BenchmarkSymbol>("SPY");
   const [whyTopic, setWhyTopic] = useState<WhyTopic | null>(null);
   const debounceRef = useRef<number | null>(null);
@@ -1697,10 +1700,15 @@ export default function LiveExecution() {
               <LensPanel
                 symbol={activeSymbol}
                 onClose={() => setLensOpen(false)}
-                onPopOut={() => { openLensWindow(activeSymbol); setLensOpen(false); }}
+                onPopOut={async () => {
+                  // always-on-top window where supported (Chrome/Edge), a normal pop-up elsewhere
+                  if (!(await lensPip.open())) openLensWindow(activeSymbol);
+                  setLensOpen(false);
+                }}
               />
             </SheetContent>
           </Sheet>
+          <LensPipPortal win={lensPip.win} symbol={activeSymbol} onClose={lensPip.close} />
 
           {/*
             ── Compact 2-column layout ──
