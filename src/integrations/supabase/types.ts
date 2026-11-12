@@ -1327,6 +1327,42 @@ export type Database = {
         }
         Relationships: []
       }
+      universe_pins: {
+        Row: {
+          added_at: string
+          source: string
+          symbol: string
+        }
+        Insert: {
+          added_at?: string
+          source?: string
+          symbol: string
+        }
+        Update: {
+          added_at?: string
+          source?: string
+          symbol?: string
+        }
+        Relationships: []
+      }
+      user_roles: {
+        Row: {
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          id?: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
       yahoo_history_cache: {
         Row: {
           data_points: number | null
@@ -1394,6 +1430,13 @@ export type Database = {
           row_count: number
         }[]
       }
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
       recompute_rs_scan_progress: { Args: never; Returns: undefined }
       release_universe_scan_lock: { Args: never; Returns: undefined }
       set_fundamentals_cron_active: {
@@ -1425,7 +1468,7 @@ export type Database = {
       try_universe_scan_lock: { Args: never; Returns: boolean }
     }
     Enums: {
-      [_ in never]: never
+      app_role: "admin" | "moderator" | "user"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -1552,6 +1595,8 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      app_role: ["admin", "moderator", "user"],
+    },
   },
 } as const
