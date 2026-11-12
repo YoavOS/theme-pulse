@@ -92,6 +92,13 @@
       "when": 1794501427281,
       "tag": "0012_universe_pins",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1794501471732,
+      "tag": "0013_admin_role_writes",
+      "breakpoints": true
     }
   ]
 }
