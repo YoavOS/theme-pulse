@@ -24,7 +24,7 @@ export interface SecQuarter {
 }
 
 const DAY = 86_400_000;
-const dur = (f: SecFact) => (f.start ? (Date.parse(f.end) - Date.parse(f.start)) / DAY : 0);
+export const dur = (f: SecFact) => (f.start ? (Date.parse(f.end) - Date.parse(f.start)) / DAY : 0);
 
 /** Concept preference lists (first concept with data wins, per period). */
 export const CONCEPTS = {
@@ -45,9 +45,9 @@ export const CONCEPTS = {
   costOfRevenue: ["CostOfRevenue", "CostOfGoodsAndServicesSold", "CostOfGoodsSold"],
 } as const;
 
-type Facts = Record<string, { units?: Record<string, SecFact[]> }>;
+export type Facts = Record<string, { units?: Record<string, SecFact[]> }>;
 
-function factsFor(gaap: Facts, names: readonly string[], unitPref: string[], asOf?: string): SecFact[][] {
+export function factsFor(gaap: Facts, names: readonly string[], unitPref: string[], asOf?: string): SecFact[][] {
   const out: SecFact[][] = [];
   for (const n of names) {
     const u = gaap[n]?.units;
@@ -62,7 +62,7 @@ function factsFor(gaap: Facts, names: readonly string[], unitPref: string[], asO
 }
 
 /** Latest-filed value per (start,end) — amendments and later comparatives win. */
-function byPeriod(list: SecFact[]) {
+export function byPeriod(list: SecFact[]) {
   const m = new Map<string, SecFact>();
   for (const f of list) {
     if (!/^10-[QK]/.test(f.form ?? "10-")) continue;
@@ -74,7 +74,7 @@ function byPeriod(list: SecFact[]) {
 }
 
 /** 3-month value for the quarter ending `end` from duration facts (direct or derived). */
-function quarterValue(facts: SecFact[], end: string): { v: number | null; derived: boolean } {
+export function quarterValue(facts: SecFact[], end: string): { v: number | null; derived: boolean } {
   const atEnd = facts.filter((f) => f.end === end && f.start);
   const direct = atEnd.find((f) => dur(f) >= 75 && dur(f) <= 105);
   if (direct) return { v: direct.val, derived: false };
@@ -92,13 +92,13 @@ function quarterValue(facts: SecFact[], end: string): { v: number | null; derive
   return { v: null, derived: false };
 }
 
-function instantValue(facts: SecFact[], end: string): number | null {
+export function instantValue(facts: SecFact[], end: string): number | null {
   const f = facts.find((x) => !x.start && x.end === end);
   return f ? f.val : null;
 }
 
 /** Quarter ends present in the filings (any 10-Q/10-K period end), newest first. */
-function quarterEnds(all: SecFact[][]): string[] {
+export function quarterEnds(all: SecFact[][]): string[] {
   const s = new Set<string>();
   for (const list of all) for (const f of list) if (f.start && /^10-[QK]/.test(f.form ?? "") && dur(f) >= 75) s.add(f.end);
   // collapse ends within 10 days of each other (52/53-week calendars)
@@ -220,7 +220,7 @@ export function adjustForSplits(rows: SecQuarter[]): SecQuarter[] {
 }
 
 // ── network (edge function only) ─────────────────────────────────
-const SEC_UA = "ThemePulse research app (contact: noreply@anthropic.com)";
+export const SEC_UA = "ThemePulse research app (contact: noreply@anthropic.com)";
 let tickerMap: { at: number; m: Map<string, number> } | null = null;
 
 export async function secCik(symbol: string): Promise<number | null> {

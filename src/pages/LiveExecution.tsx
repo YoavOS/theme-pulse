@@ -39,7 +39,11 @@ import MarketDriversWidget from "@/components/live/MarketDriversWidget";
 import StockDriversPanel from "@/components/live/StockDriversPanel";
 import StockBotPanel from "@/components/live/StockBotPanel";
 import Pullback21Card from "@/components/live/Pullback21Card";
+import LensPanel from "@/components/lens/LensPanel";
+import { openLensWindow, postLensSymbol } from "@/lib/lens/channel";
+import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { LineChart as LineChartIcon } from "lucide-react";
+import { GraduationCap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 // ───────────────────────── helpers ─────────────────────────
@@ -657,6 +661,7 @@ export default function LiveExecution() {
   const [activeSymbol, setActiveSymbol] = useState<string | null>(null);
   const [driversOpen, setDriversOpen] = useState(false);
   const [stockBotOpen, setStockBotOpen] = useState(false);
+  const [lensOpen, setLensOpen] = useState(false);
   const [benchmark, setBenchmark] = useState<BenchmarkSymbol>("SPY");
   const [whyTopic, setWhyTopic] = useState<WhyTopic | null>(null);
   const debounceRef = useRef<number | null>(null);
@@ -1298,6 +1303,8 @@ export default function LiveExecution() {
   }, [activeStock, stocks]);
 
   // Watchlist split-view mode
+  useEffect(() => { if (activeSymbol) postLensSymbol(activeSymbol); }, [activeSymbol]);
+
   const [watchMode, setWatchMode] = useState<"all" | "leaders" | "rotation">("all");
   const watchRows = useMemo(() => {
     const rows = watchTickers.map((sym) => {
@@ -1388,6 +1395,15 @@ export default function LiveExecution() {
                     Switch the benchmark used for relative strength (RS) comparisons. SPY tracks the S&amp;P 500 (broad market); QQQ tracks the Nasdaq-100 (tech-heavy). RS values below recompute live.
                   </TooltipContent>
                 </Tooltip>
+                <button
+                  type="button"
+                  onClick={() => setLensOpen(true)}
+                  className="ml-1 inline-flex items-center gap-1.5 rounded-md border border-[hsl(40,90%,55%)]/50 bg-[hsl(40,90%,55%)]/10 px-3 py-1.5 text-sm font-bold text-[hsl(40,90%,66%)] transition-colors hover:bg-[hsl(40,90%,55%)]/20"
+                  title="Fundamentals Lens: this company's fundamentals, explained — Damodaran's framework, vs its peers and its life-cycle stage"
+                >
+                  <GraduationCap size={14} />
+                  Fundamentals Lens
+                </button>
                 <button
                   type="button"
                   onClick={() => activeSymbol && submit(activeSymbol, { force: true })}
@@ -1674,6 +1690,17 @@ export default function LiveExecution() {
 
           {/* ── 21 EMA pullback check: follows the stock above, or type any ticker ── */}
           <Pullback21Card symbol={activeSymbol} />
+
+          <Sheet open={lensOpen} onOpenChange={setLensOpen}>
+            <SheetContent side="right" className="w-full p-0 sm:max-w-[420px] [&>button]:hidden">
+              <SheetTitle className="sr-only">Fundamentals Lens</SheetTitle>
+              <LensPanel
+                symbol={activeSymbol}
+                onClose={() => setLensOpen(false)}
+                onPopOut={() => { openLensWindow(activeSymbol); setLensOpen(false); }}
+              />
+            </SheetContent>
+          </Sheet>
 
           {/*
             ── Compact 2-column layout ──

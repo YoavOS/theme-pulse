@@ -17,6 +17,7 @@ const StorageManager = lazyPage(() => import("./pages/StorageManager"));
 const MinerviniChecker = lazyPage(() => import("./pages/MinerviniChecker"));
 const StageAnalysis = lazyPage(() => import("./pages/StageAnalysis"));
 const BaseScanner = lazyPage(() => import("./pages/BaseScanner"));
+const FundamentalsLens = lazyPage(() => import("./pages/FundamentalsLens"));
 const NotFound = lazyPage(() => import("./pages/NotFound"));
 import { Suspense, useEffect } from "react";
 import { lazyPage } from "@/lib/lazyPage";
@@ -57,6 +58,7 @@ const App = () => (
             <Route path="/intelligence" element={<Navigate to="/" replace />} />
             <Route path="/rs-alpha" element={<RsAlpha />} />
             <Route path="/live" element={<LiveExecution />} />
+            <Route path="/lens" element={<FundamentalsLens />} />
             <Route path="/earnings" element={<Earnings />} />
             <Route path="/market-drivers" element={<Navigate to="/" replace />} />
             <Route path="/morning-brief" element={<Navigate to="/?brief=1" replace />} />
