@@ -4,6 +4,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Copy, Download, Check, Trophy, Settings2, RotateCcw } from "lucide-react";
 import { useStockStages } from "@/hooks/useStockStages";
 import type { StockStage } from "@/lib/stageAnalysis";
+import { moveBox } from "@/lib/moveTint";
 
 interface Props {
   open: boolean;
@@ -235,7 +236,7 @@ export default function ExportTopLeadersDialog({ open, onOpenChange, themes, tim
         <div className="space-y-2">
           <p className="text-xs font-medium text-muted-foreground">Breakdown</p>
           {breakdown.map((b, i) => (
-            <div key={b.theme} className="rounded-md border border-border bg-card/50 p-2.5">
+            <div key={b.theme} className="rounded-md border border-border bg-card/50 p-2.5" style={moveBox(b.perf, 5)}>
               <div className="mb-1.5 flex items-center justify-between gap-2">
                 <span className="text-xs font-semibold text-foreground">#{i + 1} {b.theme}</span>
                 <span className="flex items-center gap-2 font-mono text-xs">

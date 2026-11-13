@@ -8,6 +8,7 @@ import {
   type BriefData, type DigestGroup, type EarningsRow, type EconEvent,
 } from "@/hooks/useBrief";
 import type { Breadth } from "@/components/dashboard/IndexBreadthStrip";
+import { toneBox, type Tone } from "@/lib/moveTint";
 
 /* ───────────── helpers ───────────── */
 
@@ -36,7 +37,7 @@ const IMPACT_DOT: Record<string, string> = {
 };
 
 /** One plain-words read of today's tape from index breadth. */
-function regimeLine(spy: Breadth | null | undefined, qqq: Breadth | null | undefined): { head: string; tail: string } | null {
+function regimeLine(spy: Breadth | null | undefined, qqq: Breadth | null | undefined): { head: string; tail: string; tone: Tone } | null {
   const s = upShare(spy);
   if (!spy || s === null) return null;
   const p = spy.indexPct ?? 0;
@@ -52,7 +53,10 @@ function regimeLine(spy: Breadth | null | undefined, qqq: Breadth | null | undef
   const q = upShare(qqq);
   const tail = `S&P ${pctTxt(spy.indexPct, 2)} with ${Math.round(s * 100)}% of members up` +
     (qqq && q !== null ? `; Nasdaq 100 ${pctTxt(qqq.indexPct, 2)} with ${Math.round(q * 100)}% up.` : ".");
-  return { head, tail };
+  // Box color follows the read: broad strength blue, broad weakness pink, anything mixed gold.
+  const tone: Tone = head === "Broad advance." || head === "Flat index, most stocks up." ? "good"
+    : head === "Broad selling." || head === "Flat index, most stocks down." ? "bad" : "warn";
+  return { head, tail, tone };
 }
 
 const tickersIn = (text: string) => [...text.matchAll(/\*\*([A-Z][A-Z0-9.-]{0,6})\*\*/g)].map((m) => m[1]);
@@ -210,7 +214,7 @@ export default function BriefPanel({ data, themes, timeframe, groupLabel, onOpen
         {/* Right now */}
         <section ref={refs.now} className="scroll-mt-2">
           <H sub={`from your dashboard · ${timeframe}`}>Right now</H>
-          <div className="space-y-2.5 rounded-lg border border-border bg-background/40 px-3 py-2.5 text-[12px] leading-relaxed">
+          <div className="space-y-2.5 rounded-lg border border-border bg-background/40 px-3 py-2.5 text-[12px] leading-relaxed" style={regime ? toneBox(regime.tone, 0.4) : undefined}>
             {regime ? (
               <p><b>{regime.head}</b> <span className="text-muted-foreground">{regime.tail}</span></p>
             ) : (

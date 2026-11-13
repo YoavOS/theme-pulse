@@ -7,6 +7,7 @@ import {
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import EarningsAnalysisPanel, { type EarningsAnalysisContext } from "@/components/earnings/EarningsAnalysisPanel";
+import { moveBox } from "@/lib/moveTint";
 
 // ────────────────────────────────────────────────────────────────────
 // Types matching the two edge functions
@@ -451,6 +452,7 @@ export default function Earnings() {
                               reportDate: g.reportDate, reportTime: g.reportTime,
                             })}
                             className="cursor-pointer px-4 py-3 transition-colors hover:bg-accent/30"
+                            style={{ background: moveBox(g.gapPct, 15).background, boxShadow: g.gapPct ? `inset 3px 0 0 hsl(var(${g.gapPct > 0 ? "--up" : "--down"}) / 0.7)` : undefined }}
                           >
                             <div className="flex flex-wrap items-center justify-between gap-3">
                               <div className="flex min-w-0 items-center gap-2">
@@ -469,13 +471,13 @@ export default function Earnings() {
                                 <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Mcap</div>
                                 <div className="font-mono font-semibold text-foreground">{fmtMcap(g.marketCap)}</div>
                               </div>
-                              <div className="rounded border border-border/60 bg-muted/20 px-2 py-1">
+                              <div className="rounded border border-border/60 bg-muted/20 px-2 py-1" style={moveBox(g.epsSurprisePct, 25)}>
                                 <div className="text-[10px] uppercase tracking-wide text-muted-foreground">EPS Surprise</div>
                                 <div className={`font-mono font-semibold ${g.epsSurprisePct !== null && g.epsSurprisePct >= 0 ? "text-[hsl(222,82%,68%)]" : g.epsSurprisePct !== null ? "text-destructive" : "text-muted-foreground"}`}>
                                   {g.epsSurprisePct !== null ? `${g.epsSurprisePct >= 0 ? "+" : ""}${g.epsSurprisePct.toFixed(1)}%` : "—"}
                                 </div>
                               </div>
-                              <div className="rounded border border-border/60 bg-muted/20 px-2 py-1">
+                              <div className="rounded border border-border/60 bg-muted/20 px-2 py-1" style={moveBox(g.revenueSurprisePct, 8)}>
                                 <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Rev Surprise</div>
                                 <div className={`font-mono font-semibold ${g.revenueSurprisePct !== null && g.revenueSurprisePct >= 0 ? "text-[hsl(222,82%,68%)]" : g.revenueSurprisePct !== null ? "text-destructive" : "text-muted-foreground"}`}>
                                   {g.revenueSurprisePct !== null ? `${g.revenueSurprisePct >= 0 ? "+" : ""}${g.revenueSurprisePct.toFixed(1)}%` : "—"}

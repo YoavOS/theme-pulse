@@ -3,6 +3,7 @@ import { ThemeData } from "@/data/themeData";
 import { Trophy } from "lucide-react";
 import type { DashboardWeights } from "./DashboardWeightsPanel";
 import { normalizeDashboardWeights } from "./DashboardWeightsPanel";
+import { moveBox } from "@/lib/moveTint";
 
 interface Props {
   themes: ThemeData[];
@@ -97,6 +98,7 @@ export default function OverallBestThemesList({ themes, weights, onThemeClick }:
                         <span
                           key={p.symbol}
                           className="inline-flex items-center gap-1 rounded border border-border bg-secondary/50 px-1.5 py-0.5"
+                          style={moveBox(p.pct, 5)}
                         >
                           <span className="font-semibold text-foreground">{p.symbol}</span>
                           <span className={`font-mono ${colorFor(p.pct)}`}>{fmt(p.pct)}</span>

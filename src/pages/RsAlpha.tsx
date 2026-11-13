@@ -47,6 +47,7 @@ import {
   passesHighGrowth,
   passesONeil,
 } from "@/lib/growthFilters";
+import { moveBox, toneBox } from "@/lib/moveTint";
 
 // Strongest-first: Rocket (High Growth) > Fire (Growth) > Diamond (O'Neil).
 function growthBadge(f: ReturnType<typeof useStockFundamentalsMap>["map"] extends Map<string, infer T> ? T | undefined : never): { emoji: string; label: string } | null {
@@ -1020,7 +1021,8 @@ export default function RsAlpha() {
         {/* New 52-week highs & lows — side panel on wide screens; here a bar that opens it below 1280px */}
         {!isWide && (
           <div className="container pb-2">
-            <button onClick={() => setHlSheet(true)} className="flex w-full items-center gap-2 rounded-md border border-border bg-card/30 px-3 py-2 text-left text-xs hover:bg-accent/30">
+            <button onClick={() => setHlSheet(true)} className="flex w-full items-center gap-2 rounded-md border border-border bg-card/30 px-3 py-2 text-left text-xs hover:bg-accent/30"
+              style={hlTotals.highs + hlTotals.lows > 0 ? moveBox(hlTotals.highs - hlTotals.lows, Math.max(10, (hlTotals.highs + hlTotals.lows) / 2)) : undefined}>
               <TrendingUp size={13} className="text-[hsl(222,82%,64%)]" />
               <span className="font-medium">52-week highs &amp; lows</span>
               <span className="font-mono text-[hsl(222,82%,64%)]">{hlTotals.highs}</span>
@@ -1164,13 +1166,13 @@ export default function RsAlpha() {
                 <div className="text-xs text-muted-foreground">Qualified Stocks</div>
                 <div className="text-xl font-bold text-foreground">{stocks.length}</div>
               </div>
-              <div className="rounded-lg border border-border bg-card p-3">
+              <div className="rounded-lg border border-border bg-card p-3" style={toneBox("good", 0.4)}>
                 <div className="text-xs text-muted-foreground">Positive RS</div>
                 <div className="text-xl font-bold text-[hsl(222,82%,68%)]">
                   {sortedStocks.filter(s => (getRsForTab(s, activeTab) ?? 0) > 0).length}
                 </div>
               </div>
-              <div className="rounded-lg border border-border bg-card p-3">
+              <div className="rounded-lg border border-border bg-card p-3" style={toneBox("bad", 0.4)}>
                 <div className="text-xs text-muted-foreground">Negative RS</div>
                 <div className="text-xl font-bold text-destructive">
                   {sortedStocks.filter(s => (getRsForTab(s, activeTab) ?? 0) < 0).length}
