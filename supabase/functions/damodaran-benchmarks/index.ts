@@ -10,7 +10,9 @@
 // Data © Aswath Damodaran, offered free for use; the Lens shows the source and date on every figure.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
-import * as XLSX from "https://cdn.sheetjs.com/xlsx-0.20.3/package/xlsx.mjs";
+// SheetJS from npm via esm.sh (the deploy bundler can't fetch from cdn.sheetjs.com). 0.18.5 is the last npm
+// release; we only read Damodaran's own published files, server-side.
+import * as XLSX from "https://esm.sh/xlsx@0.18.5";
 import { corsHeaders } from "../_shared/cors.ts";
 import { DATA_BASE, FILE_SPECS, parseIndname, parseIndustrySheet, type BenchRow, type Cell } from "../_shared/damodaran.ts";
 
