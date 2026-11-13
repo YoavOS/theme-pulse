@@ -17,6 +17,7 @@ import SectorIndustryHeatmap from "@/components/dashboard/SectorIndustryHeatmap"
 import DashboardConcentrationPanel from "@/components/dashboard/DashboardConcentrationPanel";
 
 import OverallBestThemesList from "@/components/dashboard/OverallBestThemesList";
+import { GroupBars, GroupCards } from "@/components/dashboard/GroupDisplays";
 import ExportTopLeadersDialog from "@/components/dashboard/ExportTopLeadersDialog";
 import ThemeStrengthMeter from "@/components/dashboard/ThemeStrengthMeter";
 import DashboardWeightsPanel, {
@@ -105,13 +106,20 @@ export default function Index() {
   useEffect(() => { try { localStorage.setItem("dashboard_mixed_v1", mixed ? "1" : "0"); } catch { /* ignore */ } }, [mixed]);
   const pickGroupMode = (m: GroupMode) => { setMixed(false); setGroupMode(m); };
   const pickMixed = () => { setMixed(true); setGroupMode("industry"); };
-  // Overall: heatmap (default) or the ranked table.
-  const [overallView, setOverallView] = useState<"heatmap" | "list">(() => {
-    try { return localStorage.getItem("overall_view_v1") === "list" ? "list" : "heatmap"; } catch { return "heatmap"; }
+  // Heatmap view display: boxes (default), bars, cards, or (Overall only) the ranked table.
+  type BoardDisplay = "boxes" | "bars" | "cards" | "list";
+  const [boardDisplay, setBoardDisplay] = useState<BoardDisplay>(() => {
+    try {
+      const v = localStorage.getItem("board_display_v1");
+      if (v === "boxes" || v === "bars" || v === "cards" || v === "list") return v;
+      return localStorage.getItem("overall_view_v1") === "list" ? "list" : "boxes";
+    } catch { return "boxes"; }
   });
   useEffect(() => {
-    try { localStorage.setItem("overall_view_v1", overallView); } catch { /* ignore */ }
-  }, [overallView]);
+    try { localStorage.setItem("board_display_v1", boardDisplay); } catch { /* ignore */ }
+  }, [boardDisplay]);
+  const boardShown: BoardDisplay = boardDisplay === "list" && activeTimeframe !== "Overall" ? "boxes" : boardDisplay;
+
   const [dashView, setDashView] = useState<"heatmap" | "tracker" | "session">(() => {
     try { const v = localStorage.getItem("dashboard_view_v1"); return v === "tracker" || v === "session" ? v : "heatmap"; } catch { return "heatmap"; }
   });
@@ -492,15 +500,21 @@ export default function Index() {
             </div>
 
             <div className="flex items-center gap-2">
-              {activeTimeframe === "Overall" && dashView === "heatmap" && (
+              {dashView === "heatmap" && (
                 <div className="inline-flex items-center gap-0.5 rounded-md border border-border bg-muted/20 p-0.5">
-                  {(["heatmap", "list"] as const).map((v) => (
+                  {([
+                    ["boxes", "Boxes", "Heatmap boxes with signals and volume"],
+                    ["bars", "Bars", "Every group as one bar, strongest first"],
+                    ["cards", "Cards", "Every group as a card with its move, strongest first"],
+                    ...(activeTimeframe === "Overall" ? [["list", "Ranked list", "The Overall ranking as a table"]] : []),
+                  ] as [BoardDisplay, string, string][]).map(([v, label, tip]) => (
                     <button
                       key={v}
-                      onClick={() => setOverallView(v)}
-                      className={`rounded px-2.5 py-1 text-[11px] font-medium transition ${overallView === v ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}
+                      onClick={() => setBoardDisplay(v)}
+                      title={tip}
+                      className={`rounded px-2.5 py-1 text-[11px] font-medium transition ${boardShown === v ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}
                     >
-                      {v === "heatmap" ? "Boxes" : "Ranked list"}
+                      {label}
                     </button>
                   ))}
                 </div>
@@ -799,7 +813,22 @@ export default function Index() {
             onOpen={setDrilldownTheme}
             sectorOf={isMixed ? sectorOf : undefined}
           />
-        ) : activeTimeframe === "Overall" && overallView === "list" ? (
+        ) : boardShown === "bars" || boardShown === "cards" ? (
+          <div className="rounded-xl border border-border bg-card px-4 py-3.5">
+            {(() => {
+              const rows = (groupMode === "theme" && searchMatchSet ? themes.filter(t => searchMatchSet.has(t.theme_name.toLowerCase())) : themes).filter(t => t.tickers.length > 0);
+              const sec = isMixed ? sectorOf : undefined;
+              return !rows.length
+                ? <div className="py-10 text-center text-sm text-muted-foreground">No groups to show yet.</div>
+                : boardShown === "bars"
+                  ? <GroupBars rows={rows} onOpen={setDrilldownTheme} sectorOf={sec} />
+                  : <GroupCards rows={rows} onOpen={setDrilldownTheme} sectorOf={sec} />;
+            })()}
+            <p className="mt-3 text-[11.5px] text-muted-foreground">
+              {activeTimeframe === "Overall" ? "Overall score (weighted 1D / 1W / 1M / 3M average)" : `${activeTimeframe} change`}, strongest first{boardShown === "bars" ? "; the right column is breadth (stocks up / stocks with data)" : "; hover a card for its breadth"}. Click a group to open its stocks.
+            </p>
+          </div>
+        ) : boardShown === "list" ? (
           <OverallBestThemesList
             themes={groupMode === "theme" && searchMatchSet ? themes.filter(t => searchMatchSet.has(t.theme_name.toLowerCase())) : themes}
             weights={overallWeights}
