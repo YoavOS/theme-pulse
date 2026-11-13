@@ -428,6 +428,18 @@ export default function StageAnalysis() {
 
         {stocks.length > 0 && (
           <>
+            {/* Order: the market at a glance (stages) → where the strength is (groups) → is it a time to
+                act (verdict) → which stocks just changed stage → supporting context → reference. */}
+            <SectionNav items={[
+              { id: "sa-overview", label: "Stages" },
+              { id: "sa-groups", label: "By group" },
+              { id: "sa-verdict", label: "Market verdict" },
+              { id: "sa-changes", label: "Stage changes" },
+              { id: "sa-leadership", label: "Leadership" },
+              { id: "sa-breadth", label: "Breadth" },
+              { id: "sa-rotation", label: "Rotation & new highs" },
+            ]} />
+
             {/* Market overview — Deepvue layout */}
             <section id="sa-overview" className="scroll-mt-12 space-y-4 py-2">
               <SectionHead
@@ -454,112 +466,6 @@ export default function StageAnalysis() {
                 </>}
               />
             </section>
-
-            {/* The verdict comes from the momentum gauge (trend, volatility, momentum's own results,
-                stretch, daily breadth + today's checks), not from weekly breadth alone. */}
-            <MomentumGauge rows={listAll} onVerdict={onGauge} />
-            {regimeNow && (
-              <BottomLine
-                tone={gauge ? VERDICT_TEXT[gauge.today].tone : regimeNow.color === "green" ? "good" : regimeNow.color === "red" ? "bad" : "warn"}
-                title={gauge
-                  ? <>{VERDICT_TEXT[gauge.today].label}{gauge.today !== gauge.verdict ? " today" : ""} — {VERDICT_TEXT[gauge.today].text}</>
-                  : <>Breadth is {REGIME_TEXT[regimeNow.color].label.toLowerCase()} — {REGIME_TEXT[regimeNow.color].short}</>}
-                lines={[
-                  <>Weekly breadth of {scope === "market" ? "the whole market" : "your list"}: {REGIME_TEXT[regimeNow.color].label.toLowerCase()}.</>,
-                  breadth
-                    ? scope === "market"
-                      ? <>{breadth.now.toFixed(0)}% of US stocks are in Stage 2 ({ordinal(breadth.pct)} percentile of the last {breadth.weeks} weeks — history rebuilt from today's members, so earlier weeks look healthier than they were).</>
-                      : <>{breadth.now.toFixed(0)}% of your stocks are in Stage 2. (Your list is picked by today's strength, so its own history isn't a fair yardstick — switch to Whole market for a percentile.)</>
-                    : null,
-                  leaders.length
-                    ? <>Leading {GROUP_MODE_LABEL[mode].toLowerCase()} groups: {leaders.slice(0, 4).map((g) => g.name).join(", ")}{leaders.length > 4 ? ` +${leaders.length - 4} more` : ""}. Look for setups here first.</>
-                    : leadershipData
-                      ? <>No {GROUP_MODE_LABEL[mode].toLowerCase()} group is clearly leading SPY right now.</>
-                      : <>Group leadership is unavailable for this view (no weekly price history yet — run Scan Stages).</>,
-                  bestCandidates.length
-                    ? <>{bestCandidates.length} candidates (fresh Stage 2 breakouts with strong RS in an industry where many others are in Stage 2 — not yet validated by the track record): {bestCandidates.slice(0, 5).map((r) => r.symbol).join(", ")}.</>
-                    : <>No stock meets the best-candidate rules this week.</>,
-                ]}
-              />
-            )}
-
-            <SectionNav items={[
-              { id: "sa-overview", label: "Stages" },
-              { id: "sa-breadth", label: "Breadth" },
-              { id: "sa-changes", label: "Stage changes" },
-              { id: "sa-leadership", label: "Leadership" },
-              { id: "sa-rotation", label: "Rotation & new highs" },
-              { id: "sa-groups", label: "By group" },
-            ]} />
-
-            <div id="sa-breadth" className="scroll-mt-12"><RegimePanel rows={regimeRows} scopeLabel={scope === "market" ? "the whole market" : "your list"} /></div>
-
-            {/* Transitions */}
-            <section id="sa-changes" className="scroll-mt-12 rounded-lg border border-border bg-card p-4">
-              <SectionHead
-                title="Stage changes"
-                sub="Stocks that moved between stages recently. Fresh breakouts into Stage 2 are the best long candidates; click a chip for the list."
-                right={<Segmented<number> size="xs" value={transWindow} onChange={setTransWindow} options={[1, 2, 4].map((w) => ({ value: w, label: w === 1 ? "last week" : `last ${w} weeks` }))} />}
-              />
-              <div className="flex flex-wrap gap-2">
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <button
-                      disabled={!bestCandidates.length}
-                      onClick={() => { setSubFilter(null); setMinConf(0); setSearch(""); setList({ title: "Candidates (not yet validated)", rows: bestCandidates }); }}
-                      className="flex items-center gap-2 rounded-md border border-primary/40 bg-primary/10 px-2.5 py-1.5 text-left text-[11px] text-primary hover:bg-primary/20 disabled:opacity-40"
-                    >
-                      Candidates <span className="font-mono font-semibold">{bestCandidates.length}</span>
-                      {bestCandidates.slice(0, 3).map((r) => <span key={r.symbol} className="font-mono opacity-80">{r.symbol}</span>)}
-                    </button>
-                  </TooltipTrigger>
-                  <TooltipContent className="max-w-xs text-xs">
-                    Fresh Stage 2A breakouts (not weak-volume) or late-base 1B, confidence ≥ 70, RS rank ≥ 70 vs SPY,
-                    in an industry with ≥ 35% of its stocks in Stage 2. A watchlist — not a buy signal; always check the chart.
-                  </TooltipContent>
-                </Tooltip>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <button
-                      disabled={!nearBreakout.length}
-                      onClick={() => { setSubFilter(null); setMinConf(0); setSearch(""); setList({ title: "Near breakout (Stage 1 within 5% of range high)", rows: nearBreakout }); }}
-                      className="flex items-center gap-2 rounded-md border border-border bg-background/40 px-2.5 py-1.5 text-left text-[11px] hover:bg-accent/40 disabled:opacity-40"
-                    >
-                      <span className="h-2 w-2 rounded-full" style={{ background: STAGE_COLORS[1] }} />
-                      Near breakout <span className="font-mono font-semibold">{nearBreakout.length}</span>
-                      {nearBreakout.slice(0, 3).map((r) => <span key={r.symbol} className="font-mono text-muted-foreground">{r.symbol}</span>)}
-                    </button>
-                  </TooltipTrigger>
-                  <TooltipContent className="max-w-xs text-xs">
-                    Stage 1 bases trading within 5% of their range high — the level a 1→2 breakout must clear. Best with volume ≥ 2× on the breakout week.
-                  </TooltipContent>
-                </Tooltip>
-                {transitions.map((t) => (
-                  <button
-                    key={t.key}
-                    disabled={!t.rows.length}
-                    onClick={() => { setSubFilter(null); setMinConf(0); setSearch(""); setList({ title: t.label, rows: t.rows }); }}
-                    className="flex items-center gap-2 rounded-md border border-border bg-background/40 px-2.5 py-1.5 text-left text-[11px] hover:bg-accent/40 disabled:opacity-40"
-                  >
-                    <span className="h-2 w-2 rounded-full" style={{ background: STAGE_COLORS[t.color] }} />
-                    <span>{t.label}</span>
-                    <span className="font-mono font-semibold">{t.rows.length}</span>
-                    {t.rows.slice(0, 3).map((r) => (
-                      <span key={r.symbol} className="font-mono text-muted-foreground">
-                        {r.symbol}{r.quality === "LOW" ? "⚠" : ""}
-                      </span>
-                    ))}
-                  </button>
-                ))}
-              </div>
-            </section>
-
-            <div id="sa-leadership" className="scroll-mt-12"><LeadershipPanel groups={groups} spy={market} asOf={asOf} modeLabel={GROUP_MODE_LABEL[mode]} minMembers={minGroupSize} /></div>
-
-            <div id="sa-rotation" className="grid scroll-mt-12 gap-4 lg:grid-cols-2">
-              <RotationPanel groups={groups} asOf={asOf} modeLabel={GROUP_MODE_LABEL[mode]} minMembers={minGroupSize} onOpen={(name, rs) => openList(`${name} — stocks by stage`, rs)} />
-              <NewHighsLowsPanel stocks={aligned} groupsOf={groupsOf} modeLabel={GROUP_MODE_LABEL[mode]} onOpen={openList} />
-            </div>
 
             {/* Groups — Deepvue layout */}
             <section id="sa-groups" className="scroll-mt-12">
@@ -642,6 +548,105 @@ export default function StageAnalysis() {
                 </button>
               )}
             </section>
+
+            <div id="sa-verdict" className="scroll-mt-12 space-y-4">
+            {/* The verdict comes from the momentum gauge (trend, volatility, momentum's own results,
+                stretch, daily breadth + today's checks), not from weekly breadth alone. */}
+            <MomentumGauge rows={listAll} onVerdict={onGauge} />
+            {regimeNow && (
+              <BottomLine
+                tone={gauge ? VERDICT_TEXT[gauge.today].tone : regimeNow.color === "green" ? "good" : regimeNow.color === "red" ? "bad" : "warn"}
+                title={gauge
+                  ? <>{VERDICT_TEXT[gauge.today].label}{gauge.today !== gauge.verdict ? " today" : ""} — {VERDICT_TEXT[gauge.today].text}</>
+                  : <>Breadth is {REGIME_TEXT[regimeNow.color].label.toLowerCase()} — {REGIME_TEXT[regimeNow.color].short}</>}
+                lines={[
+                  <>Weekly breadth of {scope === "market" ? "the whole market" : "your list"}: {REGIME_TEXT[regimeNow.color].label.toLowerCase()}.</>,
+                  breadth
+                    ? scope === "market"
+                      ? <>{breadth.now.toFixed(0)}% of US stocks are in Stage 2 ({ordinal(breadth.pct)} percentile of the last {breadth.weeks} weeks — history rebuilt from today's members, so earlier weeks look healthier than they were).</>
+                      : <>{breadth.now.toFixed(0)}% of your stocks are in Stage 2. (Your list is picked by today's strength, so its own history isn't a fair yardstick — switch to Whole market for a percentile.)</>
+                    : null,
+                  leaders.length
+                    ? <>Leading {GROUP_MODE_LABEL[mode].toLowerCase()} groups: {leaders.slice(0, 4).map((g) => g.name).join(", ")}{leaders.length > 4 ? ` +${leaders.length - 4} more` : ""}. Look for setups here first.</>
+                    : leadershipData
+                      ? <>No {GROUP_MODE_LABEL[mode].toLowerCase()} group is clearly leading SPY right now.</>
+                      : <>Group leadership is unavailable for this view (no weekly price history yet — run Scan Stages).</>,
+                  bestCandidates.length
+                    ? <>{bestCandidates.length} candidates (fresh Stage 2 breakouts with strong RS in an industry where many others are in Stage 2 — not yet validated by the track record): {bestCandidates.slice(0, 5).map((r) => r.symbol).join(", ")}.</>
+                    : <>No stock meets the best-candidate rules this week.</>,
+                ]}
+              />
+            )}
+            </div>
+
+            {/* Transitions */}
+            <section id="sa-changes" className="scroll-mt-12 rounded-lg border border-border bg-card p-4">
+              <SectionHead
+                title="Stage changes"
+                sub="Stocks that moved between stages recently. Fresh breakouts into Stage 2 are the best long candidates; click a chip for the list."
+                right={<Segmented<number> size="xs" value={transWindow} onChange={setTransWindow} options={[1, 2, 4].map((w) => ({ value: w, label: w === 1 ? "last week" : `last ${w} weeks` }))} />}
+              />
+              <div className="flex flex-wrap gap-2">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      disabled={!bestCandidates.length}
+                      onClick={() => { setSubFilter(null); setMinConf(0); setSearch(""); setList({ title: "Candidates (not yet validated)", rows: bestCandidates }); }}
+                      className="flex items-center gap-2 rounded-md border border-primary/40 bg-primary/10 px-2.5 py-1.5 text-left text-[11px] text-primary hover:bg-primary/20 disabled:opacity-40"
+                    >
+                      Candidates <span className="font-mono font-semibold">{bestCandidates.length}</span>
+                      {bestCandidates.slice(0, 3).map((r) => <span key={r.symbol} className="font-mono opacity-80">{r.symbol}</span>)}
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent className="max-w-xs text-xs">
+                    Fresh Stage 2A breakouts (not weak-volume) or late-base 1B, confidence ≥ 70, RS rank ≥ 70 vs SPY,
+                    in an industry with ≥ 35% of its stocks in Stage 2. A watchlist — not a buy signal; always check the chart.
+                  </TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      disabled={!nearBreakout.length}
+                      onClick={() => { setSubFilter(null); setMinConf(0); setSearch(""); setList({ title: "Near breakout (Stage 1 within 5% of range high)", rows: nearBreakout }); }}
+                      className="flex items-center gap-2 rounded-md border border-border bg-background/40 px-2.5 py-1.5 text-left text-[11px] hover:bg-accent/40 disabled:opacity-40"
+                    >
+                      <span className="h-2 w-2 rounded-full" style={{ background: STAGE_COLORS[1] }} />
+                      Near breakout <span className="font-mono font-semibold">{nearBreakout.length}</span>
+                      {nearBreakout.slice(0, 3).map((r) => <span key={r.symbol} className="font-mono text-muted-foreground">{r.symbol}</span>)}
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent className="max-w-xs text-xs">
+                    Stage 1 bases trading within 5% of their range high — the level a 1→2 breakout must clear. Best with volume ≥ 2× on the breakout week.
+                  </TooltipContent>
+                </Tooltip>
+                {transitions.map((t) => (
+                  <button
+                    key={t.key}
+                    disabled={!t.rows.length}
+                    onClick={() => { setSubFilter(null); setMinConf(0); setSearch(""); setList({ title: t.label, rows: t.rows }); }}
+                    className="flex items-center gap-2 rounded-md border border-border bg-background/40 px-2.5 py-1.5 text-left text-[11px] hover:bg-accent/40 disabled:opacity-40"
+                  >
+                    <span className="h-2 w-2 rounded-full" style={{ background: STAGE_COLORS[t.color] }} />
+                    <span>{t.label}</span>
+                    <span className="font-mono font-semibold">{t.rows.length}</span>
+                    {t.rows.slice(0, 3).map((r) => (
+                      <span key={r.symbol} className="font-mono text-muted-foreground">
+                        {r.symbol}{r.quality === "LOW" ? "⚠" : ""}
+                      </span>
+                    ))}
+                  </button>
+                ))}
+              </div>
+            </section>
+
+            <div id="sa-leadership" className="scroll-mt-12"><LeadershipPanel groups={groups} spy={market} asOf={asOf} modeLabel={GROUP_MODE_LABEL[mode]} minMembers={minGroupSize} /></div>
+
+            <div id="sa-breadth" className="scroll-mt-12"><RegimePanel rows={regimeRows} scopeLabel={scope === "market" ? "the whole market" : "your list"} /></div>
+
+            <div id="sa-rotation" className="grid scroll-mt-12 gap-4 lg:grid-cols-2">
+              <RotationPanel groups={groups} asOf={asOf} modeLabel={GROUP_MODE_LABEL[mode]} minMembers={minGroupSize} onOpen={(name, rs) => openList(`${name} — stocks by stage`, rs)} />
+              <NewHighsLowsPanel stocks={aligned} groupsOf={groupsOf} modeLabel={GROUP_MODE_LABEL[mode]} onOpen={openList} />
+            </div>
 
             <HowItWorks title="How to read this page & how stages tested">
               <p>
