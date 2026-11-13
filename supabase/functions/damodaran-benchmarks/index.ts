@@ -176,5 +176,5 @@ Deno.serve(async (req) => {
     return json(report, report?.error ? 500 : 200);
   }
   EdgeRuntime.waitUntil(run());
-  return json({ started: true, part, note: "Running in the background — the result is written to damodaran_loads (newest row) in about a minute." }, 202);
+  return json({ started: true, part, note: "Running in the background — the result is written to damodaran_loads (newest row) in about a minute." });
 });
