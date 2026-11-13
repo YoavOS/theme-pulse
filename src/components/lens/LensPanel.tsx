@@ -1,5 +1,6 @@
-import { Fragment, useEffect, useMemo, useRef, useState } from "react";
-import { BookOpen, Brain, ChevronDown, ExternalLink, GraduationCap, Info, Loader2, PanelRightOpen, RefreshCw, Search, Sparkles, X } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Link } from "react-router-dom";
+import { ArrowLeft, BookOpen, Brain, ChevronDown, ExternalLink, GraduationCap, Info, Loader2, RefreshCw, Search, Sparkles, X } from "lucide-react";
 import { useFundamentalsLens, useLensExplanation } from "@/hooks/useFundamentalsLens";
 import { PILLAR_INFO, STAGE_ORDER, STAGE_SHORT, type Benchmark, type ConceptCard, type LensPayload, type Lecture, type Metric, type PeerStat } from "@/lib/lens/types";
 import { PROGRESS_EVENT, markConcept, readProgress } from "@/lib/lens/progress";
@@ -8,7 +9,7 @@ import ReviewView from "./ReviewView";
 import { dueQuestions } from "@/lib/lens/review";
 
 /**
- * Fundamentals Lens — a narrow (~400px) companion panel that teaches fundamentals on the stock you're
+ * Fundamentals Lens — a full tab that folds into a narrow side-panel column when its window is narrow; it teaches fundamentals on the stock you're
  * looking at, using Aswath Damodaran's framework: place the company in its life cycle, then read
  * growth, profitability, reinvestment and risk against what's normal for that stage and its peers.
  * Each concept opens in three layers: Basics → Worked example (this company's numbers) → Go deeper
@@ -331,13 +332,33 @@ function StageCard({ p }: { p: LensPayload }) {
   );
 }
 
-export default function LensPanel({ symbol: symbolProp, onSymbolChange, onClose, onPopOut, compactHeader }: {
+/** Width-driven layout: the panel measures itself, so it adapts to the window you drag around. */
+function useWidth<T extends HTMLElement>() {
+  const ref = useRef<T>(null);
+  const [w, setW] = useState(0);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver((es) => setW(Math.round(es[0].contentRect.width)));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  return [ref, w] as const;
+}
+const WIDE = 980;        // two columns: overview left, concepts right
+const VERY_WIDE = 1440;  // concepts in two columns
+
+export default function LensPanel({ symbol: symbolProp, onSymbolChange, onClose, compactHeader, homeLink }: {
   symbol: string | null;
   onSymbolChange?: (s: string) => void;
   onClose?: () => void;
-  onPopOut?: () => void;
   compactHeader?: boolean;
+  /** Show a link back to the dashboard (full-tab use, wide windows only). */
+  homeLink?: boolean;
 }) {
+  const [rootRef, width] = useWidth<HTMLDivElement>();
+  const wide = width >= WIDE;
+  const veryWide = width >= VERY_WIDE;
   const [own, setOwn] = useState<string | null>(symbolProp);
   useEffect(() => { setOwn(symbolProp); }, [symbolProp]);
   const symbol = own;
@@ -376,13 +397,16 @@ export default function LensPanel({ symbol: symbolProp, onSymbolChange, onClose,
   const asOf = dm?.asOf ?? null;
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-background text-foreground">
+    <div ref={rootRef} className="flex h-full min-h-0 flex-col bg-background text-foreground">
       {/* Header */}
-      <div className="sticky top-0 z-10 border-b border-border bg-background/95 px-3 py-2 backdrop-blur">
-        <div className="flex items-center gap-1.5">
-          <GraduationCap size={15} className="shrink-0 text-[hsl(40,90%,60%)]" />
-          {!compactHeader && <span className="mr-1 text-[13px] font-semibold">Fundamentals Lens</span>}
-          <form className="flex min-w-0 flex-1 items-center gap-1" onSubmit={(e) => { e.preventDefault(); submit(); }}>
+      <div className={`sticky top-0 z-10 border-b border-border bg-background/95 backdrop-blur ${wide ? "px-6 py-3" : "px-3 py-2"}`}>
+        <div className={`flex items-center gap-1.5 ${wide ? "mx-auto max-w-[1680px]" : ""}`}>
+          {homeLink && wide && (
+            <Link to="/" title="Back to Dashboard" className="mr-1 rounded-md border border-border p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"><ArrowLeft size={15} /></Link>
+          )}
+          <GraduationCap size={wide ? 20 : 15} className="shrink-0 text-[hsl(40,90%,60%)]" />
+          {!compactHeader && <span className={`mr-1 font-semibold ${wide ? "mr-4 font-['Syne',sans-serif] text-2xl font-bold tracking-tight" : "text-[13px]"}`}>Fundamentals Lens</span>}
+          <form className={`flex min-w-0 items-center gap-1 ${wide ? "w-72" : "flex-1"}`} onSubmit={(e) => { e.preventDefault(); submit(); }}>
             <span className="relative min-w-0 flex-1">
               <Search size={12} className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground" />
               <input ref={inputRef} value={input} onChange={(e) => setInput(e.target.value.toUpperCase())} placeholder="Ticker  ( / )" aria-label="Ticker"
@@ -397,14 +421,13 @@ export default function LensPanel({ symbol: symbolProp, onSymbolChange, onClose,
             <Brain size={14} />
             {dueCount > 0 && !reviewing && <span className="absolute -right-1 -top-1 min-w-[14px] rounded-full bg-primary px-0.5 text-center text-[9px] font-bold leading-[14px] text-primary-foreground">{dueCount > 9 ? "9+" : dueCount}</span>}
           </button>
-          {onPopOut && <button onClick={onPopOut} title="Open in its own window — put it next to TradingView" className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"><PanelRightOpen size={13} /></button>}
           {onClose && <button onClick={onClose} aria-label="Close" className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"><X size={14} /></button>}
         </div>
         {data && (
-          <div className="mt-1.5 space-y-1">
+          <div className={`mt-1.5 space-y-1 ${wide ? "mx-auto max-w-[1680px]" : ""}`}>
             <div className="flex items-baseline gap-2">
-              <span className="font-mono text-base font-bold">{data.symbol}</span>
-              <span className="min-w-0 truncate text-xs text-muted-foreground">{data.company}</span>
+              <span className={`font-mono font-bold ${wide ? "text-xl" : "text-base"}`}>{data.symbol}</span>
+              <span className={`min-w-0 truncate text-muted-foreground ${wide ? "text-sm" : "text-xs"}`}>{data.company}</span>
             </div>
             <div className="flex flex-wrap gap-1 text-[10.5px]">
               <span className="rounded bg-muted/50 px-1.5 py-0.5" title={`${data.classification.sector} › ${data.classification.industry} › ${data.classification.subIndustry}`}>{data.classification.subIndustry !== "Other" ? data.classification.subIndustry : data.classification.industry}</span>
@@ -418,8 +441,9 @@ export default function LensPanel({ symbol: symbolProp, onSymbolChange, onClose,
       </div>
 
       {/* Body */}
-      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-3 py-3">
-        {reviewing && <ReviewView opened={opened} payload={data} onExit={() => { setReviewing(false); setReviewTick((t) => t + 1); }} />}
+      <div className={`min-h-0 flex-1 overflow-y-auto ${wide ? "px-6 py-5" : "px-3 py-3"}`}>
+       <div className={`space-y-3 ${wide ? "mx-auto max-w-[1680px]" : ""}`}>
+        {reviewing && <div className={wide ? "mx-auto max-w-2xl" : ""}><ReviewView opened={opened} payload={data} onExit={() => { setReviewing(false); setReviewTick((t) => t + 1); }} /></div>}
         {!reviewing && <>
         {!symbol && (
           <div className="space-y-2 py-6 text-center text-sm text-muted-foreground">
@@ -432,6 +456,9 @@ export default function LensPanel({ symbol: symbolProp, onSymbolChange, onClose,
 
         {data && (
           <>
+           <div className={wide ? "grid items-start gap-5" : "space-y-3"} style={wide ? { gridTemplateColumns: "minmax(380px, 460px) minmax(0, 1fr)" } : undefined}>
+            {/* Overview: who the company is and where it stands */}
+            <div className="space-y-3">
             {data.sec.status !== "ok" && <p className="flex gap-1.5 rounded-md border border-border bg-muted/30 p-2 text-xs text-muted-foreground"><Info size={13} className="mt-px shrink-0" />{data.sec.status}</p>}
             {data.financial && <p className="flex gap-1.5 rounded-md border border-border bg-muted/30 p-2 text-xs text-muted-foreground"><Info size={13} className="mt-px shrink-0" />A financial company: debt is part of how it makes money, so ROIC, free cash flow and coverage are left out — ROE is the main return measure here.</p>}
 
@@ -476,13 +503,17 @@ export default function LensPanel({ symbol: symbolProp, onSymbolChange, onClose,
               </div>
               {data.foundations.map((c) => <ConceptView key={c.id} c={c} symbol={data.symbol} stageLabel={stageLabel} seen={!!progress[c.id]} asOf={asOf} />)}
             </section>
+            </div>
+
+            {/* Concepts, by pillar */}
+            <div className={veryWide ? "columns-2 gap-3" : "space-y-3"}>
 
             {/* Pillars */}
             {pillars.map((pk) => {
               const cards = data.cards.filter((c) => c.pillar === pk);
               if (!cards.length) return null;
               return (
-                <Fragment key={pk}>
+                <div key={pk} className={`space-y-3 ${veryWide ? "mb-3 break-inside-avoid" : ""}`}>
                 <section className="rounded-lg border border-border">
                   <div className="px-3 pt-2">
                     <div className="text-[13px] font-semibold">{PILLAR_INFO[pk].label}</div>
@@ -491,11 +522,13 @@ export default function LensPanel({ symbol: symbolProp, onSymbolChange, onClose,
                   <div className="mt-1">{cards.map((c) => <ConceptView key={c.id} c={c} symbol={data.symbol} stageLabel={stageLabel} seen={!!progress[c.id]} asOf={asOf} />)}</div>
                 </section>
                 {pk === "profitability" && data.adjust && <AdjustCard a={data.adjust} symbol={data.symbol} />}
-                </Fragment>
+                </div>
               );
             })}
+            </div>
+           </div>
 
-            <footer className="space-y-1 pb-2 text-[10.5px] leading-snug text-muted-foreground">
+            <footer className={`space-y-1 pb-2 text-[10.5px] leading-snug text-muted-foreground ${wide ? "pt-2" : ""}`}>
               <p>Company numbers: SEC filings ({data.sec.ttmLabel}), computed by the app. Peer comparisons: data-provider figures for companies in the app's universe. Market cap{data.market.asOf ? ` as of ${data.market.asOf.slice(0, 10)}` : ""}.</p>
               {dm && <p>Industry averages: Aswath Damodaran, <a href={dm.source} target="_blank" rel="noopener noreferrer" className="underline hover:text-foreground">NYU Stern data</a> ({dm.asOf}, US firms), shared freely by him. They're a year-start snapshot, so they lag the company's latest quarters.</p>}
               <p>Framework and lectures: Aswath Damodaran, NYU Stern (Valuation and Corporate Finance, Spring 2025). Summaries are the app's own words. Educational — not investment advice.</p>
@@ -503,6 +536,7 @@ export default function LensPanel({ symbol: symbolProp, onSymbolChange, onClose,
           </>
         )}
         </>}
+       </div>
       </div>
     </div>
   );

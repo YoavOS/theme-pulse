@@ -4,7 +4,8 @@ import LensPanel from "@/components/lens/LensPanel";
 import { onLensSymbol } from "@/lib/lens/channel";
 
 /**
- * Standalone Fundamentals Lens — open it in a narrow window next to TradingView (/lens?symbol=NVDA).
+ * Fundamentals Lens tab (/lens?symbol=NVDA). Full-page layout when the window is wide; drag the
+ * window into a corner and it folds into a single side-panel column.
  * "Follow" keeps it on the ticker you check in Live Execution.
  */
 export default function FundamentalsLens() {
@@ -12,7 +13,8 @@ export default function FundamentalsLens() {
   const [symbol, setSymbol] = useState<string | null>(params.get("symbol")?.toUpperCase() || null);
   const [follow, setFollow] = useState<boolean>(() => { try { return localStorage.getItem("lens-follow") !== "0"; } catch { return true; } });
   useEffect(() => { try { localStorage.setItem("lens-follow", follow ? "1" : "0"); } catch { /* ignore */ } }, [follow]);
-  useEffect(() => (follow ? onLensSymbol((s) => setSymbol(s.toUpperCase())) : undefined), [follow]);
+  // "Follow" tracks every ticker checked in Live Execution; its Lens button always switches the tab.
+  useEffect(() => onLensSymbol((s, force) => { if (force || follow) setSymbol(s.toUpperCase()); }), [follow]);
   useEffect(() => {
     document.title = symbol ? `${symbol} · Fundamentals Lens` : "Fundamentals Lens";
     if (symbol && params.get("symbol") !== symbol) setParams({ symbol }, { replace: true });
@@ -21,7 +23,7 @@ export default function FundamentalsLens() {
   return (
     <div className="flex h-screen flex-col bg-background">
       <div className="min-h-0 flex-1">
-        <LensPanel symbol={symbol} onSymbolChange={setSymbol} />
+        <LensPanel symbol={symbol} onSymbolChange={setSymbol} homeLink />
       </div>
       <label className="flex items-center gap-2 border-t border-border px-3 py-1.5 text-[11px] text-muted-foreground">
         <input type="checkbox" checked={follow} onChange={(e) => setFollow(e.target.checked)} className="accent-[hsl(var(--primary))]" />
