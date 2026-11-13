@@ -6,7 +6,6 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Slider } from "@/components/ui/slider";
 import { useStockStages } from "@/hooks/useStockStages";
 import { useUniverseSectors } from "@/hooks/useUniverseSectors";
 import { groupKeyForIndustry, GROUP_MODE_LABEL, type GroupMode } from "@/lib/groupColors";
@@ -22,7 +21,7 @@ import StageOverview from "@/components/stages/StageOverview";
 import StageExportBar from "@/components/stages/StageExportBar";
 import { tint } from "@/lib/colorTint";
 import {
-  REGIME_TEXT, STAGE_COLORS, applyLive, loadMarketStages, loadStages, onStagesUpdated, type MarketMember, STAGE_NAMES, STAGE_TIPS, groupHealth, isStageScanRunning, regimeSeries, runStageScan, stageWeeksAgo,
+  REGIME_TEXT, STAGE_COLORS, applyLive, loadMarketStages, loadStages, onStagesUpdated, type MarketMember, STAGE_NAMES, STAGE_TIPS, SUBSTAGE_TIPS, groupHealth, isStageScanRunning, regimeSeries, runStageScan, stageWeeksAgo,
   type StageNum, type StockStage,
 } from "@/lib/stageAnalysis";
 
@@ -110,6 +109,7 @@ export default function StageAnalysis() {
   const [scan, setScan] = useState<{ done: number; total: number } | null>(isStageScanRunning() ? { done: 0, total: 0 } : null);
   const [list, setList] = useState<{ title: string; rows: StockStage[]; stage?: StageNum } | null>(null);
   const [subFilter, setSubFilter] = useState<string | null>(null);
+  const [stageFilter, setStageFilter] = useState<StageNum | null>(null);
   const [minConf, setMinConf] = useState(0);
   const [search, setSearch] = useState("");
   const [transWindow, setTransWindow] = useState(1); // weeks
@@ -316,10 +316,10 @@ export default function StageAnalysis() {
     }
   };
 
-  const openList = (title: string, rs: StockStage[]) => { setSubFilter(null); setMinConf(0); setSearch(""); setList({ title, rows: rs }); };
+  const openList = (title: string, rs: StockStage[]) => { setSubFilter(null); setStageFilter(null); setMinConf(0); setSearch(""); setList({ title, rows: rs }); };
 
   const openStage = (s: StageNum) => {
-    setSubFilter(null); setMinConf(0); setSearch("");
+    setSubFilter(null); setStageFilter(null); setMinConf(0); setSearch("");
     setList({ title: STAGE_NAMES[s], rows: stocks.filter((r) => r.stage === s), stage: s });
   };
 
@@ -327,17 +327,23 @@ export default function StageAnalysis() {
     if (!list) return [];
     const q = search.trim().toUpperCase();
     return list.rows.filter((r) =>
-      (!subFilter || r.substage === subFilter) && r.confidence >= minConf &&
+      (stageFilter === null || r.stage === stageFilter) && (!subFilter || r.substage === subFilter) && r.confidence >= minConf &&
       (!q || r.symbol.includes(q) || firstGroup(r.symbol).toUpperCase().includes(q)));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [list, subFilter, minConf, search, mode, labelBySymbol, themeMap]);
+  }, [list, stageFilter, subFilter, minConf, search, mode, labelBySymbol, themeMap]);
 
+  // Dialog filters: stage counts (tinted chips) and, for the chosen stage, its substages.
+  const stageCounts = useMemo(() => {
+    const n: Record<StageNum, number> = { 0: 0, 1: 0, 2: 0, 3: 0, 4: 0 };
+    for (const r of list?.rows ?? []) n[r.stage as StageNum]++;
+    return n;
+  }, [list]);
   const subOptions = useMemo(() => {
     if (!list) return [];
     const c = new Map<string, number>();
-    for (const r of list.rows) c.set(r.substage, (c.get(r.substage) ?? 0) + 1);
+    for (const r of list.rows) if (stageFilter === null || r.stage === stageFilter) c.set(r.substage, (c.get(r.substage) ?? 0) + 1);
     return [...c.entries()].sort((a, b) => a[0].localeCompare(b[0]));
-  }, [list]);
+  }, [list, stageFilter]);
 
   // Health pills (Deepvue colours: strong/healthy blue, neutral yellow, weak pink)
   const HEALTH_COLOR = { strong: "hsl(222, 82%, 66%)", healthy: "hsl(222, 82%, 66%)", neutral: "hsl(47, 75%, 52%)", weak: "hsl(329, 70%, 62%)" } as const;
@@ -688,35 +694,68 @@ export default function StageAnalysis() {
 
       {/* Stage / transition list */}
       <Dialog open={!!list} onOpenChange={(o) => !o && setList(null)}>
-        <DialogContent className="max-w-5xl">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-sm">
+        <DialogContent className="max-w-4xl gap-3 p-4 sm:p-5">
+          <DialogHeader className="space-y-1">
+            <DialogTitle className="flex items-center gap-2 text-[15px]">
               {list?.stage !== undefined && <span className="h-2.5 w-2.5 rounded-full" style={{ background: STAGE_COLORS[list.stage] }} />}
               {list?.title}
+              <span className="text-[12px] font-normal text-muted-foreground">{list?.rows.length.toLocaleString("en-US")}</span>
             </DialogTitle>
+            {list?.stage !== undefined && <p className="text-[11px] text-muted-foreground">{STAGE_TIPS[list.stage]}</p>}
           </DialogHeader>
-          {list?.stage !== undefined && <p className="-mt-2 text-[11px] text-muted-foreground">{STAGE_TIPS[list.stage]}</p>}
-          <div className="flex flex-wrap items-center gap-3">
+
+          {/* Stage mix of this list — also the filter (Deepvue-style tinted chips) */}
+          {list && list.stage === undefined && list.rows.length > 0 && (
+            <div className="space-y-2">
+              <div className="flex h-2 overflow-hidden rounded-full bg-muted">
+                {STAGES.map((k) => <div key={k} style={{ width: `${(stageCounts[k as StageNum] / list.rows.length) * 100}%`, background: STAGE_COLORS[k as StageNum] }} />)}
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                <button onClick={() => { setStageFilter(null); setSubFilter(null); }}
+                  className={`rounded-lg border px-2.5 py-1 text-[12px] font-semibold transition ${stageFilter === null ? "border-primary/60 bg-primary/15 text-primary" : "border-border text-muted-foreground hover:text-foreground"}`}>
+                  All <span className="font-normal opacity-70">{list.rows.length}</span>
+                </button>
+                {([2, 1, 3, 4, 0] as StageNum[]).filter((k) => stageCounts[k] > 0).map((k) => {
+                  const on = stageFilter === k, c = STAGE_COLORS[k];
+                  return (
+                    <button key={k} onClick={() => { setStageFilter(on ? null : k); setSubFilter(null); }} title={STAGE_TIPS[k]}
+                      className="rounded-lg border px-2.5 py-1 text-[12px] font-semibold transition hover:brightness-125"
+                      style={{ color: c, borderColor: tint(c, on ? 0.75 : 0.35), background: tint(c, on ? 0.2 : 0.07) }}>
+                      {k === 0 ? "Transition" : `S${k}`} <span className="font-normal text-muted-foreground">{stageCounts[k]} · {((stageCounts[k] / list.rows.length) * 100).toFixed(0)}%</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          <div className="flex flex-wrap items-center gap-2">
             {subOptions.length > 1 && (
-              <div className="flex flex-wrap gap-1">
-                <button onClick={() => setSubFilter(null)} className={`rounded border px-2 py-0.5 text-[10px] ${!subFilter ? "border-primary bg-primary/15 text-primary" : "border-border text-muted-foreground"}`}>All</button>
-                {subOptions.map(([s, c]) => (
-                  <button key={s} onClick={() => setSubFilter(subFilter === s ? null : s)} className={`rounded border px-2 py-0.5 font-mono text-[10px] ${subFilter === s ? "border-primary bg-primary/15 text-primary" : "border-border text-muted-foreground"}`}>
-                    {s.replace("-", "−")} <span className="opacity-70">{c}</span>
-                  </button>
-                ))}
+              <div className="flex flex-wrap items-center gap-1" title="Substage (A = fresh, B = late)">
+                {subOptions.map(([sub, n]) => {
+                  const on = subFilter === sub, c = STAGE_COLORS[(Number(sub[0]) || 0) as StageNum];
+                  return (
+                    <button key={sub} onClick={() => setSubFilter(on ? null : sub)} title={SUBSTAGE_TIPS[sub] ?? ""}
+                      className="rounded-md border px-1.5 py-0.5 font-mono text-[11px] transition"
+                      style={on ? { color: c, borderColor: tint(c, 0.7), background: tint(c, 0.18) } : { borderColor: "hsl(var(--border))", color: "hsl(var(--muted-foreground))" }}>
+                      {sub.replace("-", "−")} <span className="opacity-70">{n}</span>
+                    </button>
+                  );
+                })}
               </div>
             )}
-            <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
-              Min confidence <span className="w-6 font-mono text-foreground">{minConf}</span>
-              <Slider value={[minConf]} min={0} max={95} step={5} onValueChange={(v) => setMinConf(v[0])} className="w-28" />
+            <div className="ml-auto flex items-center gap-2">
+              <select value={minConf} onChange={(e) => setMinConf(Number(e.target.value))} title="Minimum confidence: how clearly the chart fits its stage"
+                className="h-7 rounded-md border border-border bg-background px-1.5 text-[11.5px] text-muted-foreground">
+                {[0, 50, 70, 85].map((v) => <option key={v} value={v}>{v ? `Confidence ${v}+` : "Any confidence"}</option>)}
+              </select>
+              <input
+                value={search} onChange={(e) => setSearch(e.target.value)} placeholder={`Ticker or ${GROUP_MODE_LABEL[mode].toLowerCase()}…`}
+                className="h-7 w-40 rounded-md border border-border bg-background px-2 text-[12px]"
+              />
             </div>
-            <input
-              value={search} onChange={(e) => setSearch(e.target.value)} placeholder={`Ticker or ${GROUP_MODE_LABEL[mode].toLowerCase()}…`}
-              className="h-7 w-44 rounded border border-border bg-background px-2 text-xs"
-            />
           </div>
-          <StageStockTable rows={listRows} exportName={list?.title ?? "Stages"} groupOf={firstGroup} rsOf={rsOf} nameOf={nameOf} maxHeight={480} />
+          <StageStockTable rows={listRows} exportName={list?.title ?? "Stages"} groupOf={firstGroup} rsOf={rsOf} nameOf={nameOf} maxHeight={460} />
         </DialogContent>
       </Dialog>
     </div>
