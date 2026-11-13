@@ -120,6 +120,13 @@
       "when": 1794605889392,
       "tag": "0016_proven_strong_tables",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1794605900259,
+      "tag": "0017_proven_strength_life_stage",
+      "breakpoints": true
     }
   ]
 }

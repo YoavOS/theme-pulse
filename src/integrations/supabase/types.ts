@@ -620,6 +620,7 @@ export type Database = {
           industry: string | null
           label: string | null
           last_10k_filed: string | null
+          life_stage: string | null
           median_spread: number | null
           min_pooled_spread: number | null
           score: number | null
@@ -650,6 +651,7 @@ export type Database = {
           industry?: string | null
           label?: string | null
           last_10k_filed?: string | null
+          life_stage?: string | null
           median_spread?: number | null
           min_pooled_spread?: number | null
           score?: number | null
@@ -680,6 +682,7 @@ export type Database = {
           industry?: string | null
           label?: string | null
           last_10k_filed?: string | null
+          life_stage?: string | null
           median_spread?: number | null
           min_pooled_spread?: number | null
           score?: number | null
