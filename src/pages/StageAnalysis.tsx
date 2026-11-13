@@ -446,7 +446,7 @@ export default function StageAnalysis() {
                 right={market && <span className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground">SPY <StageBadge r={market} /></span>}
               />
               <StageOverview
-                n={totals.n} transition={totals.n[0]} series={series} onOpen={openStage}
+                n={totals.n} transition={totals.n[0]} series={series} onOpen={openStage} asOf={asOf}
                 footer={<>
                   {breadth && (
                     <span title="Where this week's Stage 2 share sits within the chart's history. Very low readings (washouts) have tended to come before the strongest rebounds in leaders; very high readings mean a crowded, extended market — context, not a timing signal.">

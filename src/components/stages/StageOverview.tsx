@@ -29,12 +29,14 @@ function smooth(pts: [number, number][]) {
   return d;
 }
 
-export default function StageOverview({ n, transition, series, onOpen, footer }: {
+export default function StageOverview({ n, transition, series, onOpen, footer, asOf }: {
   n: Record<StageNum, number>;
   transition: number;
   series: Record<StageNum, number[]>;
   onOpen: (s: StageNum) => void;
   footer?: React.ReactNode;
+  /** Date of the last completed week (the chart's last point), ISO yyyy-mm-dd. */
+  asOf?: string | null;
 }) {
   const total = n[1] + n[2] + n[3] + n[4];
   const pct = (k: StageNum) => (total ? (n[k] / total) * 100 : 0);
@@ -60,6 +62,14 @@ export default function StageOverview({ n, transition, series, onOpen, footer }:
     return { lo: Math.max(0, mn - pad), hi: Math.min(100, mx + pad) };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [series, shown]);
+  // Week-ending date of point i: the last point is asOf, each earlier point one week before.
+  const dateAt = (i: number) => {
+    if (!asOf) return null;
+    const d = new Date(`${asOf.slice(0, 10)}T12:00:00Z`);
+    if (Number.isNaN(d.getTime())) return null;
+    d.setUTCDate(d.getUTCDate() - 7 * (len - 1 - i));
+    return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
+  };
   const x = (i: number) => (len > 1 ? (i / (len - 1)) * W : 0);
   const y = (v: number) => PAD + (1 - (v - lo) / Math.max(1e-6, hi - lo)) * (H - PAD * 2);
 
@@ -113,13 +123,16 @@ export default function StageOverview({ n, transition, series, onOpen, footer }:
           </svg>
           {hover !== null && (
             <div className="pointer-events-none absolute top-1 rounded-md border border-border bg-background/95 px-2.5 py-1.5 font-mono text-[11px]"
-              style={{ left: `min(${(hover / (len - 1)) * 100}%, calc(100% - 140px))` }}>
-              <div className="text-muted-foreground">{len - 1 - hover === 0 ? "last week" : `${len - 1 - hover}w ago`}</div>
+              style={{ left: `min(${(hover / (len - 1)) * 100}%, calc(100% - 210px))` }}>
+              <div className="text-muted-foreground">
+                {len - 1 - hover === 0 ? "last week" : `${len - 1 - hover}w ago`}
+                {dateAt(hover) && <span className="ml-1.5 text-foreground">· week ending {dateAt(hover)}</span>}
+              </div>
               {STAGES.map((k) => <div key={k} style={{ color: STAGE_COLORS[k] }} className={shown.has(k) ? "" : "opacity-50"}>S{k} {series[k][hover].toFixed(0)}%</div>)}
               <div>S2 − S4 {series[2][hover] - series[4][hover] >= 0 ? "+" : ""}{(series[2][hover] - series[4][hover]).toFixed(0)}</div>
             </div>
           )}
-          <div className="mt-1 flex justify-between text-[10px] text-muted-foreground"><span>{len}w ago</span><span>last completed week</span></div>
+          <div className="mt-1 flex justify-between text-[10px] text-muted-foreground"><span>{len}w ago{dateAt(0) && ` · ${dateAt(0)}`}</span><span>last completed week{dateAt(len - 1) && ` · ${dateAt(len - 1)}`}</span></div>
         </div>
       )}
 

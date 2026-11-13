@@ -1,3 +1,4 @@
+import { tint } from "@/lib/colorTint";
 import { useMemo, useState } from "react";
 import { SectionHead, Segmented } from "@/components/Explainer";
 import { ordinal } from "@/lib/utils";
@@ -72,11 +73,16 @@ export default function RotationPanel({ groups, asOf, modeLabel, minMembers, onO
         <div className="space-y-1">
           {items.map((r) => {
             const d = r.rankThen - r.rankNow;
+            // Tint by the move: blue for groups climbing into Stage 2, pink for groups leaving it;
+            // the bigger the change in the Stage 2 share, the stronger the tint.
+            const t = Math.min(1, Math.abs(r.now - r.then) / 30);
+            const c = up ? STAGE_COLORS[2] : STAGE_COLORS[4];
             return (
               <button
                 key={r.name}
                 onClick={() => onOpen(r.name, byName.get(r.name) ?? [])}
-                className="w-full rounded-md border border-border/60 bg-background/40 px-2.5 py-1.5 text-left transition hover:border-border hover:bg-accent/40"
+                className="w-full rounded-lg border px-2.5 py-1.5 text-left transition hover:brightness-125"
+                style={{ background: tint(c, 0.05 + 0.13 * t), borderColor: tint(c, 0.25 + 0.4 * t) }}
                 title={`${r.name}: ${r.then.toFixed(0)}% → ${r.now.toFixed(0)}% of its ${r.n} stocks in Stage 2 · ranked ${ordinal(r.rankThen)} → ${ordinal(r.rankNow)} of ${rows.length}`}
               >
                 <span className="flex items-baseline gap-2">
