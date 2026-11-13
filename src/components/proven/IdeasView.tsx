@@ -6,6 +6,7 @@ import { PRINCIPLES, TAKES } from "@/lib/proven/principles";
 import { ARCHETYPE_TEXT, LABEL_TEXT, type ProvenRow } from "@/lib/proven/types";
 import { valueOf, type Story } from "@/lib/lens/valuation";
 import ProvenBadge from "./ProvenBadge";
+import { AutoTerms, Term } from "@/components/lens/Term";
 
 type Row = Pick<ProvenRow, "symbol" | "label" | "sentence" | "industry" | "archetype" | "archetypes" | "score" | "median_spread" | "series" | "track">;
 const GOOD = new Set(["elite", "proven"]);
@@ -43,7 +44,7 @@ function GrowthLab() {
       <div className="text-[13px] font-semibold">Growth lab: when does growth add value?</div>
       {[["Return on new capital", roic, setRoic, 2, 40], ["Cost of capital", wacc, setWacc, 4, 16], ["Revenue growth (5 yrs)", g, setG, 0, 40]].map(([l, v, set, mn, mx]) => (
         <label key={l as string} className="block">
-          <div className="flex justify-between text-[11px]"><span className="text-muted-foreground">{l as string}</span><span className="font-mono">{(v as number).toFixed(0)}%</span></div>
+          <div className="flex justify-between text-[11px]"><span className="text-muted-foreground"><AutoTerms text={l as string} /></span><span className="font-mono">{(v as number).toFixed(0)}%</span></div>
           <input type="range" min={mn as number} max={mx as number} step={1} value={v as number} onChange={(e) => (set as (n: number) => void)(Number(e.target.value))} className="w-full accent-[hsl(var(--primary))]" />
         </label>
       ))}
@@ -51,7 +52,7 @@ function GrowthLab() {
         Growing {g}% a year makes this business worth <span className={`font-mono font-semibold ${diff >= 0 ? "text-[hsl(199,85%,70%)]" : "text-[hsl(35,95%,66%)]"}`}>{diff >= 0 ? "+" : "−"}{Math.abs(diff).toFixed(0)}%</span> {diff >= 0 ? "more" : "less"} than not growing at all.
       </p>
       <p className="text-[11.5px] leading-snug text-muted-foreground">
-        {roic > wacc + 0.5 ? "New capital earns more than it costs, so every reinvested dollar is worth more than a dollar — growth creates value." : roic < wacc - 0.5 ? "New capital earns less than it costs, so the faster it grows, the more value it destroys. Try raising the return above the cost of capital." : "New capital earns about what it costs: growth just makes the company bigger, not more valuable."}
+        <AutoTerms text={roic > wacc + 0.5 ? "New capital earns more than it costs, so every reinvested dollar is worth more than a dollar — growth creates value." : roic < wacc - 0.5 ? "New capital earns less than it costs, so the faster it grows, the more value it destroys. Try raising the return above the cost of capital." : "New capital earns about what it costs: growth just makes the company bigger, not more valuable."} />
       </p>
     </div>
   );
@@ -100,12 +101,12 @@ function ComparePairs({ rows, onOpen }: { rows: Row[]; onOpen: (s: string) => vo
       ) : (
         <div className="space-y-1.5">
           {[pair.a, pair.b].map((r) => (
-            <div key={r.symbol} className="text-[12px] leading-snug"><span className="font-mono font-bold">{r.symbol}</span> <ProvenBadge row={r} short={false} /> <span className="text-muted-foreground">{r.sentence}</span></div>
+            <div key={r.symbol} className="text-[12px] leading-snug"><span className="font-mono font-bold">{r.symbol}</span> <ProvenBadge row={r} short={false} explain /> <span className="text-muted-foreground"><AutoTerms text={r.sentence} /></span></div>
           ))}
           <div className="grid grid-cols-3 gap-1 text-[11px]">
             <span /> <span className="text-center font-mono">{pair.a.symbol}</span><span className="text-center font-mono">{pair.b.symbol}</span>
-            <span className="text-muted-foreground">after-tax margin</span><span className="text-center font-mono">{pa.margin?.toFixed(1) ?? "n/a"}%</span><span className="text-center font-mono">{pb.margin?.toFixed(1) ?? "n/a"}%</span>
-            <span className="text-muted-foreground">sales per $ capital</span><span className="text-center font-mono">{pa.turn?.toFixed(2) ?? "n/a"}×</span><span className="text-center font-mono">{pb.turn?.toFixed(2) ?? "n/a"}×</span>
+            <span className="text-muted-foreground"><Term id="operating_margin">after-tax margin</Term></span><span className="text-center font-mono">{pa.margin?.toFixed(1) ?? "n/a"}%</span><span className="text-center font-mono">{pb.margin?.toFixed(1) ?? "n/a"}%</span>
+            <span className="text-muted-foreground"><Term id="sales_to_capital">sales per $ capital</Term></span><span className="text-center font-mono">{pa.turn?.toFixed(2) ?? "n/a"}×</span><span className="text-center font-mono">{pb.turn?.toFixed(2) ?? "n/a"}×</span>
           </div>
           {route && <p className="text-[12.5px] leading-snug"><span className="font-semibold">The principle: </span>return on capital = margin × capital efficiency. {pair.a.symbol} wins mainly on {route}. Same industry, same cost of capital — the difference is the business.</p>}
         </div>
@@ -126,7 +127,7 @@ function Gallery({ rows, onOpen }: { rows: Row[]; onOpen: (s: string) => void })
     <div className="grid gap-3" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))" }}>
       {groups.map(([k, rs]) => (
         <div key={k} className="rounded-lg border border-border p-3">
-          <div className="text-[13px] font-semibold">{ARCHETYPE_TEXT[k] ?? k}</div>
+          <div className="text-[13px] font-semibold"><AutoTerms text={ARCHETYPE_TEXT[k] ?? k} /></div>
           <div className="mt-1.5 space-y-1">
             {rs.map((r) => (
               <button key={r.symbol} onClick={() => onOpen(r.symbol)} title={r.sentence ?? ""} className="flex w-full items-center gap-2 rounded px-1 py-0.5 text-left hover:bg-muted/40">
@@ -151,7 +152,7 @@ export default function IdeasView({ onOpen, active = true }: { onOpen: (symbol: 
     <div className="mx-auto max-w-[1680px] space-y-6 px-4 py-5 sm:px-6">
       <header className="space-y-1">
         <h2 className="flex items-center gap-2 text-xl font-bold"><Lightbulb size={18} className="text-[hsl(40,90%,60%)]" /> Think like Damodaran</h2>
-        <p className="max-w-3xl text-[13px] leading-snug text-muted-foreground">Twelve questions he asks of every company. Each card says where the app shows it. Learn the questions, not the numbers — the questions work on any company, at any age.</p>
+        <p className="max-w-3xl text-[13px] leading-snug text-muted-foreground">Twelve questions <Term id="damodaran">he</Term> asks of every company. Each card says where the app shows it. Learn the questions, not the numbers — the questions work on any company, at any age.</p>
       </header>
 
       <section className="grid items-start gap-3" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))" }}>
@@ -161,13 +162,13 @@ export default function IdeasView({ onOpen, active = true }: { onOpen: (symbol: 
             <article key={p.id} className="rounded-lg border border-border p-3">
               <button onClick={() => setOpenP(open ? null : p.id)} className="w-full text-left">
                 <div className="text-[10.5px] font-semibold text-muted-foreground">{i + 1}</div>
-                <div className="text-[14px] font-semibold leading-snug">{p.question}</div>
+                <div className="text-[14px] font-semibold leading-snug"><AutoTerms text={p.question} /></div>
               </button>
               {open ? (
                 <div className="mt-2 space-y-1.5 text-[12.5px] leading-snug">
-                  <p>{p.idea}</p>
-                  <p><span className="font-semibold">See it: </span><span className="text-muted-foreground">{p.seeIt}</span></p>
-                  <p><span className="font-semibold">The trap: </span><span className="text-muted-foreground">{p.trap}</span></p>
+                  <p><AutoTerms text={p.idea} /></p>
+                  <p><span className="font-semibold">See it: </span><span className="text-muted-foreground"><AutoTerms text={p.seeIt} /></span></p>
+                  <p><span className="font-semibold">The trap: </span><span className="text-muted-foreground"><AutoTerms text={p.trap} /></span></p>
                   <div className="space-y-0.5 pt-1">
                     {p.sources.map((s) => (
                       <a key={s.url} href={s.url} target="_blank" rel="noopener noreferrer" className="flex items-start gap-1 text-[11px] text-primary hover:underline">
@@ -189,7 +190,7 @@ export default function IdeasView({ onOpen, active = true }: { onOpen: (symbol: 
 
       <section className="space-y-2">
         <h3 className="text-[15px] font-semibold">Proven companies, by how they earn it</h3>
-        <p className="max-w-3xl text-[12px] text-muted-foreground">Return on capital = margin × capital efficiency, so there's more than one route to a great business. Click a company to open it in the Lens and see its record. Good companies aren't automatically good investments — check what the price is betting on.</p>
+        <p className="max-w-3xl text-[12px] text-muted-foreground"><AutoTerms text="Return on capital = margin × capital efficiency, so there's more than one route to a great business. Click a company to open it in the Lens and see its record. Good companies aren't automatically good investments — check what the price is betting on." /></p>
         {rows ? <Gallery rows={rows} onOpen={onOpen} /> : null}
       </section>
 
@@ -203,7 +204,7 @@ export default function IdeasView({ onOpen, active = true }: { onOpen: (symbol: 
                 {t.tickers.filter((x) => !x.includes(".") && x !== "GOOG").map((x) => <button key={x} onClick={() => onOpen(x)} className="rounded bg-muted/50 px-1.5 py-0.5 font-mono text-[11px] font-bold hover:bg-muted">{x}</button>)}
                 <span className="ml-auto text-[10.5px] text-muted-foreground">{t.date}</span>
               </div>
-              <p className="text-[12.5px] leading-snug">{t.text}</p>
+              <p className="text-[12.5px] leading-snug"><AutoTerms text={t.text} /></p>
               <a href={t.source.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-[11px] text-primary hover:underline"><ExternalLink size={11} /> {t.source.title}</a>
             </div>
           ))}

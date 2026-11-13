@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Check, ChevronDown, Minus, X as XIcon } from "lucide-react";
 import ProvenBadge from "./ProvenBadge";
 import { ARCHETYPE_TEXT, FLAG_TEXT, STAGE_LABEL, TRACK_TEXT, type ProvenCheck, type ProvenRow } from "@/lib/proven/types";
+import { AutoTerms, Term } from "@/components/lens/Term";
 
 const pp = (v: number) => `${v >= 0 ? "+" : "−"}${Math.abs(v).toFixed(1)} pp`;
 
@@ -21,7 +22,7 @@ function SpreadChart({ series, hurdle }: { series: NonNullable<ProvenRow["series
     <figure className="space-y-1">
       <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
         <svg width="18" height="6" aria-hidden><line x1="0" x2="18" y1="3" y2="3" stroke="currentColor" strokeDasharray="3 3" /></svg>
-        cost of capital{hurdle !== null ? ` (${hurdle.toFixed(1)}%)` : ""}
+        <Term id="cost_of_capital">cost of capital</Term>{hurdle !== null ? ` (${hurdle.toFixed(1)}%)` : ""}
         <span className="ml-auto font-mono">{pp(hi)} … {pp(lo)}</span>
       </div>
       <svg viewBox={`0 0 ${W} ${H + 12}`} className="w-full" role="img" aria-label="Return on capital minus cost of capital, by year">
@@ -50,7 +51,7 @@ function CheckRow({ c }: { c: ProvenCheck }) {
   return (
     <div className="flex items-start gap-1.5 text-[11.5px] leading-snug">
       <span className="mt-0.5 shrink-0">{icon}</span>
-      <span className="min-w-0 flex-1">{c.label}</span>
+      <span className="min-w-0 flex-1"><AutoTerms text={c.label} /></span>
       <span className="shrink-0 font-mono text-[11px] text-muted-foreground">{c.value}</span>
     </div>
   );
@@ -68,19 +69,19 @@ export default function TrackRecordCard({ row, loading }: { row: ProvenRow | nul
   return (
     <section className="space-y-2 rounded-lg border border-border p-3">
       <div className="flex items-center justify-between gap-2">
-        <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Track record</span>
-        <ProvenBadge row={row} short={false} />
+        <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground"><Term id="track_record">Track record</Term></span>
+        <ProvenBadge row={row} short={false} explain />
       </div>
-      <p className="text-[13px] leading-snug">{row.sentence}</p>
+      <p className="text-[13px] leading-snug"><AutoTerms text={row.sentence} /></p>
       {!young && row.series && <SpreadChart series={row.series} hurdle={row.hurdle} />}
       <p className="text-[11.5px] leading-snug text-muted-foreground">
-        {young
+        <AutoTerms text={young
           ? "Damodaran's test of a good business is earning more on capital than it costs, for years. A young company can't have that record yet — so the question is whether the path toward it is already visible in the numbers."
-          : "Damodaran's test of a good business: it earns more on its capital than that capital costs — and keeps doing it. One great year proves little; the record is the evidence."}
+          : "Damodaran's test of a good business: it earns more on its capital than that capital costs — and keeps doing it. One great year proves little; the record is the evidence."} />
       </p>
       {(row.archetypes?.length ?? 0) > 0 && (
         <div className="flex flex-wrap gap-1">
-          {row.archetypes!.map((a) => <span key={a} className="rounded bg-muted/50 px-1.5 py-0.5 text-[10.5px]">{ARCHETYPE_TEXT[a] ?? a}</span>)}
+          {row.archetypes!.map((a) => <span key={a} className="rounded bg-muted/50 px-1.5 py-0.5 text-[10.5px]"><AutoTerms text={ARCHETYPE_TEXT[a] ?? a} /></span>)}
         </div>
       )}
       <button onClick={() => setOpen(!open)} className="flex items-center gap-1 text-[11.5px] text-primary hover:underline">
@@ -88,7 +89,7 @@ export default function TrackRecordCard({ row, loading }: { row: ProvenRow | nul
       </button>
       {open && (
         <div className="space-y-2">
-          <p className="text-[11px] leading-snug text-muted-foreground">{row.why}</p>
+          <p className="text-[11px] leading-snug text-muted-foreground"><AutoTerms text={row.why} /></p>
           {row.track && <div className="text-[10.5px] text-muted-foreground">Track: {TRACK_TEXT[row.track]}{row.life_stage ? ` · stage: ${STAGE_LABEL[row.life_stage] ?? row.life_stage} — the stage decides which test applies` : ""}</div>}
           {(row.checks ?? []).length > 0 && <div className="space-y-1">{row.checks!.map((c) => <CheckRow key={c.id} c={c} />)}</div>}
           {!young && (row.gates ?? []).length > 0 && (
@@ -97,7 +98,7 @@ export default function TrackRecordCard({ row, loading }: { row: ProvenRow | nul
               {row.gates!.map((c) => <CheckRow key={c.id} c={c} />)}
             </div>
           )}
-          {(row.flags ?? []).filter((f) => FLAG_TEXT[f] && !(young && f === "rd_adjusted")).map((f) => <p key={f} className="text-[11px] leading-snug text-[hsl(40,90%,66%)]">{FLAG_TEXT[f]}</p>)}
+          {(row.flags ?? []).filter((f) => FLAG_TEXT[f] && !(young && f === "rd_adjusted")).map((f) => <p key={f} className="text-[11px] leading-snug text-[hsl(40,90%,66%)]"><AutoTerms text={FLAG_TEXT[f]} /></p>)}
           <p className="text-[10.5px] leading-snug text-muted-foreground">
             {young ? "Industry comparisons: " : "Hurdle: "}{row.hurdle_source ?? "industry cost of capital"}{young ? "" : ", applied to every year"}. Annual 10-K figures{row.as_of ? ` through FY ${row.as_of.slice(0, 4)}` : ""}; thresholds are the app's judgement and will be recalibrated.
             {!young && " Return on capital here is Damodaran's adjusted, year-by-year version — a standard tax rate, leases counted as debt, and R&D treated as investment where it's material — so it can differ from the trailing-twelve-month figure in the Profitability section."}

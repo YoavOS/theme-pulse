@@ -12,6 +12,7 @@ import PriceStoryCard from "./PriceStoryCard";
 import ProvenBadge from "@/components/proven/ProvenBadge";
 import { useProvenOne } from "@/hooks/useProvenStrength";
 import { toneBox, type Tone } from "@/lib/moveTint";
+import { AutoTerms, Term } from "./Term";
 
 /**
  * Fundamentals Lens — a full tab that folds into a narrow side-panel column when its window is narrow; it teaches fundamentals on the stock you're
@@ -64,7 +65,7 @@ function PeerBar({ p, higherIsBetter }: { p: PeerStat; higherIsBetter: boolean |
       </div>
       <div className="flex justify-between gap-2 text-[10.5px] text-muted-foreground">
         <span className={t.cls}>{t.words} of {p.group}</span>
-        <span className="whitespace-nowrap font-mono">median {p.median} · n={p.n}</span>
+        <span className="whitespace-nowrap font-mono"><Term id="median">median</Term> {p.median} · n={p.n}</span>
       </div>
     </div>
   );
@@ -82,7 +83,7 @@ function BenchLine({ b, higherIsBetter, asOf }: { b: Benchmark; higherIsBetter: 
   return (
     <div className="space-y-0.5 text-[10.5px] leading-snug">
       <div className="flex justify-between gap-2" title={`Damodaran's aggregate for ${b.industry}${b.n ? ` (${b.n} US firms)` : ""}${asOf ? `, ${asOf} data` : ""}. Whole market: ${b.market ?? "n/a"}.`}>
-        <span className={t.cls}>{t.words} avg</span>
+        <span className={t.cls}>{t.words} <Term id="damodaran_industry">avg</Term></span>
         <span className="whitespace-nowrap font-mono text-muted-foreground">industry {b.display}{b.market ? ` · market ${b.market}` : ""}</span>
       </div>
       {b.smallSample && <p className="text-muted-foreground">Only {b.n} firms in this industry — the average is noisy.</p>}
@@ -118,8 +119,8 @@ function Explain({ symbol, conceptId, label }: { symbol: string; conceptId: stri
   if (exp.error) return <p className="text-xs text-loss-medium">{exp.error}</p>;
   return (
     <div className="space-y-1.5 rounded-md border border-primary/25 bg-primary/[0.05] p-2.5">
-      {exp.sentences.map((s, i) => <p key={i} className="text-[13px] leading-snug">{s.text}</p>)}
-      {exp.missing.length > 0 && <p className="text-[11px] text-muted-foreground">Missing for a full picture: {exp.missing.join("; ")}</p>}
+      {exp.sentences.map((s, i) => <p key={i} className="text-[13px] leading-snug"><AutoTerms text={s.text} /></p>)}
+      {exp.missing.length > 0 && <p className="text-[11px] text-muted-foreground">Missing for a full picture: <AutoTerms text={exp.missing.join("; ")} /></p>}
       <p className="text-[10.5px] text-muted-foreground">
         {exp.source === "model" ? "AI-written from the numbers on this card — every figure was checked against them." : "Plain summary (the AI explanation wasn't available or didn't pass the number check)."}
       </p>
@@ -131,7 +132,7 @@ function MetricLine({ m, higherIsBetter, asOf }: { m: Metric; higherIsBetter: bo
   return (
     <div className="space-y-1 py-1.5">
       <div className="flex items-baseline justify-between gap-3">
-        <span className="text-xs text-muted-foreground">{m.label}{m.approx && <span title="Uses a fallback figure or assumption — see the worked example"> *</span>}</span>
+        <span className="text-xs text-muted-foreground"><AutoTerms text={m.label} />{m.approx && <span title="Uses a fallback figure or assumption — see the worked example"> *</span>}</span>
         <span className="shrink-0 font-mono text-sm font-semibold tabular-nums">{m.display}</span>
       </div>
       {m.peer && <PeerBar p={m.peer} higherIsBetter={higherIsBetter} />}
@@ -139,7 +140,7 @@ function MetricLine({ m, higherIsBetter, asOf }: { m: Metric; higherIsBetter: bo
         <p className="text-[10.5px] leading-snug text-muted-foreground">The peer rank uses the data provider's figure ({m.peer.own}) so every company is measured the same way; the {m.display} above is computed from the filings. Definitions differ slightly.</p>
       )}
       {m.bench && <BenchLine b={m.bench} higherIsBetter={higherIsBetter} asOf={asOf} />}
-      {m.note && <p className="text-[11px] leading-snug text-[hsl(40,90%,66%)]">{m.note}</p>}
+      {m.note && <p className="text-[11px] leading-snug text-[hsl(40,90%,66%)]"><AutoTerms text={m.note} /></p>}
     </div>
   );
 }
@@ -158,24 +159,24 @@ function IndustryCard({ p }: { p: LensPayload }) {
     <section className="rounded-lg border border-[hsl(199,85%,62%)]/30 bg-[hsl(199,85%,62%)]/[0.04] p-3">
       <div className="flex items-baseline justify-between gap-2">
         <span className="text-[11px] font-semibold uppercase tracking-wide text-[hsl(199,85%,72%)]">Industry context</span>
-        <span className="text-[10.5px] text-muted-foreground">Damodaran · {d.asOf}</span>
+        <span className="text-[10.5px] text-muted-foreground"><Term id="damodaran">Damodaran</Term> · {d.asOf}</span>
       </div>
       <p className="mt-1 text-[13px] leading-snug"><span className="font-semibold">{d.name}</span>{d.n ? <span className="text-muted-foreground"> · {d.n} US firms</span> : null}</p>
       <p className="text-[10.5px] text-muted-foreground">{how}.</p>
       <div className="mt-2 grid grid-cols-3 gap-1.5 text-center">
         {[["Cost of capital", d.costOfCapital, d.marketCostOfCapital ? `market ${d.marketCostOfCapital}` : null], ["Beta", d.beta, "market 1.00"], ["Losing money", d.pctMoneyLosing, "of firms"]].map(([k, v, sub]) => (
           <div key={k} className="rounded-md bg-muted/25 px-1 py-1.5">
-            <div className="text-[10px] text-muted-foreground">{k}</div>
+            <div className="text-[10px] text-muted-foreground"><AutoTerms text={k} /></div>
             <div className="font-mono text-[13px] font-semibold tabular-nums">{v ?? "—"}</div>
             {sub && <div className="text-[9.5px] text-muted-foreground">{sub}</div>}
           </div>
         ))}
       </div>
       {d.costOfCapital && !p.financial && (
-        <p className="mt-2 text-[12px] leading-snug">The hurdle: a business in this industry adds value only if its return on capital beats about <span className="font-mono">{d.costOfCapital}</span>, what investors require for its risk.</p>
+        <p className="mt-2 text-[12px] leading-snug">The <Term id="cost_of_capital">hurdle</Term>: a business in this industry adds value only if its <Term id="roic">return on capital</Term> beats about <span className="font-mono">{d.costOfCapital}</span>, what investors require for its risk.</p>
       )}
       {d.costOfEquity && p.financial && (
-        <p className="mt-2 text-[12px] leading-snug">The hurdle for a financial company is on equity: return on equity has to beat about <span className="font-mono">{d.costOfEquity}</span>, the industry's cost of equity.</p>
+        <p className="mt-2 text-[12px] leading-snug">The <Term id="cost_of_capital">hurdle</Term> for a financial company is on equity: <Term id="roe">return on equity</Term> has to beat about <span className="font-mono">{d.costOfEquity}</span>, the industry's <Term id="cost_of_equity">cost of equity</Term>.</p>
       )}
       {contrasts.length > 0 && (
         <>
@@ -186,7 +187,7 @@ function IndustryCard({ p }: { p: LensPayload }) {
             <div className="mt-1 space-y-0.5">
               {contrasts.map((m) => (
                 <div key={m.id} className="flex justify-between gap-2 text-[11.5px]">
-                  <span className="text-muted-foreground">{SHORT[m.id] ?? m.label}</span>
+                  <span className="text-muted-foreground"><AutoTerms text={SHORT[m.id] ?? m.label} /></span>
                   <span className="whitespace-nowrap font-mono tabular-nums">{m.bench!.display} <span className="text-muted-foreground">vs {m.bench!.market}</span></span>
                 </div>
               ))}
@@ -213,7 +214,7 @@ function ConceptView({ c, symbol, stageLabel, seen, asOf = null }: { c: ConceptC
       <button onClick={toggle} aria-expanded={open} className="flex w-full items-center gap-2 px-3 py-2.5 text-left hover:bg-muted/30">
         {!seen && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-primary" title="Not opened yet" />}
         <span className="min-w-0 flex-1">
-          <span className="block truncate text-[13px] font-medium">{c.title}</span>
+          <span className="block truncate text-[13px] font-medium"><AutoTerms text={c.title} /></span>
           {tone && <span className={`block truncate text-[10.5px] ${tone.cls}`}>{tone.words}</span>}
         </span>
         {prim && <span className="shrink-0 font-mono text-sm tabular-nums">{prim.display}</span>}
@@ -232,12 +233,12 @@ function ConceptView({ c, symbol, stageLabel, seen, asOf = null }: { c: ConceptC
             <div className="space-y-2.5 text-[13px] leading-snug">
               <div className="rounded-md bg-muted/30 p-2">
                 <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Think first</div>
-                <p className="mt-0.5 italic">{c.question}</p>
+                <p className="mt-0.5 italic"><AutoTerms text={c.question} /></p>
                 {!revealed && <button onClick={() => setRevealed(true)} className="mt-1 text-[11px] text-primary hover:underline">I've thought about it — show me</button>}
               </div>
               {(revealed || c.metrics.length === 0) && <>
-                <p>{c.what}</p>
-                <p className="text-foreground/85">{c.why}</p>
+                <p><AutoTerms text={c.what} /></p>
+                <p className="text-foreground/85"><AutoTerms text={c.why} /></p>
               </>}
               {c.metrics.length > 0 && (
                 <div className="rounded-md border border-border/60 px-2.5">
@@ -245,8 +246,8 @@ function ConceptView({ c, symbol, stageLabel, seen, asOf = null }: { c: ConceptC
                   {c.metrics.map((m) => <MetricLine key={m.id} m={m} higherIsBetter={c.higherIsBetter} asOf={asOf} />)}
                 </div>
               )}
-              {c.stageNote && stageLabel && <p><span className="font-semibold text-[hsl(40,90%,66%)]">At the {stageLabel} stage: </span>{c.stageNote}</p>}
-              {c.industry && <p className="text-foreground/85"><span className="font-semibold">Why industries differ: </span>{c.industry}</p>}
+              {c.stageNote && stageLabel && <p><span className="font-semibold text-[hsl(40,90%,66%)]">At the <AutoTerms text={stageLabel} /> stage: </span><AutoTerms text={c.stageNote} /></p>}
+              {c.industry && <p className="text-foreground/85"><span className="font-semibold">Why industries differ: </span><AutoTerms text={c.industry} /></p>}
               {c.metrics.length > 0 && <Explain symbol={symbol} conceptId={c.id} label={`What this means for ${symbol}`} />}
             </div>
           )}
@@ -256,18 +257,18 @@ function ConceptView({ c, symbol, stageLabel, seen, asOf = null }: { c: ConceptC
               {c.metrics.length === 0 && <p className="text-xs text-muted-foreground">This is a framework concept — see the Basics and the lecture.</p>}
               {c.metrics.map((m) => (
                 <div key={m.id} className="rounded-md border border-border/60 p-2.5 text-xs">
-                  <div className="font-semibold">{m.label}</div>
-                  <div className="mt-0.5 text-muted-foreground">{m.formula}</div>
+                  <div className="font-semibold"><AutoTerms text={m.label} /></div>
+                  <div className="mt-0.5 text-muted-foreground"><AutoTerms text={m.formula} /></div>
                   {m.inputs.length > 0 && (
                     <table className="mt-1.5 w-full">
                       <tbody>
-                        {m.inputs.map((x) => <tr key={x.label}><td className="py-0.5 pr-2 text-muted-foreground">{x.label}</td><td className="py-0.5 text-right font-mono tabular-nums">{x.display}</td></tr>)}
+                        {m.inputs.map((x) => <tr key={x.label}><td className="py-0.5 pr-2 text-muted-foreground"><AutoTerms text={x.label} /></td><td className="py-0.5 text-right font-mono tabular-nums">{x.display}</td></tr>)}
                         <tr className="border-t border-border/60"><td className="pt-1 font-semibold">= {m.label}</td><td className="pt-1 text-right font-mono font-semibold tabular-nums">{m.display}</td></tr>
                       </tbody>
                     </table>
                   )}
-                  <div className="mt-1 text-[10.5px] text-muted-foreground">{m.period}</div>
-                  {m.note && <p className="mt-1 text-[11px] text-[hsl(40,90%,66%)]">{m.note}</p>}
+                  <div className="mt-1 text-[10.5px] text-muted-foreground"><AutoTerms text={m.period} /></div>
+                  {m.note && <p className="mt-1 text-[11px] text-[hsl(40,90%,66%)]"><AutoTerms text={m.note} /></p>}
                 </div>
               ))}
             </div>
@@ -277,7 +278,7 @@ function ConceptView({ c, symbol, stageLabel, seen, asOf = null }: { c: ConceptC
             <div className="space-y-2.5">
               {c.caveats.length > 0 && (
                 <ul className="list-disc space-y-1 pl-4 text-[12.5px] leading-snug text-foreground/90">
-                  {c.caveats.map((x) => <li key={x}>{x}</li>)}
+                  {c.caveats.map((x) => <li key={x}><AutoTerms text={x} /></li>)}
                 </ul>
               )}
               <div>
@@ -301,30 +302,30 @@ function StageCard({ p }: { p: LensPayload }) {
     <section className="rounded-lg border border-[hsl(40,90%,55%)]/35 bg-[hsl(40,90%,55%)]/[0.05]">
       <button onClick={() => { setOpen(!open); if (!open) markConcept("life_cycle", p.symbol, 1); }} className="w-full px-3 py-2.5 text-left">
         <div className="flex items-center justify-between gap-2">
-          <span className="text-[11px] font-semibold uppercase tracking-wide text-[hsl(40,90%,66%)]">Life-cycle stage</span>
+          <span className="text-[11px] font-semibold uppercase tracking-wide text-[hsl(40,90%,66%)]"><Term id="life_cycle">Life-cycle stage</Term></span>
           <span className="text-[10.5px] text-muted-foreground">app rule of thumb · {lc.confidence} confidence</span>
         </div>
         <div className="mt-1.5 flex items-center gap-1" aria-label={`Stage: ${lc.label}`}>
           {STAGE_ORDER.map((s, i) => (
             <div key={s} className="flex min-w-0 flex-1 flex-col items-center gap-1">
               <div className={`h-1.5 w-full rounded-full ${i === idx ? "bg-[hsl(40,90%,58%)]" : i === lean ? "bg-[hsl(40,90%,58%)]/40" : "bg-muted/60"}`} />
-              <span className={`truncate text-[9.5px] ${i === idx ? "font-semibold text-foreground" : "text-muted-foreground"}`} title={STAGE_SHORT[s]}>{TRACK[s]}</span>
+              <span className={`truncate text-[9.5px] ${i === idx ? "font-semibold text-foreground" : "text-muted-foreground"}`} title={STAGE_SHORT[s]}><Term id={s}>{TRACK[s]}</Term></span>
             </div>
           ))}
         </div>
-        <p className="mt-2 text-[13px] leading-snug"><span className="font-semibold">{lc.label}{lc.leaningLabel ? `, leaning ${lc.leaningLabel}` : ""}.</span> The question that matters most: <span className="italic">{lc.question}</span></p>
+        <p className="mt-2 text-[13px] leading-snug"><span className="font-semibold"><AutoTerms text={lc.label} />{lc.leaningLabel ? <>, leaning <AutoTerms text={lc.leaningLabel} /></> : ""}.</span> The question that matters most: <span className="italic"><AutoTerms text={lc.question} /></span></p>
         <span className="mt-1 inline-flex items-center gap-1 text-[11px] text-primary">{open ? "Less" : "How it was placed, and what's normal here"} <ChevronDown size={12} className={open ? "rotate-180" : ""} /></span>
       </button>
       {open && (
         <div className="space-y-2.5 border-t border-[hsl(40,90%,55%)]/20 px-3 py-2.5 text-[12.5px] leading-snug">
-          <p><span className="font-semibold">Typical numbers: </span>{lc.signature}</p>
-          <p><span className="font-semibold">How the market prices it: </span>{lc.pricing}</p>
+          <p><span className="font-semibold">Typical numbers: </span><AutoTerms text={lc.signature} /></p>
+          <p><span className="font-semibold">How the market prices it: </span><AutoTerms text={lc.pricing} /></p>
           <div>
             <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">The signals used</div>
             <ul className="mt-1 space-y-0.5">
               {lc.signals.map((s) => (
                 <li key={s.id} className="flex justify-between gap-2 text-xs">
-                  <span className="text-muted-foreground">{s.label}</span>
+                  <span className="text-muted-foreground"><AutoTerms text={s.label} /></span>
                   <span className={`font-mono ${s.points.includes(lc.stage) ? "" : "text-muted-foreground line-through decoration-dotted"}`} title={`Points to: ${s.points.map((x) => STAGE_SHORT[x]).join(", ")}`}>{s.display}</span>
                 </li>
               ))}
@@ -439,10 +440,10 @@ export default function LensPanel({ symbol: symbolProp, onSymbolChange, onClose,
             <div className="flex flex-wrap gap-1 text-[10.5px]">
               <span className="rounded bg-muted/50 px-1.5 py-0.5" title={`${data.classification.sector} › ${data.classification.industry} › ${data.classification.subIndustry}`}>{data.classification.subIndustry !== "Other" ? data.classification.subIndustry : data.classification.industry}</span>
               {dm && <span className="rounded bg-[hsl(199,85%,62%)]/15 px-1.5 py-0.5 text-[hsl(199,85%,72%)]" title={`Damodaran industry group (${dm.asOf})`}>{dm.name}</span>}
-              {data.lifeCycle && <span className="rounded bg-[hsl(40,90%,55%)]/15 px-1.5 py-0.5 text-[hsl(40,90%,68%)]">{data.lifeCycle.label}</span>}
-              {proven.row?.status === "ok" && <ProvenBadge row={proven.row} short={false} className="!text-[10.5px] !font-normal py-0.5" />}
-              {fmtMoney(data.market.marketCap) && <span className="rounded bg-muted/50 px-1.5 py-0.5 font-mono">cap {fmtMoney(data.market.marketCap)}</span>}
-              {data.sec.asOf && <span className="rounded bg-muted/50 px-1.5 py-0.5" title={data.sec.filed ? `Filed ${data.sec.filed}` : undefined}>filings to {data.sec.asOf}</span>}
+              {data.lifeCycle && <span className="rounded bg-[hsl(40,90%,55%)]/15 px-1.5 py-0.5 text-[hsl(40,90%,68%)]"><AutoTerms text={data.lifeCycle.label} /></span>}
+              {proven.row?.status === "ok" && <ProvenBadge row={proven.row} short={false} explain className="!text-[10.5px] !font-normal py-0.5" />}
+              {fmtMoney(data.market.marketCap) && <span className="rounded bg-muted/50 px-1.5 py-0.5 font-mono"><Term id="market_cap">cap</Term> {fmtMoney(data.market.marketCap)}</span>}
+              {data.sec.asOf && <span className="rounded bg-muted/50 px-1.5 py-0.5" title={data.sec.filed ? `Filed ${data.sec.filed}` : undefined}><Term id="tenk">filings</Term> to {data.sec.asOf}</span>}
             </div>
           </div>
         )}
@@ -468,13 +469,13 @@ export default function LensPanel({ symbol: symbolProp, onSymbolChange, onClose,
             {/* Overview: who the company is and where it stands */}
             <div className="space-y-3">
             {data.sec.status !== "ok" && <p className="flex gap-1.5 rounded-md border border-border bg-muted/30 p-2 text-xs text-muted-foreground"><Info size={13} className="mt-px shrink-0" />{data.sec.status}</p>}
-            {data.financial && <p className="flex gap-1.5 rounded-md border border-border bg-muted/30 p-2 text-xs text-muted-foreground"><Info size={13} className="mt-px shrink-0" />A financial company: debt is part of how it makes money, so ROIC, free cash flow and coverage are left out — ROE is the main return measure here.</p>}
+            {data.financial && <p className="flex gap-1.5 rounded-md border border-border bg-muted/30 p-2 text-xs text-muted-foreground"><Info size={13} className="mt-px shrink-0" /><span><AutoTerms text="A financial company: debt is part of how it makes money, so ROIC, free cash flow and coverage are left out — ROE is the main return measure here." /></span></p>}
 
             {/* Story */}
             {data.story.length > 0 && (
               <section className="space-y-2">
                 <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">The story in numbers</div>
-                <div className="space-y-1 text-[13px] leading-snug">{data.story.map((s) => <p key={s}>{s}</p>)}</div>
+                <div className="space-y-1 text-[13px] leading-snug">{data.story.map((s) => <p key={s}><AutoTerms text={s} /></p>)}</div>
                 <Explain symbol={data.symbol} conceptId="story" label="Explain it in plain words" />
               </section>
             )}
@@ -482,17 +483,17 @@ export default function LensPanel({ symbol: symbolProp, onSymbolChange, onClose,
             {/* Snapshot: the numbers that matter most at this stage */}
             {data.snapshot.length > 0 && (
               <section>
-                <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">What matters most{stageLabel ? ` for a ${stageLabel} company` : ""}</div>
+                <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">What matters most{stageLabel ? <> for a <AutoTerms text={stageLabel} /> company</> : ""}</div>
                 <div className="grid grid-cols-2 gap-1.5">
                   {data.snapshot.map((id) => {
                     const hit = byId.get(id);
                     if (!hit) return null;
                     return (
                       <div key={id} className="rounded-md border border-border/60 bg-muted/20 p-2" style={hit.m.peer ? toneBox(peerTone(hit.m.peer, hit.c.higherIsBetter).tone, 0.35) : undefined}>
-                        <div className="truncate text-[10.5px] text-muted-foreground" title={hit.m.label}>{SHORT[id] ?? hit.m.label}</div>
+                        <div className="truncate text-[10.5px] text-muted-foreground" title={hit.m.label}><AutoTerms text={SHORT[id] ?? hit.m.label} /></div>
                         <div className="font-mono text-[15px] font-semibold tabular-nums">{hit.m.display}</div>
                         {hit.m.peer && <div className={`truncate text-[10px] ${peerTone(hit.m.peer, hit.c.higherIsBetter).cls}`}>{peerTone(hit.m.peer, hit.c.higherIsBetter).words}</div>}
-                        {hit.m.bench && <div className="truncate text-[10px] text-muted-foreground" title={`${hit.m.bench.industry} average (Damodaran)`}>industry {hit.m.bench.display}</div>}
+                        {hit.m.bench && <div className="truncate text-[10px] text-muted-foreground" title={`${hit.m.bench.industry} average (Damodaran)`}><Term id="damodaran_industry">industry</Term> {hit.m.bench.display}</div>}
                       </div>
                     );
                   })}
@@ -526,8 +527,8 @@ export default function LensPanel({ symbol: symbolProp, onSymbolChange, onClose,
                 <div key={pk} className={`space-y-3 ${veryWide ? "mb-3 break-inside-avoid" : ""}`}>
                 <section className="rounded-lg border border-border">
                   <div className="px-3 pt-2">
-                    <div className="text-[13px] font-semibold">{PILLAR_INFO[pk].label}</div>
-                    <div className="text-[11px] text-muted-foreground">{PILLAR_INFO[pk].question}</div>
+                    <div className="text-[13px] font-semibold"><AutoTerms text={PILLAR_INFO[pk].label} /></div>
+                    <div className="text-[11px] text-muted-foreground"><AutoTerms text={PILLAR_INFO[pk].question} /></div>
                   </div>
                   <div className="mt-1">{cards.map((c) => <ConceptView key={c.id} c={c} symbol={data.symbol} stageLabel={stageLabel} seen={!!progress[c.id]} asOf={asOf} />)}</div>
                 </section>
