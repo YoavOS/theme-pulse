@@ -15,9 +15,9 @@
 // Thresholds marked (judgement) are app choices from the research report, to be recalibrated.
 // ─────────────────────────────────────────────────────────────
 import { byPeriod, dur, factsFor, type Facts, type SecFact } from "./secFundamentals.ts";
-import { LENS_FLOW, LENS_INSTANT, debtAt, type QuarterRow } from "./lensMetrics.ts";
+import { LENS_FLOW, LENS_INSTANT, debtAt, type QuarterRow, type Stage } from "./lensMetrics.ts";
 
-export const PROVEN_VERSION = 1;
+export const PROVEN_VERSION = 2;
 
 const EXTRA_FLOW = {
   goodwillImpairment: ["GoodwillImpairmentLoss"],
@@ -105,6 +105,7 @@ export interface YearMetrics {
   revGrowth: number | null;
   shares: number | null;
   acquisitions: number | null; goodwill: number | null;
+  cashReturned: number | null;  // buybacks + dividends ($)
 }
 
 export interface EngineCtx {
@@ -115,6 +116,8 @@ export interface EngineCtx {
   industry: string | null;      // Damodaran industry
   industryGm: number | null;    // Damodaran industry gross margin (%)
   industrySalesToCapital: number | null;
+  /** Life-cycle stage from the Lens (Damodaran's six stages) — decides which test applies. */
+  stage?: Stage | null;
 }
 export const HURDLE_FLOOR = 6;  // (judgement) no business is judged against less than 6%
 const taxFor = (end: string) => (end < "2018-01-01" ? 0.35 : 0.25);   // hypothetical marginal rate (Damodaran)
@@ -188,6 +191,7 @@ export function yearMetrics(rows: YearRow[], ctx: EngineCtx): YearMetrics[] {
       revGrowth: fin(rev) && fin(prev?.flow.revenue) && prev!.flow.revenue! > 0 ? (rev / prev!.flow.revenue! - 1) * 100 : null,
       shares: shares[i],
       acquisitions: fin(r.flow.acquisitions) ? Math.max(0, r.flow.acquisitions) : null, goodwill: r.inst.goodwill ?? null,
+      cashReturned: fin(r.flow.buybacks) || fin(r.flow.dividends) ? Math.max(0, r.flow.buybacks ?? 0) + Math.max(0, r.flow.dividends ?? 0) : null,
     };
   });
   // pooled 3-year return (Σ NOPAT / Σ beginning capital), on the same basis as `primary`
@@ -248,6 +252,7 @@ export interface Verdict {
   flags: string[];              // still_compounding, rd_adjusted, ex_goodwill_better, cyclical_by_volatility, …
   archetype: string | null; archetypes: string[];
   score: number | null;         // internal list ordering only
+  stage: Stage | null;
   series: { end: string; spread: number | null; primary: number | null; margin: number | null; turnover: number | null }[];
 }
 
@@ -269,8 +274,9 @@ export function evaluate(ms: YearMetrics[], ctx: EngineCtx, now = new Date()): V
   const window = ms.slice(0, 10);
   const latest = ms[0];
   const flags: string[] = [];
+  const stage = ctx.stage ?? null;
   const base = {
-    version: PROVEN_VERSION, asOf: latest?.end ?? null, hurdle, flags,
+    version: PROVEN_VERSION, asOf: latest?.end ?? null, hurdle, flags, stage,
     series: window.map((m) => ({ end: m.end, spread: m.spread, primary: m.primary, margin: m.margin, turnover: m.turnover })).reverse(),
   };
   if (!latest) {
@@ -401,6 +407,9 @@ export function evaluate(ms: YearMetrics[], ctx: EngineCtx, now = new Date()): V
     { id: "value", miss: "destroyed value in total", label: "Created value in total over the period", pass: fin(cumEp) ? cumEp > 0 : null, value: fin(cumEp) ? `${cumEp >= 0 ? "+" : "−"}$${(Math.abs(cumEp) / 1e9).toFixed(cumEp > 1e10 || cumEp < -1e10 ? 0 : 1)}B` : "n/a" },
   ];
   const testsPass = checks.every((c) => c.pass === true);
+  // Damodaran: what "good" looks like depends on the stage — act your age (informational, not part of the pass)
+  const age = ageCheck(stage, window, hurdle, incr);
+  if (age) { checks.push(age); if (age.pass === false) flags.push("not_acting_age"); }
   const elite = testsPass && above >= Math.ceil((cyclical ? 0.7 : 0.8) * n) && fin(wm) && wm >= 5;
   const fadingNow = fin(slope) && slope <= -2 || (window.length >= 2 && window.slice(0, 2).every((m) => fin(m.spread) && m.spread < 0));
 
@@ -414,8 +423,20 @@ export function evaluate(ms: YearMetrics[], ctx: EngineCtx, now = new Date()): V
     return { ...base, ...common, track, label, sentence, why: WHY[track], checks };
   }
 
-  // not proven on the full test — young / short record?
-  const young = n < 7 || (fin(cagr5) && cagr5 > 20) || cumOpLoss;
+  // not proven on the full test — young / short record? The life-cycle stage decides when it's known:
+  // start-ups and young growth firms are always judged on direction; mature and declining firms never are.
+  const youngByStage = stage === "startup" || stage === "young_growth";
+  const matureByStage = stage === "mature_growth" || stage === "mature_stable" || stage === "decline";
+  const young = youngByStage || (!matureByStage && (n < 7 || (fin(cagr5) && cagr5 > 20) || cumOpLoss));
+  if (!young && n < 7) {
+    // a mature business with a short public record (recent listing / spin-off)
+    if (n >= 3 && above >= n - 1 && fin(wm) && wm >= 3 && !fadingNow) {
+      return { ...base, ...common, track, label: "provisional", why: WHY[track], checks,
+        sentence: `Short record but a clean one: earned more than its cost of capital in ${above} of ${n} years (median ${pp(wm)}). Needs more years to count as proven.` };
+    }
+    return { ...base, ...common, track, label: n < 3 ? "insufficient" : "not_proven", why: WHY[track], checks,
+      sentence: n < 3 ? `Only ${n} year${n === 1 ? "" : "s"} of comparable annual reports — too short to judge.` : `Short record: ${recordSentence.charAt(0).toLowerCase()}${recordSentence.slice(1)}` };
+  }
   if (young) {
     const yc = youngChecks(window, ctx, hurdle, incr);
     // a short but clean record of excess returns
@@ -444,6 +465,31 @@ export function evaluate(ms: YearMetrics[], ctx: EngineCtx, now = new Date()): V
   const failed = checks.filter((c) => c.pass === false).map((c) => c.miss ?? c.label);
   return { ...base, ...common, track, label: "not_proven", why: WHY[track], checks,
     sentence: `${recordSentence}${failed.length ? ` Misses: ${failed.join("; ")}.` : ""}` };
+}
+
+/** Damodaran's "act your age": what a company at this stage should be doing with its capital.
+ *  Mature-stage firms aren't asked to grow; growth firms aren't asked to pay out. (judgement thresholds) */
+export function ageCheck(stage: Stage | null, window: YearMetrics[], hurdle: number, incr: number | null): Check | null {
+  if (!stage || stage === "startup" || stage === "young_growth") return null;   // covered by the young-company checks
+  const w3 = window.slice(0, 3);
+  const fcf3 = w3.reduce((s, m) => s + (m.fcf ?? 0), 0);
+  const ret3 = w3.reduce((s, m) => s + (m.cashReturned ?? 0), 0);
+  const payout = fcf3 > 0 ? (ret3 / fcf3) * 100 : null;
+  const capGrowth = fin(window[0]?.ic) && fin(window[Math.min(3, window.length - 1)]?.ic) && window[Math.min(3, window.length - 1)].ic! > 0
+    ? (window[0].ic! / window[Math.min(3, window.length - 1)].ic! - 1) * 100 : null;
+  if (stage === "high_growth" || stage === "mature_growth") {
+    return { id: "age", miss: "reinvesting at returns below its cost", label: "Acting its age (growth): new capital earns more than it costs, so reinvesting adds value",
+      pass: fin(incr) ? incr > hurdle : null, value: fin(incr) ? `new capital earns ${pct(incr)} vs ${pct(hurdle, 1)}` : "n/a" };
+  }
+  if (stage === "mature_stable") {
+    return { id: "age", miss: "holding on to cash it can't reinvest well", label: "Acting its age (mature): returns most of the cash it can't reinvest well (≥ 50% of free cash flow, 3 yrs)",
+      pass: fin(payout) ? payout >= 50 : null, value: fin(payout) ? `${Math.round(payout)}% of FCF returned` : fcf3 <= 0 ? "no free cash flow" : "n/a" };
+  }
+  // decline: shrink gracefully — don't pour capital in below its cost; give cash back
+  const reinvestingBelowCost = fin(capGrowth) && capGrowth > 10 && !(fin(incr) && incr > hurdle);
+  return { id: "age", miss: "investing to grow despite returns below its cost", label: "Acting its age (decline): not pouring capital into growth that earns less than it costs, and returning cash",
+    pass: fin(capGrowth) ? !reinvestingBelowCost && (fin(payout) ? payout >= 50 : true) : null,
+    value: `${fin(capGrowth) ? `capital ${capGrowth >= 0 ? "+" : ""}${capGrowth.toFixed(0)}% in 3 yrs` : "n/a"}${fin(payout) ? `; ${Math.round(payout)}% of FCF returned` : ""}` };
 }
 
 /** Incremental ROIC over up to 5 years: ΔNOPAT / Δ beginning capital (%), when capital grew ≥ 5%. */

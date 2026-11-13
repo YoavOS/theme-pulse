@@ -16,6 +16,7 @@ import { classifyLabel } from "../_shared/gicsTaxonomy.ts";
 import { resolveDamodaranIndustry } from "../_shared/damodaranMap.ts";
 import { defaultRndLife, TOTAL_MARKET } from "../_shared/damodaran.ts";
 import { evaluate, parseAnnualPanel, PROVEN_VERSION, yearMetrics, type EngineCtx } from "../_shared/provenEngine.ts";
+import { classifyLifeCycle, computeMetrics, parseLensHistory } from "../_shared/lensMetrics.ts";
 
 const SB_URL = Deno.env.get("SUPABASE_URL")!;
 const SB_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -48,7 +49,8 @@ async function scoreOne(sb: Sb, symbol: string, sector: string | null, bench: Be
   if (!cik) return { ...base, status: "not_sec_filer", sentence: "Not an SEC filer (foreign listing, ETF or unknown ticker) — no 10-K history to judge." };
   const r = await fetch(`https://data.sec.gov/api/xbrl/companyfacts/CIK${String(cik).padStart(10, "0")}.json`, { headers: { "User-Agent": SEC_UA } });
   if (!r.ok) { await r.body?.cancel(); throw new Error(`SEC HTTP ${r.status}`); }
-  const panel = parseAnnualPanel(await r.json());
+  const facts = await r.json();
+  const panel = parseAnnualPanel(facts);
   if (!panel.length) return { ...base, status: "no_annual_filings", sentence: "No US-GAAP annual filings (IFRS / 20-F filer, or too new) — nothing to judge yet." };
   const lastFiled = panel[0].filed;
   // unchanged since the last scoring → just mark it checked
@@ -62,7 +64,14 @@ async function scoreOne(sb: Sb, symbol: string, sector: string | null, bench: Be
   const row = bench.idx.get(ind.name) ?? bench.idx.get(TOTAL_MARKET) ?? {};
   const hurdleSource = bench.idx.has(ind.name) && ind.match !== "market"
     ? `Damodaran cost of capital, ${ind.name} (${bench.asOf})` : bench.idx.has(TOTAL_MARKET) ? `Damodaran cost of capital, whole market (${bench.asOf})` : "app assumption (8%) — Damodaran data not loaded";
+  // the same life-cycle stage the Lens shows (Damodaran's six stages, from the latest quarters)
+  let stage: EngineCtx["stage"] = null;
+  try {
+    const h = parseLensHistory(facts);
+    stage = classifyLifeCycle(computeMetrics(h, { price: null, marketCap: null }, { financial }), h)?.stage ?? null;
+  } catch { stage = null; }
   const ctx: EngineCtx = {
+    stage,
     hurdle: row.cost_of_capital ?? 8, costOfEquity: row.cost_of_equity ?? null, financial,
     rndLife: defaultRndLife(ind.match !== "market" ? ind.name : null, classification.sector),
     industry: ind.match !== "market" ? ind.name : null, industryGm: row.gross_margin ?? null, industrySalesToCapital: row.sales_to_capital ?? null,
@@ -82,7 +91,7 @@ async function scoreOne(sb: Sb, symbol: string, sector: string | null, bench: Be
     ...base, status: "ok", error: null, as_of: v.asOf, last_10k_filed: lastFiled, track: v.track, label: v.label, sentence: v.sentence, why: v.why,
     years_valid: v.yearsValid, years_above: v.yearsAbove, median_spread: v.medianSpread, min_pooled_spread: v.minPooledSpread, cum_ep: v.cumEp,
     spread_slope: v.spreadSlope, hurdle: v.hurdle, hurdle_source: hurdleSource, industry: ctx.industry, archetype: v.archetype, archetypes: v.archetypes,
-    flags: v.flags, checks: v.checks, gates: v.gates, series: v.series, score: v.score,
+    flags: v.flags, checks: v.checks, gates: v.gates, series: v.series, score: v.score, life_stage: v.stage,
   };
 }
 
