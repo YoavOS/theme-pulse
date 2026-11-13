@@ -20,6 +20,8 @@ import LeadershipPanel from "@/components/stages/LeadershipPanel";
 import RotationPanel from "@/components/stages/RotationPanel";
 import NewHighsLowsPanel from "@/components/stages/NewHighsLowsPanel";
 import StageStockTable, { StageBadge } from "@/components/stages/StageStockTable";
+import StageOverview from "@/components/stages/StageOverview";
+import { tint } from "@/lib/colorTint";
 import {
   REGIME_TEXT, STAGE_COLORS, applyLive, loadMarketStages, loadStages, onStagesUpdated, type MarketMember, STAGE_NAMES, STAGE_TIPS, groupHealth, isStageScanRunning, regimeSeries, runStageScan, stageWeeksAgo,
   type StageNum, type StockStage,
@@ -56,50 +58,6 @@ function breadthSeries(rows: StockStage[]) {
     for (const k of STAGES) out[k].push(tot ? (n[k] / tot) * 100 : 0);
   }
   return out;
-}
-
-function MiniChart({ series }: { series: Record<StageNum, number[]> }) {
-  const [hover, setHover] = useState<number | null>(null);
-  const len = series[2].length;
-  if (len < 2) return <div className="py-6 text-center text-xs text-muted-foreground">History appears after the first scan.</div>;
-  const all = STAGES.flatMap((k) => series[k]);
-  const max = Math.min(100, Math.ceil((Math.max(...all) + 5) / 10) * 10);
-  const W = 1000, H = 120;
-  const path = (arr: number[]) => arr.map((v, i) => `${i ? "L" : "M"}${((i / (len - 1)) * W).toFixed(1)},${(H - (v / max) * (H - 8) - 4).toFixed(1)}`).join(" ");
-  return (
-    <div className="relative">
-      <svg
-        viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="h-[120px] w-full"
-        onMouseMove={(e) => {
-          const rect = (e.currentTarget as SVGElement).getBoundingClientRect();
-          setHover(Math.round(((e.clientX - rect.left) / rect.width) * (len - 1)));
-        }}
-        onMouseLeave={() => setHover(null)}
-      >
-        {[0.25, 0.5, 0.75].map((f) => <line key={f} x1={0} x2={W} y1={H * f} y2={H * f} stroke="hsl(var(--border))" strokeWidth={1} vectorEffect="non-scaling-stroke" opacity={0.4} />)}
-        {/* shade the gap between Stage 2 and Stage 4: blue while advancing stocks outnumber declining ones, pink otherwise */}
-        {series[2].slice(1).map((_, k) => {
-          const x0 = (k / (len - 1)) * W, x1 = ((k + 1) / (len - 1)) * W;
-          const y = (v: number) => H - (v / max) * (H - 8) - 4;
-          const net = series[2][k] + series[2][k + 1] - series[4][k] - series[4][k + 1];
-          return <polygon key={k} points={`${x0},${y(series[2][k])} ${x1},${y(series[2][k + 1])} ${x1},${y(series[4][k + 1])} ${x0},${y(series[4][k])}`} fill={net >= 0 ? STAGE_COLORS[2] : STAGE_COLORS[4]} opacity={0.13} />;
-        })}
-        {([1, 3, 4, 2] as StageNum[]).map((k) => (
-          <path key={k} d={path(series[k])} fill="none" stroke={STAGE_COLORS[k]} strokeWidth={k === 2 || k === 4 ? 2 : 1.2}
-            opacity={k === 2 || k === 4 ? 1 : 0.6} vectorEffect="non-scaling-stroke" />
-        ))}
-        {hover !== null && <line x1={(hover / (len - 1)) * W} x2={(hover / (len - 1)) * W} y1={0} y2={H} stroke="hsl(var(--muted-foreground))" strokeWidth={1} vectorEffect="non-scaling-stroke" />}
-      </svg>
-      {hover !== null && (
-        <div className="pointer-events-none absolute top-1 rounded border border-border bg-background/95 px-2 py-1 font-mono text-[10px]" style={{ left: `min(${(hover / (len - 1)) * 100}%, calc(100% - 150px))` }}>
-          <div className="text-muted-foreground">{len - 1 - hover === 0 ? "last week" : `${len - 1 - hover}w ago`}</div>
-          {STAGES.map((k) => <div key={k} style={{ color: STAGE_COLORS[k] }}>S{k} {series[k][hover].toFixed(0)}%</div>)}
-          <div className="text-foreground">S2 − S4 {(series[2][hover] - series[4][hover]) >= 0 ? "+" : ""}{(series[2][hover] - series[4][hover]).toFixed(0)}</div>
-        </div>
-      )}
-      <div className="flex justify-between text-[10px] text-muted-foreground"><span>{len}w ago</span><span>max {max}%</span><span>last completed week</span></div>
-    </div>
-  );
 }
 
 const TRANSITION_GROUPS: { key: string; label: string; color: StageNum; match: (r: StockStage) => boolean }[] = [
@@ -382,11 +340,11 @@ export default function StageAnalysis() {
     return [...c.entries()].sort((a, b) => a[0].localeCompare(b[0]));
   }, [list]);
 
-  const pctOf = (k: StageNum) => (totals.classified ? (totals.n[k] / totals.classified) * 100 : 0);
-  const healthTone = { strong: "text-[hsl(222,82%,68%)]", healthy: "text-[hsl(222,70%,78%)]", neutral: "text-muted-foreground", weak: "text-[hsl(329,70%,64%)]" };
+  // Health pills (Deepvue colours: strong/healthy blue, neutral yellow, weak pink)
+  const HEALTH_COLOR = { strong: "hsl(222, 82%, 66%)", healthy: "hsl(222, 82%, 66%)", neutral: "hsl(47, 75%, 52%)", weak: "hsl(329, 70%, 62%)" } as const;
   const colHead = (col: SortCol, label: string, tip?: string) => (
-    <th onClick={() => setSortCol(col)} className={`cursor-pointer select-none whitespace-nowrap px-2 py-2 text-right text-[11px] font-medium ${sortCol === col ? "text-[hsl(222,82%,68%)]" : "text-muted-foreground"}`} title={tip}>
-      {label}{sortCol === col ? " ▾" : ""}
+    <th onClick={() => setSortCol(col)} className={`cursor-pointer select-none whitespace-nowrap px-2 py-3 text-right text-[14px] font-semibold ${sortCol === col ? "text-[hsl(222,82%,68%)]" : "text-muted-foreground"}`} title={tip}>
+      {label}{sortCol === col ? " ↓" : ""}
     </th>
   );
 
@@ -509,50 +467,31 @@ export default function StageAnalysis() {
 
             <div id="sa-breadth" className="scroll-mt-12"><RegimePanel rows={regimeRows} scopeLabel={scope === "market" ? "the whole market" : "your list"} /></div>
 
-            {/* Market overview */}
-            <section id="sa-overview" className="scroll-mt-12 rounded-lg border border-border bg-card p-4">
+            {/* Market overview — Deepvue layout */}
+            <section id="sa-overview" className="scroll-mt-12 space-y-4 py-2">
               <SectionHead
                 title={scope === "market" ? "Stages across the whole market" : "Stages across your list"}
-                sub="Where every stock sits in Weinstein's four stages this week. Click a stage to see its stocks."
+                sub="Where every stock sits in Weinstein's four stages this week. Click a stage for its stocks; click the legend to show or hide a line."
                 right={market && <span className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground">SPY <StageBadge r={market} /></span>}
               />
-              <div className="flex h-2 overflow-hidden rounded-full bg-muted">
-                {STAGES.map((k) => <div key={k} style={{ width: `${pctOf(k)}%`, background: STAGE_COLORS[k] }} />)}
-              </div>
-              <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-5">
-                {STAGES.map((k) => (
-                  <Tooltip key={k}>
-                    <TooltipTrigger asChild>
-                      <button onClick={() => openStage(k)} className="rounded-md border border-transparent px-2 py-1.5 text-center transition hover:border-border hover:bg-accent/40">
-                        <div className="flex items-center justify-center gap-1.5 text-xs"><span className="h-2 w-2 rounded-full" style={{ background: STAGE_COLORS[k] }} />S{k}</div>
-                        <div className="mt-0.5 font-mono text-[11px] text-muted-foreground">{totals.n[k].toLocaleString("en-US")} · {pctOf(k).toFixed(0)}%</div>
-                      </button>
-                    </TooltipTrigger>
-                    <TooltipContent className="max-w-xs text-xs">{STAGE_TIPS[k]}</TooltipContent>
-                  </Tooltip>
-                ))}
-                <button onClick={() => openStage(0)} className="rounded-md border border-transparent px-2 py-1.5 text-center transition hover:border-border hover:bg-accent/40" title={STAGE_TIPS[0]}>
-                  <div className="text-xs text-muted-foreground">In transition</div>
-                  <div className="mt-0.5 font-mono text-[11px] text-muted-foreground">{totals.n[0].toLocaleString("en-US")}</div>
-                </button>
-              </div>
-              <div className="mt-3 flex flex-wrap items-center justify-end gap-3 text-[10px] text-muted-foreground">
-                {breadth && (
-                  <span className="mr-auto" title="Where this week's Stage 2 share sits within the chart's history. Very low readings (washouts) have tended to come before the strongest rebounds in leaders; very high readings mean a crowded, extended market — context, not a timing signal.">
-                    Stage 2 share <b className="text-foreground">{breadth.now.toFixed(0)}%</b>{scope === "market" && <> · {ordinal(breadth.pct)} percentile of the last {breadth.weeks} weeks (range {breadth.lo.toFixed(0)}–{breadth.hi.toFixed(0)}%, rebuilt from today's members)</>}
-                    {breadth.pct <= 10 ? " · washout zone" : breadth.pct >= 90 ? " · crowded zone" : ""}
-                  </span>
-                )}
-                {net && (
-                  <span title="Share of stocks in Stage 2 minus the share in Stage 4 — positive while advancing stocks outnumber declining ones (the shaded gap on the chart)">
-                    S2 − S4 <b className={net.now >= 0 ? "text-[hsl(222,82%,70%)]" : "text-[hsl(329,70%,66%)]"}>{net.now >= 0 ? "+" : ""}{net.now.toFixed(0)} pts</b>
-                    {" "}<span className={net.d4 >= 0 ? "text-gain-medium" : "text-loss-medium"}>({net.d4 >= 0 ? "▲" : "▼"}{Math.abs(net.d4).toFixed(0)} in 4w)</span>
-                  </span>
-                )}
-                {STAGES.map((k) => <span key={k} className="inline-flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full" style={{ background: STAGE_COLORS[k] }} />S{k}</span>)}
-                <span>· % of classified stocks, weekly</span>
-              </div>
-              <MiniChart series={series} />
+              <StageOverview
+                n={totals.n} transition={totals.n[0]} series={series} onOpen={openStage}
+                footer={<>
+                  {breadth && (
+                    <span title="Where this week's Stage 2 share sits within the chart's history. Very low readings (washouts) have tended to come before the strongest rebounds in leaders; very high readings mean a crowded, extended market — context, not a timing signal.">
+                      Stage 2 share <b className="text-foreground">{breadth.now.toFixed(0)}%</b>{scope === "market" && <> · {ordinal(breadth.pct)} percentile of the last {breadth.weeks} weeks (range {breadth.lo.toFixed(0)}–{breadth.hi.toFixed(0)}%, rebuilt from today's members)</>}
+                      {breadth.pct <= 10 ? " · washout zone" : breadth.pct >= 90 ? " · crowded zone" : ""}
+                    </span>
+                  )}
+                  {net && (
+                    <span title="Share of stocks in Stage 2 minus the share in Stage 4 — positive while advancing stocks outnumber declining ones">
+                      S2 − S4 <b style={{ color: net.now >= 0 ? STAGE_COLORS[2] : STAGE_COLORS[4] }}>{net.now >= 0 ? "+" : ""}{net.now.toFixed(0)} pts</b>
+                      {" "}<span className={net.d4 >= 0 ? "text-gain-medium" : "text-loss-medium"}>({net.d4 >= 0 ? "▲" : "▼"}{Math.abs(net.d4).toFixed(0)} in 4w)</span>
+                    </span>
+                  )}
+                  <span>% of classified stocks, weekly</span>
+                </>}
+              />
             </section>
 
             {/* Transitions */}
@@ -622,12 +561,12 @@ export default function StageAnalysis() {
               <NewHighsLowsPanel stocks={aligned} groupsOf={groupsOf} modeLabel={GROUP_MODE_LABEL[mode]} onOpen={openList} />
             </div>
 
-            {/* Groups */}
-            <section id="sa-groups" className="scroll-mt-12 overflow-hidden rounded-lg border border-border bg-card">
-              <div className="border-b border-border px-4 pb-1 pt-4">
+            {/* Groups — Deepvue layout */}
+            <section id="sa-groups" className="scroll-mt-12">
+              <div className="pb-2">
                 <SectionHead
                   title="By group"
-                  sub={mode !== "theme" && !uniLoaded ? "Loading industries…" : `${groups.length} groups ranked by their share of stocks in Stage 2. Click a row for its stocks.`}
+                  sub={mode !== "theme" && !uniLoaded ? "Loading industries…" : `${groups.length} groups. Click a column to sort, a row for its stocks.`}
                   right={<>
                     <Segmented value={mode} onChange={(m) => { setMode(m); setExpanded(null); setShowAllGroups(false); }} options={MODES.map((m) => ({ value: m, label: GROUP_MODE_LABEL[m] }))} />
                     <label className="flex items-center gap-1.5 text-[11px] text-muted-foreground" title="Groups with very few stocks swing between 0% and 100% — hide them for a fair ranking">
@@ -641,13 +580,13 @@ export default function StageAnalysis() {
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full border-collapse">
-                  <thead className="bg-muted/20">
-                    <tr className="border-b border-border">
-                      <th onClick={() => setSortCol("name")} className="cursor-pointer px-3 py-2 text-left text-[11px] font-medium text-muted-foreground">Group</th>
-                      <th className="hidden px-2 py-2 text-left text-[11px] font-medium text-muted-foreground md:table-cell">Distribution</th>
+                  <thead>
+                    <tr className="border-b-2 border-border">
+                      <th onClick={() => setSortCol("name")} className={`cursor-pointer select-none px-2 py-3 text-left text-[14px] font-semibold ${sortCol === "name" ? "text-[hsl(222,82%,68%)]" : "text-muted-foreground"}`}>Name{sortCol === "name" ? " ↓" : ""}</th>
+                      <th className="hidden px-2 py-3 md:table-cell" aria-label="Distribution" />
                       {colHead(1, "S1")}{colHead(2, "S2")}{colHead(3, "S3")}{colHead(4, "S4")}
                       {colHead("a2", "2A", "Fresh Stage 2 breakouts (last 13 weeks) in the group")}
-                      {colHead("d2", "Stage mix", "From the share of the group's stocks in each stage right now — Strong: S2 ≥ 50% · Healthy: S2 ≥ 35% · Weak: S4 ≥ 50%. Arrow = change in the S2 share vs 4 weeks ago. (Group leadership above measures returns vs SPY instead, so the two can differ.)")}
+                      {colHead("d2", "Health", "From the share of the group's stocks in each stage right now — Strong: S2 ≥ 50% · Healthy: S2 ≥ 35% · Weak: S4 ≥ 50%. Arrow = change in the S2 share vs 4 weeks ago; click to sort by it. (Group leadership above measures returns vs SPY instead, so the two can differ.)")}
                     </tr>
                   </thead>
                   <tbody>
@@ -656,36 +595,37 @@ export default function StageAnalysis() {
                       const open = expanded === g.name;
                       return (
                         <Fragment key={g.name}>
-                          <tr onClick={() => setExpanded(open ? null : g.name)} className="cursor-pointer border-b border-border/40 hover:bg-accent/30">
-                            <td className="max-w-[260px] px-3 py-2 text-xs font-medium">
-                              <span className="inline-flex items-center gap-1">
-                                {open ? <ChevronDown size={12} /> : <ChevronRight size={12} className="text-muted-foreground" />}
+                          <tr onClick={() => setExpanded(open ? null : g.name)} className="cursor-pointer hover:bg-accent/20">
+                            <td className="max-w-[300px] px-2 py-3.5">
+                              <span className="inline-flex min-w-0 items-center gap-1.5 text-[15px] font-semibold">
+                                {open ? <ChevronDown size={14} className="shrink-0" /> : <ChevronRight size={14} className="shrink-0 text-muted-foreground" />}
                                 <span className="truncate">{g.name}</span>
-                                <span className="font-normal text-muted-foreground">({g.count})</span>
+                                <span className="text-[12px] font-normal text-muted-foreground">{g.count}</span>
                               </span>
                             </td>
-                            <td className="hidden px-2 py-2 md:table-cell">
-                              <div className="flex h-1.5 w-40 overflow-hidden rounded-full bg-muted">
+                            <td className="hidden px-2 py-3.5 md:table-cell">
+                              <div className="flex h-2.5 w-[200px] overflow-hidden rounded-full bg-muted">
                                 {STAGES.map((k) => <div key={k} style={{ width: `${g.pct[k as 1]}%`, background: STAGE_COLORS[k] }} />)}
                               </div>
                             </td>
-                            <td className="px-2 py-2 text-right font-mono text-xs">{g.pct[1].toFixed(0)}%</td>
-                            <td className="px-2 py-2 text-right font-mono text-xs" style={{ color: STAGE_COLORS[2] }}>{g.pct[2].toFixed(0)}%</td>
-                            <td className="px-2 py-2 text-right font-mono text-xs" style={g.pct[3] >= 30 ? { color: STAGE_COLORS[3] } : undefined}>{g.pct[3].toFixed(0)}%</td>
-                            <td className="px-2 py-2 text-right font-mono text-xs" style={g.pct[4] >= 40 ? { color: STAGE_COLORS[4] } : undefined}>{g.pct[4].toFixed(0)}%</td>
-                            <td className="px-2 py-2 text-right font-mono text-xs">{g.fresh2A || <span className="text-muted-foreground">·</span>}</td>
-                            <td className="whitespace-nowrap px-3 py-2 text-right text-[11px]">
-                              <span className={healthTone[h.tone]}>{h.label}</span>
+                            {STAGES.map((k) => {
+                              const v = g.pct[k as 1];
+                              const hot = (k === 2 && (sortCol === 2 || v >= 30)) || (k === 4 && v >= 40) || (k === 3 && v >= 30);
+                              return <td key={k} className="px-2 py-3.5 text-right text-[15px] tabular-nums" style={hot ? { color: STAGE_COLORS[k] } : undefined}>{v.toFixed(0)}%</td>;
+                            })}
+                            <td className="px-2 py-3.5 text-right text-[14px] tabular-nums">{g.fresh2A || <span className="text-muted-foreground">·</span>}</td>
+                            <td className="whitespace-nowrap px-2 py-3.5 text-right">
+                              <span className="inline-block rounded-md px-3 py-1 text-[14px] font-semibold" style={{ color: HEALTH_COLOR[h.tone], background: tint(HEALTH_COLOR[h.tone], 0.14) }}>{h.label}</span>
                               {g.s2Change4w !== null && Math.abs(g.s2Change4w) >= 1 && (
-                                <span className={`ml-1 font-mono text-[10px] ${g.s2Change4w > 0 ? "text-gain-medium" : "text-loss-strong"}`}>
+                                <span className={`ml-1.5 font-mono text-[11px] ${g.s2Change4w > 0 ? "text-gain-medium" : "text-loss-strong"}`} title="Change in the group's Stage 2 share vs 4 weeks ago (points)">
                                   {g.s2Change4w > 0 ? "▲" : "▼"}{Math.abs(g.s2Change4w).toFixed(0)}
                                 </span>
                               )}
                             </td>
                           </tr>
                           {open && (
-                            <tr className="border-b border-border/40 bg-background/40">
-                              <td colSpan={8} className="px-4 py-3">
+                            <tr className="bg-card/50">
+                              <td colSpan={8} className="px-3 py-3">
                                 <StageStockTable rows={g.members} exportName={`Stages_${g.name}`} rsOf={rsOf} nameOf={nameOf} maxHeight={360} />
                               </td>
                             </tr>
@@ -697,7 +637,7 @@ export default function StageAnalysis() {
                 </table>
               </div>
               {groups.length > GROUP_PREVIEW && (
-                <button onClick={() => setShowAllGroups((v) => !v)} className="w-full border-t border-border px-4 py-2 text-left text-[11.5px] text-primary hover:bg-accent/30">
+                <button onClick={() => setShowAllGroups((v) => !v)} className="mt-1 w-full px-2 py-2 text-left text-[12px] text-primary hover:bg-accent/20">
                   {showAllGroups ? `Show the top ${GROUP_PREVIEW} only` : `Show all ${groups.length} groups`}
                 </button>
               )}
