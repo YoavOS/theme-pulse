@@ -99,7 +99,8 @@ export default function TrackRecordCard({ row, loading }: { row: ProvenRow | nul
           )}
           {(row.flags ?? []).filter((f) => FLAG_TEXT[f] && !(young && f === "rd_adjusted")).map((f) => <p key={f} className="text-[11px] leading-snug text-[hsl(40,90%,66%)]">{FLAG_TEXT[f]}</p>)}
           <p className="text-[10.5px] leading-snug text-muted-foreground">
-            {young ? "Industry comparisons: " : "Hurdle: "}{row.hurdle_source ?? "industry cost of capital"}{young ? "" : ", never below 6%, applied to every year"}. Annual 10-K figures{row.as_of ? ` through FY ${row.as_of.slice(0, 4)}` : ""}; thresholds are the app's judgement and will be recalibrated.
+            {young ? "Industry comparisons: " : "Hurdle: "}{row.hurdle_source ?? "industry cost of capital"}{young ? "" : ", applied to every year"}. Annual 10-K figures{row.as_of ? ` through FY ${row.as_of.slice(0, 4)}` : ""}; thresholds are the app's judgement and will be recalibrated.
+            {!young && " Return on capital here is Damodaran's adjusted, year-by-year version — a standard tax rate, leases counted as debt, and R&D treated as investment where it's material — so it can differ from the trailing-twelve-month figure in the Profitability section."}
           </p>
         </div>
       )}

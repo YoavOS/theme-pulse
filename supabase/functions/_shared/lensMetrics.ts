@@ -224,7 +224,7 @@ export interface LensMetrics {
   ttmLabel: string;
   taxRate: number | null;        // effective rate used (fraction)
   /** Raw TTM inputs the front end needs for Damodaran's R&D/lease adjustments. */
-  raw?: { ebit: number | null; revenue: number | null; rndTtm: number | null; icBase: number | null; leaseNow: number | null; leaseBase: number | null };
+  raw?: { ebit: number | null; revenue: number | null; rndTtm: number | null; icBase: number | null; leaseNow: number | null; leaseBase: number | null; debt: number | null; cash: number | null };
   revenueTtm: number | null;
 }
 
@@ -424,7 +424,7 @@ export function computeMetrics(h: CompanyHistory, mkt: MarketData, opts: { finan
     note: fin(ebit) && ebit <= 0 ? "Not meaningful: operating income is negative." : undefined });
 
   return { metrics: m, asOf: q0?.end ?? null, filed: q0?.filed ?? null, ttmLabel, taxRate, revenueTtm: rev,
-    raw: { ebit, revenue: rev, rndTtm: rnd, icBase: fin(icBase) ? icBase : null, leaseNow: q0?.inst.opLease ?? null, leaseBase: q4?.inst.opLease ?? null } };
+    raw: { ebit, revenue: rev, rndTtm: rnd, icBase: fin(icBase) ? icBase : null, leaseNow: q0?.inst.opLease ?? null, leaseBase: q4?.inst.opLease ?? null, debt: d0.debt, cash: c0 } };
 }
 
 // ── Corporate life cycle (heuristic) ──────────────────────────────────────────────────

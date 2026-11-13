@@ -13,7 +13,7 @@ import { classifyLifeCycle, computeMetrics, fmtPct, fmtPp, fmtX, median, percent
 import { benchValue, benchmarkFor, defaultRndLife, DATA_PAGE, type BenchIndex, type Benchmark, type IndustryProfile } from "./damodaran.ts";
 
 export const MIN_PEERS = 5;
-export const LENS_VERSION = 3;
+export const LENS_VERSION = 4;
 
 /** Peer-comparable metrics: lens metric id → data-provider column and its scale to the lens unit. */
 export const PEER_FIELDS: Record<string, { col: string; scale: number; unit: "pct" | "x" }> = {
@@ -69,6 +69,13 @@ export interface AdjustInputs {
   defaultLife: number;
 }
 
+export interface ValuationInputs {
+  marketCap: number; debt: number; cash: number; revenue: number; opMargin: number; taxRate: number;
+  costOfCapital: number; costOfCapitalSource: string;
+  industry: string | null; industryOpMargin: number | null; industrySalesToCapital: number | null; industryGrowth5y: number | null;
+  pastGrowth1y: number | null; pastGrowth3y: number | null; salesToCapital: number | null;
+}
+
 export interface ConceptCard {
   id: string; pillar: string; title: string; question: string;
   what: string; why: string; industry: string; stageNote: string | null; caveats: string[];
@@ -91,6 +98,8 @@ export interface LensPayload {
   story: string[];
   /** Inputs for Damodaran's R&D and lease adjustments (computed in the panel so the R&D life can be changed). */
   adjust: AdjustInputs | null;
+  /** Inputs for "what the price is betting on" (narrative and numbers; computed in the panel). */
+  valuation: ValuationInputs | null;
   snapshot: string[];             // metric ids for the top strip (stage-specific)
   foundations: ConceptCard[];
   cards: ConceptCard[];
@@ -133,6 +142,7 @@ export function buildPayload(a: {
     lifeCycle: lc && s ? { ...lc, label: s.label, question: s.question, signature: s.signature, pricing: s.pricing, leaningLabel: lc.leaning ? STAGES[lc.leaning].label : null, lectures: withUrl(s.lectures) } : null,
     story: storyLines(a.symbol, lc, byId, a.financial),
     adjust: a.financial || !mx.raw ? null : adjustInputs(mx.raw, mx.taxRate, a.history, a.bench ?? null, a.classification.sector),
+    valuation: a.financial || !mx.raw ? null : valuationInputs(mx.raw, mx.taxRate, a.market.marketCap, byId, a.bench ?? null),
     snapshot: (s?.focus ?? ["rev_growth_ttm", "op_margin", "fcf_margin", "roic"]).map((id) => (id === "roic" && byId.has("excess_return") ? "excess_return" : id)).filter((id) => byId.has(id)),
     foundations, cards, computedAt: new Date().toISOString(),
   };
@@ -174,6 +184,22 @@ export function adjustInputs(raw: NonNullable<ReturnType<typeof computeMetrics>[
     costOfCapital: ind ? benchValue(bench!.idx, ind, "cost_of_capital") : null, industry: ind,
     industryMargin: fmt("op_margin"), industryAdjMargin: fmt("op_margin_adj"),
     defaultLife: defaultRndLife(ind, sector),
+  };
+}
+
+export function valuationInputs(raw: NonNullable<ReturnType<typeof computeMetrics>["raw"]>, taxRate: number | null, marketCap: number | null,
+  byId: Map<string, Metric>, bench: { idx: BenchIndex; profile: IndustryProfile } | null): ValuationInputs | null {
+  if (!fin(marketCap) || marketCap <= 0 || !fin(raw.revenue) || raw.revenue <= 0 || !fin(raw.ebit)) return null;
+  const ind = bench && bench.profile.match !== "market" ? bench.profile.name : null;
+  const bv = (m: string) => (ind ? benchValue(bench!.idx, ind, m) : null);
+  const wacc = bv("cost_of_capital");
+  const v = (id: string) => { const x = byId.get(id)?.value; return fin(x) ? x : null; };
+  return {
+    marketCap, debt: Math.max(0, raw.debt ?? 0), cash: Math.max(0, raw.cash ?? 0), revenue: raw.revenue, opMargin: (raw.ebit / raw.revenue) * 100,
+    taxRate: Math.min(0.4, Math.max(0.1, taxRate ?? 0.25)),
+    costOfCapital: fin(wacc) ? wacc : 8, costOfCapitalSource: fin(wacc) ? `Damodaran cost of capital, ${ind} (${bench!.profile.asOf})` : "app assumption (8%) — industry data not loaded",
+    industry: ind, industryOpMargin: bv("op_margin"), industrySalesToCapital: bv("sales_to_capital"), industryGrowth5y: bv("rev_cagr_5y"),
+    pastGrowth1y: v("rev_growth_ttm"), pastGrowth3y: v("rev_cagr_3y"), salesToCapital: v("sales_to_capital"),
   };
 }
 

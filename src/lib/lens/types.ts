@@ -1,6 +1,12 @@
 // Front-end mirror of the fundamentals-lens payload (supabase/functions/_shared/lensPayload.ts).
 // Keep in sync with that file.
 import type { AdjustInputs } from "./adjust";
+export interface ValuationInputs {
+  marketCap: number; debt: number; cash: number; revenue: number; opMargin: number; taxRate: number;
+  costOfCapital: number; costOfCapitalSource: string;
+  industry: string | null; industryOpMargin: number | null; industrySalesToCapital: number | null; industryGrowth5y: number | null;
+  pastGrowth1y: number | null; pastGrowth3y: number | null; salesToCapital: number | null;
+}
 
 export type Pillar = "growth" | "profitability" | "reinvestment" | "risk" | "cash_return" | "pricing" | "foundations";
 export type Stage = "startup" | "young_growth" | "high_growth" | "mature_growth" | "mature_stable" | "decline";
@@ -39,6 +45,7 @@ export interface LensPayload {
   lifeCycle: LifeCycle | null;
   story: string[];
   adjust?: AdjustInputs | null;
+  valuation?: ValuationInputs | null;
   snapshot: string[];
   foundations: ConceptCard[];
   cards: ConceptCard[];
