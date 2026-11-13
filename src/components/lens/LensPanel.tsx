@@ -7,6 +7,9 @@ import { PROGRESS_EVENT, markConcept, readProgress } from "@/lib/lens/progress";
 import AdjustCard from "./AdjustCard";
 import ReviewView from "./ReviewView";
 import { dueQuestions } from "@/lib/lens/review";
+import TrackRecordCard from "@/components/proven/TrackRecordCard";
+import ProvenBadge from "@/components/proven/ProvenBadge";
+import { useProvenOne } from "@/hooks/useProvenStrength";
 
 /**
  * Fundamentals Lens — a full tab that folds into a narrow side-panel column when its window is narrow; it teaches fundamentals on the stock you're
@@ -365,6 +368,7 @@ export default function LensPanel({ symbol: symbolProp, onSymbolChange, onClose,
   const [input, setInput] = useState(symbolProp ?? "");
   useEffect(() => { setInput(symbolProp ?? ""); }, [symbolProp]);
   const { data, loading, error, refresh } = useFundamentalsLens(symbol);
+  const proven = useProvenOne(data?.symbol ?? null);
   const inputRef = useRef<HTMLInputElement>(null);
   const [progress, setProgress] = useState(readProgress);
   useEffect(() => {
@@ -433,6 +437,7 @@ export default function LensPanel({ symbol: symbolProp, onSymbolChange, onClose,
               <span className="rounded bg-muted/50 px-1.5 py-0.5" title={`${data.classification.sector} › ${data.classification.industry} › ${data.classification.subIndustry}`}>{data.classification.subIndustry !== "Other" ? data.classification.subIndustry : data.classification.industry}</span>
               {dm && <span className="rounded bg-[hsl(199,85%,62%)]/15 px-1.5 py-0.5 text-[hsl(199,85%,72%)]" title={`Damodaran industry group (${dm.asOf})`}>{dm.name}</span>}
               {data.lifeCycle && <span className="rounded bg-[hsl(40,90%,55%)]/15 px-1.5 py-0.5 text-[hsl(40,90%,68%)]">{data.lifeCycle.label}</span>}
+              {proven.row?.status === "ok" && <ProvenBadge row={proven.row} short={false} className="!text-[10.5px] !font-normal py-0.5" />}
               {fmtMoney(data.market.marketCap) && <span className="rounded bg-muted/50 px-1.5 py-0.5 font-mono">cap {fmtMoney(data.market.marketCap)}</span>}
               {data.sec.asOf && <span className="rounded bg-muted/50 px-1.5 py-0.5" title={data.sec.filed ? `Filed ${data.sec.filed}` : undefined}>filings to {data.sec.asOf}</span>}
             </div>
@@ -493,6 +498,7 @@ export default function LensPanel({ symbol: symbolProp, onSymbolChange, onClose,
             )}
 
             {data.lifeCycle && <StageCard p={data} />}
+            <TrackRecordCard row={proven.row} loading={proven.loading} />
             <IndustryCard p={data} />
 
             {/* Foundations */}

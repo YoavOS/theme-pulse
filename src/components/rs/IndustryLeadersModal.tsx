@@ -9,6 +9,8 @@ import { useStockStages } from "@/hooks/useStockStages";
 import { useStockBases } from "@/hooks/useStockBases";
 import { useInsiderBuys } from "@/hooks/useInsiderBuys";
 import InsiderBuyBadge from "@/components/rs/InsiderBuyBadge";
+import ProvenBadge from "@/components/proven/ProvenBadge";
+import { useProvenMap } from "@/hooks/useProvenStrength";
 import { breakoutSetup, savedCoverage, savedScore, type ProfileKey } from "@/lib/superperfProfiles";
 import { GROUP_MODE_LABEL, groupKeyForIndustry, type GroupMode } from "@/lib/groupColors";
 import { STAGE_COLORS, type StockStage } from "@/lib/stageAnalysis";
@@ -81,6 +83,7 @@ export default function IndustryLeadersModal({ open, onOpenChange, stocks, isOtc
   const { bySymbol: stageMap } = useStockStages(open);
   const { bySymbol: baseMap } = useStockBases(open);
   const insiders = useInsiderBuys(open);
+  const proven = useProvenMap(open);
 
   const [mode, setMode] = useState<GroupMode>(() => { try { return (localStorage.getItem("industry-leaders-mode") as GroupMode) || "industry"; } catch { return "industry"; } });
   const changeMode = (m: GroupMode) => { setMode(m); setView(null); try { localStorage.setItem("industry-leaders-mode", m); } catch { /* ignore */ } };
@@ -288,7 +291,7 @@ export default function IndustryLeadersModal({ open, onOpenChange, stocks, isOtc
                       <td className="px-2 py-1.5">
                         <span className="inline-flex flex-wrap items-center gap-1.5">
                           <a href={tv(L.symbol)} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} className="font-mono font-bold hover:text-primary">{L.symbol}</a>
-                          <InsiderBuyBadge info={insiders.get(L.symbol)} />
+                          <InsiderBuyBadge info={insiders.get(L.symbol)} /><ProvenBadge row={proven.get(L.symbol)} />
                           <BucketChip b={L.bucket} />
                         </span>
                         {bySym.get(L.symbol)?.companyName && <div className="max-w-[200px] truncate text-[11px] text-muted-foreground">{bySym.get(L.symbol)?.companyName}</div>}
@@ -328,9 +331,12 @@ export default function IndustryLeadersModal({ open, onOpenChange, stocks, isOtc
                       <span className="font-mono text-lg font-bold">{L.symbol}</span>
                       <span className="text-sm text-muted-foreground">{bySym.get(L.symbol)?.companyName}</span>
                       <BucketChip b={L.bucket} />
-                      <InsiderBuyBadge info={insiders.get(L.symbol)} />
+                      <InsiderBuyBadge info={insiders.get(L.symbol)} /><ProvenBadge row={proven.get(L.symbol)} />
                       <a href={tv(L.symbol)} target="_blank" rel="noopener noreferrer" className="ml-auto inline-flex items-center gap-1 rounded-md border border-border px-2.5 py-1 text-xs hover:bg-accent"><ExternalLink size={12} /> Chart</a>
                     </div>
+                    {proven.get(L.symbol)?.sentence && (
+                      <p className="mt-1.5 text-xs text-muted-foreground"><span className="font-semibold text-foreground">Track record: </span>{proven.get(L.symbol)!.sentence}</p>
+                    )}
                     <p className="mt-2 text-sm">
                       Best fundamentals of {current.ranked} in the group (score {L.score}){strong.length ? `, top fifth on ${strong.join(", ")}` : ""}.
                       {" "}RS rating {L.rsRating ?? "—"}{st ? `, stage ${st.substage || st.stage}` : ""}{setup !== null ? `, setup ${setup}` : ""}{b?.state ? `, base ${STATE_NAMES[b.state].toLowerCase()}${b.dist_to_pivot !== null ? ` (${b.dist_to_pivot.toFixed(1)}% to pivot)` : ""}` : ""}.
@@ -367,7 +373,7 @@ export default function IndustryLeadersModal({ open, onOpenChange, stocks, isOtc
                             <span className="inline-flex items-center gap-1.5">
                               {r.rank === 1 && <Crown size={12} className="text-[hsl(40,90%,60%)]" />}
                               <a href={tv(r.symbol)} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} className="font-mono font-bold hover:text-primary">{r.symbol}</a>
-                              <InsiderBuyBadge info={insiders.get(r.symbol)} />
+                              <InsiderBuyBadge info={insiders.get(r.symbol)} /><ProvenBadge row={proven.get(r.symbol)} />
                             </span>
                             <div className="max-w-[200px] truncate text-[11px] text-muted-foreground">{bySym.get(r.symbol)?.companyName}</div>
                           </td>
