@@ -79,7 +79,7 @@ export default function SectorIndustryHeatmap({ industries, sectorOf, onOpen, la
           >
             <span className="text-[12.5px] font-semibold leading-tight">{b.name}</span>
             <span className="flex items-baseline gap-2">
-              <span className={`font-mono text-xs font-semibold ${b.avg > 0.005 ? "text-[hsl(166,100%,42%)]" : b.avg < -0.005 ? "text-[hsl(344,100%,65%)]" : "text-muted-foreground"}`}>{fmt(b.avg)}</span>
+              <span className={`font-mono text-xs font-semibold ${b.avg > 0.005 ? "text-[hsl(222,82%,64%)]" : b.avg < -0.005 ? "text-[hsl(330,72%,61%)]" : "text-muted-foreground"}`}>{fmt(b.avg)}</span>
               <span className="font-mono text-[10px] text-muted-foreground">{b.stocks} stocks · {Math.round((b.up / b.stocks) * 100)}% up</span>
             </span>
           </button>

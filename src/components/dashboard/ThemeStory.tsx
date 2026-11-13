@@ -31,9 +31,9 @@ const mem = new Map<string, Loaded>();
 
 const PHASE: Record<string, { label: string; cls: string }> = {
   early: { label: "Early", cls: "bg-sky-500/15 text-sky-300 border-sky-500/30" },
-  building: { label: "Building", cls: "bg-emerald-500/15 text-emerald-300 border-emerald-500/30" },
+  building: { label: "Building", cls: "bg-blue-500/15 text-blue-300 border-blue-500/30" },
   mature: { label: "Mature", cls: "bg-amber-500/15 text-amber-300 border-amber-500/30" },
-  fading: { label: "Fading", cls: "bg-rose-500/15 text-rose-300 border-rose-500/30" },
+  fading: { label: "Fading", cls: "bg-pink-500/15 text-pink-300 border-pink-500/30" },
   unclear: { label: "Unclear", cls: "bg-white/5 text-muted-foreground border-white/10" },
 };
 

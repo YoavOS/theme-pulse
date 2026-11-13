@@ -40,9 +40,9 @@ export default function HelpButton() {
             className="absolute right-0 top-full mt-2 z-50 animate-pulse cursor-pointer"
             onClick={handleOpen}
           >
-            <div className="flex items-center gap-1.5 rounded-md border border-[#00f5c4]/30 bg-[#00f5c4]/10 px-3 py-1.5 whitespace-nowrap">
-              <span className="text-[#00f5c4] text-sm">↑</span>
-              <span className="text-[10px] font-medium text-[#00f5c4]" style={{ fontFamily: "'DM Mono', monospace" }}>
+            <div className="flex items-center gap-1.5 rounded-md border border-[#6f9ff5]/30 bg-[#6f9ff5]/10 px-3 py-1.5 whitespace-nowrap">
+              <span className="text-[#6f9ff5] text-sm">↑</span>
+              <span className="text-[10px] font-medium text-[#6f9ff5]" style={{ fontFamily: "'DM Mono', monospace" }}>
                 New? See the indicator guide
               </span>
             </div>

@@ -53,7 +53,7 @@ interface FundamentalsCache {
 const CACHE_TTL = 24 * 60 * 60 * 1000;
 
 export function getScoreLabel(score: number): { text: string; color: string } {
-  if (score >= 80) return { text: "Excellent fundamentals", color: "text-[#00f5c4]" };
+  if (score >= 80) return { text: "Excellent fundamentals", color: "text-[#6f9ff5]" };
   if (score >= 60) return { text: "Good fundamentals", color: "text-gain-medium" };
   if (score >= 40) return { text: "Mixed fundamentals", color: "text-[#facc15]" };
   if (score >= 20) return { text: "Weak fundamentals", color: "text-[#f5a623]" };
@@ -79,7 +79,7 @@ export function getStockTypeInfo(type: string | null): { emoji: string; label: s
 
 export function getValuationColor(label: string | null): string {
   switch (label) {
-    case "Undervalued": return "text-[#00f5c4]";
+    case "Undervalued": return "text-[#6f9ff5]";
     case "Fairly valued": return "text-gain-medium";
     case "Premium valuation": return "text-[#f5a623]";
     case "Expensive":
@@ -91,7 +91,7 @@ export function getValuationColor(label: string | null): string {
 
 export function getSmartMoneyColor(score: number | null): string {
   if (score == null) return "text-muted-foreground";
-  if (score > 75) return "text-[#00f5c4]";
+  if (score > 75) return "text-[#6f9ff5]";
   if (score > 50) return "text-gain-medium";
   if (score > 25) return "text-[#f5a623]";
   return "text-muted-foreground";

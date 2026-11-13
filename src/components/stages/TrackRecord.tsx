@@ -162,7 +162,7 @@ export default function TrackRecord({ mode }: { mode: "stages" | "bases" }) {
                   <td className="px-2 py-1">{g.name}</td>
                   <td className="px-2 py-1 text-right font-mono">{g.eps.toLocaleString("en-US")}</td>
                   <td className="px-2 py-1 text-right font-mono text-muted-foreground">{g.n.toLocaleString("en-US")}</td>
-                  <td className={`px-2 py-1 text-right font-mono ${g.medEx > 0 ? "text-emerald-400" : g.medEx < 0 ? "text-pink-300" : ""}`}>{g.eps ? `${g.medEx >= 0 ? "+" : ""}${g.medEx.toFixed(1)}%` : "—"}</td>
+                  <td className={`px-2 py-1 text-right font-mono ${g.medEx > 0 ? "text-blue-400" : g.medEx < 0 ? "text-pink-300" : ""}`}>{g.eps ? `${g.medEx >= 0 ? "+" : ""}${g.medEx.toFixed(1)}%` : "—"}</td>
                   <td className="px-2 py-1 text-right font-mono">{g.eps ? `${g.medRet >= 0 ? "+" : ""}${g.medRet.toFixed(1)}%` : "—"}</td>
                   <td className="px-2 py-1 text-right font-mono">{g.eps ? <>{g.hit.toFixed(0)}% <span className="text-muted-foreground">({g.ci[0].toFixed(0)}–{g.ci[1].toFixed(0)})</span></> : "—"}</td>
                 </tr>

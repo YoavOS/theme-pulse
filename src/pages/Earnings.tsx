@@ -65,10 +65,10 @@ const fmtRev = (r: number | null) => {
 const fmtPct = (n: number | null, dp = 2) => n === null || n === undefined ? "—" : `${n >= 0 ? "+" : ""}${n.toFixed(dp)}%`;
 const gapColor = (g: number | null) => {
   if (g === null) return "text-muted-foreground";
-  if (g >= 5) return "text-[hsl(160,80%,55%)]";
-  if (g > 0) return "text-[hsl(160,60%,55%)]";
+  if (g >= 5) return "text-[hsl(222,82%,71%)]";
+  if (g > 0) return "text-[hsl(222,82%,71%)]";
   if (g <= -5) return "text-destructive";
-  if (g < 0) return "text-[hsl(0,70%,60%)]";
+  if (g < 0) return "text-[hsl(330,72%,58%)]";
   return "text-muted-foreground";
 };
 const reportTimeBadge = (t: TodayRow["reportTime"]) => {
@@ -350,11 +350,11 @@ export default function Earnings() {
         <section className="rounded-lg border border-border bg-card">
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-3">
             <div className="flex items-center gap-2">
-              <TrendingUp size={15} className="text-[hsl(160,70%,50%)]" />
+              <TrendingUp size={15} className="text-[hsl(222,82%,68%)]" />
               <h2 className="font-['Syne',sans-serif] text-base font-semibold text-foreground">
                 Recent Big Earnings Winners
               </h2>
-              <span className="rounded bg-[hsl(160,70%,50%)]/10 px-1.5 py-0.5 font-mono text-[10px] text-[hsl(160,70%,50%)]">
+              <span className="rounded bg-[hsl(222,82%,68%)]/10 px-1.5 py-0.5 font-mono text-[10px] text-[hsl(222,82%,68%)]">
                 {gappers.length}
               </span>
             </div>
@@ -386,7 +386,7 @@ export default function Earnings() {
               <button
                 onClick={loadGappers}
                 disabled={gappersLoading}
-                className="inline-flex items-center gap-1.5 rounded-md border border-[hsl(160,70%,50%)]/50 bg-[hsl(160,70%,50%)]/10 px-2.5 py-1 text-[11px] font-semibold text-[hsl(160,70%,50%)] hover:bg-[hsl(160,70%,50%)]/20 disabled:opacity-50"
+                className="inline-flex items-center gap-1.5 rounded-md border border-[hsl(222,82%,68%)]/50 bg-[hsl(222,82%,68%)]/10 px-2.5 py-1 text-[11px] font-semibold text-[hsl(222,82%,68%)] hover:bg-[hsl(222,82%,68%)]/20 disabled:opacity-50"
               >
                 {gappersLoading ? <Loader2 size={11} className="animate-spin" /> : <RefreshCw size={11} />}
                 {gappers.length === 0 ? "Scan Now" : "Rescan"}
@@ -471,13 +471,13 @@ export default function Earnings() {
                               </div>
                               <div className="rounded border border-border/60 bg-muted/20 px-2 py-1">
                                 <div className="text-[10px] uppercase tracking-wide text-muted-foreground">EPS Surprise</div>
-                                <div className={`font-mono font-semibold ${g.epsSurprisePct !== null && g.epsSurprisePct >= 0 ? "text-[hsl(160,70%,50%)]" : g.epsSurprisePct !== null ? "text-destructive" : "text-muted-foreground"}`}>
+                                <div className={`font-mono font-semibold ${g.epsSurprisePct !== null && g.epsSurprisePct >= 0 ? "text-[hsl(222,82%,68%)]" : g.epsSurprisePct !== null ? "text-destructive" : "text-muted-foreground"}`}>
                                   {g.epsSurprisePct !== null ? `${g.epsSurprisePct >= 0 ? "+" : ""}${g.epsSurprisePct.toFixed(1)}%` : "—"}
                                 </div>
                               </div>
                               <div className="rounded border border-border/60 bg-muted/20 px-2 py-1">
                                 <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Rev Surprise</div>
-                                <div className={`font-mono font-semibold ${g.revenueSurprisePct !== null && g.revenueSurprisePct >= 0 ? "text-[hsl(160,70%,50%)]" : g.revenueSurprisePct !== null ? "text-destructive" : "text-muted-foreground"}`}>
+                                <div className={`font-mono font-semibold ${g.revenueSurprisePct !== null && g.revenueSurprisePct >= 0 ? "text-[hsl(222,82%,68%)]" : g.revenueSurprisePct !== null ? "text-destructive" : "text-muted-foreground"}`}>
                                   {g.revenueSurprisePct !== null ? `${g.revenueSurprisePct >= 0 ? "+" : ""}${g.revenueSurprisePct.toFixed(1)}%` : "—"}
                                 </div>
                               </div>

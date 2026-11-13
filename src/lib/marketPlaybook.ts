@@ -191,7 +191,7 @@ export function overlays(type: MarketTypeKey, m: FlagMetrics, fng: FearGreed | n
 }
 
 export const STRENGTH_STYLE: Record<Strength, string> = {
-  strong: "bg-emerald-500/15 text-emerald-400",
+  strong: "bg-blue-500/15 text-blue-400",
   moderate: "bg-sky-500/15 text-sky-300",
   weak: "bg-muted text-muted-foreground",
   "own data": "bg-amber-500/15 text-amber-300",

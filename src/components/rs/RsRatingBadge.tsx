@@ -3,8 +3,8 @@ interface Props {
 }
 
 function ratingStyles(r: number): { bg: string; text: string; label: string } {
-  if (r >= 80) return { bg: "bg-[hsl(160,75%,30%)]", text: "text-[hsl(160,80%,90%)]", label: "Very Strong" };
-  if (r >= 60) return { bg: "bg-[hsl(160,60%,45%)]/80", text: "text-[hsl(160,80%,95%)]", label: "Strong" };
+  if (r >= 80) return { bg: "bg-[hsl(222,82%,58%)]", text: "text-[hsl(222,82%,76%)]", label: "Very Strong" };
+  if (r >= 60) return { bg: "bg-[hsl(222,82%,66%)]/80", text: "text-[hsl(222,82%,76%)]", label: "Strong" };
   if (r >= 40) return { bg: "bg-[hsl(40,85%,50%)]/80", text: "text-[hsl(40,90%,12%)]", label: "Neutral" };
   return { bg: "bg-destructive/80", text: "text-destructive-foreground", label: "Weak" };
 }

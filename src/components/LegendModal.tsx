@@ -49,7 +49,7 @@ function Section({ title, items, defaultOpen = false }: { title: string; items: 
 const momentumLabels: LegendItem[] = [
   {
     label: "Breaking Out",
-    labelStyle: `<span class="text-xs font-semibold uppercase tracking-wide text-[#00f5c4]" style="font-family: ${DM_MONO}">Breaking Out</span>`,
+    labelStyle: `<span class="text-xs font-semibold uppercase tracking-wide text-[#6f9ff5]" style="font-family: ${DM_MONO}">Breaking Out</span>`,
     explanation: "Short-term performance is significantly outpacing long-term trend AND volume confirms. Strong rotation signal.",
   },
   {
@@ -59,7 +59,7 @@ const momentumLabels: LegendItem[] = [
   },
   {
     label: "Accelerating",
-    labelStyle: `<span class="text-xs font-semibold uppercase tracking-wide text-[#00f5c4]" style="font-family: ${DM_MONO}">Accelerating</span>`,
+    labelStyle: `<span class="text-xs font-semibold uppercase tracking-wide text-[#6f9ff5]" style="font-family: ${DM_MONO}">Accelerating</span>`,
     explanation: "Short-term is moderately outperforming long-term. Emerging strength, not yet a full breakout.",
   },
   {
@@ -79,12 +79,12 @@ const momentumLabels: LegendItem[] = [
   },
   {
     label: "Fading Hard",
-    labelStyle: `<span class="text-xs font-semibold uppercase tracking-wide text-[#ef4444]" style="font-family: ${DM_MONO}">Fading Hard</span>`,
+    labelStyle: `<span class="text-xs font-semibold uppercase tracking-wide text-[#e0559b]" style="font-family: ${DM_MONO}">Fading Hard</span>`,
     explanation: "Short-term is significantly underperforming long-term AND volume confirms selling. Strong reversal signal with institutional distribution.",
   },
   {
     label: "Recovering",
-    labelStyle: `<span class="text-xs font-semibold uppercase tracking-wide text-[#00f5c4]" style="font-family: ${DM_MONO}">Recovering</span>`,
+    labelStyle: `<span class="text-xs font-semibold uppercase tracking-wide text-[#6f9ff5]" style="font-family: ${DM_MONO}">Recovering</span>`,
     explanation: "Short-term is positive while long-term is still negative. Early signs of a turnaround — watch for sustained follow-through.",
   },
 ];
@@ -92,12 +92,12 @@ const momentumLabels: LegendItem[] = [
 const volumeSignals: LegendItem[] = [
   {
     label: "Volume confirming",
-    labelStyle: `<span class="text-xs font-medium text-[#00f5c4]" style="font-family: ${DM_MONO}">⚡ Volume confirming</span>`,
+    labelStyle: `<span class="text-xs font-medium text-[#6f9ff5]" style="font-family: ${DM_MONO}">⚡ Volume confirming</span>`,
     explanation: "Today's volume is 40%+ above average AND the theme is accelerating. Institutional buying is supporting the move.",
   },
   {
     label: "High volume selling",
-    labelStyle: `<span class="text-xs font-medium text-[#ef4444]" style="font-family: ${DM_MONO}">⚡ High volume selling</span>`,
+    labelStyle: `<span class="text-xs font-medium text-[#e0559b]" style="font-family: ${DM_MONO}">⚡ High volume selling</span>`,
     explanation: "Today's volume is elevated AND the theme is fading. Suggests institutional distribution — more serious than low-volume fading.",
   },
   {
@@ -115,17 +115,17 @@ const volumeSignals: LegendItem[] = [
 const demandSignals: LegendItem[] = [
   {
     label: "Rel Vol",
-    labelStyle: `<span class="text-xs font-medium text-[#00f5c4]" style="font-family: ${DM_MONO}">Rel Vol: 1.8×</span>`,
+    labelStyle: `<span class="text-xs font-medium text-[#6f9ff5]" style="font-family: ${DM_MONO}">Rel Vol: 1.8×</span>`,
     explanation: "Today's volume vs 20-day average. >1.8× = unusual institutional interest. >1.4× = elevated. <0.8× = quiet, below average participation.",
   },
   {
     label: "Sustained Vol",
-    labelStyle: `<span class="text-xs font-medium text-[#4ade80]" style="font-family: ${DM_MONO}">+29% sus</span>`,
+    labelStyle: `<span class="text-xs font-medium text-[#7aa4f2]" style="font-family: ${DM_MONO}">+29% sus</span>`,
     explanation: "10-day average volume vs 3-month average. Positive = multi-day accumulation building. Negative = volume trend declining.",
   },
   {
     label: "Vol Spike",
-    labelStyle: `<span class="text-xs font-medium text-[#4ade80]" style="font-family: ${DM_MONO}">↑ +36%</span>`,
+    labelStyle: `<span class="text-xs font-medium text-[#7aa4f2]" style="font-family: ${DM_MONO}">↑ +36%</span>`,
     explanation: "Today's volume vs 20-day average as a percentage. Only shown when change exceeds 30% — filters out noise.",
   },
 ];
@@ -138,7 +138,7 @@ const breadthIndicators: LegendItem[] = [
   },
   {
     label: "Breadth %",
-    labelStyle: `<span class="text-base font-medium text-[#00f5c4]" style="font-family: ${DM_MONO}">89%</span>`,
+    labelStyle: `<span class="text-base font-medium text-[#6f9ff5]" style="font-family: ${DM_MONO}">89%</span>`,
     explanation: "Percentage of tickers advancing. >80% = very broad strength. <30% = narrow, single-stock driven.",
   },
   {
@@ -148,7 +148,7 @@ const breadthIndicators: LegendItem[] = [
   },
   {
     label: "👀 Watch signal",
-    labelStyle: `<span class="text-xs font-medium text-[#00f5c4]" style="font-family: ${DM_MONO}">👀 Watch</span>`,
+    labelStyle: `<span class="text-xs font-medium text-[#6f9ff5]" style="font-family: ${DM_MONO}">👀 Watch</span>`,
     explanation: "Breadth rank is much better than momentum rank — broad quiet strength not yet reflected in price. Potential opportunity.",
   },
 ];
@@ -156,12 +156,12 @@ const breadthIndicators: LegendItem[] = [
 const scoringExplained: LegendItem[] = [
   {
     label: "Momentum Score",
-    labelStyle: `<div class="flex items-center gap-1"><div class="h-1.5 w-12 rounded-full bg-[rgba(255,255,255,0.06)]"><div class="h-full w-3/4 rounded-full bg-[#00f5c4]"></div></div><span class="text-sm text-muted-foreground" style="font-family: ${DM_MONO}">75</span></div>`,
+    labelStyle: `<div class="flex items-center gap-1"><div class="h-1.5 w-12 rounded-full bg-[rgba(255,255,255,0.06)]"><div class="h-full w-3/4 rounded-full bg-[#6f9ff5]"></div></div><span class="text-sm text-muted-foreground" style="font-family: ${DM_MONO}">75</span></div>`,
     explanation: "Weighted score: 20% today + 35% this week + 45% this month, adjusted for volume. Higher = stronger sustained momentum. Normalized 0-100 across all themes.",
   },
   {
     label: "Section: Strong",
-    labelStyle: `<span class="text-xs font-semibold uppercase tracking-widest text-[#00f5c4]" style="font-family: ${SYNE}">Strong</span>`,
+    labelStyle: `<span class="text-xs font-semibold uppercase tracking-widest text-[#6f9ff5]" style="font-family: ${SYNE}">Strong</span>`,
     explanation: "Themes with positive average daily performance. These are outperforming on the selected timeframe.",
   },
   {
@@ -181,7 +181,7 @@ const scoringExplained: LegendItem[] = [
   },
   {
     label: "Trend Arrow",
-    labelStyle: `<span class="text-[#00f5c4]">↗</span> <span class="text-[#f5a623]">↘</span> <span class="text-muted-foreground">—</span>`,
+    labelStyle: `<span class="text-[#6f9ff5]">↗</span> <span class="text-[#f5a623]">↘</span> <span class="text-muted-foreground">—</span>`,
     explanation: "Quick visual: ↗ = momentum score >65 (strong). ↘ = score <35 (weak). — = neutral range in between.",
   },
 ];

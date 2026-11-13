@@ -15,9 +15,9 @@ import { ZONE, analyzePullback, type Bar, type PullbackResult } from "@/lib/pull
  */
 
 const LIGHT = {
-  green: { dot: "bg-[hsl(150,70%,45%)] shadow-[0_0_14px_hsl(150,70%,45%)]", text: "text-[hsl(150,70%,55%)]", ring: "border-[hsl(150,70%,45%)]/40 bg-[hsl(150,70%,45%)]/[0.07]" },
+  green: { dot: "bg-[hsl(222,82%,66%)] shadow-[0_0_14px_hsl(222,82%,66%)]", text: "text-[hsl(222,82%,71%)]", ring: "border-[hsl(222,82%,66%)]/40 bg-[hsl(222,82%,66%)]/[0.07]" },
   yellow: { dot: "bg-[hsl(40,95%,55%)] shadow-[0_0_14px_hsl(40,95%,55%)]", text: "text-[hsl(40,95%,62%)]", ring: "border-[hsl(40,95%,55%)]/40 bg-[hsl(40,95%,55%)]/[0.07]" },
-  red: { dot: "bg-[hsl(0,80%,58%)] shadow-[0_0_14px_hsl(0,80%,58%)]", text: "text-[hsl(0,80%,65%)]", ring: "border-[hsl(0,80%,58%)]/40 bg-[hsl(0,80%,58%)]/[0.07]" },
+  red: { dot: "bg-[hsl(330,72%,57%)] shadow-[0_0_14px_hsl(330,72%,57%)]", text: "text-[hsl(330,72%,61%)]", ring: "border-[hsl(330,72%,57%)]/40 bg-[hsl(330,72%,57%)]/[0.07]" },
   grey: { dot: "bg-muted-foreground/60", text: "text-muted-foreground", ring: "border-border bg-muted/20" },
 } as const;
 
@@ -31,8 +31,8 @@ function ZoneGauge({ dist }: { dist: number }) {
   return (
     <div className="space-y-1">
       <div className="relative h-3 overflow-hidden rounded-full bg-muted/40">
-        {seg(MIN, ZONE.deep, "bg-[hsl(0,80%,58%)]/35", "Too deep")}
-        {seg(ZONE.deep, ZONE.near, "bg-[hsl(150,70%,45%)]/45", "Zone")}
+        {seg(MIN, ZONE.deep, "bg-[hsl(330,72%,57%)]/35", "Too deep")}
+        {seg(ZONE.deep, ZONE.near, "bg-[hsl(222,82%,66%)]/45", "Zone")}
         {seg(ZONE.near, ZONE.far, "bg-[hsl(40,95%,55%)]/35", "Approaching")}
         <div className="absolute inset-y-0 w-px bg-foreground/70" style={{ left: `${x(0)}%` }} title="21 EMA" />
         <div className="absolute top-1/2 h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-background bg-foreground shadow" style={{ left: `${x(dist)}%` }} />
@@ -136,7 +136,7 @@ export default function Pullback21Card({ symbol }: { symbol: string | null }) {
           <ul className="grid gap-x-4 gap-y-0.5 text-xs sm:grid-cols-2">
             {res.checks.map((c) => (
               <li key={c.label} className="flex items-center gap-1.5" title={c.detail}>
-                {c.ok ? <Check size={13} className="text-[hsl(150,70%,50%)]" /> : <X size={13} className="text-loss-medium" />}
+                {c.ok ? <Check size={13} className="text-[hsl(222,82%,68%)]" /> : <X size={13} className="text-loss-medium" />}
                 <span className={`shrink-0 whitespace-nowrap ${c.ok ? "" : "text-loss-medium"}`}>{c.label}</span>
                 <span className="truncate text-muted-foreground">· {c.detail}</span>
               </li>

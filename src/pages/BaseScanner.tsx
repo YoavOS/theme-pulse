@@ -49,7 +49,7 @@ function MiniChart({ r }: { r: StockBase }) {
     <svg viewBox={`0 0 ${W} ${H}`} className="h-[26px] w-24" aria-label="Last 30 weeks with pivot and stop">
       <line x1={0} x2={W} y1={y(pivot)} y2={y(pivot)} stroke="hsl(var(--primary))" strokeDasharray="3 2" strokeWidth={0.8} opacity={0.8} />
       <line x1={0} x2={W} y1={y(stop)} y2={y(stop)} stroke="hsl(329,70%,60%)" strokeDasharray="1 2" strokeWidth={0.8} opacity={0.6} />
-      <path d={d} fill="none" stroke={up ? "hsl(150,65%,50%)" : "hsl(var(--foreground))"} strokeWidth={1.3} />
+      <path d={d} fill="none" stroke={up ? "hsl(222,82%,68%)" : "hsl(var(--foreground))"} strokeWidth={1.3} />
     </svg>
   );
 }
@@ -57,7 +57,7 @@ type SortKey = "score" | "dist" | "risk" | "rs" | "depth" | "weeks" | "symbol";
 
 const STATE_STYLE: Record<BaseState, string> = {
   ready: "bg-primary/15 text-primary",
-  triggered: "bg-emerald-500/15 text-emerald-400",
+  triggered: "bg-blue-500/15 text-blue-400",
   qualified: "bg-[hsl(222,82%,64%)]/15 text-[hsl(222,82%,74%)]",
   developing: "bg-amber-400/15 text-amber-300",
   extended: "bg-orange-400/15 text-orange-300",
@@ -372,7 +372,7 @@ export default function BaseScanner() {
                           <td className="whitespace-nowrap px-2 py-1.5">
                             {r.primary_label && <span className="rounded bg-primary/15 px-1.5 py-[1px] text-[10px] text-primary">{LABEL_NAMES[r.primary_label]}</span>}
                             {extra.length > 0 && <span className="ml-1 text-[10px] text-muted-foreground" title={extra.map((lb) => LABEL_NAMES[lb]).join(", ")}>+{extra.length}</span>}
-                            {f.daily?.contracting && <span className="ml-1 rounded bg-emerald-500/15 px-1.5 py-[1px] text-[10px] text-emerald-400" title={`Contracting on daily swings: ${f.daily.pullbacks.map((p) => p.toFixed(0) + "%").join(" → ")}. In the walk-forward test this was the strongest base feature.`}>tight</span>}
+                            {f.daily?.contracting && <span className="ml-1 rounded bg-blue-500/15 px-1.5 py-[1px] text-[10px] text-blue-400" title={`Contracting on daily swings: ${f.daily.pullbacks.map((p) => p.toFixed(0) + "%").join(" → ")}. In the walk-forward test this was the strongest base feature.`}>tight</span>}
                           </td>
                           <td className="whitespace-nowrap px-2 py-1.5 text-right font-mono">
                             <span className="inline-flex items-center gap-1.5">
@@ -381,17 +381,17 @@ export default function BaseScanner() {
                             </span>
                           </td>
                           <td className="px-2 py-1.5">{r.state && <span className={`rounded px-1.5 py-[1px] text-[10px] ${STATE_STYLE[r.state]}`}>{STATE_NAMES[r.state]}</span>}</td>
-                          <td className={`whitespace-nowrap px-2 py-1.5 text-right font-mono ${dist < 0 ? "text-emerald-400" : dist <= 5 ? "text-primary" : ""}`}>
+                          <td className={`whitespace-nowrap px-2 py-1.5 text-right font-mono ${dist < 0 ? "text-blue-400" : dist <= 5 ? "text-primary" : ""}`}>
                             {dist < 0 ? `+${Math.abs(dist).toFixed(1)}% ↑` : `${dist.toFixed(1)}%`}
                           </td>
                           <td className={`whitespace-nowrap px-2 py-1.5 text-right font-mono ${(r.stop_risk ?? 0) > 12 ? "text-amber-400" : ""}`}>{fmtPct(r.stop_risk)}</td>
-                          <td className={`whitespace-nowrap px-2 py-1.5 text-right font-mono ${(r.rs_pct ?? 0) >= 90 ? "text-emerald-400" : ""}`}>{r.rs_pct ?? "—"}</td>
+                          <td className={`whitespace-nowrap px-2 py-1.5 text-right font-mono ${(r.rs_pct ?? 0) >= 90 ? "text-blue-400" : ""}`}>{r.rs_pct ?? "—"}</td>
                           <td className="px-2 py-1.5">{stage ? <StageBadge r={stage} compact /> : <span className="text-muted-foreground">—</span>}</td>
                           {wide && <>
                             <td className="whitespace-nowrap px-2 py-1.5 text-right font-mono">{fmtPct(f.depthPct, 0)}</td>
                             <td className="whitespace-nowrap px-2 py-1.5 text-right font-mono">{f.weeks}</td>
                             <td className="whitespace-nowrap px-2 py-1.5 text-right font-mono">+{f.priorImpulsePct.toFixed(0)}%</td>
-                            <td className={`whitespace-nowrap px-2 py-1.5 text-right font-mono ${grade === "A" ? "text-emerald-400" : grade === "B" ? "text-[hsl(222,82%,74%)]" : grade === "C" ? "text-amber-300" : "text-pink-300"}`}>{grade}</td>
+                            <td className={`whitespace-nowrap px-2 py-1.5 text-right font-mono ${grade === "A" ? "text-blue-400" : grade === "B" ? "text-[hsl(222,82%,74%)]" : grade === "C" ? "text-amber-300" : "text-pink-300"}`}>{grade}</td>
                             <td className="whitespace-nowrap px-2 py-1.5 text-right font-mono">{f.dryUp === null ? "—" : f.dryUp.toFixed(2)}</td>
                             <td className="max-w-[160px] truncate px-2 py-1.5 text-[11px] text-muted-foreground">{groupOf(r.symbol)}</td>
                           </>}
@@ -536,13 +536,13 @@ function BaseChart({ r }: { r: StockBase }) {
       <WeeklyChart
         s={ch}
         shadeFrom={ch.from}
-        levels={[{ y: piv, color: "hsl(40,95%,55%)" }, { y: sup, color: "hsl(344,80%,65%)", dash: "2 3" }]}
+        levels={[{ y: piv, color: "hsl(40,95%,55%)" }, { y: sup, color: "hsl(330,72%,61%)", dash: "2 3" }]}
         label={`${r.symbol} weekly chart, last ${ch.c.length} weeks`}
       />
       <div className="mt-1 flex flex-wrap gap-x-3 text-[10px] text-muted-foreground">
         <span>weekly · {ch.c.length}w to {ch.end}</span>
         <span className="text-[hsl(40,95%,55%)]">— pivot</span>
-        <span className="text-[hsl(344,80%,65%)]">— stop</span>
+        <span className="text-[hsl(330,72%,61%)]">— stop</span>
         <span className="text-[hsl(280,60%,72%)]">— 30w MA</span>
         <span>shaded = base</span>
       </div>

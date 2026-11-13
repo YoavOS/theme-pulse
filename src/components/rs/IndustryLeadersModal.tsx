@@ -31,11 +31,11 @@ import IndustryExportTab from "@/components/rs/IndustryExportTab";
 
 const fmtPct = (v: number | null | undefined, d = 0) => (typeof v === "number" && Number.isFinite(v) ? `${v > 0 ? "+" : ""}${v.toFixed(d)}%` : "—");
 const pctCls = (v: number | null) =>
-  v === null ? "text-muted-foreground" : v >= 80 ? "text-[hsl(150,65%,58%)] font-semibold" : v >= 60 ? "text-[hsl(150,45%,62%)]" : v >= 40 ? "text-foreground" : v >= 20 ? "text-[hsl(25,85%,62%)]" : "text-loss-medium";
+  v === null ? "text-muted-foreground" : v >= 80 ? "text-[hsl(222,82%,73%)] font-semibold" : v >= 60 ? "text-[hsl(222,65%,75%)]" : v >= 40 ? "text-foreground" : v >= 20 ? "text-[hsl(25,85%,62%)]" : "text-loss-medium";
 const pctBg = (v: number | null) =>
-  v === null ? "" : v >= 80 ? "bg-[hsl(150,60%,45%)]/15" : v >= 60 ? "bg-[hsl(150,60%,45%)]/[0.07]" : v < 20 ? "bg-loss-medium/10" : "";
+  v === null ? "" : v >= 80 ? "bg-[hsl(222,82%,66%)]/15" : v >= 60 ? "bg-[hsl(222,82%,66%)]/[0.07]" : v < 20 ? "bg-loss-medium/10" : "";
 
-function Bar({ v, color = "hsl(150,60%,50%)" }: { v: number | null; color?: string }) {
+function Bar({ v, color = "hsl(222,82%,68%)" }: { v: number | null; color?: string }) {
   return (
     <span className="inline-flex items-center gap-1.5">
       <span className="relative h-1.5 w-14 overflow-hidden rounded-full bg-muted">
@@ -61,7 +61,7 @@ function BaseCell({ b }: { b: StockBase | undefined }) {
   if (!b?.state) return <span className="text-muted-foreground">—</span>;
   const good = b.state === "ready" || b.state === "qualified" || b.state === "triggered";
   return (
-    <span className={`text-xs ${good ? "text-[hsl(150,65%,60%)]" : b.state === "failed" || b.state === "extended" ? "text-[hsl(25,85%,62%)]" : "text-muted-foreground"}`}
+    <span className={`text-xs ${good ? "text-[hsl(222,82%,74%)]" : b.state === "failed" || b.state === "extended" ? "text-[hsl(25,85%,62%)]" : "text-muted-foreground"}`}
       title={[b.dist_to_pivot !== null ? `${b.dist_to_pivot.toFixed(1)}% to pivot` : "", b.score !== null ? `base score ${Math.round(b.score)}` : ""].filter(Boolean).join(" · ") || undefined}>
       {STATE_NAMES[b.state]}{b.dist_to_pivot !== null && (b.state === "ready" || b.state === "qualified") ? ` · ${b.dist_to_pivot.toFixed(1)}%` : ""}
     </span>

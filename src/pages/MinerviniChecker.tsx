@@ -648,7 +648,7 @@ function GrowthBars({ q }: { q: Series["quarters"] }) {
                 const turn = s.turn?.[i];
                 const txt = turn ? "T/A" : v === null ? "—" : `${v >= 0 ? "+" : ""}${v.toFixed(0)}`;
                 const top = v === null ? zero : Math.min(zero, yPct(v)), h = v === null ? 0 : Math.abs(yPct(v) - zero);
-                const col = v === null ? "" : v >= 25 ? "hsl(150,65%,45%)" : v >= 0 ? "hsla(150,40%,45%,0.55)" : "hsl(344,75%,60%)";
+                const col = v === null ? "" : v >= 25 ? "hsl(222,82%,66%)" : v >= 0 ? "hsla(222,60%,66%,0.55)" : "hsl(330,72%,58%)";
                 return (
                   <div key={i} className="relative flex-1" title={`${rows[i].date}: ${turn ? "turnaround (profit after a loss)" : v === null ? "no data" : `${txt}%`}`}>
                     {turn ? (
@@ -1102,7 +1102,7 @@ function HistoryCard({ h }: { h: History }) {
               return <rect key={x.end} x={pad + bw * i + bw * 0.15} y={H - 18 - hgt} width={bw * 0.7} height={hgt} fill="hsl(222,70%,60%)" opacity={0.35} />;
             })}
             {yLo < 0 && <line x1={0} x2={W} y1={Y(0)} y2={Y(0)} stroke="currentColor" strokeOpacity={0.25} strokeDasharray="3 3" vectorEffect="non-scaling-stroke" />}
-            <polyline points={line} fill="none" stroke="hsl(150,65%,50%)" strokeWidth={2} vectorEffect="non-scaling-stroke" />
+            <polyline points={line} fill="none" stroke="hsl(222,82%,68%)" strokeWidth={2} vectorEffect="non-scaling-stroke" />
             {q.map((x, i) => (i % 4 === 0 ? <text key={x.end} x={pad + bw * i} y={H - 4} fontSize="10" fill="currentColor" opacity={0.55}>{x.end.slice(0, 7)}</text> : null))}
           </svg>
           <div className="mt-1 flex flex-wrap gap-x-4 text-[10.5px] text-muted-foreground">

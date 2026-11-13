@@ -55,13 +55,13 @@ interface TooltipPosition {
  */
 function getHeatColor(pct: number, scale = 4): string {
   const k = scale / 4;
-  if (pct > 4 * k) return "hsl(170, 90%, 45%)";
-  if (pct > 2 * k) return "hsl(170, 70%, 35%)";
-  if (pct > 0.5 * k) return "hsl(170, 50%, 25%)";
-  if (pct >= -0.5 * k) return "hsl(220, 10%, 18%)";
-  if (pct >= -2 * k) return "hsl(30, 60%, 25%)";
-  if (pct >= -4 * k) return "hsl(15, 70%, 30%)";
-  return "hsl(0, 70%, 35%)";
+  if (pct > 4 * k) return "hsl(222, 70%, 48%)";
+  if (pct > 2 * k) return "hsl(222, 60%, 37%)";
+  if (pct > 0.5 * k) return "hsl(222, 45%, 25%)";
+  if (pct >= -0.5 * k) return "hsl(228, 9%, 14%)";
+  if (pct >= -2 * k) return "hsl(330, 40%, 25%)";
+  if (pct >= -4 * k) return "hsl(330, 55%, 35%)";
+  return "hsl(330, 65%, 45%)";
 }
 
 /** Full names wrap onto up to 3 lines; only very long names are shortened. */
@@ -70,30 +70,30 @@ function truncateThemeName(name: string): string {
 }
 
 function getPerfColor(pct: number) {
-  if (pct > 0.1) return "#00ff88";
-  if (pct < -0.1) return "#ff4466";
+  if (pct > 0.1) return "#5b8def";
+  if (pct < -0.1) return "#e0559b";
   return "#9ca3af";
 }
 
 function getBreadthColor(pct: number) {
-  if (pct >= 70) return "#00ff88";
+  if (pct >= 70) return "#5b8def";
   if (pct >= 40) return "#f59e0b";
-  return "#ff4466";
+  return "#e0559b";
 }
 
 function getRelVolColor(val: number) {
-  if (val >= 2.0) return "#00ff88";
-  if (val >= 1.2) return "#22c55e";
+  if (val >= 2.0) return "#5b8def";
+  if (val >= 1.2) return "#5b8def";
   if (val >= 0.8) return "#9ca3af";
   return "#f59e0b";
 }
 
 function getSustainedVolColor(val: number) {
-  if (val >= 15) return "#00ff88";
-  if (val >= 5) return "#22c55e";
+  if (val >= 15) return "#5b8def";
+  if (val >= 5) return "#5b8def";
   if (val >= -5) return "#9ca3af";
   if (val >= -15) return "#f59e0b";
-  return "#ff4466";
+  return "#e0559b";
 }
 
 export default function HeatmapGridView({
@@ -204,13 +204,13 @@ export default function HeatmapGridView({
         <span>{scale === 4 ? "Strong ↓" : `−${scale}%`}</span>
         <div className="flex h-3 flex-1 max-w-[200px] rounded overflow-hidden">
           {[
-            "hsl(0, 70%, 35%)",
+            "hsl(330, 72%, 43%)",
             "hsl(15, 70%, 30%)",
             "hsl(30, 60%, 25%)",
             "hsl(220, 10%, 18%)",
-            "hsl(170, 50%, 25%)",
-            "hsl(170, 70%, 35%)",
-            "hsl(170, 90%, 45%)",
+            "hsl(222, 70%, 25%)",
+            "hsl(222, 82%, 60%)",
+            "hsl(222, 82%, 66%)",
           ].map((c, i) => (
             <div key={i} className="flex-1" style={{ background: c }} />
           ))}
@@ -374,7 +374,7 @@ export default function HeatmapGridView({
                       <div className="space-y-0.5" style={{ fontFamily: DM_MONO }}>
                         {topMovers.map((m, i) => (
                           <div key={m.symbol} className="flex items-center justify-between gap-2 text-[11px]">
-                            <span className={`font-semibold truncate ${i === 0 ? "text-[#00f5c4]" : "text-foreground/90"}`}>{m.symbol}</span>
+                            <span className={`font-semibold truncate ${i === 0 ? "text-[#6f9ff5]" : "text-foreground/90"}`}>{m.symbol}</span>
                             <span className="flex items-center gap-2 tabular-nums">
                               <span style={{ color: getPerfColor(m.pct) }}>
                                 {m.pct >= 0 ? "+" : ""}{m.pct.toFixed(2)}%

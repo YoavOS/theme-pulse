@@ -165,8 +165,8 @@ const SORT_OPTIONS: { id: SortBy; label: string }[] = [
 function emaColor(d: number | null | undefined): string {
   if (d === null || d === undefined) return "text-muted-foreground";
   const a = Math.abs(d);
-  if (a <= 2) return "text-[hsl(140,70%,55%)] font-semibold";
-  if (a <= 5) return "text-[hsl(160,55%,55%)]";
+  if (a <= 2) return "text-[hsl(222,82%,71%)] font-semibold";
+  if (a <= 5) return "text-[hsl(222,75%,71%)]";
   if (a <= 10) return "text-foreground";
   return d >= 0 ? "text-amber-400" : "text-destructive/80";
 }
@@ -960,7 +960,7 @@ export default function CustomListAnalyzerModal({
                                 <span className="font-semibold text-foreground">{g.name}</span>
                                 <span className="rounded-full bg-background px-1.5 font-mono text-[10px] text-muted-foreground">{g.stocks.length}</span>
                                 {g.avg !== null && (
-                                  <span className={`font-mono text-[10px] ${g.avg >= 0 ? "text-[hsl(160,60%,55%)]" : "text-destructive/80"}`}>avg RS {pctDisplay(g.avg)}</span>
+                                  <span className={`font-mono text-[10px] ${g.avg >= 0 ? "text-[hsl(222,82%,71%)]" : "text-destructive/80"}`}>avg RS {pctDisplay(g.avg)}</span>
                                 )}
                               </span>
                             </td>
@@ -985,8 +985,8 @@ export default function CustomListAnalyzerModal({
                           <td className="px-2 py-1.5 font-mono font-semibold"><span className="inline-flex items-center gap-1.5">{s.symbol}<InsiderBuyBadge info={insiders.get(s.symbol.toUpperCase())} /></span></td>
                           <td className="px-2 py-1.5 text-center"><RsRatingBadge rating={rating} /></td>
                           <td className="px-2 py-1.5 max-w-[200px] truncate text-muted-foreground" title={s.companyName ?? ""}>{s.companyName ?? "—"}</td>
-                          <td className={`px-2 py-1.5 text-right font-mono ${rs !== null && rs >= 0 ? "text-[hsl(160,60%,55%)]" : "text-destructive/80"}`}>{pctDisplay(rs)}</td>
-                          <td className={`px-2 py-1.5 text-right font-mono ${ret !== null && ret >= 0 ? "text-[hsl(160,60%,55%)]" : "text-destructive/80"}`}>{pctDisplay(ret)}</td>
+                          <td className={`px-2 py-1.5 text-right font-mono ${rs !== null && rs >= 0 ? "text-[hsl(222,82%,71%)]" : "text-destructive/80"}`}>{pctDisplay(rs)}</td>
+                          <td className={`px-2 py-1.5 text-right font-mono ${ret !== null && ret >= 0 ? "text-[hsl(222,82%,71%)]" : "text-destructive/80"}`}>{pctDisplay(ret)}</td>
                           {emaCell(ema?.dist9d, ema?.ema9d, "9D EMA")}
                           {emaCell(ema?.dist21d, ema?.ema21d, "21D EMA")}
                           {emaCell(ema?.dist9w, ema?.ema9w, "9W EMA")}

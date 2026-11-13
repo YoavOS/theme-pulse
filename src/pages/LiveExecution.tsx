@@ -64,14 +64,14 @@ function compactNum(v: number | null | undefined): string {
 }
 function pctClass(v: number | null | undefined): string {
   if (v === null || v === undefined) return "text-muted-foreground";
-  if (v > 0) return "text-[hsl(160,75%,45%)]";
+  if (v > 0) return "text-[hsl(222,82%,66%)]";
   if (v < 0) return "text-destructive";
   return "text-muted-foreground";
 }
 function ratingClass(r: number | null): string {
   if (r === null) return "text-muted-foreground";
-  if (r >= 80) return "text-[hsl(160,80%,45%)]";
-  if (r >= 60) return "text-[hsl(160,70%,55%)]";
+  if (r >= 80) return "text-[hsl(222,82%,66%)]";
+  if (r >= 60) return "text-[hsl(222,82%,71%)]";
   if (r >= 40) return "text-[hsl(40,85%,55%)]";
   return "text-destructive";
 }
@@ -151,9 +151,9 @@ function buildVerdict(
   if (rating >= 70 && posCount >= 2 && negCount === 0) {
     return {
       label: "Constructive Setup",
-      color: "text-[hsl(160,80%,45%)]",
-      bg: "bg-[hsl(160,80%,45%)]/10",
-      border: "border-[hsl(160,80%,45%)]/30",
+      color: "text-[hsl(222,82%,66%)]",
+      bg: "bg-[hsl(222,82%,66%)]/10",
+      border: "border-[hsl(222,82%,66%)]/30",
       icon: CheckCircle2,
       reason:
         "Multiple factors line up favourably (relative strength, momentum, and volume). Worth deeper review — not an automatic buy. Confirm with your own entry rules.",
@@ -239,7 +239,7 @@ interface WhyContent {
 }
 
 function toneClass(t?: "pos" | "neg" | "neu" | "na"): string {
-  if (t === "pos") return "text-[hsl(160,80%,45%)]";
+  if (t === "pos") return "text-[hsl(222,82%,66%)]";
   if (t === "neg") return "text-destructive";
   if (t === "na") return "text-muted-foreground italic";
   return "text-foreground";
@@ -1504,7 +1504,7 @@ export default function LiveExecution() {
                         {verdict.factors.map((f) => {
                           const cls =
                             f.status === "pos"
-                              ? "border-[hsl(160,80%,45%)]/40 bg-[hsl(160,80%,45%)]/10 text-[hsl(160,80%,45%)]"
+                              ? "border-[hsl(222,82%,66%)]/40 bg-[hsl(222,82%,66%)]/10 text-[hsl(222,82%,66%)]"
                               : f.status === "neg"
                               ? "border-destructive/40 bg-destructive/10 text-destructive"
                               : f.status === "na"
@@ -1544,18 +1544,18 @@ export default function LiveExecution() {
                   <div
                     className={`flex items-start gap-2 rounded-lg border p-3 text-xs ${
                       pullback.kind === "healthy"
-                        ? "border-[hsl(160,80%,45%)]/30 bg-[hsl(160,80%,45%)]/10"
+                        ? "border-[hsl(222,82%,66%)]/30 bg-[hsl(222,82%,66%)]/10"
                         : "border-destructive/30 bg-destructive/10"
                     }`}
                   >
                     {pullback.kind === "healthy" ? (
-                      <TrendingDown size={14} className="mt-0.5 shrink-0 text-[hsl(160,80%,45%)]" />
+                      <TrendingDown size={14} className="mt-0.5 shrink-0 text-[hsl(222,82%,66%)]" />
                     ) : (
                       <XCircle size={14} className="mt-0.5 shrink-0 text-destructive" />
                     )}
                     <div className="flex-1">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <div className={`font-semibold ${pullback.kind === "healthy" ? "text-[hsl(160,80%,45%)]" : "text-destructive"}`}>
+                        <div className={`font-semibold ${pullback.kind === "healthy" ? "text-[hsl(222,82%,66%)]" : "text-destructive"}`}>
                           {pullback.label}
                         </div>
                         <WhyButton onClick={() => setWhyTopic("pullback")} />
@@ -1588,7 +1588,7 @@ export default function LiveExecution() {
                 {accelDelta !== null && (
                   <div className="flex items-center gap-2 rounded-md border border-border/40 bg-muted/20 px-3 py-2 text-xs">
                     {accelDelta > 0 ? (
-                      <TrendingUp size={13} className="text-[hsl(160,80%,45%)]" />
+                      <TrendingUp size={13} className="text-[hsl(222,82%,66%)]" />
                     ) : accelDelta < 0 ? (
                       <TrendingDown size={13} className="text-destructive" />
                     ) : (
@@ -1644,16 +1644,16 @@ export default function LiveExecution() {
 
                     <button
                       onClick={() => setStockBotOpen(true)}
-                      className="group relative w-full overflow-hidden rounded-xl border border-emerald-500/30 bg-gradient-to-r from-emerald-500/10 via-emerald-500/5 to-transparent px-5 py-4 text-left transition-all hover:border-emerald-500/50 hover:from-emerald-500/15"
+                      className="group relative w-full overflow-hidden rounded-xl border border-blue-500/30 bg-gradient-to-r from-blue-500/10 via-blue-500/5 to-transparent px-5 py-4 text-left transition-all hover:border-blue-500/50 hover:from-blue-500/15"
                     >
                       <div className="flex items-center justify-between">
                         <div>
                           <div className="flex items-center gap-2">
-                            <Sparkles size={15} className="text-emerald-400" />
+                            <Sparkles size={15} className="text-blue-400" />
                             <span className="font-['Syne',sans-serif] text-sm font-semibold text-foreground">
                               StockBot Deep Analysis — {activeSymbol}
                             </span>
-                            <span className="rounded-md border border-emerald-500/30 bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-medium text-emerald-400">AI</span>
+                            <span className="rounded-md border border-blue-500/30 bg-blue-500/10 px-1.5 py-0.5 text-[10px] font-medium text-blue-400">AI</span>
                           </div>
                           <div className="mt-1 text-xs text-muted-foreground">
                             Live tool calls: financials, key ratios, news, peer comparison.
@@ -1895,7 +1895,7 @@ export default function LiveExecution() {
                         <div
                           className={`rounded-lg border p-4 ${
                             snapshot.options.sentiment === "Bullish"
-                              ? "border-[hsl(160,80%,45%)]/30 bg-[hsl(160,80%,45%)]/10"
+                              ? "border-[hsl(222,82%,66%)]/30 bg-[hsl(222,82%,66%)]/10"
                               : snapshot.options.sentiment === "Bearish"
                               ? "border-destructive/30 bg-destructive/10"
                               : "border-border/40 bg-muted/20"
@@ -1908,7 +1908,7 @@ export default function LiveExecution() {
                             <span
                               className={`font-['Syne',sans-serif] text-2xl font-bold ${
                                 snapshot.options.sentiment === "Bullish"
-                                  ? "text-[hsl(160,80%,45%)]"
+                                  ? "text-[hsl(222,82%,66%)]"
                                   : snapshot.options.sentiment === "Bearish"
                                   ? "text-destructive"
                                   : "text-foreground"
@@ -2384,7 +2384,7 @@ function ConvictionBreakdown({
   ];
   const tone = (s: number | null) =>
     s === null ? "bg-muted/40" :
-    s >= 70 ? "bg-[hsl(160,80%,45%)]" : s >= 50 ? "bg-[hsl(40,85%,55%)]" : "bg-destructive";
+    s >= 70 ? "bg-[hsl(222,82%,66%)]" : s >= 50 ? "bg-[hsl(40,85%,55%)]" : "bg-destructive";
 
   return (
     <div className="rounded-lg border border-primary/30 bg-primary/5 p-4">
@@ -2592,7 +2592,7 @@ function FundamentalsBlock({
   const peVsSector = pe !== null && sectorPeAvg ? pe / sectorPeAvg : null;
   const peTone = peVsSector === null
     ? "text-muted-foreground"
-    : peVsSector < 1.0 ? "text-[hsl(160,80%,45%)]"
+    : peVsSector < 1.0 ? "text-[hsl(222,82%,66%)]"
     : peVsSector < 1.5 ? "text-foreground"
     : "text-[hsl(40,85%,55%)]";
 
@@ -2646,7 +2646,7 @@ function FundamentalsBlock({
     const tone = !hasData
       ? "text-muted-foreground"
       : v >= goodAt
-      ? "text-[hsl(160,80%,45%)]"
+      ? "text-[hsl(222,82%,66%)]"
       : v >= 0
       ? "text-foreground"
       : "text-destructive";
@@ -2730,7 +2730,7 @@ function FundamentalsBlock({
         </div>
       </div>
       {peJustified && pe !== null && (
-        <div className="rounded-md border border-[hsl(160,80%,45%)]/30 bg-[hsl(160,80%,45%)]/10 p-3 text-base text-foreground/90">
+        <div className="rounded-md border border-[hsl(222,82%,66%)]/30 bg-[hsl(222,82%,66%)]/10 p-3 text-base text-foreground/90">
           ✓ The high P/E ({pe.toFixed(1)}) is being justified by strong growth (EPS ≥ 25% or Revenue ≥ 20% YoY) — no valuation penalty applied to the Fundamentals score.
         </div>
       )}

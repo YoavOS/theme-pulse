@@ -84,19 +84,19 @@ export default function EarningsAnalysisPanel({ ctx, onClose }: Props) {
         <div className="grid grid-cols-3 gap-2 border-b border-border bg-muted/10 px-5 py-3 text-center text-[11px]">
           <div>
             <div className="text-[10px] uppercase text-muted-foreground">Gap</div>
-            <div className={`font-mono font-bold ${(ctx.gapPct ?? 0) >= 0 ? "text-[hsl(150,75%,55%)]" : "text-[hsl(0,75%,65%)]"}`}>
+            <div className={`font-mono font-bold ${(ctx.gapPct ?? 0) >= 0 ? "text-[hsl(222,82%,71%)]" : "text-[hsl(330,72%,61%)]"}`}>
               {ctx.gapPct !== null && ctx.gapPct !== undefined ? `${ctx.gapPct >= 0 ? "+" : ""}${ctx.gapPct.toFixed(1)}%` : "—"}
             </div>
           </div>
           <div>
             <div className="text-[10px] uppercase text-muted-foreground">EPS Surprise</div>
-            <div className={`font-mono font-bold ${(ctx.epsSurprisePct ?? 0) >= 0 ? "text-[hsl(150,75%,55%)]" : "text-[hsl(0,75%,65%)]"}`}>
+            <div className={`font-mono font-bold ${(ctx.epsSurprisePct ?? 0) >= 0 ? "text-[hsl(222,82%,71%)]" : "text-[hsl(330,72%,61%)]"}`}>
               {ctx.epsSurprisePct !== null && ctx.epsSurprisePct !== undefined ? `${ctx.epsSurprisePct >= 0 ? "+" : ""}${ctx.epsSurprisePct.toFixed(1)}%` : "—"}
             </div>
           </div>
           <div>
             <div className="text-[10px] uppercase text-muted-foreground">Rev Surprise</div>
-            <div className={`font-mono font-bold ${(ctx.revenueSurprisePct ?? 0) >= 0 ? "text-[hsl(150,75%,55%)]" : "text-[hsl(0,75%,65%)]"}`}>
+            <div className={`font-mono font-bold ${(ctx.revenueSurprisePct ?? 0) >= 0 ? "text-[hsl(222,82%,71%)]" : "text-[hsl(330,72%,61%)]"}`}>
               {ctx.revenueSurprisePct !== null && ctx.revenueSurprisePct !== undefined ? `${ctx.revenueSurprisePct >= 0 ? "+" : ""}${ctx.revenueSurprisePct.toFixed(1)}%` : "—"}
             </div>
           </div>
@@ -125,8 +125,8 @@ export default function EarningsAnalysisPanel({ ctx, onClose }: Props) {
                 body={data.longTerm}
               />
               <Section
-                icon={<Target size={14} className="text-[hsl(150,75%,55%)]" />}
-                accent="hsl(150,75%,55%)"
+                icon={<Target size={14} className="text-[hsl(222,82%,71%)]" />}
+                accent="hsl(222,82%,71%)"
                 title="Trader Takeaway"
                 subtitle="Actionable summary"
                 body={data.takeaway}

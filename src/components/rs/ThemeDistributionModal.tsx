@@ -20,11 +20,11 @@ const TOPN_MIN = 10;
 const TOPN_MAX = 500;
 
 const SLICE_COLORS = [
-  "hsl(160, 70%, 50%)", "hsl(200, 80%, 55%)", "hsl(280, 65%, 60%)",
-  "hsl(30, 85%, 55%)",  "hsl(340, 75%, 60%)", "hsl(50, 85%, 55%)",
-  "hsl(180, 70%, 50%)", "hsl(260, 70%, 65%)", "hsl(15, 80%, 60%)",
+  "hsl(222, 82%, 68%)", "hsl(200, 80%, 55%)", "hsl(280, 65%, 60%)",
+  "hsl(30, 85%, 55%)",  "hsl(330, 72%, 58%)", "hsl(50, 85%, 55%)",
+  "hsl(222, 82%, 68%)", "hsl(260, 70%, 65%)", "hsl(15, 80%, 60%)",
   "hsl(100, 55%, 50%)", "hsl(220, 70%, 60%)", "hsl(320, 60%, 60%)",
-  "hsl(0, 70%, 60%)", "hsl(140, 60%, 50%)", "hsl(240, 70%, 65%)",
+  "hsl(330, 72%, 58%)", "hsl(222, 82%, 68%)", "hsl(240, 70%, 65%)",
   "hsl(60, 80%, 55%)", "hsl(190, 75%, 55%)", "hsl(300, 65%, 60%)",
 ];
 const UNASSIGNED_COLOR = "hsl(0, 0%, 40%)";
@@ -72,8 +72,8 @@ interface ThemeAddition {
 function CohesionBadge({ score }: { score?: number }) {
   if (score === undefined || score === null) return null;
   const tone =
-    score >= 9 ? "border-[hsl(160,70%,50%)]/50 bg-[hsl(160,70%,50%)]/15 text-[hsl(160,80%,55%)]"
-    : score >= 7 ? "border-[hsl(180,70%,50%)]/40 bg-[hsl(180,70%,50%)]/10 text-[hsl(180,80%,60%)]"
+    score >= 9 ? "border-[hsl(222,82%,68%)]/50 bg-[hsl(222,82%,68%)]/15 text-[hsl(222,82%,71%)]"
+    : score >= 7 ? "border-[hsl(222,82%,68%)]/40 bg-[hsl(222,82%,68%)]/10 text-[hsl(222,82%,74%)]"
     : "border-[hsl(40,80%,55%)]/40 bg-[hsl(40,80%,55%)]/10 text-[hsl(40,90%,60%)]";
   const label = score >= 9 ? "Excellent" : score >= 7 ? "Strong" : "Mixed";
   return (
@@ -423,7 +423,7 @@ export default function ThemeDistributionModal({
                         disabled={isCreating || isCreated}
                         className={`inline-flex w-full items-center justify-center gap-1.5 rounded-md border px-2 py-1.5 text-[11px] font-medium transition-colors ${
                           isCreated
-                            ? "border-[hsl(160,70%,50%)]/40 bg-[hsl(160,70%,50%)]/10 text-[hsl(160,70%,50%)]"
+                            ? "border-[hsl(222,82%,68%)]/40 bg-[hsl(222,82%,68%)]/10 text-[hsl(222,82%,68%)]"
                             : "border-primary/50 bg-primary/10 text-primary hover:bg-primary/20"
                         } disabled:cursor-not-allowed disabled:opacity-60`}
                       >
@@ -461,7 +461,7 @@ export default function ThemeDistributionModal({
                         disabled={isAdding || isAdded}
                         className={`inline-flex w-full items-center justify-center gap-1.5 rounded-md border px-2 py-1.5 text-[11px] font-medium transition-colors ${
                           isAdded
-                            ? "border-[hsl(160,70%,50%)]/40 bg-[hsl(160,70%,50%)]/10 text-[hsl(160,70%,50%)]"
+                            ? "border-[hsl(222,82%,68%)]/40 bg-[hsl(222,82%,68%)]/10 text-[hsl(222,82%,68%)]"
                             : "border-primary/50 bg-primary/10 text-primary hover:bg-primary/20"
                         } disabled:cursor-not-allowed disabled:opacity-60`}
                       >

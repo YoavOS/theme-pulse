@@ -18,7 +18,7 @@ function ScoreGauge({ score, size = "md" }: { score: number; size?: "sm" | "md" 
   const pct = Math.min(100, Math.max(0, score));
   const w = size === "sm" ? 40 : 60;
   const h = size === "sm" ? 6 : 8;
-  const barColor = score >= 70 ? "hsl(var(--primary))" : score >= 50 ? "hsl(152, 100%, 50%)" : score >= 30 ? "#facc15" : "hsl(var(--destructive))";
+  const barColor = score >= 70 ? "hsl(var(--primary))" : score >= 50 ? "hsl(222, 82%, 68%)" : score >= 30 ? "#facc15" : "hsl(var(--destructive))";
 
   return (
     <div className="flex items-center gap-2">
@@ -32,7 +32,7 @@ function ScoreGauge({ score, size = "md" }: { score: number; size?: "sm" | "md" 
 
 function CategoryBar({ label, emoji, score, max = 25 }: { label: string; emoji: string; score: number; max?: number }) {
   const pct = Math.min(100, Math.max(0, (score / max) * 100));
-  const color = pct >= 70 ? "hsl(var(--primary))" : pct >= 50 ? "hsl(152, 100%, 50%)" : pct >= 30 ? "#facc15" : "hsl(var(--destructive))";
+  const color = pct >= 70 ? "hsl(var(--primary))" : pct >= 50 ? "hsl(222, 82%, 68%)" : pct >= 30 ? "#facc15" : "hsl(var(--destructive))";
 
   return (
     <div className="flex items-center gap-2 text-[11px]">
@@ -120,7 +120,7 @@ function fmtRatio(v: number | null, suffix = "×"): string {
 function SmartMoneyCard({ f }: { f: FundamentalsData }) {
   const smScore = f.smart_money_score ?? 0;
   const smColor = getSmartMoneyColor(f.smart_money_score);
-  const barColor = smScore > 75 ? "hsl(var(--primary))" : smScore > 50 ? "hsl(152, 100%, 50%)" : smScore > 25 ? "#facc15" : "hsl(var(--muted-foreground))";
+  const barColor = smScore > 75 ? "hsl(var(--primary))" : smScore > 50 ? "hsl(222, 82%, 68%)" : smScore > 25 ? "#facc15" : "hsl(var(--muted-foreground))";
 
   const instPct = f.institutional_ownership_pct;
   const instChange = f.institutional_change;
@@ -145,19 +145,19 @@ function SmartMoneyCard({ f }: { f: FundamentalsData }) {
       <div className="space-y-1 text-[10px]">
         <div className="flex items-center gap-1.5">
           <span>🏛️</span>
-          <span className={instPct != null ? (instPct > 50 ? "text-[#00f5c4]" : instPct > 30 ? "text-gain-medium" : "text-muted-foreground") : "text-muted-foreground"}>
+          <span className={instPct != null ? (instPct > 50 ? "text-[#6f9ff5]" : instPct > 30 ? "text-gain-medium" : "text-muted-foreground") : "text-muted-foreground"}>
             Institutions own {instPct != null ? `${instPct.toFixed(1)}%` : "N/A"} of float
           </span>
         </div>
         <div className="flex items-center gap-1.5">
           <span>📈</span>
-          <span className={instChange != null ? (instChange >= 0 ? "text-[#00f5c4]" : "text-destructive") : "text-muted-foreground"}>
+          <span className={instChange != null ? (instChange >= 0 ? "text-[#6f9ff5]" : "text-destructive") : "text-muted-foreground"}>
             Institutions {instChange != null ? (instChange >= 0 ? `bought ${instChange.toFixed(1)}% more` : `sold ${Math.abs(instChange).toFixed(1)}% more`) : "N/A"} this quarter
           </span>
         </div>
         <div className="flex items-center gap-1.5">
           <span>👔</span>
-          <span className={insiderScore != null ? (insiderScore > 0 ? "text-[#00f5c4]" : "text-destructive") : "text-muted-foreground"}>
+          <span className={insiderScore != null ? (insiderScore > 0 ? "text-[#6f9ff5]" : "text-destructive") : "text-muted-foreground"}>
             Insiders are {f.insider_sentiment_label || "N/A"}
           </span>
         </div>
@@ -176,7 +176,7 @@ function SmartMoneyCard({ f }: { f: FundamentalsData }) {
           <span className="text-muted-foreground"> · </span>
           <span className="text-destructive">{sells} sells</span>
           {buys > sells && (
-            <p className="text-[9px] text-[#00f5c4] mt-0.5">Executives are buying their own stock — bullish signal</p>
+            <p className="text-[9px] text-[#6f9ff5] mt-0.5">Executives are buying their own stock — bullish signal</p>
           )}
           {sells > buys && (
             <p className="text-[9px] text-[#f5a623] mt-0.5">More selling than buying by insiders — monitor closely</p>

@@ -8,8 +8,8 @@ import type { StockStage } from "@/lib/stageAnalysis";
  * (highs) and liquidation (lows) are concentrated, and a groups-on-both-sides read for chop.
  */
 
-const HI = "hsl(152, 60%, 48%)";
-const LO = "hsl(344, 75%, 62%)";
+const HI = "hsl(222, 82%, 67%)";
+const LO = "hsl(330, 72%, 59%)";
 
 const bitsAt = (r: StockStage, ago: number) => {
   const f = r.features?.flags ?? "";

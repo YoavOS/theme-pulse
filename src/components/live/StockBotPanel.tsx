@@ -78,10 +78,10 @@ export default function StockBotPanel({ open, onOpenChange, symbol, companyName,
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="right" className="flex w-full max-w-[640px] flex-col gap-0 border-l border-border bg-background p-0 sm:max-w-[640px]">
-        <div className="flex items-center justify-between border-b border-border bg-gradient-to-r from-emerald-500/10 via-primary/5 to-transparent px-5 py-4">
+        <div className="flex items-center justify-between border-b border-border bg-gradient-to-r from-blue-500/10 via-primary/5 to-transparent px-5 py-4">
           <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg border border-emerald-500/30 bg-emerald-500/10">
-              <Bot size={18} className="text-emerald-400" />
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg border border-blue-500/30 bg-blue-500/10">
+              <Bot size={18} className="text-blue-400" />
             </div>
             <div>
               <div className="font-['Syne',sans-serif] text-base font-semibold text-foreground">
@@ -104,7 +104,7 @@ export default function StockBotPanel({ open, onOpenChange, symbol, companyName,
             <div className="space-y-3">
               <div className="rounded-lg border border-border bg-card/40 p-4">
                 <div className="flex items-center gap-2 text-sm font-medium text-foreground">
-                  <Sparkles size={14} className="text-emerald-400" />
+                  <Sparkles size={14} className="text-blue-400" />
                   Ask anything about {symbol}
                 </div>
                 <p className="mt-1.5 text-xs text-muted-foreground">
@@ -116,7 +116,7 @@ export default function StockBotPanel({ open, onOpenChange, symbol, companyName,
                   <button
                     key={s}
                     onClick={() => send(s)}
-                    className="rounded-full border border-border bg-card/40 px-3 py-1.5 text-xs text-foreground hover:border-emerald-500/40 hover:bg-emerald-500/5"
+                    className="rounded-full border border-border bg-card/40 px-3 py-1.5 text-xs text-foreground hover:border-blue-500/40 hover:bg-blue-500/5"
                   >
                     {s}
                   </button>
@@ -132,7 +132,7 @@ export default function StockBotPanel({ open, onOpenChange, symbol, companyName,
                   {m.content}
                 </div>
               ) : (
-                <div className="prose prose-sm prose-invert max-w-none text-sm leading-relaxed text-foreground prose-headings:font-['Syne',sans-serif] prose-headings:text-foreground prose-strong:text-foreground prose-a:text-emerald-400">
+                <div className="prose prose-sm prose-invert max-w-none text-sm leading-relaxed text-foreground prose-headings:font-['Syne',sans-serif] prose-headings:text-foreground prose-strong:text-foreground prose-a:text-blue-400">
                   <ReactMarkdown>{m.content}</ReactMarkdown>
                 </div>
               )}
@@ -159,12 +159,12 @@ export default function StockBotPanel({ open, onOpenChange, symbol, companyName,
               onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(input); } }}
               rows={1}
               placeholder={`Ask StockBot about ${symbol}…`}
-              className="flex-1 resize-none rounded-lg border border-border bg-card/40 px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:border-emerald-500/40 focus:outline-none"
+              className="flex-1 resize-none rounded-lg border border-border bg-card/40 px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:border-blue-500/40 focus:outline-none"
             />
             <button
               type="submit"
               disabled={sending || !input.trim()}
-              className="flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-500 text-white transition-colors hover:bg-emerald-400 disabled:opacity-40"
+              className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-500 text-white transition-colors hover:bg-blue-400 disabled:opacity-40"
             >
               {sending ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
             </button>

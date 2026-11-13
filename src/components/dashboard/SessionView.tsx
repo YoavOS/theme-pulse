@@ -29,15 +29,15 @@ const FLAT = 0.15; // % — a gap this small is shown muted (it still decides th
 
 const OUTCOME: Record<Outcome, { title: string; meaning: string; color: string }> = {
   bought: { title: "Gapped down, bought", meaning: "Opened lower, buyers stepped in", color: "hsl(200, 85%, 64%)" },
-  go: { title: "Gapped up, kept going", meaning: "Opened higher and kept rising", color: "hsl(166, 100%, 42%)" },
-  sold: { title: "Gapped down, sold more", meaning: "Opened lower and kept falling", color: "hsl(344, 100%, 65%)" },
+  go: { title: "Gapped up, kept going", meaning: "Opened higher and kept rising", color: "hsl(222, 82%, 64%)" },
+  sold: { title: "Gapped down, sold more", meaning: "Opened lower and kept falling", color: "hsl(330, 72%, 61%)" },
   fade: { title: "Gapped up, faded", meaning: "Opened higher, sellers took over", color: "hsl(35, 95%, 60%)" },
 };
 const outcomeOf = (gap: number, open: number): Outcome => (gap < 0 ? (open >= 0 ? "bought" : "sold") : open >= 0 ? "go" : "fade");
 
 interface Row { name: string; gap: number; open: number; today: number; n: number; up: number; sector: string | null; theme: ThemeData }
 const fmt = (x: number) => `${x > 0 ? "+" : ""}${x.toFixed(2)}%`;
-const tone = (x: number) => (x > 0.05 ? "text-[hsl(166,100%,42%)]" : x < -0.05 ? "text-[hsl(344,100%,65%)]" : "text-muted-foreground");
+const tone = (x: number) => (x > 0.05 ? "text-[hsl(222,82%,64%)]" : x < -0.05 ? "text-[hsl(330,72%,61%)]" : "text-muted-foreground");
 const PREVIEW = 6;
 
 export default function SessionView({ groupMode, baseThemes, industryBySymbol, onOpen, sectorOf }: {
@@ -170,8 +170,8 @@ export default function SessionView({ groupMode, baseThemes, industryBySymbol, o
           <div className="flex items-center gap-2 text-[11.5px]">
             <span className="text-muted-foreground">Since the open</span>
             <span className="flex h-2 w-28 overflow-hidden rounded-full bg-muted">
-              <span style={{ width: `${(rising / rows.length) * 100}%`, background: "hsl(166, 100%, 42%)" }} />
-              <span className="flex-1" style={{ background: "hsl(344, 100%, 65%)" }} />
+              <span style={{ width: `${(rising / rows.length) * 100}%`, background: "hsl(222, 82%, 64%)" }} />
+              <span className="flex-1" style={{ background: "hsl(330, 72%, 61%)" }} />
             </span>
             <span className="font-mono">{rising} rising · {rows.length - rising} falling</span>
           </div>

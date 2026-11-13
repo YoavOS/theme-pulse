@@ -27,7 +27,7 @@ interface SentimentPayload {
 
 const KEY = "market_sentiment_cache_v1";
 const TTL = 3 * 60 * 60 * 1000;
-const GREEN = "hsl(150,65%,48%)", RED = "hsl(344,75%,62%)", AMBER = "hsl(42,90%,58%)", GREY = "hsl(220,9%,55%)";
+const GREEN = "hsl(222,82%,67%)", RED = "hsl(330,72%,59%)", AMBER = "hsl(42,90%,58%)", GREY = "hsl(220,9%,55%)";
 
 export function useMarketSentiment(refreshKey: number) {
   const [data, setData] = useState<SentimentPayload | null>(null);

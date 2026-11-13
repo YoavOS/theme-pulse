@@ -46,10 +46,10 @@ const SORTS: { value: SortKey; label: string; title: string }[] = [
 const PREVIEW = 12;
 
 // App colours: highs teal, lows rose (as elsewhere in RS Alpha)
-const HI = "text-[hsl(166,100%,42%)]";
-const LO = "text-[hsl(344,100%,65%)]";
-const hiCell = (share: number) => (share >= 0.5 ? "bg-[hsl(166,85%,40%)]/20" : share >= 0.25 ? "bg-[hsl(166,85%,40%)]/10" : share > 0 ? "bg-[hsl(166,85%,40%)]/[0.04]" : "");
-const loCell = (share: number) => (share >= 0.5 ? "bg-[hsl(344,85%,58%)]/20" : share >= 0.25 ? "bg-[hsl(344,85%,58%)]/10" : share > 0 ? "bg-[hsl(344,85%,58%)]/[0.04]" : "");
+const HI = "text-[hsl(222,82%,64%)]";
+const LO = "text-[hsl(330,72%,61%)]";
+const hiCell = (share: number) => (share >= 0.5 ? "bg-[hsl(222,82%,63%)]/20" : share >= 0.25 ? "bg-[hsl(222,82%,63%)]/10" : share > 0 ? "bg-[hsl(222,82%,63%)]/[0.04]" : "");
+const loCell = (share: number) => (share >= 0.5 ? "bg-[hsl(330,72%,57%)]/20" : share >= 0.25 ? "bg-[hsl(330,72%,57%)]/10" : share > 0 ? "bg-[hsl(330,72%,57%)]/[0.04]" : "");
 const rsCls = (r: number | null) => (r === null ? "text-muted-foreground" : r >= 80 ? `${HI} font-semibold` : r < 40 ? "text-loss-medium" : "");
 const tv = (s: string) => `https://www.tradingview.com/chart/?symbol=${encodeURIComponent(s)}`;
 
@@ -263,8 +263,8 @@ export default function HighsLowsPanel({ stocks, loading, range, onRange, mode, 
                       ) : (
                         <>
                           <span className="grid grid-cols-2 items-center" aria-hidden>
-                            <span className="flex justify-end border-r border-border pr-0.5"><span className="h-2 rounded-sm bg-[hsl(344,85%,58%)]" style={{ width: `${Math.min(100, ls * 100)}%` }} /></span>
-                            <span className="flex pl-0.5"><span className="h-2 rounded-sm bg-[hsl(166,85%,40%)]" style={{ width: `${Math.min(100, hs * 100)}%` }} /></span>
+                            <span className="flex justify-end border-r border-border pr-0.5"><span className="h-2 rounded-sm bg-[hsl(330,72%,57%)]" style={{ width: `${Math.min(100, ls * 100)}%` }} /></span>
+                            <span className="flex pl-0.5"><span className="h-2 rounded-sm bg-[hsl(222,82%,63%)]" style={{ width: `${Math.min(100, hs * 100)}%` }} /></span>
                           </span>
                           <span className="flex items-center justify-end font-mono text-[11.5px] tabular-nums">{Math.round(hs * 100)}%</span>
                           <span className={`flex items-center justify-end font-mono text-[11.5px] tabular-nums ${rsCls(g.avgRs)}`}>{g.avgRs !== null ? g.avgRs.toFixed(0) : "—"}</span>
@@ -334,7 +334,7 @@ function Spotlight({ g, kind }: { g: GroupRow; kind: "highs" | "lows" }) {
   const share = Math.round((list.length / g.n) * 100);
   const hi = kind === "highs";
   return (
-    <div className={`rounded-lg border p-3 ${hi ? "border-[hsl(40,90%,55%)]/40 bg-[hsl(40,90%,55%)]/[0.06]" : "border-[hsl(344,85%,58%)]/35 bg-[hsl(344,85%,58%)]/[0.05]"}`}>
+    <div className={`rounded-lg border p-3 ${hi ? "border-[hsl(40,90%,55%)]/40 bg-[hsl(40,90%,55%)]/[0.06]" : "border-[hsl(330,72%,57%)]/35 bg-[hsl(330,72%,57%)]/[0.05]"}`}>
       <div className="flex items-center gap-1.5">
         {hi ? <Crown size={14} className="text-[hsl(40,90%,60%)]" /> : <TrendingDown size={14} className={LO} />}
         <span className="text-[10.5px] font-semibold uppercase tracking-wide text-muted-foreground">{hi ? "Leading the highs" : "Leading the lows"}</span>
@@ -343,7 +343,7 @@ function Spotlight({ g, kind }: { g: GroupRow; kind: "highs" | "lows" }) {
       <div className="text-[11.5px] text-muted-foreground">
         <span className={`font-mono font-semibold ${hi ? HI : LO}`}>{list.length}</span> of {g.n} at new {kind} ({share}%){hi && g.avgRs !== null ? <> · avg RS <span className={`font-mono ${rsCls(g.avgRs)}`}>{g.avgRs.toFixed(0)}</span></> : null}
       </div>
-      <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-muted/50"><div className={`h-full rounded-full ${hi ? "bg-[hsl(166,85%,40%)]" : "bg-[hsl(344,85%,58%)]"}`} style={{ width: `${share}%` }} /></div>
+      <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-muted/50"><div className={`h-full rounded-full ${hi ? "bg-[hsl(222,82%,63%)]" : "bg-[hsl(330,72%,57%)]"}`} style={{ width: `${share}%` }} /></div>
       <div className="mt-2 flex flex-wrap gap-1">
         {list.slice(0, 6).map((s) => (
           <a key={s.symbol} href={tv(s.symbol)} target="_blank" rel="noopener noreferrer" title={s.name ?? s.symbol}
@@ -359,7 +359,7 @@ function Spotlight({ g, kind }: { g: GroupRow; kind: "highs" | "lows" }) {
 }
 
 function ExportButton({ n, what, onDownload, onCopy }: { n: number; what: "highs" | "lows"; onDownload: () => void; onCopy: () => void }) {
-  const tone = what === "highs" ? "border-[hsl(166,85%,40%)]/50 text-[hsl(166,100%,45%)] hover:bg-[hsl(166,85%,40%)]/10" : "border-[hsl(344,85%,58%)]/50 text-[hsl(344,100%,70%)] hover:bg-[hsl(344,85%,58%)]/10";
+  const tone = what === "highs" ? "border-[hsl(222,82%,63%)]/50 text-[hsl(222,82%,66%)] hover:bg-[hsl(222,82%,63%)]/10" : "border-[hsl(330,72%,57%)]/50 text-[hsl(330,72%,64%)] hover:bg-[hsl(330,72%,57%)]/10";
   return (
     <span className={`inline-flex overflow-hidden rounded-md border text-[11.5px] ${tone}`}>
       <button onClick={onDownload} disabled={!n} className="inline-flex items-center gap-1 px-2.5 py-1 font-medium disabled:opacity-40" title={`Download all ${n} new 52-week ${what} as a TradingView .txt`}>
@@ -413,7 +413,7 @@ export function HighsLowsRail({ highs, lows, range, onOpen }: { highs: number; l
   return (
     <div className="flex h-full flex-col items-center gap-4 py-3">
       <button onClick={onOpen} aria-label="Open 52-week highs and lows" title="Open 52-week highs & lows"
-        className="grid h-10 w-10 place-items-center rounded-lg border border-[hsl(166,85%,40%)]/60 bg-[hsl(166,85%,40%)]/10 text-[hsl(166,100%,45%)] hover:bg-[hsl(166,85%,40%)]/20">
+        className="grid h-10 w-10 place-items-center rounded-lg border border-[hsl(222,82%,63%)]/60 bg-[hsl(222,82%,63%)]/10 text-[hsl(222,82%,66%)] hover:bg-[hsl(222,82%,63%)]/20">
         <TrendingUp size={16} />
       </button>
       <span className="text-[9.5px] font-semibold uppercase tracking-wide text-muted-foreground">{LABEL[range]}</span>

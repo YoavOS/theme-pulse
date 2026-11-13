@@ -5,8 +5,8 @@ import type { ThemeData } from "@/data/themeData";
  * Colors are scaled to the timeframe (a 3-month move and a 1-day move use different ranges).
  */
 
-const UP = "166, 85%, 40%";
-const DOWN = "344, 85%, 58%";
+const UP = "222, 78%, 56%";
+const DOWN = "330, 70%, 54%";
 
 /** Fill for a value on a ±scale range: faint near zero, saturated at the ends. */
 export function heatFill(v: number, scale: number) {

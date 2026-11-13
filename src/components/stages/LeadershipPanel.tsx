@@ -16,7 +16,7 @@ function RsSpark({ g }: { g: GroupLead }) {
   const up = pts[pts.length - 1] >= pts[Math.max(0, pts.length - 14)];
   return (
     <svg viewBox={`0 0 ${W} ${H}`} className="h-[18px] w-20" preserveAspectRatio="none" aria-label="Relative strength vs SPY, 40 weeks">
-      <path d={d} fill="none" stroke={up ? "hsl(150,65%,50%)" : "hsl(330,70%,65%)"} strokeWidth="1.4" vectorEffect="non-scaling-stroke" />
+      <path d={d} fill="none" stroke={up ? "hsl(222,82%,68%)" : "hsl(330,72%,61%)"} strokeWidth="1.4" vectorEffect="non-scaling-stroke" />
     </svg>
   );
 }
@@ -90,10 +90,10 @@ export default function LeadershipPanel({ groups, spy, asOf, modeLabel, minMembe
                   </td>
                   <td className="px-2 py-1 text-right font-mono">
                     {g.rank13}
-                    {g.rank13Chg4 !== null && <span className={`ml-1 text-[10px] ${g.rank13Chg4 > 0 ? "text-emerald-400" : g.rank13Chg4 < 0 ? "text-pink-300" : "text-muted-foreground"}`}>{g.rank13Chg4 > 0 ? "+" : ""}{g.rank13Chg4}</span>}
+                    {g.rank13Chg4 !== null && <span className={`ml-1 text-[10px] ${g.rank13Chg4 > 0 ? "text-blue-400" : g.rank13Chg4 < 0 ? "text-pink-300" : "text-muted-foreground"}`}>{g.rank13Chg4 > 0 ? "+" : ""}{g.rank13Chg4}</span>}
                   </td>
                   <td className="whitespace-nowrap px-2 py-1 text-right font-mono text-[11px]">
-                    {[g.rs4, g.rs13, g.rs26].map((x, k) => <span key={k} className={`${k ? "ml-1.5" : ""} ${x > 0 ? "text-emerald-400" : "text-pink-300"}`}>{sign(x)}</span>)}
+                    {[g.rs4, g.rs13, g.rs26].map((x, k) => <span key={k} className={`${k ? "ml-1.5" : ""} ${x > 0 ? "text-blue-400" : "text-pink-300"}`}>{sign(x)}</span>)}
                   </td>
                   <td className="px-2 py-1 text-right font-mono">{Math.round(g.p50)}% <span className="text-[10px] text-muted-foreground">({Math.round(g.p50Peak13)})</span></td>
                   <td className="px-2 py-1 text-right font-mono">{Math.round(g.highs4)}%</td>
