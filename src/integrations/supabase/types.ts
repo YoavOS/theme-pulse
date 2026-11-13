@@ -32,6 +32,93 @@ export type Database = {
         }
         Relationships: []
       }
+      damodaran_benchmarks: {
+        Row: {
+          as_of: string | null
+          industry: string
+          loaded_at: string
+          metric: string
+          n_firms: number | null
+          source_column: string | null
+          source_file: string
+          source_year: number
+          unit: string
+          value: number
+        }
+        Insert: {
+          as_of?: string | null
+          industry: string
+          loaded_at?: string
+          metric: string
+          n_firms?: number | null
+          source_column?: string | null
+          source_file: string
+          source_year: number
+          unit: string
+          value: number
+        }
+        Update: {
+          as_of?: string | null
+          industry?: string
+          loaded_at?: string
+          metric?: string
+          n_firms?: number | null
+          source_column?: string | null
+          source_file?: string
+          source_year?: number
+          unit?: string
+          value?: number
+        }
+        Relationships: []
+      }
+      damodaran_loads: {
+        Row: {
+          id: number
+          ok: boolean
+          report: Json | null
+          source_year: number | null
+          started_at: string
+        }
+        Insert: {
+          id?: number
+          ok?: boolean
+          report?: Json | null
+          source_year?: number | null
+          started_at?: string
+        }
+        Update: {
+          id?: number
+          ok?: boolean
+          report?: Json | null
+          source_year?: number | null
+          started_at?: string
+        }
+        Relationships: []
+      }
+      damodaran_tickers: {
+        Row: {
+          company: string | null
+          industry: string
+          loaded_at: string
+          source_year: number
+          symbol: string
+        }
+        Insert: {
+          company?: string | null
+          industry: string
+          loaded_at?: string
+          source_year: number
+          symbol: string
+        }
+        Update: {
+          company?: string | null
+          industry?: string
+          loaded_at?: string
+          source_year?: number
+          symbol?: string
+        }
+        Relationships: []
+      }
       full_update_progress: {
         Row: {
           id: string
