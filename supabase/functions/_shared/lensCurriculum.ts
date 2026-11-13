@@ -201,7 +201,7 @@ export const CONCEPTS: Concept[] = [
     question: "If two companies grow equally fast, why might the one with lower margins be worth less?",
     what: "Operating income as a share of revenue — what the business earns from its operations before interest and taxes.",
     why: "It's the profitability input in a valuation story. The direction matters as much as the level: rising margins as the company grows is the payoff of scale; falling margins can signal competition or rising costs.",
-    industry: "In Damodaran's January 2026 US data the pre-tax operating margin was about 33% for system & application software and under 2% for grocery retail — so 'good' depends entirely on the business.",
+    industry: "In Damodaran's January 2026 US data the pre-tax operating margin was about 33% for system & application software and about 2% for grocery retail — so 'good' depends entirely on the business.",
     stages: {
       startup: "Deeply negative is expected.",
       young_growth: "Negative is normal; watch whether losses shrink as revenue grows.",
@@ -256,8 +256,29 @@ export const CONCEPTS: Concept[] = [
       mature_stable: "Should be steady and above the cost of capital — if not, returning cash beats reinvesting it.",
       decline: "Falling returns are the case for shrinking and paying out.",
     },
-    caveats: ["Accounting choices (expensed R&D, leases, write-downs, buybacks) can push it far from the true economic return.", "The app's cost-of-capital comparison arrives with Damodaran's industry data in the next phase."],
+    caveats: ["Accounting choices (expensed R&D, leases, write-downs, buybacks) can push it far from the true economic return.", "The next card compares it with what capital costs in the industry."],
     lectures: [L.cf12, L.v10, L.cf11], higherIsBetter: true,
+  },
+  {
+    id: "value_creation", pillar: "profitability", title: "Returns vs the cost of capital", metricIds: ["excess_return", "equity_spread"], primary: "excess_return",
+    question: "Two companies both grow 20% a year. How can one be getting more valuable and the other less?",
+    what: "The return the business earns on its capital minus the return its investors require for the risk (the cost of capital). For banks and insurers the same test is done on equity: return on equity minus the cost of equity.",
+    why: "This spread is the hinge of corporate finance. Positive: every dollar reinvested is worth more than a dollar, so growth adds value. Zero: growth just makes the company bigger. Negative: growth destroys value, and the company would be worth more reinvesting less and returning cash.",
+    industry: "Costs of capital differ by industry mainly through risk (beta) and debt: in Damodaran's January data, steady, debt-funded businesses such as utilities sit near the bottom and volatile, equity-funded ones such as semiconductors near the top. A 9% return clears the hurdle in one industry and misses it in another.",
+    stages: {
+      startup: "Almost always negative — the test that matters is whether the path to a positive spread is believable.",
+      young_growth: "Negative is normal; watch for the spread narrowing as margins improve.",
+      high_growth: "Turning positive is the moment growth starts creating value rather than just size.",
+      mature_growth: "A clearly positive spread is what justifies continuing to reinvest heavily.",
+      mature_stable: "A thin or negative spread argues for returning cash rather than reinvesting it.",
+      decline: "Negative spreads are common; shrinking the business can create value.",
+    },
+    caveats: [
+      "The hurdle here is the industry's average cost of capital, not the company's own — a company with more debt or a riskier business has a different one.",
+      "One year of returns can be distorted by a write-down, a big acquisition or a cyclical peak.",
+      "Expensed R&D and leases make returns look different from their economic level, in either direction.",
+    ],
+    lectures: [L.cf12, L.cf10, L.v8, L.cf2], higherIsBetter: true,
   },
 
   // ── Reinvestment

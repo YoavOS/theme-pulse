@@ -6,9 +6,16 @@ export type Stage = "startup" | "young_growth" | "high_growth" | "mature_growth"
 
 export interface MetricInput { label: string; display: string }
 export interface PeerStat { pct: number; n: number; group: string; level: "sub-industry" | "industry" | "sector"; median: string; own: string; position: "top" | "upper" | "middle" | "lower" | "bottom" }
+/** Damodaran's industry aggregate for a metric (January data). */
+export interface Benchmark { industry: string; display: string; market: string | null; n: number | null; position: "above" | "below" | "in line"; note?: string; smallSample: boolean }
 export interface Metric {
   id: string; pillar: Pillar; label: string; value: number | null; unit: "pct" | "pp" | "usd" | "x" | "years";
-  display: string; period: string; formula: string; inputs: MetricInput[]; note?: string; approx?: boolean; peer?: PeerStat;
+  display: string; period: string; formula: string; inputs: MetricInput[]; note?: string; approx?: boolean; peer?: PeerStat; bench?: Benchmark;
+}
+export interface DamodaranProfile {
+  name: string; match: "damodaran" | "mapped" | "market"; confidence: "close" | "approx" | null; from: string | null; n: number | null; asOf: string;
+  costOfCapital: string | null; costOfEquity: string | null; beta: string | null; pctMoneyLosing: string | null; marketCostOfCapital: string | null;
+  smallSample: boolean; source: string;
 }
 export interface Lecture { course: "Valuation" | "Corporate Finance" | "Life Cycle"; session: number | null; videoId: string | null; playlist?: string; title: string; inferred?: boolean; url: string }
 export interface ConceptCard {
@@ -25,6 +32,7 @@ export interface LensPayload {
   version: number; symbol: string; company: string | null;
   classification: { sector: string; industry: string; subIndustry: string };
   financial: boolean;
+  damodaran?: DamodaranProfile | null;
   market: { price: number | null; marketCap: number | null; asOf: string | null };
   sec: { status: string; asOf: string | null; filed: string | null; ttmLabel: string };
   lifeCycle: LifeCycle | null;
