@@ -1,8 +1,19 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Loader2, RefreshCw } from "lucide-react";
 import type { ThemeData, Ticker } from "@/data/themeData";
 import { GROUP_MODE_LABEL, groupKeyForIndustry, type GroupMode } from "@/lib/groupColors";
 import { marketClock, useLiveSession, type SessionQuote } from "@/hooks/useLiveSession";
+import { GroupBars, GroupCards } from "@/components/dashboard/GroupDisplays";
+import { Segmented } from "@/components/Explainer";
+import { fmtPct } from "@/lib/groupDisplay";
+
+type SessionDisplay = "quad" | "bars" | "cards";
+const DISPLAYS: { value: SessionDisplay; label: string; title: string }[] = [
+  { value: "quad", label: "Quadrants", title: "Groups sorted into the four gap / session outcomes" },
+  { value: "bars", label: "Bars", title: "Every group's move since the open as one bar, with its gap" },
+  { value: "cards", label: "Cards", title: "Every group's move since the open as a card, with its gap" },
+];
+const DISPLAY_KEY = "session_display_v1";
 
 /**
  * Combined view — each group's move today split into the overnight gap (yesterday's close → open)
@@ -39,6 +50,10 @@ export default function SessionView({ groupMode, baseThemes, industryBySymbol, o
 }) {
   const { live, loading, error, refresh } = useLiveSession(true);
   const [expanded, setExpanded] = useState<Set<Outcome>>(new Set());
+  const [display, setDisplay] = useState<SessionDisplay>(() => {
+    try { const v = localStorage.getItem(DISPLAY_KEY) as SessionDisplay | null; return v && DISPLAYS.some((d) => d.value === v) ? v : "quad"; } catch { return "quad"; }
+  });
+  useEffect(() => { try { localStorage.setItem(DISPLAY_KEY, display); } catch { /* ignore */ } }, [display]);
 
   const rows = useMemo(() => {
     if (!live) return [] as Row[];
@@ -76,6 +91,24 @@ export default function SessionView({ groupMode, baseThemes, industryBySymbol, o
     return m;
   }, [rows]);
   const rising = byOutcome.bought.length + byOutcome.go.length;
+
+  // Bars / Cards: one entry per group under its plain name; opening it shows the since-open stocks.
+  const flat = useMemo(() => {
+    const by = new Map<string, Row>();
+    const list: ThemeData[] = rows.map((r) => { by.set(r.name, r); return { ...r.theme, theme_name: r.name }; });
+    return { list, by };
+  }, [rows]);
+  const openFlat = (t: ThemeData) => onOpen(flat.by.get(t.theme_name)?.theme ?? { ...t, theme_name: `${t.theme_name} — since the open` });
+  const describe = (t: ThemeData) => {
+    const r = flat.by.get(t.theme_name);
+    return r ? `${r.name}: since the open ${fmt(r.open)}, gap ${fmt(r.gap)}, today ${fmt(r.today)} — ${OUTCOME[outcomeOf(r.gap, r.open)].title.toLowerCase()} · ${r.up}/${r.n} up since the open` : `${t.theme_name}: ${fmt(t.performance_pct)} since the open`;
+  };
+  const gapNote = (t: ThemeData) => {
+    const r = flat.by.get(t.theme_name);
+    if (!r) return null;
+    const o = OUTCOME[outcomeOf(r.gap, r.open)];
+    return <span className="inline-flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full" style={{ background: o.color }} />gap {fmtPct(r.gap)}</span>;
+  };
 
   const clock = marketClock();
   const status = live
@@ -132,6 +165,7 @@ export default function SessionView({ groupMode, baseThemes, industryBySymbol, o
           </h2>
           <p className="mt-0.5 text-[11.5px] text-muted-foreground">How each group opened (the gap) and what it did once trading started. <span className="font-mono">{status}</span></p>
         </div>
+        <Segmented<SessionDisplay> size="xs" value={display} onChange={setDisplay} options={DISPLAYS} />
         {rows.length > 0 && (
           <div className="flex items-center gap-2 text-[11.5px]">
             <span className="text-muted-foreground">Since the open</span>
@@ -148,6 +182,10 @@ export default function SessionView({ groupMode, baseThemes, industryBySymbol, o
         <div className="py-10 text-center text-sm text-muted-foreground">
           {loading ? "Fetching live quotes…" : error === "no_open" ? "No opening prices came back yet — try again in a minute." : error ? `Couldn't fetch live quotes: ${error}` : "No live data yet."}
         </div>
+      ) : display === "bars" ? (
+        <GroupBars rows={flat.list} onOpen={openFlat} sectorOf={sectorOf} title={describe} right={gapNote} />
+      ) : display === "cards" ? (
+        <GroupCards rows={flat.list} onOpen={openFlat} sectorOf={sectorOf} title={describe} sub={gapNote} />
       ) : (
         <div className="grid grid-cols-1 gap-x-3 gap-y-2 md:grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)]">
           <span className="hidden md:block" />

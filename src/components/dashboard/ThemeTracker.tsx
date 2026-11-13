@@ -1,8 +1,10 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Loader2, RefreshCw } from "lucide-react";
 import type { ThemeData, Ticker } from "@/data/themeData";
 import { HeatLegend, HeatTiles } from "@/components/dashboard/TrackerDisplays";
-import SectorIndustryHeatmap, { buildSectorBlocks } from "@/components/dashboard/SectorIndustryHeatmap";
+import SectorIndustryHeatmap from "@/components/dashboard/SectorIndustryHeatmap";
+import { GroupBars, GroupCards } from "@/components/dashboard/GroupDisplays";
+import { niceMax } from "@/lib/groupDisplay";
 import { Segmented } from "@/components/Explainer";
 import { marketClock, useLiveSession } from "@/hooks/useLiveSession";
 import type { PerfCache } from "@/hooks/useFullScan";
@@ -29,20 +31,14 @@ const TFS: { key: TrackerTf; label: string; tip: string }[] = [
 const TF_KEY = "theme_tracker_tf_v1";
 const SHOW_KEY = "theme_tracker_show_v1";
 const DISPLAY_KEY = "theme_tracker_display_v1";
-export type TrackerDisplay = "bars" | "heat";
+export type TrackerDisplay = "bars" | "cards" | "heat";
 const DISPLAYS: { value: TrackerDisplay; label: string; title: string }[] = [
   { value: "bars", label: "Bars", title: "Every group as one bar, strongest first" },
+  { value: "cards", label: "Cards", title: "Every group as a card with its move, strongest first" },
   { value: "heat", label: "Heatmap", title: "Colored tiles, strongest first" },
 ];
 
 interface Member { symbol: string; name?: string | null }
-
-/** Round the scale up to a readable number so bars are comparable at a glance. */
-function niceMax(x: number) {
-  if (!(x > 0)) return 1;
-  const steps = [0.5, 1, 2, 3, 4, 5, 8, 10, 15, 20, 30, 40, 50, 75, 100, 150, 200, 300, 500, 1000];
-  return steps.find((s) => s >= x) ?? Math.ceil(x / 100) * 100;
-}
 
 export default function ThemeTracker({
   groupMode, baseThemes, universeList, industryBySymbol, loadPerfMap, scanCompletedAt, onOpen, sectorOf,
@@ -147,11 +143,8 @@ export default function ThemeTracker({
     return out;
   }, [groups, valueOf]);
 
-  const shown = useMemo(() => {
-    if (showAll || rows.length <= 30 || display !== "bars" || sectorOf) return rows;
-    return [...rows.slice(0, 15), ...rows.slice(-15)];
-  }, [rows, showAll, display]);
-  const scale = niceMax(Math.max(0, ...shown.map((r) => Math.abs(r.performance_pct))));
+  const shown = rows;
+  const scale = niceMax(Math.max(0, ...rows.map((r) => Math.abs(r.performance_pct))));
   const clock = marketClock();
 
   let status: string;
@@ -176,7 +169,6 @@ export default function ThemeTracker({
         ? stagesLoading ? "Loading…" : "No YTD data yet — run a Full Scan (it updates stages too) or Scan Stages."
         : perf ? "No stocks in these groups were in the last Full Scan." : "No Full Scan data yet — press Full Scan.";
 
-  const fmt = (x: number) => `${x > 0 ? "+" : ""}${x.toFixed(2)}%`;
 
   const tfSwitch = (
     <div className="inline-flex rounded-md border border-border bg-muted/20 p-0.5">
@@ -205,11 +197,6 @@ export default function ThemeTracker({
         )}
         <div className="ml-auto flex flex-wrap items-center gap-2">
           <Segmented<TrackerDisplay> size="xs" value={display} onChange={setDisplay} options={DISPLAYS} />
-          {rows.length > 30 && display === "bars" && !sectorOf && (
-            <button onClick={() => setShowAll(!showAll)} className="rounded border border-border px-2 py-1 text-[11px] text-muted-foreground hover:text-foreground">
-              {showAll ? `Top & bottom 15` : `Show all ${rows.length}`}
-            </button>
-          )}
           {tfSwitch}
         </div>
       </div>
@@ -223,51 +210,10 @@ export default function ThemeTracker({
           <div className="flex justify-end"><HeatLegend scale={scale} /></div>
           <HeatTiles rows={shown} scale={scale} onOpen={onOpen} />
         </div>
-      ) : sectorOf ? (
-        <div className="space-y-2">
-          {buildSectorBlocks(rows, sectorOf).map((b) => (
-            <div key={b.name} className="rounded-md border border-border/50 bg-background/30 px-1.5 py-1">
-              <BarRow r={b.theme} scale={scale} onOpen={onOpen} strong />
-              {b.industries.map((r) => <BarRow key={r.theme_name} r={r} scale={scale} onOpen={onOpen} indent />)}
-            </div>
-          ))}
-        </div>
+      ) : display === "cards" ? (
+        <GroupCards rows={rows} onOpen={onOpen} sectorOf={sectorOf} />
       ) : (
-        <>
-          <div className="mb-0.5 grid grid-cols-[120px_1fr_60px] gap-2.5 px-1 font-mono text-[10px] text-muted-foreground sm:grid-cols-[190px_1fr_64px_70px]">
-            <span />
-            <span className="flex justify-between"><span>−{scale}%</span><span>0</span><span>+{scale}%</span></span>
-            <span />
-            <span className="hidden sm:block" />
-          </div>
-          {shown.map((r, i) => {
-            const v = r.performance_pct;
-            const w = Math.min(50, (Math.abs(v) / scale) * 50);
-            const valid = r.valid_count ?? r.up_count + r.down_count;
-            return (
-              <Fragment2 key={r.theme_name} gap={!showAll && rows.length > 30 && i === 15}>
-                <button
-                  onClick={() => onOpen(r)}
-                  className="grid w-full grid-cols-[120px_1fr_60px] items-center gap-2.5 rounded-md px-1 py-[3px] text-left hover:bg-accent/40 sm:grid-cols-[190px_1fr_64px_70px]"
-                  title={`${r.theme_name}: ${fmt(v)} average of ${valid} stock${valid === 1 ? "" : "s"}${r.na_count ? ` (${r.na_count} without data)` : ""} — click to open`}
-                >
-                  <span className="truncate text-xs font-medium">{r.theme_name}</span>
-                  <span className="relative h-3 rounded-[3px] bg-muted/40">
-                    <span className="absolute -bottom-[3px] -top-[3px] left-1/2 w-px bg-border" />
-                    <span
-                      className="absolute bottom-0 top-0 rounded-[3px]"
-                      style={v >= 0
-                        ? { left: "50%", width: `${w}%`, background: "hsl(166, 100%, 42%)" }
-                        : { right: "50%", width: `${w}%`, background: "hsl(344, 100%, 65%)" }}
-                    />
-                  </span>
-                  <span className={`text-right font-mono text-xs ${v > 0 ? "text-[hsl(166,100%,42%)]" : v < 0 ? "text-[hsl(344,100%,65%)]" : "text-muted-foreground"}`}>{fmt(v)}</span>
-                  <span className="hidden text-right font-mono text-[10.5px] text-muted-foreground sm:block" title="Breadth: stocks up / stocks with data">{r.up_count}/{valid} ↑</span>
-                </button>
-              </Fragment2>
-            );
-          })}
-        </>
+        <GroupBars rows={rows} onOpen={onOpen} sectorOf={sectorOf} showAll={showAll} onShowAll={setShowAll} />
       )}
 
       <div className="mt-3 rounded-r-lg border-l-2 border-primary bg-primary/5 px-3 py-2 text-[11.5px] leading-relaxed text-muted-foreground">
@@ -282,39 +228,8 @@ export default function ThemeTracker({
         ) : (
           <><b className="text-foreground/90">{TFS.find((t) => t.key === tf)?.label}</b> numbers come from the Dashboard's last Full Scan{groupMode !== "theme" ? " and cover the whole stock list" : ""}.</>
         )}
-        {" "}{display === "bars" ? "The right column is breadth: stocks up / stocks with data." : sectorOf ? "Tile width is the number of stocks in the industry; click a sector name for all its stocks." : "Tiles are ordered strongest first."} Click a group to open its stocks.
+        {" "}{display === "bars" ? "The right column is breadth: stocks up / stocks with data." : display === "cards" ? "Cards are ordered strongest first; hover one for its breadth." : sectorOf ? "Tile width is the number of stocks in the industry; click a sector name for all its stocks." : "Tiles are ordered strongest first."} Click a group to open its stocks.
       </div>
     </div>
-  );
-}
-
-/** One bar row (used for the grouped Sector + Industry list). */
-function BarRow({ r, scale, onOpen, strong = false, indent = false }: { r: ThemeData; scale: number; onOpen: (t: ThemeData) => void; strong?: boolean; indent?: boolean }) {
-  const v = r.performance_pct, w = Math.min(50, (Math.abs(v) / scale) * 50), valid = r.valid_count ?? r.up_count + r.down_count;
-  const f = (x: number) => `${x > 0 ? "+" : ""}${x.toFixed(2)}%`;
-  return (
-    <button
-      onClick={() => onOpen(r)}
-      className="grid w-full grid-cols-[120px_1fr_60px] items-center gap-2.5 rounded-md px-1 py-[3px] text-left hover:bg-accent/40 sm:grid-cols-[190px_1fr_64px_70px]"
-      title={`${r.theme_name}: ${f(v)} average of ${valid} stocks — click to open`}
-    >
-      <span className={`truncate text-xs ${strong ? "font-semibold" : "font-medium text-foreground/85"} ${indent ? "pl-3" : ""}`}>{r.theme_name}</span>
-      <span className={`relative rounded-[3px] bg-muted/40 ${strong ? "h-3.5" : "h-2.5"}`}>
-        <span className="absolute -bottom-[3px] -top-[3px] left-1/2 w-px bg-border" />
-        <span className="absolute bottom-0 top-0 rounded-[3px]" style={v >= 0 ? { left: "50%", width: `${w}%`, background: `hsla(166, 100%, 42%, ${strong ? 1 : 0.75})` } : { right: "50%", width: `${w}%`, background: `hsla(344, 100%, 65%, ${strong ? 1 : 0.75})` }} />
-      </span>
-      <span className={`text-right font-mono text-xs ${strong ? "font-semibold" : ""} ${v > 0 ? "text-[hsl(166,100%,42%)]" : v < 0 ? "text-[hsl(344,100%,65%)]" : "text-muted-foreground"}`}>{f(v)}</span>
-      <span className="hidden text-right font-mono text-[10.5px] text-muted-foreground sm:block">{r.up_count}/{valid} ↑</span>
-    </button>
-  );
-}
-
-/** Row wrapper that draws a divider where the top and bottom halves meet. */
-function Fragment2({ gap, children }: { gap: boolean; children: ReactNode }) {
-  return (
-    <>
-      {gap && <div className="my-1 border-t border-dashed border-border text-center text-[10px] text-muted-foreground">⋯</div>}
-      {children}
-    </>
   );
 }
