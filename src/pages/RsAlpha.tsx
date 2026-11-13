@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
 import { Link } from "react-router-dom";
-import { ArrowLeft, RefreshCw, Loader2, Info, ChevronDown, ChevronUp, ArrowUpDown, Filter, Hammer, Pause, Play, RotateCcw, Copy, Download, Settings2, PieChart as PieChartIcon, Database, BarChart3, Trophy, Crown } from "lucide-react";
+import { ArrowLeft, RefreshCw, Loader2, Info, ChevronDown, ChevronUp, ArrowUpDown, Filter, Hammer, Pause, Play, RotateCcw, Copy, Download, Settings2, PieChart as PieChartIcon, Database, BarChart3, Trophy, Crown, TrendingUp } from "lucide-react";
 import { toast } from "sonner";
 import { useRsAlpha, RsStock, RS_FILTER_THRESHOLDS } from "@/hooks/useRsAlpha";
 import { useFundamentalsScan } from "@/hooks/useFundamentalsScan";
@@ -18,7 +18,15 @@ import LeadersShortlistModal from "@/components/rs/LeadersShortlistModal";
 import IndustryLeadersModal from "@/components/rs/IndustryLeadersModal";
 import { useSuperperformance } from "@/hooks/useSuperperformance";
 import SetupAnalyzerModal from "@/components/rs/SetupAnalyzerModal";
-import HighsLowsPanel, { hlWindowDays, type HlStock, type HlWindow } from "@/components/rs/HighsLowsPanel";
+import HighsLowsPanel, { HighsLowsRail, hlCounts, hlWindowDays, type HlStock, type HlWindow } from "@/components/rs/HighsLowsPanel";
+import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
+
+/** Media query as state (same pattern as the Dashboard's Brief). */
+function useMedia(q: string) {
+  const [m, setM] = useState(() => typeof window !== "undefined" && window.matchMedia(q).matches);
+  useEffect(() => { const mq = window.matchMedia(q); const on = () => setM(mq.matches); on(); mq.addEventListener("change", on); return () => mq.removeEventListener("change", on); }, [q]);
+  return m;
+}
 import { useCuratedThemes } from "@/hooks/useCuratedThemes";
 import { GROUP_MODE_LABEL, groupKeyForIndustry, type GroupMode } from "@/lib/groupColors";
 import { Segmented } from "@/components/Explainer";
@@ -246,7 +254,12 @@ export default function RsAlpha() {
   });
   useEffect(() => { localStorage.setItem("rs-52w-filter", String(nh52wOn)); }, [nh52wOn]);
 
-  // New 52-week highs & lows panel — one timeframe for the panel and the table filter.
+  // New 52-week highs & lows — a side panel like the Dashboard's Brief: docked on the right on wide
+  // screens (open, or collapsed to a rail), a slide-over below 1280px. One timeframe for the panel
+  // and the table filter.
+  const isWide = useMedia("(min-width: 1280px)");
+  const isPhone = useMedia("(max-width: 639px)");
+  const [hlSheet, setHlSheet] = useState(false);
   const [hlOpen, setHlOpen] = useState<boolean>(() => { try { return localStorage.getItem("rs-hl-open") !== "0"; } catch { return true; } });
   useEffect(() => { try { localStorage.setItem("rs-hl-open", hlOpen ? "1" : "0"); } catch { /* ignore */ } }, [hlOpen]);
   const [hlRange, setHlRange] = useState<HlWindow>(() => { try { return (localStorage.getItem("rs-hl-range") as HlWindow) || "1w"; } catch { return "1w"; } });
@@ -511,6 +524,8 @@ export default function RsAlpha() {
     return out;
   }, [stocks, nh52wMap, curatedThemesForHl, ratingMap]);
 
+  const hlTotals = useMemo(() => hlCounts(hlStocks, hlRange), [hlStocks, hlRange]);
+
   const exportItems = () => {
     const themeOf = new Map<string, string>();
     for (const t of curatedThemesForHl) for (const sym of t.symbols) if (!themeOf.has(sym)) themeOf.set(sym, t.name);
@@ -553,7 +568,8 @@ export default function RsAlpha() {
   };
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="flex min-h-screen bg-background">
+    <div className="min-w-0 flex-1">
       <header className="z-30 border-b border-border bg-background/80 backdrop-blur-md md:sticky md:top-0">
         <div className="container flex flex-wrap items-center justify-between gap-y-2 py-3">
           <div className="flex items-center gap-3">
@@ -1001,24 +1017,20 @@ export default function RsAlpha() {
           </div>
         </div>
 
-        {/* New 52-week highs & lows */}
-        <div className="container pb-2">
-          {hlOpen ? (
-            <HighsLowsPanel
-              stocks={hlStocks} loading={nh52wLoading} range={hlRange} onRange={setHlRange} mode={hlMode} onMode={setHlMode}
-              filterOn={nh52wOn} onFilter={setNh52wOn} tableMatches={sortedStocks.length} onHide={() => setHlOpen(false)}
-            />
-          ) : (
-            <button onClick={() => setHlOpen(true)} className="flex w-full items-center gap-2 rounded-md border border-border bg-card/30 px-3 py-2 text-left text-xs hover:bg-accent/30">
-              <span className="font-medium">New 52-week highs &amp; lows</span>
+        {/* New 52-week highs & lows — side panel on wide screens; here a bar that opens it below 1280px */}
+        {!isWide && (
+          <div className="container pb-2">
+            <button onClick={() => setHlSheet(true)} className="flex w-full items-center gap-2 rounded-md border border-border bg-card/30 px-3 py-2 text-left text-xs hover:bg-accent/30">
+              <TrendingUp size={13} className="text-[hsl(166,100%,42%)]" />
+              <span className="font-medium">52-week highs &amp; lows</span>
+              <span className="font-mono text-[hsl(166,100%,42%)]">{hlTotals.highs}</span>
+              <span className="text-muted-foreground">/</span>
+              <span className="font-mono text-[hsl(344,100%,65%)]">{hlTotals.lows}</span>
               <span className="text-muted-foreground">{nh52wOn ? "· table filtered to new highs" : ""}</span>
-              <span className="ml-auto text-[11px] text-muted-foreground">Show</span>
+              <span className="ml-auto text-[11px] text-muted-foreground">Open</span>
             </button>
-          )}
-        </div>
-
-
-
+          </div>
+        )}
 
         {(isRebuilding || isPaused || (progress.totalQueued > 0 && progress.processed < progress.totalQueued)) && (
           <div className="container pb-2">
@@ -1578,6 +1590,29 @@ export default function RsAlpha() {
         nh52wMap={nh52wMap}
         qqqPctChange={qqqPctChange}
       />
+
+      {!isWide && (
+        <Sheet open={hlSheet} onOpenChange={setHlSheet}>
+          <SheetContent side={isPhone ? "bottom" : "right"} className={`p-0 [&>button]:hidden ${isPhone ? "h-[88vh] rounded-t-2xl" : "w-full sm:max-w-[480px]"}`}>
+            <SheetTitle className="sr-only">52-week highs and lows</SheetTitle>
+            <HighsLowsPanel docked
+              stocks={hlStocks} loading={nh52wLoading} range={hlRange} onRange={setHlRange} mode={hlMode} onMode={setHlMode}
+              filterOn={nh52wOn} onFilter={setNh52wOn} tableMatches={sortedStocks.length} onHide={() => setHlSheet(false)}
+            />
+          </SheetContent>
+        </Sheet>
+      )}
+    </div>
+    {isWide && (
+      <aside className={`sticky top-0 z-40 h-screen shrink-0 border-l border-border bg-background ${hlOpen ? "w-[440px] 2xl:w-[500px]" : "w-14"}`} aria-label="52-week highs and lows">
+        {hlOpen
+          ? <HighsLowsPanel docked
+              stocks={hlStocks} loading={nh52wLoading} range={hlRange} onRange={setHlRange} mode={hlMode} onMode={setHlMode}
+              filterOn={nh52wOn} onFilter={setNh52wOn} tableMatches={sortedStocks.length} onHide={() => setHlOpen(false)}
+            />
+          : <HighsLowsRail highs={hlTotals.highs} lows={hlTotals.lows} range={hlRange} onOpen={() => setHlOpen(true)} />}
+      </aside>
+    )}
     </div>
   );
 }
