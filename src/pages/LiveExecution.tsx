@@ -39,11 +39,7 @@ import MarketDriversWidget from "@/components/live/MarketDriversWidget";
 import StockDriversPanel from "@/components/live/StockDriversPanel";
 import StockBotPanel from "@/components/live/StockBotPanel";
 import Pullback21Card from "@/components/live/Pullback21Card";
-import LensPanel from "@/components/lens/LensPanel";
-import { LensPipPortal } from "@/components/lens/LensPip";
-import { useLensPip } from "@/hooks/useLensPip";
-import { openLensWindow, postLensSymbol } from "@/lib/lens/channel";
-import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
+import { openLensTab, postLensSymbol } from "@/lib/lens/channel";
 import { LineChart as LineChartIcon } from "lucide-react";
 import { GraduationCap } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -663,8 +659,6 @@ export default function LiveExecution() {
   const [activeSymbol, setActiveSymbol] = useState<string | null>(null);
   const [driversOpen, setDriversOpen] = useState(false);
   const [stockBotOpen, setStockBotOpen] = useState(false);
-  const [lensOpen, setLensOpen] = useState(false);
-  const lensPip = useLensPip();
   const [benchmark, setBenchmark] = useState<BenchmarkSymbol>("SPY");
   const [whyTopic, setWhyTopic] = useState<WhyTopic | null>(null);
   const debounceRef = useRef<number | null>(null);
@@ -1400,9 +1394,9 @@ export default function LiveExecution() {
                 </Tooltip>
                 <button
                   type="button"
-                  onClick={() => setLensOpen(true)}
+                  onClick={() => openLensTab(activeSymbol)}
                   className="ml-1 inline-flex items-center gap-1.5 rounded-md border border-[hsl(40,90%,55%)]/50 bg-[hsl(40,90%,55%)]/10 px-3 py-1.5 text-sm font-bold text-[hsl(40,90%,66%)] transition-colors hover:bg-[hsl(40,90%,55%)]/20"
-                  title="Fundamentals Lens: this company's fundamentals, explained — Damodaran's framework, vs its peers and its life-cycle stage"
+                  title="Open the Fundamentals Lens tab on this ticker (switches the tab if it's already open)"
                 >
                   <GraduationCap size={14} />
                   Fundamentals Lens
@@ -1694,21 +1688,6 @@ export default function LiveExecution() {
           {/* ── 21 EMA pullback check: follows the stock above, or type any ticker ── */}
           <Pullback21Card symbol={activeSymbol} />
 
-          <Sheet open={lensOpen} onOpenChange={setLensOpen}>
-            <SheetContent side="right" className="w-full p-0 sm:max-w-[420px] [&>button]:hidden">
-              <SheetTitle className="sr-only">Fundamentals Lens</SheetTitle>
-              <LensPanel
-                symbol={activeSymbol}
-                onClose={() => setLensOpen(false)}
-                onPopOut={async () => {
-                  // always-on-top window where supported (Chrome/Edge), a normal pop-up elsewhere
-                  if (!(await lensPip.open())) openLensWindow(activeSymbol);
-                  setLensOpen(false);
-                }}
-              />
-            </SheetContent>
-          </Sheet>
-          <LensPipPortal win={lensPip.win} symbol={activeSymbol} onClose={lensPip.close} />
 
           {/*
             ── Compact 2-column layout ──
