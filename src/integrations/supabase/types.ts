@@ -302,6 +302,51 @@ export type Database = {
         }
         Relationships: []
       }
+      lens_cache: {
+        Row: {
+          computed_at: string
+          payload: Json
+          symbol: string
+        }
+        Insert: {
+          computed_at?: string
+          payload: Json
+          symbol: string
+        }
+        Update: {
+          computed_at?: string
+          payload?: Json
+          symbol?: string
+        }
+        Relationships: []
+      }
+      lens_explanations: {
+        Row: {
+          concept_id: string
+          created_at: string
+          facts_hash: string
+          payload: Json
+          prompt_version: number
+          symbol: string
+        }
+        Insert: {
+          concept_id: string
+          created_at?: string
+          facts_hash: string
+          payload: Json
+          prompt_version: number
+          symbol: string
+        }
+        Update: {
+          concept_id?: string
+          created_at?: string
+          facts_hash?: string
+          payload?: Json
+          prompt_version?: number
+          symbol?: string
+        }
+        Relationships: []
+      }
       market_stages: {
         Row: {
           as_of: string | null
