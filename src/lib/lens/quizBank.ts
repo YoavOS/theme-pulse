@@ -21,6 +21,16 @@ export const QUIZ_BANK: QuizQ[] = [
     choices: ["Exciting", "Something that could happen, is likely to happen, and is tied to specific inputs", "Agreed by analysts", "Short"], answer: 1,
     why: "A story is only useful if it ties to numbers — growth, margins, reinvestment, risk — and holds up when you ask whether it could happen at all, whether it's likely, and whether the numbers really follow from it." },
 
+  { id: "sn2", concept: "story_numbers", q: "A story passes \"possible\" and \"plausible\". What's left in Damodaran's test?",
+    choices: ["Nothing — it's proven", "\"Probable\": is it likely to be delivered, given competition and management?", "Whether analysts agree", "Whether the stock is rising"], answer: 1,
+    why: "Possible asks if it could happen at all, plausible if the economics work at that scale, probable if it's likely to be delivered. Many stories fail only at the last step." },
+  { id: "sn3", concept: "story_numbers", q: "Every AI company in a hot market is priced as a winner. What's the \"big market delusion\"?",
+    choices: ["The market is too small for any winner", "Each story may pass alone, but together they need more revenue than the market will ever have", "AI has no market", "Prices always fall"], answer: 1,
+    why: "His 2025 example: language-model companies priced at $1.5 trillion+ on under $100 billion of combined revenue. Add up what the whole group's prices need." },
+  { id: "lc3", concept: "life_cycle", q: "Which is Damodaran's typical way for a mature, stable company to fail its age?",
+    choices: ["Paying dividends", "Trying to buy growth through acquisitions", "Returning cash through buybacks", "Cutting costs"], answer: 1,
+    why: "Stable firms in denial try to buy growth — usually through acquisitions that fail a return-on-capital test. Growing old is inevitable; growing up is optional." },
+
   // ── Growth
   { id: "rg1", concept: "revenue_growth", q: "Revenue grew 40% but the company had to triple its invested capital to get there. What's the key missing question?",
     choices: ["Was the growth organic?", "What return does that new capital earn?", "Did the stock go up?", "Is the CEO founder-led?"], answer: 1,
@@ -51,6 +61,9 @@ export const QUIZ_BANK: QuizQ[] = [
   { id: "vc1", concept: "value_creation", q: "A company grows fast with ROIC of 7% while its cost of capital is 10%. Growth is…",
     choices: ["Adding value", "Destroying value — each dollar reinvested earns less than it costs", "Neutral", "Impossible to judge"], answer: 1,
     why: "When return on capital is below the cost of capital, every dollar reinvested is worth less than a dollar. Faster growth makes it worse." },
+  { id: "vc3", concept: "value_creation", q: "In Damodaran's January 2026 data, roughly what share of ~48,000 companies worldwide earned more than their cost of capital?",
+    choices: ["About 80%", "About 50%", "About 28%", "About 5%"], answer: 2,
+    why: "About 28% — and only 17% by five points or more. Earning your cost of capital is the exception, which is why a long record of it means something." },
   { id: "vc2", concept: "value_creation", q: "Why can the same 9% return clear the bar in one industry and miss it in another?",
     choices: ["Tax rates differ", "Costs of capital differ — mainly through business risk (beta) and debt", "Accounting rules differ", "It can't"], answer: 1,
     why: "Investors demand more from riskier businesses. Utilities have low costs of capital; chip makers and internet companies high ones." },

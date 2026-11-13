@@ -12,6 +12,7 @@ export interface ProvenRow {
   checks: ProvenCheck[] | null; gates: ProvenCheck[] | null;
   series: { end: string; spread: number | null; primary: number | null; margin: number | null; turnover: number | null }[] | null;
   score: number | null; computed_at: string;
+  life_stage?: string | null;
 }
 
 export const LABEL_TEXT: Record<ProvenLabel, string> = {
@@ -36,6 +37,9 @@ export const LABEL_CLS: Record<ProvenLabel, string> = {
   not_proven: "border-border bg-transparent text-muted-foreground",
   insufficient: "border-border bg-transparent text-muted-foreground",
 };
+export const STAGE_LABEL: Record<string, string> = {
+  startup: "Start-up", young_growth: "Young Growth", high_growth: "High Growth", mature_growth: "Mature Growth", mature_stable: "Mature Stable", decline: "Decline",
+};
 export const TRACK_TEXT: Record<ProvenTrack, string> = {
   standard: "Return on capital vs cost of capital", cyclical: "Through the cycle", financial: "Return on equity vs cost of equity",
   capital_light: "Capital-light (profits & cash)", young: "Young company — judged on direction",
@@ -51,4 +55,5 @@ export const FLAG_TEXT: Record<string, string> = {
   ex_goodwill_better: "The business itself earns much more than the total return — acquisitions were paid for richly.",
   cyclical_by_volatility: "Returns swing a lot year to year, so it's judged through the cycle.",
   stale_filings: "No annual report in about two years — the record may be out of date.",
+  not_acting_age: "Not acting its age — what it does with its capital doesn't fit its stage of life (see the stage check above).",
 };
