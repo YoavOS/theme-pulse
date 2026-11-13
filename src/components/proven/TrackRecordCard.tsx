@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Check, ChevronDown, Minus, X as XIcon } from "lucide-react";
 import ProvenBadge from "./ProvenBadge";
-import { ARCHETYPE_TEXT, FLAG_TEXT, TRACK_TEXT, type ProvenCheck, type ProvenRow } from "@/lib/proven/types";
+import { ARCHETYPE_TEXT, FLAG_TEXT, STAGE_LABEL, TRACK_TEXT, type ProvenCheck, type ProvenRow } from "@/lib/proven/types";
 
 const pp = (v: number) => `${v >= 0 ? "+" : "−"}${Math.abs(v).toFixed(1)} pp`;
 
@@ -89,7 +89,7 @@ export default function TrackRecordCard({ row, loading }: { row: ProvenRow | nul
       {open && (
         <div className="space-y-2">
           <p className="text-[11px] leading-snug text-muted-foreground">{row.why}</p>
-          {row.track && <div className="text-[10.5px] text-muted-foreground">Track: {TRACK_TEXT[row.track]}</div>}
+          {row.track && <div className="text-[10.5px] text-muted-foreground">Track: {TRACK_TEXT[row.track]}{row.life_stage ? ` · stage: ${STAGE_LABEL[row.life_stage] ?? row.life_stage} — the stage decides which test applies` : ""}</div>}
           {(row.checks ?? []).length > 0 && <div className="space-y-1">{row.checks!.map((c) => <CheckRow key={c.id} c={c} />)}</div>}
           {!young && (row.gates ?? []).length > 0 && (
             <div className="space-y-1 border-t border-border/50 pt-1.5">

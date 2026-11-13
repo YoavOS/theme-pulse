@@ -8,6 +8,7 @@ CREATE TABLE IF NOT EXISTS public.proven_strength (
   error             text,
   as_of             date,                       -- latest fiscal year-end used
   last_10k_filed    text,
+  life_stage        text,                       -- Damodaran life-cycle stage (same rule as the Lens)
   track             text,                       -- standard | cyclical | financial | capital_light | young
   label             text,                       -- elite | proven | proven_caveat | fading | provisional | emerging | emerging_early | was_strong | not_proven | insufficient
   sentence          text,
