@@ -13,6 +13,7 @@ import {
   groupVolume, readBreadth, tickerVolumeRatio, volumeBasisFor, volumeWords,
   BREADTH_LABEL, BREADTH_HELP, type VolumeStrength,
 } from "@/lib/groupSignals";
+import { moveBox, toneBox } from "@/lib/moveTint";
 
 const MONO = "'DM Mono', monospace";
 const TF_COL: Record<string, string> = { Today: "Today", "1W": "1W", "1M": "1M", "3M": "3M", Overall: "Score" };
@@ -69,9 +70,9 @@ function Meter({ value, max, tick, tone }: { value: number; max: number; tick?: 
   );
 }
 
-function Stat({ label, children, foot }: { label: string; children: React.ReactNode; foot?: React.ReactNode }) {
+function Stat({ label, children, foot, box }: { label: string; children: React.ReactNode; foot?: React.ReactNode; box?: React.CSSProperties }) {
   return (
-    <div className="flex min-w-0 flex-col gap-1.5 rounded-lg border border-border bg-background/40 px-3 py-2.5">
+    <div className="flex min-w-0 flex-col gap-1.5 rounded-lg border border-border bg-background/40 px-3 py-2.5" style={box}>
       <span className="text-[11px] text-muted-foreground">{label}</span>
       {children}
       {foot && <span className="text-[11px] leading-snug text-muted-foreground">{foot}</span>}
@@ -293,6 +294,7 @@ export default function ThemeDrilldownModal({
           <div className="grid grid-cols-2 gap-2 px-5 pt-4 sm:grid-cols-4 sm:px-6">
             <Stat
               label="Stocks rising"
+              box={breadth.total >= 4 ? toneBox(breadth.pctUp >= 60 ? "good" : breadth.pctUp <= 40 ? "bad" : "warn", Math.abs(breadth.pctUp - 50) / 50) : undefined}
               foot={breadth.kind ? <span title={BREADTH_HELP[breadth.kind]}>{BREADTH_LABEL[breadth.kind]}</span> : breadth.total < 4 ? "Too few stocks to judge" : undefined}
             >
               <span className="text-base font-semibold text-foreground" style={{ fontFamily: MONO }}>
@@ -304,10 +306,10 @@ export default function ThemeDrilldownModal({
               <span className="text-base font-semibold text-foreground" style={{ fontFamily: MONO }}>{vol ? `${vol.ratio.toFixed(1)}×` : "—"}</span>
               <Meter value={vol?.ratio ?? 0} max={3} tick={1} tone={vol && vol.ratio >= 1.5 ? "brand" : "neutral"} />
             </Stat>
-            <Stat label="Typical stock" foot="Median, so one big mover can't skew it">
+            <Stat label="Typical stock" foot="Median, so one big mover can't skew it" box={moveBox(breadth.medianPct, 5)}>
               <span className={`text-base font-semibold ${pctClass(breadth.medianPct)}`} style={{ fontFamily: MONO }}>{fmtPct(breadth.medianPct)}</span>
             </Stat>
-            <Stat label={theme.performance_pct >= 0 ? "Leader" : "Weakest"} foot={leader?.name ? <span className="block truncate">{leader.name}</span> : undefined}>
+            <Stat label={theme.performance_pct >= 0 ? "Leader" : "Weakest"} box={moveBox(leader?.pct, 8)} foot={leader?.name ? <span className="block truncate">{leader.name}</span> : undefined}>
               <span className="flex items-baseline gap-2 text-base font-semibold" style={{ fontFamily: MONO }}>
                 <span className="text-foreground">{leader?.symbol ?? "—"}</span>
                 <span className={`text-sm ${pctClass(leader?.pct)}`}>{fmtPct(leader?.pct)}</span>

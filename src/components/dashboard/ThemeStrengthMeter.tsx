@@ -4,6 +4,7 @@ import { ThemeData } from "@/data/themeData";
 import { supabase as _supa } from "@/integrations/supabase/client";
 import ThemeStory from "@/components/dashboard/ThemeStory";
 import { Loader2, TrendingUp, TrendingDown, Minus, Sparkles, Zap } from "lucide-react";
+import { moveBox } from "@/lib/moveTint";
 
 const supabase: any = _supa;
 const DM_MONO = "'DM Mono', monospace";
@@ -388,7 +389,7 @@ export default function ThemeStrengthMeter({ theme, open, onOpenChange, mode = "
             </h4>
             <div className="rounded-md bg-white/[0.04] border border-white/[0.06] divide-y divide-white/[0.06]">
               {metrics?.top5.map((s) => (
-                <div key={s.symbol} className="flex items-center justify-between px-3 py-1.5">
+                <div key={s.symbol} className="flex items-center justify-between px-3 py-1.5" style={{ background: moveBox(s.pct, 5).background }}>
                   <span className="text-sm font-semibold text-foreground" style={{ fontFamily: DM_MONO }}>{s.symbol}</span>
                   <div className="flex items-center gap-3">
                     <span className="text-sm tabular-nums font-semibold" style={{ fontFamily: DM_MONO, color: perfColor(s.pct) }}>

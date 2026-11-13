@@ -59,9 +59,12 @@ export function useMarketSentiment(refreshKey: number) {
   return { data, state };
 }
 
-function Card({ title, sub, evidence, children }: { title: string; sub: string; evidence: "strong" | "moderate" | "weak"; children: React.ReactNode }) {
+function Card({ title, sub, evidence, children, accent }: { title: string; sub: string; evidence: "strong" | "moderate" | "weak"; children: React.ReactNode; accent?: string }) {
+  // The card takes the color of its reading (blue supportive, pink risky, gold caution).
+  const tinted = accent && accent !== GREY;
   return (
-    <section className="flex flex-col rounded-lg border border-border bg-card p-4">
+    <section className="flex flex-col rounded-lg border border-border bg-card p-4"
+      style={tinted ? { background: `color-mix(in srgb, ${accent} 7%, hsl(var(--card)))`, borderColor: `color-mix(in srgb, ${accent} 40%, transparent)` } : undefined}>
       <div className="mb-2 flex items-start gap-2">
         <div className="min-w-0 flex-1">
           <h3 className="font-display text-[15px] font-semibold leading-tight tracking-tight">{title}</h3>
@@ -97,7 +100,7 @@ export function AaiiCard({ data, state }: { data: SentimentPayload | null; state
   const W = 300, H = 46, mx = Math.max(25, ...spreads.map(Math.abs));
   const y = (v: number) => H / 2 - (v / mx) * (H / 2 - 2);
   return (
-    <Card title="Investor sentiment" sub={`AAII survey · week of ${new Date(w.date + "T12:00:00Z").toLocaleDateString("en-US", { month: "short", day: "numeric" })}`} evidence="moderate">
+    <Card accent={read.c} title="Investor sentiment" sub={`AAII survey · week of ${new Date(w.date + "T12:00:00Z").toLocaleDateString("en-US", { month: "short", day: "numeric" })}`} evidence="moderate">
       <div className="flex items-baseline gap-2">
         <span className="text-xl font-bold" style={{ color: read.c }}>{read.t}</span>
         <span className="font-mono text-xs text-muted-foreground">bull − bear {spread >= 0 ? "+" : ""}{spread.toFixed(1)}</span>
@@ -225,7 +228,7 @@ export function McClellanCard({ rows }: { rows: StockStage[] }) {
   const ys = (v: number) => H - 2 - ((v - sLo) / (sHi - sLo || 1)) * (H - 4);
   const bw = W / m.osc.length;
   return (
-    <Card title="Breadth momentum" sub={`McClellan oscillator · ${m.n.toLocaleString("en-US")} stocks of your list`} evidence="weak">
+    <Card accent={read.c} title="Breadth momentum" sub={`McClellan oscillator · ${m.n.toLocaleString("en-US")} stocks of your list`} evidence="weak">
       <div className="flex items-baseline gap-2">
         <span className="text-xl font-bold" style={{ color: read.c }}>{read.t}</span>
         <span className="font-mono text-xs text-muted-foreground">{now >= 0 ? "+" : ""}{now.toFixed(0)}</span>

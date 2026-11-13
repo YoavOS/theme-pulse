@@ -640,7 +640,8 @@ export default function StageAnalysis() {
                     key={t.key}
                     disabled={!t.rows.length}
                     onClick={() => { setSubFilter(null); setMinConf(0); setSearch(""); setList({ title: t.label, rows: t.rows }); }}
-                    className="flex items-center gap-2 rounded-md border border-border bg-background/40 px-2.5 py-1.5 text-left text-[11px] hover:bg-accent/40 disabled:opacity-40"
+                    className="flex items-center gap-2 rounded-md border border-border bg-background/40 px-2.5 py-1.5 text-left text-[11px] hover:brightness-125 disabled:opacity-40"
+                    style={t.rows.length ? { background: tint(STAGE_COLORS[t.color], 0.1), borderColor: tint(STAGE_COLORS[t.color], 0.45) } : undefined}
                   >
                     <span className="h-2 w-2 rounded-full" style={{ background: STAGE_COLORS[t.color] }} />
                     <span>{t.label}</span>

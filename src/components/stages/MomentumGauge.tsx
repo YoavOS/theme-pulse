@@ -3,6 +3,7 @@ import { AlertTriangle, ChevronDown, Gauge as GaugeIcon, Loader2, RefreshCw } fr
 import { buildGauge, dailyBreadth, loadPulse, momentumSeries, VERDICT_TEXT, type Level, type Pulse, type Verdict } from "@/lib/momentumGauge";
 import { loadHistory } from "@/lib/rsHistory";
 import type { StockStage } from "@/lib/stageAnalysis";
+import { toneBox } from "@/lib/moveTint";
 
 const DM_MONO = "'DM Mono', monospace";
 const LEVEL: Record<Level, { label: string; cls: string; dot: string }> = {
@@ -85,7 +86,7 @@ export default function MomentumGauge({ rows, onVerdict }: { rows: StockStage[];
 
       <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-5">
         {g.readings.map((r) => (
-          <div key={r.key} className="rounded-md border border-white/[0.06] bg-background/40 p-2.5" title={`${r.meaning}\n\nSource: ${r.source}`}>
+          <div key={r.key} className="rounded-md border border-white/[0.06] bg-background/40 p-2.5" style={toneBox(r.level === "good" ? "good" : r.level === "bad" ? "bad" : r.level === "mixed" ? "warn" : "neutral", 0.4)} title={`${r.meaning}\n\nSource: ${r.source}`}>
             <div className="flex items-center gap-1.5 text-[11px] font-medium text-foreground">
               <span className={`h-2 w-2 rounded-full ${LEVEL[r.level].dot}`} /> {r.name}
               <span className={`ml-auto text-[10px] ${LEVEL[r.level].cls}`}>{LEVEL[r.level].label}</span>

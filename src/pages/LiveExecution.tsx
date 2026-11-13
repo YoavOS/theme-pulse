@@ -43,6 +43,7 @@ import { openLensTab, postLensSymbol } from "@/lib/lens/channel";
 import { LineChart as LineChartIcon } from "lucide-react";
 import { GraduationCap } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { moveBox, toneBox, toneFromClass } from "@/lib/moveTint";
 
 // ───────────────────────── helpers ─────────────────────────
 
@@ -1586,7 +1587,7 @@ export default function LiveExecution() {
 
                 {/* Acceleration callout */}
                 {accelDelta !== null && (
-                  <div className="flex items-center gap-2 rounded-md border border-border/40 bg-muted/20 px-3 py-2 text-xs">
+                  <div className="flex items-center gap-2 rounded-md border border-border/40 bg-muted/20 px-3 py-2 text-xs" style={moveBox(accelDelta, 10)}>
                     {accelDelta > 0 ? (
                       <TrendingUp size={13} className="text-[hsl(222,82%,66%)]" />
                     ) : accelDelta < 0 ? (
@@ -2003,7 +2004,7 @@ export default function LiveExecution() {
                       { tf: "1M", stock: snapshot.tickerHistory?.return1m ?? null, bench: snapshot.benchmark.return1m, rs: liveRs.rs1m, rating: activeSymbol ? rating1m.get(activeSymbol) ?? null : null },
                       { tf: "3M", stock: snapshot.tickerHistory?.return3m ?? null, bench: snapshot.benchmark.return3m, rs: liveRs.rs3m, rating: null as number | null },
                     ]).map((row) => (
-                      <div key={row.tf} className="rounded-lg border border-border/40 bg-background/40 p-3">
+                      <div key={row.tf} className="rounded-lg border border-border/40 bg-background/40 p-3" style={moveBox(row.rs, 10)}>
                         <div className="mb-1.5 flex items-baseline justify-between">
                           <span className="font-['Syne',sans-serif] text-base font-bold uppercase tracking-wider text-muted-foreground">
                             RS {row.tf}
@@ -2264,7 +2265,7 @@ function MetricCard({
   onWhy?: () => void;
 }) {
   return (
-    <div className="rounded-lg border border-border/40 bg-background/40 p-3">
+    <div className="rounded-lg border border-border/40 bg-background/40 p-3" style={toneBox(toneFromClass(valueClass), 0.35)}>
       <div className="mb-1 flex items-center gap-1 text-[10px] uppercase tracking-wider text-muted-foreground">
         <span>{label}</span>
         {tooltip && (
@@ -2295,7 +2296,7 @@ function MetricCard({
 
 function RsTrendCell({ label, value }: { label: string; value: number | null }) {
   return (
-    <div className="rounded-md border border-border/30 bg-background/30 p-2 text-center">
+    <div className="rounded-md border border-border/30 bg-background/30 p-2 text-center" style={moveBox(value, 10)}>
       <div className="text-[10px] uppercase tracking-wider text-muted-foreground">RS {label}</div>
       <div className={`font-mono text-base font-semibold ${pctClass(value)}`}>{pct(value, 2)}</div>
     </div>
@@ -2658,7 +2659,7 @@ function FundamentalsBlock({
       ? "Positive but modest"
       : "Contracting";
     return (
-      <div className="rounded-lg border border-border/40 bg-background/40 p-4">
+      <div className="rounded-lg border border-border/40 bg-background/40 p-4" style={hasData ? toneBox(v >= goodAt ? "good" : v >= 0 ? "neutral" : "bad", Math.min(1, Math.abs(v) / Math.max(goodAt * 2, 1))) : undefined}>
         <div className="mb-2 flex items-start justify-between gap-2">
           <div className="text-base font-bold uppercase tracking-wider text-muted-foreground">
             {label} <span className="text-foreground/70 normal-case">({periodLabel})</span>
@@ -2702,7 +2703,7 @@ function FundamentalsBlock({
           "≥ 15%",
           <PeriodPicker value={revPeriod} onChange={setRevPeriod} />,
         )}
-        <div className="rounded-lg border border-border/40 bg-background/40 p-4">
+        <div className="rounded-lg border border-border/40 bg-background/40 p-4" style={toneBox(toneFromClass(peTone), 0.4)}>
           <div className="mb-2 text-base font-bold uppercase tracking-wider text-muted-foreground">{peLabel} vs Sector</div>
           <div className="mb-3 text-xs text-muted-foreground italic">
             Long-term sector benchmark — independent of growth period.

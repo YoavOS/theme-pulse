@@ -11,6 +11,7 @@ import TrackRecordCard from "@/components/proven/TrackRecordCard";
 import PriceStoryCard from "./PriceStoryCard";
 import ProvenBadge from "@/components/proven/ProvenBadge";
 import { useProvenOne } from "@/hooks/useProvenStrength";
+import { toneBox, type Tone } from "@/lib/moveTint";
 
 /**
  * Fundamentals Lens — a full tab that folds into a narrow side-panel column when its window is narrow; it teaches fundamentals on the stock you're
@@ -49,7 +50,8 @@ function peerTone(p: PeerStat, higherIsBetter: boolean | null) {
   const good = higherIsBetter === null ? null : (p.position === "top" || p.position === "upper") === higherIsBetter && p.position !== "middle";
   const bad = higherIsBetter === null ? null : (p.position === "bottom" || p.position === "lower") === higherIsBetter && p.position !== "middle";
   const cls = good ? "text-[hsl(222,82%,73%)]" : bad ? "text-[hsl(25,90%,64%)]" : "text-[hsl(210,70%,72%)]";
-  return { words, cls };
+  const tone: Tone = good ? "good" : bad ? "warn" : "neutral";
+  return { words, cls, tone };
 }
 
 function PeerBar({ p, higherIsBetter }: { p: PeerStat; higherIsBetter: boolean | null }) {
@@ -486,7 +488,7 @@ export default function LensPanel({ symbol: symbolProp, onSymbolChange, onClose,
                     const hit = byId.get(id);
                     if (!hit) return null;
                     return (
-                      <div key={id} className="rounded-md border border-border/60 bg-muted/20 p-2">
+                      <div key={id} className="rounded-md border border-border/60 bg-muted/20 p-2" style={hit.m.peer ? toneBox(peerTone(hit.m.peer, hit.c.higherIsBetter).tone, 0.35) : undefined}>
                         <div className="truncate text-[10.5px] text-muted-foreground" title={hit.m.label}>{SHORT[id] ?? hit.m.label}</div>
                         <div className="font-mono text-[15px] font-semibold tabular-nums">{hit.m.display}</div>
                         {hit.m.peer && <div className={`truncate text-[10px] ${peerTone(hit.m.peer, hit.c.higherIsBetter).cls}`}>{peerTone(hit.m.peer, hit.c.higherIsBetter).words}</div>}

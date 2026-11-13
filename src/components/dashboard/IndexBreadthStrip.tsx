@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Loader2, RefreshCw } from "lucide-react";
+import { moveBox } from "@/lib/moveTint";
 
 /**
  * Slim market-context strip for the bottom of the dashboard: how many S&P 500
@@ -138,7 +139,7 @@ function IndexBar({ label, b, loading }: { label: string; b: Breadth | null | un
   const upShare = total ? b!.up / total : 0.5;
   const pct = b?.indexPct;
   return (
-    <div>
+    <div className="rounded-lg border border-border/60 px-3 py-2" style={moveBox(pct, 2)}>
       <div className="mb-1 flex items-baseline gap-2 text-[12px]">
         <span className="font-semibold">{label}</span>
         {typeof pct === "number" && (

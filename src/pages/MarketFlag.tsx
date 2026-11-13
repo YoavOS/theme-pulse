@@ -12,6 +12,7 @@ import {
   HISTORY, HISTORY_ALL, PLAYBOOK, REFERENCES, STRENGTH_STYLE, TYPE_INFO, nextFomc, overlays, volTargetExposure,
   type FearGreed, type FlagMetrics, type MarketTypeKey, type Tip,
 } from "@/lib/marketPlaybook";
+import { toneBox } from "@/lib/moveTint";
 
 const CACHE_KEY = "market_flag_cache_v2";
 const CACHE_TTL = 30 * 60 * 1000;
@@ -312,7 +313,7 @@ export default function MarketFlag() {
             <Fold title="Risk factors behind the score" hint={`· ${data.factors.filter((f) => f.score < -0.5).length} of ${data.factors.length} flashing caution`}>
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 {data.factors.map((f) => (
-                  <div key={f.key} className="rounded-lg border border-border bg-card p-3">
+                  <div key={f.key} className="rounded-lg border border-border bg-card p-3" style={toneBox(f.score > 0 ? "good" : f.score === 0 ? "warn" : f.score > -1 ? "warn" : "bad", Math.min(1, Math.abs(f.score) / 2 + 0.25))}>
                     <div className="flex items-center justify-between gap-2">
                       <div className="flex items-center gap-1.5">
                         <span className="text-xs font-semibold">{f.label}</span>
@@ -364,7 +365,7 @@ function Stat({ label, value, hint }: { label: string; value: string; hint?: str
 function TipCard({ t, highlight }: { t: Tip; highlight: boolean }) {
   const tone = TONE[t.tone ?? "caution"];
   return (
-    <div className={`rounded-md border p-3 ${highlight ? "border-border bg-muted/30" : "border-border/60"}`} style={{ borderLeft: `3px solid ${tone.bar}` }}>
+    <div className={`rounded-md border p-3 ${highlight ? "border-border bg-muted/30" : "border-border/60"}`} style={{ ...toneBox(t.tone === "go" ? "good" : t.tone === "stop" ? "bad" : "warn", highlight ? 0.45 : 0.2), borderLeft: `3px solid ${tone.bar}` }}>
       <div className="flex items-start justify-between gap-2">
         <div className="text-[13px] font-semibold leading-snug">{t.title}</div>
         <span className={`shrink-0 rounded px-1.5 py-[1px] text-[10px] ${STRENGTH_STYLE[t.strength]}`}
