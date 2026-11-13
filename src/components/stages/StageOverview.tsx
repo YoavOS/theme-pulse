@@ -1,4 +1,5 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { Check } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { STAGE_COLORS, STAGE_TIPS, type StageNum } from "@/lib/stageAnalysis";
 import { tint } from "@/lib/colorTint";
@@ -7,6 +8,13 @@ import { tint } from "@/lib/colorTint";
 // a smooth breadth chart (Stage 2 and Stage 4 by default) and a clickable legend.
 
 const STAGES: (1 | 2 | 3 | 4)[] = [1, 2, 3, 4];
+const LINES_KEY = "stage_overview_lines_v1";
+const STAGE_NAME: Record<1 | 2 | 3 | 4, string> = { 1: "Basing", 2: "Advancing", 3: "Topping", 4: "Declining" };
+const PRESETS: { label: string; ks: StageNum[] }[] = [
+  { label: "S2 & S4", ks: [2, 4] },
+  { label: "All four", ks: [1, 2, 3, 4] },
+  { label: "Bases & tops", ks: [1, 3] },
+];
 
 /** Smooth path through points (Catmull-Rom → cubic Bézier). */
 function smooth(pts: [number, number][]) {
@@ -30,7 +38,15 @@ export default function StageOverview({ n, transition, series, onOpen, footer }:
 }) {
   const total = n[1] + n[2] + n[3] + n[4];
   const pct = (k: StageNum) => (total ? (n[k] / total) * 100 : 0);
-  const [shown, setShown] = useState<Set<StageNum>>(() => new Set<StageNum>([2, 4]));
+  const [shown, setShown] = useState<Set<StageNum>>(() => {
+    try {
+      const v = JSON.parse(localStorage.getItem(LINES_KEY) ?? "null");
+      if (Array.isArray(v) && v.length && v.every((k) => [1, 2, 3, 4].includes(k))) return new Set<StageNum>(v);
+    } catch { /* ignore */ }
+    return new Set<StageNum>([2, 4]);
+  });
+  useEffect(() => { try { localStorage.setItem(LINES_KEY, JSON.stringify([...shown])); } catch { /* ignore */ } }, [shown]);
+  const same = (ks: StageNum[]) => ks.length === shown.size && ks.every((k) => shown.has(k));
   const toggle = (k: StageNum) => setShown((s) => { const x = new Set(s); if (x.has(k)) { if (x.size > 1) x.delete(k); } else x.add(k); return x; });
   const [hover, setHover] = useState<number | null>(null);
 
@@ -107,12 +123,28 @@ export default function StageOverview({ n, transition, series, onOpen, footer }:
         </div>
       )}
 
-      {/* legend: click to show / hide a stage */}
-      <div className="flex items-center justify-center gap-6">
-        {STAGES.map((k) => (
-          <button key={k} onClick={() => toggle(k)} aria-pressed={shown.has(k)} title={shown.has(k) ? `Hide S${k}` : `Show S${k}`}
-            className={`flex items-center gap-2 text-[15px] font-semibold transition ${shown.has(k) ? "text-foreground" : "text-muted-foreground/60"}`}>
-            <span className="h-3 w-3 rounded-full" style={{ background: STAGE_COLORS[k], opacity: shown.has(k) ? 1 : 0.35 }} />S{k}
+      {/* line picker: which stages the chart draws */}
+      <div className="flex flex-wrap items-center justify-center gap-2">
+        <span className="mr-1 text-[11px] uppercase tracking-wide text-muted-foreground">Lines</span>
+        {STAGES.map((k) => {
+          const on = shown.has(k);
+          return (
+            <button key={k} onClick={() => toggle(k)} aria-pressed={on}
+              title={on ? (shown.size > 1 ? `Hide the S${k} line` : "At least one line stays on") : `Show the S${k} line`}
+              className="flex items-center gap-2 rounded-full border px-3 py-1.5 text-[13px] font-semibold transition"
+              style={on ? { borderColor: tint(STAGE_COLORS[k], 0.6), background: tint(STAGE_COLORS[k], 0.14), color: "hsl(var(--foreground))" } : { borderColor: "hsl(var(--border))", color: "hsl(var(--muted-foreground))" }}>
+              <span className="flex h-3.5 w-3.5 items-center justify-center rounded-full" style={{ background: on ? STAGE_COLORS[k] : "transparent", border: `1.5px solid ${STAGE_COLORS[k]}` }}>
+                {on && <Check size={9} strokeWidth={3.5} className="text-background" />}
+              </span>
+              S{k}<span className="hidden font-normal text-muted-foreground sm:inline">{STAGE_NAME[k]}</span>
+            </button>
+          );
+        })}
+        <span className="mx-1 hidden h-4 w-px bg-border sm:block" />
+        {PRESETS.map((p) => (
+          <button key={p.label} onClick={() => setShown(new Set(p.ks))}
+            className={`rounded-full px-2.5 py-1 text-[11.5px] transition ${same(p.ks) ? "bg-primary/15 text-primary" : "text-muted-foreground hover:text-foreground"}`}>
+            {p.label}
           </button>
         ))}
       </div>
