@@ -3,6 +3,7 @@ import { ChevronDown, ExternalLink } from "lucide-react";
 import type { LensPayload } from "@/lib/lens/types";
 import type { ProvenRow } from "@/lib/proven/types";
 import { buildScenarios, demandVsHistory, impliedGrowth, returnOnNewCapital, sizeMultiple, type Implied, type Scenario, type Story } from "@/lib/lens/valuation";
+import { AutoTerms, Term } from "./Term";
 
 // "What the price is betting on" — written for someone new to fundamentals. The app builds the stories
 // (from the company's own numbers and its industry's averages) and explains them; experimenting with the
@@ -59,7 +60,7 @@ function Slider({ label, plain, value, min, max, step, unit, onChange, hint }: {
   return (
     <label className="block space-y-0.5">
       <div className="flex justify-between text-[11.5px]"><span className="font-medium">{label}</span><span className="font-mono tabular-nums">{value.toFixed(step < 1 ? 1 : 0)}{unit}</span></div>
-      <div className="text-[10.5px] text-muted-foreground">{plain}</div>
+      <div className="text-[10.5px] text-muted-foreground"><AutoTerms text={plain} /></div>
       <input type="range" min={min} max={max} step={step} value={value} onChange={(e) => onChange(Number(e.target.value))} className="w-full accent-[hsl(var(--primary))]" />
       {hint && <div className="text-[10px] text-muted-foreground">{hint}</div>}
     </label>
@@ -142,7 +143,7 @@ export default function PriceStoryCard({ p, proven }: { p: LensPayload; proven: 
     <section className="rounded-lg border border-border">
       <button onClick={() => setOpen(!open)} className="flex w-full items-center gap-2 px-3 py-2.5 text-left hover:bg-muted/30">
         <span className="min-w-0 flex-1">
-          <span className="block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">What the price is betting on</span>
+          <span className="block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground"><Term id="reverse_dcf">What the price is betting on</Term></span>
           <span className="block text-[11px] text-muted-foreground">A share price is a bet on the future. Here's what has to come true for this one to make sense.</span>
         </span>
         <ChevronDown size={14} className={`shrink-0 text-muted-foreground transition-transform ${open ? "rotate-180" : ""}`} />
@@ -166,25 +167,25 @@ export default function PriceStoryCard({ p, proven }: { p: LensPayload; proven: 
                       <span className="text-[12px] font-semibold">{s.name}</span>
                       <span className="ml-auto"><Chip tone={a.tone}>{a.text}</Chip></span>
                     </div>
-                    <div className="text-[11.5px] leading-snug text-muted-foreground">If {S} {s.plain}.</div>
+                    <div className="text-[11.5px] leading-snug text-muted-foreground">If {S} <AutoTerms text={s.plain} />.</div>
                   </div>
                 );
               })}
             </div>
             <p className="text-[11.5px] leading-snug">
               <span className="font-semibold">What to notice: </span>
-              the better the business — more profit kept from each sale, less money needed to grow — the less growth the price needs. Value comes from growth <em>and</em> from what that growth costs.
-              {cautious.implied.kind === "growth_destroys" && <> In the cautious story growth even <em>lowers</em> value: at today's margin, each new dollar invested earns about {pct(roNewToday)}, less than the {pct(v.costOfCapital, 1)} that money costs. Growth only helps a business that earns more than its cost of capital.</>}
+              the better the business — more profit kept from each sale (<Term id="operating_margin">margin</Term>), less money needed to grow (<Term id="sales_to_capital">sales to capital</Term>) — the less growth the price needs. Value comes from growth <em>and</em> from what that growth costs.
+              {cautious.implied.kind === "growth_destroys" && <> In the cautious story growth even <em>lowers</em> value: at today's margin, each new dollar invested earns about {pct(roNewToday)}, less than the {pct(v.costOfCapital, 1)} that money costs. Growth only helps a business that earns more than its <Term id="cost_of_capital">cost of capital</Term>.</>}
             </p>
           </div>
 
           {/* the 3P test */}
           <div className="space-y-1.5">
-            <div className="text-[12px] font-semibold">Damodaran's three questions about the typical story</div>
+            <div className="text-[12px] font-semibold"><Term id="three_p">Damodaran's three questions</Term> about the typical story</div>
             {([["Possible?", "Could it get that big?", possible], ["Plausible?", "Do the numbers fit what it has shown?", plausible], ["Probable?", "Is there evidence it will happen?", probable]] as const).map(([q, sub, r]) => (
               <div key={q} className="space-y-0.5">
                 <div className="flex items-center gap-2 text-[12px]"><span className="font-semibold">{q}</span><span className="text-muted-foreground">{sub}</span><span className="ml-auto"><Chip tone={r.tone}>{r.chip}</Chip></span></div>
-                <p className="text-[11.5px] leading-snug text-muted-foreground">{r.text}</p>
+                <p className="text-[11.5px] leading-snug text-muted-foreground"><AutoTerms text={r.text} /></p>
               </div>
             ))}
             <p className="text-[11px] leading-snug text-muted-foreground">Many stories pass the first question and fail the last. Possible is easy; probable is the hard part.</p>
@@ -193,7 +194,7 @@ export default function PriceStoryCard({ p, proven }: { p: LensPayload; proven: 
           {/* good company vs good investment */}
           {biz && ask && (
             <div className="space-y-1.5">
-              <div className="text-[12px] font-semibold">Good company ≠ good investment</div>
+              <div className="text-[12px] font-semibold"><Term id="good_company">Good company ≠ good investment</Term></div>
               <p className="text-[11.5px] leading-snug text-muted-foreground">Damodaran asks two separate questions: is this a good business, and is the price asking too much? A great company can be a poor investment if the price already assumes everything goes right. Here "what it has shown" means both its growth and its profit margin.</p>
               <div className="grid grid-cols-[auto_repeat(3,minmax(0,1fr))] gap-px overflow-hidden rounded-md border border-border text-[10px]">
                 <div className="bg-muted/30 p-1" />
@@ -205,7 +206,7 @@ export default function PriceStoryCard({ p, proven }: { p: LensPayload; proven: 
                   </Fragment>
                 ))}
               </div>
-              <p className="text-[12px] leading-snug">{CELL[biz][ask]}</p>
+              <p className="text-[12px] leading-snug"><AutoTerms text={CELL[biz][ask]} /></p>
             </div>
           )}
 
@@ -213,11 +214,11 @@ export default function PriceStoryCard({ p, proven }: { p: LensPayload; proven: 
           <button onClick={() => setLearn(!learn)} className="flex items-center gap-1 text-[11.5px] text-primary hover:underline">What's a "story" in valuation? <ChevronDown size={12} className={learn ? "rotate-180" : ""} /></button>
           {learn && (
             <div className="space-y-1 rounded-md bg-muted/20 p-2.5 text-[11.5px] leading-snug">
-              <p>Damodaran says every price is a story told in numbers. Every company story is about four things:</p>
+              <p><Term id="damodaran">Damodaran</Term> says every price is a <Term id="story">story told in numbers</Term>. Every company story is about four things:</p>
               <p><b>How big?</b> — how fast sales grow, and how large the company can become.</p>
-              <p><b>How profitable?</b> — how much of each dollar of sales it keeps as operating profit (its operating margin).</p>
-              <p><b>How much it costs to grow?</b> — how much money it has to put back into the business for each new dollar of sales.</p>
-              <p><b>How risky?</b> — the return investors demand for that risk (its cost of capital, {pct(v.costOfCapital, 1)} for its industry).</p>
+              <p><b>How profitable?</b> — how much of each dollar of sales it keeps as operating profit (its <Term id="operating_margin">operating margin</Term>).</p>
+              <p><b>How much it costs to grow?</b> — how much money it has to put back into the business (<Term id="reinvestment">reinvestment</Term>) for each new dollar of sales.</p>
+              <p><b>How risky?</b> — the return investors demand for that risk (its <Term id="cost_of_capital">cost of capital</Term>, {pct(v.costOfCapital, 1)} for its industry).</p>
               <p>The app fills these from the company's own numbers and its industry's averages, then asks what growth the price needs. You don't have to set anything.</p>
             </div>
           )}

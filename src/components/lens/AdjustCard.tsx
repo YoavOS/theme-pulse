@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { ChevronDown } from "lucide-react";
 import { markConcept } from "@/lib/lens/progress";
 import { adjustVerdict, computeAdjusted, type AdjustInputs } from "@/lib/lens/adjust";
+import { AutoTerms, Term } from "./Term";
 
 const usd = (v: number | null) => {
   if (v === null || !Number.isFinite(v)) return "n/a";
@@ -42,11 +43,11 @@ export default function AdjustCard({ a, symbol }: { a: AdjustInputs; symbol: str
       </button>
       {open && (
         <div className="space-y-2.5 px-3 pb-3">
-          <p className="text-[12.5px] leading-snug">Accounting treats R&D as an expense even though it builds an asset that pays off for years, and (before 2019) kept leases off the balance sheet even though they are commitments just like debt. Damodaran moves both into capital: operating income goes up by the R&D that is really investment, capital goes up by the research asset and the lease debt — and the return on capital is recomputed. Free cash flow doesn't change.</p>
+          <p className="text-[12.5px] leading-snug"><AutoTerms text="Accounting treats R&D as an expense even though it builds an asset that pays off for years, and (before 2019) kept leases off the balance sheet even though they are commitments just like debt. Damodaran moves both into capital: operating income goes up by the R&D that is really investment, capital goes up by the research asset and the lease debt — and the return on capital is recomputed. Free cash flow doesn't change." /></p>
 
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[11.5px]">
-            <label className="flex items-center gap-1.5"><input type="checkbox" checked={rnd} onChange={(e) => setRnd(e.target.checked)} className="accent-[hsl(var(--primary))]" /> Capitalise R&D</label>
-            <label className="flex items-center gap-1.5"><input type="checkbox" checked={lease} onChange={(e) => setLease(e.target.checked)} className="accent-[hsl(var(--primary))]" /> Leases as debt</label>
+            <label className="flex items-center gap-1.5"><input type="checkbox" checked={rnd} onChange={(e) => setRnd(e.target.checked)} className="accent-[hsl(var(--primary))]" /> <Term id="rd_adjustment">Capitalise R&D</Term></label>
+            <label className="flex items-center gap-1.5"><input type="checkbox" checked={lease} onChange={(e) => setLease(e.target.checked)} className="accent-[hsl(var(--primary))]" /> <Term id="lease_adjustment">Leases as debt</Term></label>
           </div>
           {rnd && (
             <div className="space-y-1">
@@ -65,14 +66,14 @@ export default function AdjustCard({ a, symbol }: { a: AdjustInputs; symbol: str
             <tbody>
               {rows.map(([k, x, y]) => (
                 <tr key={k} className="border-t border-border/40">
-                  <td className="py-1 text-muted-foreground">{k}</td>
+                  <td className="py-1 text-muted-foreground"><AutoTerms text={k} /></td>
                   <td className="py-1 text-right font-mono tabular-nums">{x}</td>
                   <td className="py-1 text-right font-mono font-semibold tabular-nums">{y}</td>
                 </tr>
               ))}
             </tbody>
           </table>
-          {verdict && <p className="text-[12.5px] leading-snug">{verdict}</p>}
+          {verdict && <p className="text-[12.5px] leading-snug">{typeof verdict === "string" ? <AutoTerms text={verdict} /> : verdict}</p>}
           {a.industryAdjMargin && a.industryMargin && (
             <p className="text-[11px] leading-snug text-muted-foreground">Like for like: {a.industry}'s operating margin is {a.industryMargin} as reported and {a.industryAdjMargin} after Damodaran's own lease and R&D adjustments (January data).</p>
           )}
