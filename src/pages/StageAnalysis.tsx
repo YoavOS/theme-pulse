@@ -14,13 +14,12 @@ import RegimePanel from "@/components/stages/RegimePanel";
 import MomentumGauge from "@/components/stages/MomentumGauge";
 import { VERDICT_TEXT, type Verdict } from "@/lib/momentumGauge";
 import { BottomLine, HowItWorks, SectionHead, SectionNav, Segmented } from "@/components/Explainer";
-import { leadershipForGroups } from "@/lib/leadership";
+import { LEAD_INFO, leadershipForGroups } from "@/lib/leadership";
 import TrackRecord from "@/components/stages/TrackRecord";
-import LeadershipPanel from "@/components/stages/LeadershipPanel";
 import RotationPanel from "@/components/stages/RotationPanel";
-import NewHighsLowsPanel from "@/components/stages/NewHighsLowsPanel";
 import StageStockTable, { StageBadge } from "@/components/stages/StageStockTable";
 import StageOverview from "@/components/stages/StageOverview";
+import StageExportBar from "@/components/stages/StageExportBar";
 import { tint } from "@/lib/colorTint";
 import {
   REGIME_TEXT, STAGE_COLORS, applyLive, loadMarketStages, loadStages, onStagesUpdated, type MarketMember, STAGE_NAMES, STAGE_TIPS, groupHealth, isStageScanRunning, regimeSeries, runStageScan, stageWeeksAgo,
@@ -286,10 +285,10 @@ export default function StageAnalysis() {
   const regimeNow = useMemo(() => { const s = regimeSeries(regimeRows); return s[s.length - 1] ?? null; }, [regimeRows]);
   // Leadership needs each stock's weekly closes (features.wc); without them "no group leading" would be false.
   const leadershipData = useMemo(() => aligned.filter((r) => (r.features as { wc?: unknown } | null)?.wc).length >= 20 && !!market, [aligned, market]);
-  const leaders = useMemo(
-    () => leadershipForGroups(groups, market, asOf, Math.max(5, minGroupSize)).filter((g) => g.state === "emerging" || g.state === "confirmed" || g.state === "mature"),
-    [groups, market, asOf, minGroupSize],
-  );
+  // Group leadership vs SPY (returns, RS line, breadth) — shown as a tag on each row of the group table.
+  const leadAll = useMemo(() => leadershipForGroups(groups, market, asOf, Math.max(5, minGroupSize)), [groups, market, asOf, minGroupSize]);
+  const leadBy = useMemo(() => new Map(leadAll.map((g) => [g.name, g])), [leadAll]);
+  const leaders = useMemo(() => leadAll.filter((g) => g.state === "emerging" || g.state === "confirmed" || g.state === "mature"), [leadAll]);
 
   const startScan = async () => {
     setScan({ done: 0, total: 0 });
@@ -435,9 +434,8 @@ export default function StageAnalysis() {
               { id: "sa-groups", label: "By group" },
               { id: "sa-verdict", label: "Market verdict" },
               { id: "sa-changes", label: "Stage changes" },
-              { id: "sa-leadership", label: "Leadership" },
               { id: "sa-breadth", label: "Breadth" },
-              { id: "sa-rotation", label: "Rotation & new highs" },
+              { id: "sa-rotation", label: "Rotation" },
             ]} />
 
             {/* Market overview — Deepvue layout */}
@@ -465,6 +463,7 @@ export default function StageAnalysis() {
                   <span>% of classified stocks, weekly</span>
                 </>}
               />
+              <StageExportBar rows={aligned} rsOf={rsOf} groupOf={firstGroup} groupLabel={GROUP_MODE_LABEL[mode]} scopeLabel={scope === "market" ? "the whole market" : "your list"} />
             </section>
 
             {/* Groups — Deepvue layout */}
@@ -492,7 +491,7 @@ export default function StageAnalysis() {
                       <th className="hidden px-2 py-3 md:table-cell" aria-label="Distribution" />
                       {colHead(1, "S1")}{colHead(2, "S2")}{colHead(3, "S3")}{colHead(4, "S4")}
                       {colHead("a2", "2A", "Fresh Stage 2 breakouts (last 13 weeks) in the group")}
-                      {colHead("d2", "Health", "From the share of the group's stocks in each stage right now — Strong: S2 ≥ 50% · Healthy: S2 ≥ 35% · Weak: S4 ≥ 50%. Arrow = change in the S2 share vs 4 weeks ago; click to sort by it. (Group leadership above measures returns vs SPY instead, so the two can differ.)")}
+                      {colHead("d2", "Health", "From the share of the group's stocks in each stage right now — Strong: S2 ≥ 50% · Healthy: S2 ≥ 35% · Weak: S4 ≥ 50%. Arrow = change in the S2 share vs 4 weeks ago; click to sort by it. (The leadership tag next to a group's name measures returns vs SPY instead, so the two can differ.)")}
                     </tr>
                   </thead>
                   <tbody>
@@ -507,6 +506,23 @@ export default function StageAnalysis() {
                                 {open ? <ChevronDown size={14} className="shrink-0" /> : <ChevronRight size={14} className="shrink-0 text-muted-foreground" />}
                                 <span className="truncate">{g.name}</span>
                                 <span className="text-[12px] font-normal text-muted-foreground">{g.count}</span>
+                                {(() => {
+                                  const L = leadBy.get(g.name);
+                                  if (!L || L.state === "neutral" || L.state === "lagging") return null;
+                                  const sg = (x: number) => `${x >= 0 ? "+" : ""}${x.toFixed(1)}%`;
+                                  return (
+                                    <Tooltip>
+                                      <TooltipTrigger asChild>
+                                        <span onClick={(e) => e.stopPropagation()} className={`shrink-0 rounded px-1.5 py-0.5 text-[10.5px] font-semibold ${LEAD_INFO[L.state].cls}`}>{LEAD_INFO[L.state].label}</span>
+                                      </TooltipTrigger>
+                                      <TooltipContent className="max-w-xs text-xs leading-relaxed">
+                                        <b>{LEAD_INFO[L.state].label}</b> — {LEAD_INFO[L.state].tip}
+                                        <div className="mt-1 font-mono text-[11px]">vs SPY: 4w {sg(L.rs4)} · 13w {sg(L.rs13)} · 26w {sg(L.rs26)}</div>
+                                        <div className="font-mono text-[11px]">above 10w line {L.p50.toFixed(0)}% · above 40w {L.p200.toFixed(0)}%</div>
+                                      </TooltipContent>
+                                    </Tooltip>
+                                  );
+                                })()}
                               </span>
                             </td>
                             <td className="hidden px-2 py-3.5 md:table-cell">
@@ -639,13 +655,11 @@ export default function StageAnalysis() {
               </div>
             </section>
 
-            <div id="sa-leadership" className="scroll-mt-12"><LeadershipPanel groups={groups} spy={market} asOf={asOf} modeLabel={GROUP_MODE_LABEL[mode]} minMembers={minGroupSize} /></div>
 
             <div id="sa-breadth" className="scroll-mt-12"><RegimePanel rows={regimeRows} scopeLabel={scope === "market" ? "the whole market" : "your list"} /></div>
 
-            <div id="sa-rotation" className="grid scroll-mt-12 gap-4 lg:grid-cols-2">
+            <div id="sa-rotation" className="scroll-mt-12">
               <RotationPanel groups={groups} asOf={asOf} modeLabel={GROUP_MODE_LABEL[mode]} minMembers={minGroupSize} onOpen={(name, rs) => openList(`${name} — stocks by stage`, rs)} />
-              <NewHighsLowsPanel stocks={aligned} groupsOf={groupsOf} modeLabel={GROUP_MODE_LABEL[mode]} onOpen={openList} />
             </div>
 
             <HowItWorks title="How to read this page & how stages tested">

@@ -119,6 +119,10 @@ export default function Index() {
     try { localStorage.setItem("board_display_v1", boardDisplay); } catch { /* ignore */ }
   }, [boardDisplay]);
   const boardShown: BoardDisplay = boardDisplay === "list" && activeTimeframe !== "Overall" ? "boxes" : boardDisplay;
+  // Movers only: hide every group whose move is inside ±moveMin% (all views, all group modes).
+  const [moversOnly, setMoversOnly] = useState<boolean>(() => { try { return localStorage.getItem("dashboard_movers_only_v1") === "1"; } catch { return false; } });
+  const [moveMin, setMoveMin] = useState<number>(() => { try { const v = Number(localStorage.getItem("dashboard_move_min_v1")); return v > 0 ? v : 1; } catch { return 1; } });
+  useEffect(() => { try { localStorage.setItem("dashboard_movers_only_v1", moversOnly ? "1" : "0"); localStorage.setItem("dashboard_move_min_v1", String(moveMin)); } catch { /* ignore */ } }, [moversOnly, moveMin]);
 
   const [dashView, setDashView] = useState<"heatmap" | "tracker" | "session">(() => {
     try { const v = localStorage.getItem("dashboard_view_v1"); return v === "tracker" || v === "session" ? v : "heatmap"; } catch { return "heatmap"; }
@@ -313,6 +317,12 @@ export default function Index() {
           : buildGroupedThemes(baseThemes, industryBySymbol, groupMode),
     [baseThemes, industryBySymbol, groupMode, usingUniverse, universeList, scanPerf, activeTimeframe, overallWeights],
   );
+  const boardThemes = useMemo(
+    () => (moversOnly ? themes.filter((t) => Math.abs(t.performance_pct) >= moveMin) : themes),
+    [themes, moversOnly, moveMin],
+  );
+  const hiddenMovers = themes.length - boardThemes.length;
+
 
   // Prefetch news for the top 5 most-moving themes
   useEffect(() => {
@@ -759,6 +769,22 @@ export default function Index() {
               </button>
             ))}
           </div>
+          <span
+            className={`inline-flex items-center overflow-hidden rounded-md border text-[11px] ${moversOnly ? "border-primary/60 bg-primary/10" : "border-border bg-muted/20"}`}
+            title={`Movers only: hide every group whose move is between −${moveMin}% and +${moveMin}%, so only the significant movers show`}
+          >
+            <button onClick={() => setMoversOnly(!moversOnly)} aria-pressed={moversOnly}
+              className={`px-2.5 py-1 font-medium transition ${moversOnly ? "text-primary" : "text-muted-foreground hover:text-foreground"}`}>
+              Movers only
+            </button>
+            <select value={moveMin} onChange={(e) => { setMoveMin(Number(e.target.value)); setMoversOnly(true); }} aria-label="Minimum move"
+              className="h-full border-l border-border bg-transparent px-1 py-1 text-[11px] text-muted-foreground outline-none">
+              {[0.5, 1, 2, 3, 5].map((x) => <option key={x} value={x}>±{x}%</option>)}
+            </select>
+          </span>
+          {moversOnly && dashView === "heatmap" && hiddenMovers > 0 && (
+            <span className="text-[11px] text-muted-foreground">{hiddenMovers} quiet group{hiddenMovers === 1 ? "" : "s"} hidden</span>
+          )}
           <span className="text-[11px] uppercase tracking-wide text-muted-foreground">Group by</span>
           <div className="inline-flex items-center gap-0.5 rounded-md border border-border bg-muted/20 p-0.5">
             {(["theme", "industry", "subIndustry", "sector"] as GroupMode[]).map(m => (
@@ -801,7 +827,7 @@ export default function Index() {
         </div>
 
         {dashView === "session" ? (
-          <SessionView groupMode={groupMode} baseThemes={baseThemes} industryBySymbol={industryBySymbol} onOpen={setDrilldownTheme} sectorOf={isMixed ? sectorOf : undefined} />
+          <SessionView groupMode={groupMode} baseThemes={baseThemes} industryBySymbol={industryBySymbol} onOpen={setDrilldownTheme} sectorOf={isMixed ? sectorOf : undefined} minMove={moversOnly ? moveMin : 0} />
         ) : dashView === "tracker" ? (
           <ThemeTracker
             groupMode={groupMode}
@@ -812,14 +838,15 @@ export default function Index() {
             scanCompletedAt={scanCompletedAt}
             onOpen={setDrilldownTheme}
             sectorOf={isMixed ? sectorOf : undefined}
+            minMove={moversOnly ? moveMin : 0}
           />
         ) : boardShown === "bars" || boardShown === "cards" ? (
           <div className="rounded-xl border border-border bg-card px-4 py-3.5">
             {(() => {
-              const rows = (groupMode === "theme" && searchMatchSet ? themes.filter(t => searchMatchSet.has(t.theme_name.toLowerCase())) : themes).filter(t => t.tickers.length > 0);
+              const rows = (groupMode === "theme" && searchMatchSet ? boardThemes.filter(t => searchMatchSet.has(t.theme_name.toLowerCase())) : boardThemes).filter(t => t.tickers.length > 0);
               const sec = isMixed ? sectorOf : undefined;
               return !rows.length
-                ? <div className="py-10 text-center text-sm text-muted-foreground">No groups to show yet.</div>
+                ? <div className="py-10 text-center text-sm text-muted-foreground">{moversOnly && hiddenMovers ? `No group moved more than ±${moveMin}% — turn off Movers only to see all.` : "No groups to show yet."}</div>
                 : boardShown === "bars"
                   ? <GroupBars rows={rows} onOpen={setDrilldownTheme} sectorOf={sec} />
                   : <GroupCards rows={rows} onOpen={setDrilldownTheme} sectorOf={sec} />;
@@ -830,15 +857,15 @@ export default function Index() {
           </div>
         ) : boardShown === "list" ? (
           <OverallBestThemesList
-            themes={groupMode === "theme" && searchMatchSet ? themes.filter(t => searchMatchSet.has(t.theme_name.toLowerCase())) : themes}
+            themes={groupMode === "theme" && searchMatchSet ? boardThemes.filter(t => searchMatchSet.has(t.theme_name.toLowerCase())) : boardThemes}
             weights={overallWeights}
             onThemeClick={setDrilldownTheme}
           />
         ) : isMixed ? (
-          <SectorIndustryHeatmap industries={themes} sectorOf={sectorOf} onOpen={setDrilldownTheme} volumeMap={volumeMap} timeframe={activeTimeframe} label={activeTimeframe === "Overall" ? "% score" : "%"} />
+          <SectorIndustryHeatmap industries={boardThemes} sectorOf={sectorOf} onOpen={setDrilldownTheme} volumeMap={volumeMap} timeframe={activeTimeframe} label={activeTimeframe === "Overall" ? "% score" : "%"} />
         ) : (
           <HeatmapGridView
-            themes={themes}
+            themes={boardThemes}
             onCardClick={setDrilldownTheme}
             onInfoClick={(t) => setStrengthMeterTheme(t)}
             getThemeSignals={getThemeSignals}

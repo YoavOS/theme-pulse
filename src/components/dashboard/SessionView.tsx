@@ -40,13 +40,15 @@ const fmt = (x: number) => `${x > 0 ? "+" : ""}${x.toFixed(2)}%`;
 const tone = (x: number) => (x > 0.05 ? "text-[hsl(222,82%,64%)]" : x < -0.05 ? "text-[hsl(330,72%,61%)]" : "text-muted-foreground");
 const PREVIEW = 6;
 
-export default function SessionView({ groupMode, baseThemes, industryBySymbol, onOpen, sectorOf }: {
+export default function SessionView({ groupMode, baseThemes, industryBySymbol, onOpen, sectorOf, minMove = 0 }: {
   groupMode: GroupMode;
   baseThemes: ThemeData[];
   industryBySymbol: Map<string, string | null>;
   onOpen: (t: ThemeData) => void;
   /** Sector + Industry mode: industry name → its sector (shown as a tag). */
   sectorOf?: (industry: string) => string;
+  /** Movers only: hide groups whose move since the open is inside ±minMove% (0 = show all). */
+  minMove?: number;
 }) {
   const { live, loading, error, refresh } = useLiveSession(true);
   const [expanded, setExpanded] = useState<Set<Outcome>>(new Set());
@@ -55,7 +57,7 @@ export default function SessionView({ groupMode, baseThemes, industryBySymbol, o
   });
   useEffect(() => { try { localStorage.setItem(DISPLAY_KEY, display); } catch { /* ignore */ } }, [display]);
 
-  const rows = useMemo(() => {
+  const allRows = useMemo(() => {
     if (!live) return [] as Row[];
     const groups = new Map<string, { symbol: string; name?: string | null }[]>();
     const add = (k: string, m: { symbol: string; name?: string | null }) => {
@@ -83,6 +85,8 @@ export default function SessionView({ groupMode, baseThemes, industryBySymbol, o
     });
     return out;
   }, [live, baseThemes, groupMode, industryBySymbol, sectorOf]);
+  const rows = useMemo(() => (minMove > 0 ? allRows.filter((r) => Math.abs(r.open) >= minMove) : allRows), [allRows, minMove]);
+  const hidden = allRows.length - rows.length;
 
   const byOutcome = useMemo(() => {
     const m: Record<Outcome, Row[]> = { bought: [], go: [], sold: [], fade: [] };

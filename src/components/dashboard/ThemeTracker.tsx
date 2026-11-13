@@ -41,7 +41,7 @@ const DISPLAYS: { value: TrackerDisplay; label: string; title: string }[] = [
 interface Member { symbol: string; name?: string | null }
 
 export default function ThemeTracker({
-  groupMode, baseThemes, universeList, industryBySymbol, loadPerfMap, scanCompletedAt, onOpen, sectorOf,
+  groupMode, baseThemes, universeList, industryBySymbol, loadPerfMap, scanCompletedAt, onOpen, sectorOf, minMove = 0,
 }: {
   groupMode: GroupMode;
   baseThemes: ThemeData[];
@@ -52,6 +52,8 @@ export default function ThemeTracker({
   onOpen: (t: ThemeData) => void;
   /** Sector + Industry mode: industry name → its sector. */
   sectorOf?: (industry: string) => string;
+  /** Movers only: hide groups whose move is inside ±minMove% (0 = show all). */
+  minMove?: number;
 }) {
   const [tf, setTf] = useState<TrackerTf>(() => {
     try { const v = localStorage.getItem(TF_KEY) as TrackerTf | null; return v && TFS.some((t) => t.key === v) ? v : "open"; } catch { return "open"; }
@@ -116,7 +118,7 @@ export default function ThemeTracker({
     return typeof v === "number" && Number.isFinite(v) ? v : null;
   }, [tf, live, stageBy, perf]);
 
-  const rows = useMemo(() => {
+  const allRows = useMemo(() => {
     const out: ThemeData[] = [];
     groups.forEach((members, name) => {
       const tickers: Ticker[] = members.map((mem) => {
@@ -142,6 +144,8 @@ export default function ThemeTracker({
     out.sort((a, b) => b.performance_pct - a.performance_pct);
     return out;
   }, [groups, valueOf]);
+  const rows = useMemo(() => (minMove > 0 ? allRows.filter((r) => Math.abs(r.performance_pct) >= minMove) : allRows), [allRows, minMove]);
+  const hidden = allRows.length - rows.length;
 
   const shown = rows;
   const scale = niceMax(Math.max(0, ...rows.map((r) => Math.abs(r.performance_pct))));
@@ -160,7 +164,7 @@ export default function ThemeTracker({
       : perf ? "last Full Scan" : "";
   }
 
-  const emptyMsg =
+  const emptyMsg = hidden > 0 ? `No group moved more than ±${minMove}% — turn off Movers only to see all ${allRows.length}.` :
     tf === "open"
       ? liveLoading ? "Fetching live quotes…"
         : liveError === "no_open" ? "No since-open prices came back yet (this needs the updated fetch-themes function — or try again in a minute)."
@@ -190,6 +194,7 @@ export default function ThemeTracker({
       <div className="mb-2 flex flex-wrap items-center gap-2.5">
         <h2 className="font-display text-[15px] font-semibold tracking-tight">{sectorOf ? "Sector + Industry" : GROUP_MODE_LABEL[groupMode]} Tracker</h2>
         <span className="font-mono text-[11px] text-muted-foreground">{status}</span>
+        {hidden > 0 && <span className="text-[11px] text-muted-foreground">· {hidden} quiet group{hidden === 1 ? "" : "s"} hidden (within ±{minMove}%)</span>}
         {tf === "open" && (
           <button onClick={fetchOpen} disabled={liveLoading} title="Refresh live quotes" className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-50">
             {liveLoading ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
