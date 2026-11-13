@@ -428,6 +428,33 @@ export default function StageAnalysis() {
 
         {stocks.length > 0 && (
           <>
+            {/* Market overview — Deepvue layout */}
+            <section id="sa-overview" className="scroll-mt-12 space-y-4 py-2">
+              <SectionHead
+                title={scope === "market" ? "Stages across the whole market" : "Stages across your list"}
+                sub="Where every stock sits in Weinstein's four stages this week. Click a stage for its stocks; pick which lines the chart shows under it."
+                right={market && <span className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground">SPY <StageBadge r={market} /></span>}
+              />
+              <StageOverview
+                n={totals.n} transition={totals.n[0]} series={series} onOpen={openStage}
+                footer={<>
+                  {breadth && (
+                    <span title="Where this week's Stage 2 share sits within the chart's history. Very low readings (washouts) have tended to come before the strongest rebounds in leaders; very high readings mean a crowded, extended market — context, not a timing signal.">
+                      Stage 2 share <b className="text-foreground">{breadth.now.toFixed(0)}%</b>{scope === "market" && <> · {ordinal(breadth.pct)} percentile of the last {breadth.weeks} weeks (range {breadth.lo.toFixed(0)}–{breadth.hi.toFixed(0)}%, rebuilt from today's members)</>}
+                      {breadth.pct <= 10 ? " · washout zone" : breadth.pct >= 90 ? " · crowded zone" : ""}
+                    </span>
+                  )}
+                  {net && (
+                    <span title="Share of stocks in Stage 2 minus the share in Stage 4 — positive while advancing stocks outnumber declining ones">
+                      S2 − S4 <b style={{ color: net.now >= 0 ? STAGE_COLORS[2] : STAGE_COLORS[4] }}>{net.now >= 0 ? "+" : ""}{net.now.toFixed(0)} pts</b>
+                      {" "}<span className={net.d4 >= 0 ? "text-gain-medium" : "text-loss-medium"}>({net.d4 >= 0 ? "▲" : "▼"}{Math.abs(net.d4).toFixed(0)} in 4w)</span>
+                    </span>
+                  )}
+                  <span>% of classified stocks, weekly</span>
+                </>}
+              />
+            </section>
+
             {/* The verdict comes from the momentum gauge (trend, volatility, momentum's own results,
                 stretch, daily breadth + today's checks), not from weekly breadth alone. */}
             <MomentumGauge rows={listAll} onVerdict={onGauge} />
@@ -457,8 +484,8 @@ export default function StageAnalysis() {
             )}
 
             <SectionNav items={[
-              { id: "sa-breadth", label: "Breadth" },
               { id: "sa-overview", label: "Stages" },
+              { id: "sa-breadth", label: "Breadth" },
               { id: "sa-changes", label: "Stage changes" },
               { id: "sa-leadership", label: "Leadership" },
               { id: "sa-rotation", label: "Rotation & new highs" },
@@ -466,33 +493,6 @@ export default function StageAnalysis() {
             ]} />
 
             <div id="sa-breadth" className="scroll-mt-12"><RegimePanel rows={regimeRows} scopeLabel={scope === "market" ? "the whole market" : "your list"} /></div>
-
-            {/* Market overview — Deepvue layout */}
-            <section id="sa-overview" className="scroll-mt-12 space-y-4 py-2">
-              <SectionHead
-                title={scope === "market" ? "Stages across the whole market" : "Stages across your list"}
-                sub="Where every stock sits in Weinstein's four stages this week. Click a stage for its stocks; click the legend to show or hide a line."
-                right={market && <span className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground">SPY <StageBadge r={market} /></span>}
-              />
-              <StageOverview
-                n={totals.n} transition={totals.n[0]} series={series} onOpen={openStage}
-                footer={<>
-                  {breadth && (
-                    <span title="Where this week's Stage 2 share sits within the chart's history. Very low readings (washouts) have tended to come before the strongest rebounds in leaders; very high readings mean a crowded, extended market — context, not a timing signal.">
-                      Stage 2 share <b className="text-foreground">{breadth.now.toFixed(0)}%</b>{scope === "market" && <> · {ordinal(breadth.pct)} percentile of the last {breadth.weeks} weeks (range {breadth.lo.toFixed(0)}–{breadth.hi.toFixed(0)}%, rebuilt from today's members)</>}
-                      {breadth.pct <= 10 ? " · washout zone" : breadth.pct >= 90 ? " · crowded zone" : ""}
-                    </span>
-                  )}
-                  {net && (
-                    <span title="Share of stocks in Stage 2 minus the share in Stage 4 — positive while advancing stocks outnumber declining ones">
-                      S2 − S4 <b style={{ color: net.now >= 0 ? STAGE_COLORS[2] : STAGE_COLORS[4] }}>{net.now >= 0 ? "+" : ""}{net.now.toFixed(0)} pts</b>
-                      {" "}<span className={net.d4 >= 0 ? "text-gain-medium" : "text-loss-medium"}>({net.d4 >= 0 ? "▲" : "▼"}{Math.abs(net.d4).toFixed(0)} in 4w)</span>
-                    </span>
-                  )}
-                  <span>% of classified stocks, weekly</span>
-                </>}
-              />
-            </section>
 
             {/* Transitions */}
             <section id="sa-changes" className="scroll-mt-12 rounded-lg border border-border bg-card p-4">
