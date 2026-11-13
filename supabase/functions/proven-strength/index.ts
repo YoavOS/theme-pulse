@@ -2,9 +2,11 @@
 // holding? (Damodaran's definition of a good business, measured over ~10 years of 10-Ks.)
 //
 //   POST { symbol }                         compute one now (also used on demand by the app)
-//   POST { action: "batch", limit?, force? } nightly: work through the RS universe, missing first,
-//                                           then the stalest (≥ 7 days); a company is re-scored only
-//                                           when a newer 10-K appears or the scoring version changes
+//   POST { action: "batch", limit?, force? } scheduled: work through the RS universe, missing first,
+//                                           then the stalest (≥ 14 days); a company is re-scored only
+//                                           when a newer 10-K appears, the scoring version changes, or it
+//                                           was scored before Damodaran's figures were loaded.
+//                                           Skipped entirely until the Damodaran table is loaded.
 //
 // Hurdle = Damodaran's cost of capital for the company's industry (January table; floor 6%).
 // Every company gets a verdict — young ones on their own track (see _shared/provenEngine.ts).
@@ -20,9 +22,13 @@ import { classifyLifeCycle, computeMetrics, parseLensHistory } from "../_shared/
 
 const SB_URL = Deno.env.get("SUPABASE_URL")!;
 const SB_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-const STALE_MS = 7 * 86400_000;
-const BUDGET_MS = 110_000;       // stay inside the edge wall-clock limit
-const CONCURRENCY = 3;           // SEC asks for ≤ 10 requests/second
+const STALE_MS = 7 * 86400_000;        // on-demand: serve a stored score younger than this
+const BATCH_STALE_MS = 14 * 86400_000; // batch: re-check a company this often (10-Ks are yearly)
+const BUDGET_MS = 100_000;       // stay well inside the 150 s response / wall-clock limits
+const CONCURRENCY = 2;           // companyfacts JSON can be 10+ MB — keep memory (256 MB) and CPU per run low
+const MAX_BATCH = 40;            // hard cap per run, whatever the caller asks (CPU budget per request)
+const ERROR_RETRY_MS = 86400_000; // a company that failed (SEC hiccup) is retried after a day, not 14
+const FALLBACK_PREFIX = "app assumption";
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
@@ -43,7 +49,11 @@ async function loadBench(sb: Sb) {
 }
 type Bench = Awaited<ReturnType<typeof loadBench>>;
 
-async function scoreOne(sb: Sb, symbol: string, sector: string | null, bench: Bench, prev: { last_10k_filed: string | null; calc_version: number } | null, force: boolean) {
+type Prev = { last_10k_filed: string | null; calc_version: number; hurdle_source?: string | null } | null;
+/** Scored with the assumed 8% hurdle while Damodaran's table was empty → must be redone once it's loaded. */
+const scoredWithoutBench = (p: Prev, bench: Bench) => !!bench.asOf && !!p?.hurdle_source && p.hurdle_source.startsWith(FALLBACK_PREFIX);
+
+async function scoreOne(sb: Sb, symbol: string, sector: string | null, bench: Bench, prev: Prev, force: boolean) {
   const cik = await secCik(symbol);
   const base = { symbol, cik, calc_version: PROVEN_VERSION, computed_at: new Date().toISOString() };
   if (!cik) return { ...base, status: "not_sec_filer", sentence: "Not an SEC filer (foreign listing, ETF or unknown ticker) — no 10-K history to judge." };
@@ -54,7 +64,7 @@ async function scoreOne(sb: Sb, symbol: string, sector: string | null, bench: Be
   if (!panel.length) return { ...base, status: "no_annual_filings", sentence: "No US-GAAP annual filings (IFRS / 20-F filer, or too new) — nothing to judge yet." };
   const lastFiled = panel[0].filed;
   // unchanged since the last scoring → just mark it checked
-  if (!force && prev && prev.calc_version === PROVEN_VERSION && prev.last_10k_filed === lastFiled) return { ...base, status: "unchanged" as const };
+  if (!force && prev && prev.calc_version === PROVEN_VERSION && prev.last_10k_filed === lastFiled && !scoredWithoutBench(prev, bench)) return { ...base, status: "unchanged" as const };
 
   const classification = classifyLabel(sector);
   const financial = classification.sector === "Financials";
@@ -63,7 +73,7 @@ async function scoreOne(sb: Sb, symbol: string, sector: string | null, bench: Be
   if (!bench.idx.has(ind.name)) ind = resolveDamodaranIndustry(null, classification.subIndustry);
   const row = bench.idx.get(ind.name) ?? bench.idx.get(TOTAL_MARKET) ?? {};
   const hurdleSource = bench.idx.has(ind.name) && ind.match !== "market"
-    ? `Damodaran cost of capital, ${ind.name} (${bench.asOf})` : bench.idx.has(TOTAL_MARKET) ? `Damodaran cost of capital, whole market (${bench.asOf})` : "app assumption (8%) — Damodaran data not loaded";
+    ? `Damodaran cost of capital, ${ind.name} (${bench.asOf})` : bench.idx.has(TOTAL_MARKET) ? `Damodaran cost of capital, whole market (${bench.asOf})` : `${FALLBACK_PREFIX} (8%) — Damodaran data not loaded`;
   // the same life-cycle stage the Lens shows (Damodaran's six stages, from the latest quarters)
   let stage: EngineCtx["stage"] = null;
   try {
@@ -120,7 +130,7 @@ Deno.serve(async (req) => {
         sb.from("proven_strength").select("*").eq("symbol", symbol).maybeSingle(),
       ]);
       // fresh enough → serve what's stored
-      if (!body.force && prev && prev.calc_version === PROVEN_VERSION && Date.now() - Date.parse(prev.computed_at) < STALE_MS) return json(prev);
+      if (!body.force && prev && prev.calc_version === PROVEN_VERSION && Date.now() - Date.parse(prev.computed_at) < STALE_MS && !scoredWithoutBench(prev, bench)) return json(prev);
       let sector: string | null = u?.sector ?? null;
       if (!sector) { const { data: f } = await sb.from("stock_fundamentals").select("sector").eq("symbol", symbol).maybeSingle(); sector = f?.sector ?? null; }
       const row = await scoreOne(sb, symbol, sector, bench, prev, body.force === true);
@@ -130,7 +140,9 @@ Deno.serve(async (req) => {
     }
 
     // ── batch ──
-    const limit = Math.max(1, Math.min(200, Number(body.limit) || 60));
+    // Without Damodaran's table every company would get the assumed 8% hurdle — don't spend the run on that.
+    if (!bench.asOf) return json({ skipped: true, reason: "Damodaran benchmarks not loaded yet — run damodaran-benchmarks first", ms: Date.now() - t0 });
+    const limit = Math.max(1, Math.min(MAX_BATCH, Number(body.limit) || MAX_BATCH));
     const universe: { symbol: string; sector: string | null }[] = [];
     for (let from = 0; ; from += 1000) {
       const { data, error } = await sb.from("qualified_rs_universe").select("symbol, sector").range(from, from + 999);
@@ -138,9 +150,9 @@ Deno.serve(async (req) => {
       universe.push(...(data ?? []));
       if (!data || data.length < 1000) break;
     }
-    const known = new Map<string, { computed_at: string; calc_version: number; last_10k_filed: string | null }>();
+    const known = new Map<string, { computed_at: string; calc_version: number; last_10k_filed: string | null; hurdle_source: string | null; status: string }>();
     for (let from = 0; ; from += 1000) {
-      const { data, error } = await sb.from("proven_strength").select("symbol, computed_at, calc_version, last_10k_filed").range(from, from + 999);
+      const { data, error } = await sb.from("proven_strength").select("symbol, computed_at, calc_version, last_10k_filed, hurdle_source, status").range(from, from + 999);
       if (error) throw error;
       for (const r of data ?? []) known.set(r.symbol, r);
       if (!data || data.length < 1000) break;
@@ -148,7 +160,8 @@ Deno.serve(async (req) => {
     const now = Date.now();
     const due = universe
       .map((u) => ({ ...u, symbol: u.symbol.toUpperCase(), k: known.get(u.symbol.toUpperCase()) }))
-      .filter((u) => body.force === true || !u.k || u.k.calc_version !== PROVEN_VERSION || now - Date.parse(u.k.computed_at) > STALE_MS)
+      .filter((u) => body.force === true || !u.k || u.k.calc_version !== PROVEN_VERSION || scoredWithoutBench(u.k, bench)
+        || (u.k.status === "error" && now - Date.parse(u.k.computed_at) > ERROR_RETRY_MS) || now - Date.parse(u.k.computed_at) > BATCH_STALE_MS)
       .sort((a, b) => (a.k ? Date.parse(a.k.computed_at) : 0) - (b.k ? Date.parse(b.k.computed_at) : 0))
       .slice(0, limit);
 
@@ -159,7 +172,7 @@ Deno.serve(async (req) => {
       while (i < due.length && Date.now() - t0 < BUDGET_MS) {
         const u = due[i++];
         try {
-          const row = await scoreOne(sb, u.symbol, u.sector, bench, u.k ? { last_10k_filed: u.k.last_10k_filed, calc_version: u.k.calc_version } : null, body.force === true);
+          const row = await scoreOne(sb, u.symbol, u.sector, bench, u.k ?? null, body.force === true);
           await save(sb, row);
           counts[row.status] = (counts[row.status] ?? 0) + 1;
           if (row.status === "ok" && "label" in row) counts[`label:${row.label}`] = (counts[`label:${row.label}`] ?? 0) + 1;
