@@ -17,7 +17,7 @@
 // explanations come only from these display strings.
 // ─────────────────────────────────────────────────────────────
 
-import { CONCEPTS, byPeriod, factsFor, instantValue, parseCompanyFactsAnnual, quarterEnds, quarterValue, type Facts, type SecFact } from "./secFundamentals.ts";
+import { CONCEPTS, byPeriod, dur, factsFor, instantValue, parseCompanyFactsAnnual, quarterEnds, quarterValue, type Facts, type SecFact } from "./secFundamentals.ts";
 
 export type Pillar = "growth" | "profitability" | "reinvestment" | "risk" | "cash_return" | "pricing";
 export type Unit = "pct" | "pp" | "usd" | "x" | "years";
@@ -93,6 +93,8 @@ export interface CompanyHistory {
   annual: AnnualRow[];        // newest first
   firstFiled: string | null;  // earliest 10-K/10-Q period in the file (rough "age as a public filer")
   ifrsOnly: boolean;
+  /** Fiscal-year R&D, newest first (for Damodaran's R&D capitalisation). */
+  rndAnnual?: { end: string; val: number }[];
 }
 
 /** Parse companyfacts into the quarter rows the lens needs (newest first). */
@@ -143,7 +145,16 @@ export function parseLensHistory(json: { facts?: Record<string, Facts> }, maxQua
   const annual = parseCompanyFactsAnnual(json, 7).map((a) => ({
     end: a.end, revenue: a.revenue, operatingIncome: a.operatingIncome, netIncome: a.netIncome, operatingCashFlow: a.operatingCashFlow, capex: a.capex,
   }));
-  return { quarters, annual, firstFiled, ifrsOnly: false };
+  // fiscal-year R&D (10-K, ~1-year periods), first concept with data per year-end, up to 11 years
+  const rndByEnd = new Map<string, number>();
+  for (const l of flowL.rnd) for (const f of l) {
+    const d = dur(f);
+    if (d >= 350 && d <= 380 && /^10-K/.test(f.form ?? "10-K") && !rndByEnd.has(f.end)) rndByEnd.set(f.end, f.val);
+  }
+  const rndAnnual = [...rndByEnd.entries()].map(([end, val]) => ({ end, val })).sort((x, y) => (x.end < y.end ? 1 : -1))
+    // drop overlapping fiscal years (52/53-week calendars): keep ends at least ~300 days apart
+    .filter((r, i, arr) => i === 0 || Date.parse(arr[i - 1].end) - Date.parse(r.end) > 300 * 86400_000).slice(0, 11);
+  return { quarters, annual, firstFiled, ifrsOnly: false, rndAnnual };
 }
 
 // ── Formatting ───────────────────────────────────────────────────────────────────────
@@ -212,6 +223,8 @@ export interface LensMetrics {
   filed: string | null;          // when it was filed
   ttmLabel: string;
   taxRate: number | null;        // effective rate used (fraction)
+  /** Raw TTM inputs the front end needs for Damodaran's R&D/lease adjustments. */
+  raw?: { ebit: number | null; revenue: number | null; rndTtm: number | null; icBase: number | null; leaseNow: number | null; leaseBase: number | null };
   revenueTtm: number | null;
 }
 
@@ -410,7 +423,8 @@ export function computeMetrics(h: CompanyHistory, mkt: MarketData, opts: { finan
     formula: "(Market cap + debt − cash) ÷ operating income TTM", inputs: [{ label: "Enterprise value", display: fmtUsd(ev) }, { label: "Operating income TTM", display: fmtUsd(ebit) }],
     note: fin(ebit) && ebit <= 0 ? "Not meaningful: operating income is negative." : undefined });
 
-  return { metrics: m, asOf: q0?.end ?? null, filed: q0?.filed ?? null, ttmLabel, taxRate, revenueTtm: rev };
+  return { metrics: m, asOf: q0?.end ?? null, filed: q0?.filed ?? null, ttmLabel, taxRate, revenueTtm: rev,
+    raw: { ebit, revenue: rev, rndTtm: rnd, icBase: fin(icBase) ? icBase : null, leaseNow: q0?.inst.opLease ?? null, leaseBase: q4?.inst.opLease ?? null } };
 }
 
 // ── Corporate life cycle (heuristic) ──────────────────────────────────────────────────

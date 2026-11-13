@@ -24,6 +24,7 @@ export const FILE_SPECS: { file: string; cols: ColSpec[] }[] = [
     { metric: "gross_margin", header: /^gross margin$/, unit: "pct" },
     { metric: "net_margin", header: /^net margin$/, unit: "pct" },
     { metric: "op_margin", header: /^pre-?tax unadjusted operating margin$/, unit: "pct" },
+    { metric: "op_margin_adj", header: /^pre-?tax lease & r&d adj margin$/, unit: "pct" },
     { metric: "op_margin_pre_sbc", header: /pre-?stock compensation operating margin/, unit: "pct" },
     { metric: "ebitda_sales", header: /^ebitda\/sales$/, unit: "pct" },
     { metric: "rnd_sales", header: /^r&d\/sales$/, unit: "pct" },
@@ -245,3 +246,16 @@ export function industryProfile(idx: BenchIndex, name: string, match: IndustryPr
 
 /** Raw number for derived metrics (ROIC − cost of capital). */
 export const benchValue = (idx: BenchIndex, industry: string, metric: string) => idx.get(industry)?.get(metric)?.value ?? null;
+
+/** Amortizable life of R&D, by Damodaran industry. His own table (R&DConv.xls) couldn't be read, so
+ *  these follow his qualitative guidance — short for software and tech, long for drugs and aerospace —
+ *  and are labelled an app assumption; the panel lets the user change them. */
+export function defaultRndLife(industry: string | null, sector: string | null): number {
+  const i = industry ?? "";
+  if (/^Software|Information Services|Computer Services|Advertising|Heathcare Information/.test(i)) return 3;
+  if (/^Drugs|Aerospace|Shipbuilding/.test(i)) return 10;
+  if (/Semiconductor|Electronics|Computers|Telecom\. Equipment|Healthcare Products|Auto|Chemical|Machinery|Electrical/.test(i)) return 5;
+  if (sector === "Health Care") return 10;
+  if (sector === "Information Technology" || sector === "Communication Services") return 3;
+  return 5;
+}

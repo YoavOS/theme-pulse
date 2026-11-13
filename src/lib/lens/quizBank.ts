@@ -1,0 +1,109 @@
+// Review questions for the Fundamentals Lens — one or two per concept, in the app's own words,
+// following Damodaran's framework. A question becomes due once its concept has been opened.
+
+export interface QuizQ { id: string; concept: string; q: string; choices: string[]; answer: number; why: string }
+
+export const QUIZ_BANK: QuizQ[] = [
+  // ── Foundations
+  { id: "vp1", concept: "value_vs_price", q: "Damodaran separates value from price. Which drives value?",
+    choices: ["Momentum, mood and liquidity", "Cash flows, growth and risk", "What comparable companies trade at", "The latest earnings surprise"], answer: 1,
+    why: "Value comes from the business's cash flows, their growth and their risk. Price is set by trading — mood, momentum, flows — and can drift far from value for a long time." },
+  { id: "vp2", concept: "value_vs_price", q: "Pricing a company with a P/E multiple of its peers tells you…",
+    choices: ["What it's intrinsically worth", "How the market prices similar companies right now", "Its cost of capital", "Its future growth"], answer: 1,
+    why: "Multiples are pricing: they tell you how the market is pricing similar companies today. If the whole group is mispriced, so is your estimate." },
+  { id: "lc1", concept: "life_cycle", q: "A young growth company has negative margins and burns cash. Read through the life-cycle lens, this is…",
+    choices: ["A clear sign of a failing business", "Normal for its stage — the question is whether the path to profit is believable", "Irrelevant to its value", "Proof it's undervalued"], answer: 1,
+    why: "The same number means different things at different stages. Losses are normal early; what matters is whether growth, margins and reinvestment can plausibly reach a profitable business." },
+  { id: "lc2", concept: "life_cycle", q: "Which question matters most for a mature stable company?",
+    choices: ["Can it find any product-market fit?", "How fast can it scale revenue?", "Is it running efficiently and returning the cash it doesn't need?", "When will it turn its first profit?"], answer: 2,
+    why: "At maturity growth slows and reinvestment opportunities shrink. The value questions become efficiency, returns on existing capital and what happens to the cash." },
+  { id: "sn1", concept: "story_numbers", q: "In 'narrative and numbers', a good valuation story must be…",
+    choices: ["Exciting", "Something that could happen, is likely to happen, and is tied to specific inputs", "Agreed by analysts", "Short"], answer: 1,
+    why: "A story is only useful if it ties to numbers — growth, margins, reinvestment, risk — and holds up when you ask whether it could happen at all, whether it's likely, and whether the numbers really follow from it." },
+
+  // ── Growth
+  { id: "rg1", concept: "revenue_growth", q: "Revenue grew 40% but the company had to triple its invested capital to get there. What's the key missing question?",
+    choices: ["Was the growth organic?", "What return does that new capital earn?", "Did the stock go up?", "Is the CEO founder-led?"], answer: 1,
+    why: "Growth has a cost: reinvestment. Growth adds value only when the capital it needs earns more than the cost of that capital." },
+  { id: "eg1", concept: "earnings_growth", q: "Net income rose 300% after last year's tiny profit. The best reading is…",
+    choices: ["The business tripled", "The % change is exaggerated by a small base — look at the dollars and margins", "Earnings will keep growing 300%", "It's a red flag"], answer: 1,
+    why: "Percentage growth off a near-zero base says little. Compare dollar amounts and margins over several years instead." },
+
+  // ── Profitability
+  { id: "gm1", concept: "gross_margin", q: "Why can a 30% gross margin be excellent in one industry and weak in another?",
+    choices: ["Accounting rules differ by industry", "Business models differ: direct costs are a big share of sales in retail, small in software", "Gross margin isn't comparable at all", "Only the trend matters"], answer: 1,
+    why: "Gross margin reflects the economics of the product. Compare it with the industry, then ask whether the company's position explains the gap." },
+  { id: "om1", concept: "operating_margin", q: "A high-growth company's operating margin rose from 2% to 8% in a year. Damodaran would read this as…",
+    choices: ["Irrelevant until margins are mature", "Evidence that scale is starting to pay off — a key input to the story", "A one-off", "A reason to expect falling growth"], answer: 1,
+    why: "For growth companies the margin path is the profitability story: the target margin and how quickly it is reached drive much of the value." },
+  { id: "nm1", concept: "net_margin", q: "Why does Damodaran prefer operating margin to net margin for comparing businesses?",
+    choices: ["Net margin is often negative", "Net margin mixes in financing (interest) and one-offs, operating margin isolates the business", "Operating margin is audited", "They are the same"], answer: 1,
+    why: "Net income is after interest, taxes and non-operating items. Operating income shows what the business itself earns, regardless of how it's financed." },
+  { id: "rd1", concept: "rnd", q: "Two identical software firms; one spends 25% of revenue on R&D. Its reported margin looks lower because…",
+    choices: ["It's less efficient", "R&D is expensed even though much of it is investment in future products", "R&D is a tax", "Software firms always have low margins"], answer: 1,
+    why: "Accounting expenses R&D immediately, so heavy R&D spenders look less profitable today. Damodaran capitalises R&D to see the underlying return." },
+  { id: "roe1", concept: "roe", q: "A company's ROE jumps after a big debt-funded buyback while operating income is flat. What happened?",
+    choices: ["The business got better", "Equity shrank and leverage rose, so the same profit is spread over less equity", "Taxes fell", "Nothing — ROE is unaffected by buybacks"], answer: 1,
+    why: "ROE depends on leverage. Buybacks and debt shrink book equity and lift ROE without the business earning more — check ROIC too." },
+  { id: "roic1", concept: "roic", q: "ROIC measures…",
+    choices: ["Profit per share", "After-tax operating income relative to the capital invested in the business", "Stock return over a year", "Cash on the balance sheet"], answer: 1,
+    why: "ROIC = operating income × (1 − tax rate) ÷ (debt + equity − cash). It is the business's return on the capital it uses." },
+  { id: "vc1", concept: "value_creation", q: "A company grows fast with ROIC of 7% while its cost of capital is 10%. Growth is…",
+    choices: ["Adding value", "Destroying value — each dollar reinvested earns less than it costs", "Neutral", "Impossible to judge"], answer: 1,
+    why: "When return on capital is below the cost of capital, every dollar reinvested is worth less than a dollar. Faster growth makes it worse." },
+  { id: "vc2", concept: "value_creation", q: "Why can the same 9% return clear the bar in one industry and miss it in another?",
+    choices: ["Tax rates differ", "Costs of capital differ — mainly through business risk (beta) and debt", "Accounting rules differ", "It can't"], answer: 1,
+    why: "Investors demand more from riskier businesses. Utilities have low costs of capital; chip makers and internet companies high ones." },
+
+  // ── Reinvestment & cash
+  { id: "fcf1", concept: "free_cash_flow", q: "A profitable company has negative free cash flow. That is…",
+    choices: ["Always a red flag", "Possible when it reinvests heavily — good if the reinvestment earns more than its cost", "An accounting error", "Impossible"], answer: 1,
+    why: "Profit minus reinvestment (capex, working capital, acquisitions) is the free cash flow. Heavy reinvestment can be the right choice for a growing company with high returns." },
+  { id: "ri1", concept: "reinvestment", q: "In Damodaran's framework, expected growth in operating income ≈ …",
+    choices: ["Revenue growth × P/E", "Reinvestment rate × return on capital", "Dividend yield + inflation", "Market growth"], answer: 1,
+    why: "Growth has to be paid for: a firm that reinvests 50% of after-tax operating income at a 20% return can grow operating income about 10% a year." },
+  { id: "s2c1", concept: "sales_to_capital", q: "A sales-to-capital ratio of 3 means…",
+    choices: ["Revenue tripled", "Each $1 of invested capital supports about $3 of revenue", "Margins are 33%", "Debt is 3× equity"], answer: 1,
+    why: "It measures how capital-light growth is. Higher means less reinvestment is needed per dollar of new revenue." },
+  { id: "sbc1", concept: "sbc", q: "Damodaran's view of stock-based compensation is that it…",
+    choices: ["Is non-cash, so add it back", "Is a real expense paid in shares — treat it as a cost and don't add it back", "Only matters for startups", "Raises free cash flow"], answer: 1,
+    why: "Paying employees in stock instead of cash still costs shareholders — through dilution. Adding it back flatters cash flow." },
+  { id: "cr1", concept: "cash_runway", q: "A cash-burning young company has 9 months of runway. The main risk is…",
+    choices: ["It pays too much dividend", "It must raise money soon — possibly on bad terms, diluting shareholders", "Its taxes go up", "None"], answer: 1,
+    why: "Short runway means the company depends on capital markets. If they close or the stock falls, it may have to raise at a deep discount or cut growth." },
+
+  // ── Risk & debt
+  { id: "ic1", concept: "interest_coverage", q: "Interest coverage of 1.5× means…",
+    choices: ["Very safe", "Operating income is only 1.5× interest — little room if profits fall", "Debt is 1.5× equity", "Interest is 1.5% of revenue"], answer: 1,
+    why: "Coverage = operating income ÷ interest expense. Damodaran maps it to a synthetic rating; low coverage means a high default spread and fragility." },
+  { id: "dl1", concept: "debt_load", q: "Which business can safely carry more debt?",
+    choices: ["A volatile, young tech firm", "A stable business with predictable cash flows", "A company with negative operating income", "They are all the same"], answer: 1,
+    why: "Debt fits stable, predictable cash flows. Volatile or loss-making firms risk distress if earnings dip." },
+  { id: "lq1", concept: "liquidity", q: "A current ratio below 1 tells you…",
+    choices: ["The company is bankrupt", "Short-term liabilities exceed short-term assets — normal for some (e.g. retailers), worrying for others", "Profits are falling", "Dividends will be cut"], answer: 1,
+    why: "Some businesses run on negative working capital by design. Read it against the industry and the cash flow." },
+
+  // ── Cash return & dilution
+  { id: "di1", concept: "dilution", q: "Share count rose 5% this year with no acquisition. Your slice of the company…",
+    choices: ["Is unchanged", "Shrank about 5% unless value grew faster", "Grew 5%", "Doubled"], answer: 1,
+    why: "New shares from stock comp or raises dilute existing holders. Value per share only grows if total value grows faster than the share count." },
+  { id: "cret1", concept: "cash_return", q: "For a mature company with few good projects, returning cash via buybacks or dividends is…",
+    choices: ["A sign of decline to avoid", "Often the right choice — reinvesting below the cost of capital would destroy value", "Illegal", "Irrelevant"], answer: 1,
+    why: "If projects earn less than the cost of capital, cash is worth more in shareholders' hands. Damodaran compares cash returned with FCFE to see whether a company returns too little or too much." },
+
+  // ── Pricing
+  { id: "pr1", concept: "pricing", q: "A P/E of 60 implies the market expects…",
+    choices: ["Nothing in particular", "High growth or rising margins — the price is betting on the future", "A dividend", "Low risk only"], answer: 1,
+    why: "High multiples are bets on growth, margins or both. The question is whether the company's numbers make that bet plausible." },
+  { id: "pr2", concept: "pricing", q: "Why does a P/E only make sense for profitable companies?",
+    choices: ["SEC rules", "With losses the ratio is negative or meaningless — use sales or EV multiples instead", "It's always fine", "Losses lower the P/E"], answer: 1,
+    why: "Earnings near zero or negative break the ratio. EV/Sales or EV/EBIT, compared within the industry, work better." },
+
+  // ── Adjustments
+  { id: "adj1", concept: "adjustments", q: "Capitalising R&D for a fast-growing software firm usually…",
+    choices: ["Lowers operating income", "Raises operating income (this year's R&D is larger than the amortization of older R&D) and adds a research asset to capital", "Changes free cash flow", "Has no effect"], answer: 1,
+    why: "When R&D is growing, current R&D exceeds the amortization of past R&D, so operating income rises. Capital rises too, so ROIC can go either way." },
+  { id: "adj2", concept: "adjustments", q: "Treating operating leases as debt…",
+    choices: ["Lowers invested capital", "Adds lease liabilities to capital and adds back the interest in lease expense to operating income", "Changes revenue", "Only matters for banks"], answer: 1,
+    why: "Leases are fixed commitments like debt. Counting them raises both capital and operating income — for retailers and airlines the return on capital usually falls." },
+];
