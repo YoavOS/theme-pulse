@@ -34,11 +34,11 @@ function compactNum(n: number): string {
 function classify(ratio: number | null) {
   if (ratio === null) return { label: "No Data", tone: "muted", color: "hsl(0 0% 55%)" };
   if (ratio >= 1.5)
-    return { label: "Strong — High-conviction ORB possible", tone: "strong", color: "hsl(160 80% 45%)" };
+    return { label: "Strong — High-conviction ORB possible", tone: "strong", color: "hsl(222 82% 66%)" };
   if (ratio >= 1.2)
     return { label: "Elevated", tone: "elevated", color: "hsl(40 95% 55%)" };
   if (ratio < 0.8)
-    return { label: "Below Average — Weak participation", tone: "weak", color: "hsl(0 75% 60%)" };
+    return { label: "Below Average — Weak participation", tone: "weak", color: "hsl(330 72% 58%)" };
   return { label: "Normal", tone: "neutral", color: "hsl(0 0% 65%)" };
 }
 

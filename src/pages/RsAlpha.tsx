@@ -125,17 +125,17 @@ function getSpyField(stock: RsStock, tab: TabId): number | null {
 
 function rsColor(val: number | null): string {
   if (val === null) return "text-muted-foreground";
-  if (val >= 10) return "text-[hsl(160,80%,45%)] font-bold";
-  if (val >= 5) return "text-[hsl(160,70%,50%)]";
-  if (val > 0) return "text-[hsl(160,60%,55%)]";
+  if (val >= 10) return "text-[hsl(222,82%,66%)] font-bold";
+  if (val >= 5) return "text-[hsl(222,82%,68%)]";
+  if (val > 0) return "text-[hsl(222,82%,71%)]";
   if (val < -5) return "text-destructive font-semibold";
   if (val < 0) return "text-destructive/80";
   return "text-muted-foreground";
 }
 function rsBg(val: number | null): string {
   if (val === null) return "";
-  if (val >= 10) return "bg-[hsl(160,80%,45%)]/10";
-  if (val >= 5) return "bg-[hsl(160,70%,50%)]/5";
+  if (val >= 10) return "bg-[hsl(222,82%,66%)]/10";
+  if (val >= 5) return "bg-[hsl(222,82%,68%)]/5";
   if (val < -5) return "bg-destructive/5";
   return "";
 }
@@ -145,15 +145,15 @@ function pctDisplay(val: number | null): string {
 }
 function coilColor(score: number | null): string {
   if (score === null) return "text-muted-foreground";
-  if (score < 0.75) return "text-[hsl(160,70%,50%)] font-bold";
+  if (score < 0.75) return "text-[hsl(222,82%,68%)] font-bold";
   if (score <= 1.05) return "text-[hsl(40,90%,58%)] font-semibold";
   return "text-destructive font-semibold";
 }
 function emaDistColor(d: number | null): string {
   if (d === null || d === undefined) return "text-muted-foreground";
   const a = Math.abs(d);
-  if (a <= 2) return "text-[hsl(140,70%,55%)] font-semibold"; // close pullback / hugging EMA
-  if (a <= 5) return "text-[hsl(160,55%,55%)]";
+  if (a <= 2) return "text-[hsl(222,82%,71%)] font-semibold"; // close pullback / hugging EMA
+  if (a <= 5) return "text-[hsl(222,75%,71%)]";
   if (a <= 10) return "text-foreground";
   return d >= 0 ? "text-amber-400" : "text-destructive/80";
 }
@@ -936,7 +936,7 @@ export default function RsAlpha() {
                       role="switch"
                       aria-checked={growthFilters.oneil}
                       onClick={() => setGrowthFilters(p => ({ ...p, oneil: !p.oneil }))}
-                      className={`relative inline-flex h-4 w-7 items-center rounded-full transition-colors ${growthFilters.oneil ? "bg-[hsl(160,70%,45%)]" : "bg-muted-foreground/30"}`}
+                      className={`relative inline-flex h-4 w-7 items-center rounded-full transition-colors ${growthFilters.oneil ? "bg-[hsl(222,82%,66%)]" : "bg-muted-foreground/30"}`}
                     >
                       <span className={`inline-block h-3 w-3 transform rounded-full bg-background transition-transform ${growthFilters.oneil ? "translate-x-3.5" : "translate-x-0.5"}`} />
                     </button>
@@ -1001,7 +1001,7 @@ export default function RsAlpha() {
                   onClick={() => setRsNhFilter(opt.id)}
                   className={`rounded px-2 py-0.5 text-[11px] border transition-colors ${
                     rsNhFilter === opt.id
-                      ? "border-[hsl(140,70%,45%)] bg-[hsl(140,70%,45%)]/15 text-[hsl(140,70%,55%)] font-medium"
+                      ? "border-[hsl(222,82%,66%)] bg-[hsl(222,82%,66%)]/15 text-[hsl(222,82%,71%)] font-medium"
                       : "border-border text-muted-foreground hover:bg-accent hover:text-foreground"
                   }`}
                 >
@@ -1021,11 +1021,11 @@ export default function RsAlpha() {
         {!isWide && (
           <div className="container pb-2">
             <button onClick={() => setHlSheet(true)} className="flex w-full items-center gap-2 rounded-md border border-border bg-card/30 px-3 py-2 text-left text-xs hover:bg-accent/30">
-              <TrendingUp size={13} className="text-[hsl(166,100%,42%)]" />
+              <TrendingUp size={13} className="text-[hsl(222,82%,64%)]" />
               <span className="font-medium">52-week highs &amp; lows</span>
-              <span className="font-mono text-[hsl(166,100%,42%)]">{hlTotals.highs}</span>
+              <span className="font-mono text-[hsl(222,82%,64%)]">{hlTotals.highs}</span>
               <span className="text-muted-foreground">/</span>
-              <span className="font-mono text-[hsl(344,100%,65%)]">{hlTotals.lows}</span>
+              <span className="font-mono text-[hsl(330,72%,61%)]">{hlTotals.lows}</span>
               <span className="text-muted-foreground">{nh52wOn ? "· table filtered to new highs" : ""}</span>
               <span className="ml-auto text-[11px] text-muted-foreground">Open</span>
             </button>
@@ -1064,7 +1064,7 @@ export default function RsAlpha() {
 
         {progress.status === "complete" && progress.totalQueued > 0 && !isRebuilding && liveUniverseSynced && (
           <div className="container pb-2">
-            <div className="rounded-md border border-[hsl(160,70%,50%)]/30 bg-[hsl(160,70%,50%)]/5 px-3 py-1.5 text-xs text-[hsl(160,70%,50%)]">
+            <div className="rounded-md border border-[hsl(222,82%,68%)]/30 bg-[hsl(222,82%,68%)]/5 px-3 py-1.5 text-xs text-[hsl(222,82%,68%)]">
               ✓ Universe published — {progress.qualified} stocks now live (atomically swapped from staging).
             </div>
           </div>
@@ -1105,7 +1105,7 @@ export default function RsAlpha() {
 
         {fundScan.isComplete && fundScan.progress.totalQueued > 0 && !fundScan.isRunning && (
           <div className="container pb-2">
-            <div className="rounded-md border border-[hsl(160,70%,50%)]/30 bg-[hsl(160,70%,50%)]/5 px-3 py-1.5 text-xs text-[hsl(160,70%,50%)] flex items-center justify-between">
+            <div className="rounded-md border border-[hsl(222,82%,68%)]/30 bg-[hsl(222,82%,68%)]/5 px-3 py-1.5 text-xs text-[hsl(222,82%,68%)] flex items-center justify-between">
               <span>✓ Fundamentals scan completed — {fundScan.progress.processed.toLocaleString()} stocks processed · {fundScan.progress.succeeded.toLocaleString()} saved · {fundScan.progress.failed} failed.</span>
               <button onClick={() => setCoverageOpen(true)} className="text-foreground underline-offset-2 hover:underline">View Coverage →</button>
             </div>
@@ -1166,7 +1166,7 @@ export default function RsAlpha() {
               </div>
               <div className="rounded-lg border border-border bg-card p-3">
                 <div className="text-xs text-muted-foreground">Positive RS</div>
-                <div className="text-xl font-bold text-[hsl(160,70%,50%)]">
+                <div className="text-xl font-bold text-[hsl(222,82%,68%)]">
                   {sortedStocks.filter(s => (getRsForTab(s, activeTab) ?? 0) > 0).length}
                 </div>
               </div>
@@ -1178,7 +1178,7 @@ export default function RsAlpha() {
               </div>
               <div className="rounded-lg border border-border bg-card p-3">
                 <div className="text-xs text-muted-foreground">Top RS Score</div>
-                <div className="text-xl font-bold text-[hsl(160,70%,50%)]">
+                <div className="text-xl font-bold text-[hsl(222,82%,68%)]">
                   {sortedStocks.length > 0 ? pctDisplay(getRsForTab(sortedStocks[0], activeTab)) : "—"}
                 </div>
               </div>
@@ -1272,7 +1272,7 @@ export default function RsAlpha() {
                   </button>
                   <button
                     onClick={() => setSetupAnalyzerOpen(true)}
-                    className="inline-flex items-center gap-1.5 rounded-md border border-[hsl(140,70%,45%)]/60 bg-[hsl(140,70%,45%)]/15 px-3 py-1.5 text-xs font-semibold text-[hsl(140,70%,65%)] transition-colors hover:bg-[hsl(140,70%,45%)]/25"
+                    className="inline-flex items-center gap-1.5 rounded-md border border-[hsl(222,82%,66%)]/60 bg-[hsl(222,82%,66%)]/15 px-3 py-1.5 text-xs font-semibold text-[hsl(222,82%,76%)] transition-colors hover:bg-[hsl(222,82%,66%)]/25"
                     title="Paste a setup list — ranks by theme strength, RS, RS new high, and catalysts"
                   >
                     🎯 Rank Setup List
@@ -1381,23 +1381,23 @@ export default function RsAlpha() {
                             {stock.companyName ?? stock.sector ?? "—"}
                           </td>
                           <td className={`px-3 py-2 text-right font-mono font-semibold ${rsColor(rs)}`}>{pctDisplay(rs)}</td>
-                          <td className={`px-3 py-2 text-right font-mono ${ret !== null && ret >= 0 ? "text-[hsl(160,60%,55%)]" : "text-destructive/80"}`}>
+                          <td className={`px-3 py-2 text-right font-mono ${ret !== null && ret >= 0 ? "text-[hsl(222,82%,71%)]" : "text-destructive/80"}`}>
                             {pctDisplay(ret)}
                           </td>
-                          <td className={`px-3 py-2 text-right font-mono text-xs ${spy !== null && spy >= 0 ? "text-[hsl(160,60%,55%)]" : "text-destructive/80"}`}>
+                          <td className={`px-3 py-2 text-right font-mono text-xs ${spy !== null && spy >= 0 ? "text-[hsl(222,82%,71%)]" : "text-destructive/80"}`}>
                             {pctDisplay(spy)}
                           </td>
                           <td className="px-2 py-2 text-center">
                             {stock.rsNh20d ? (
                               <span
-                                className="inline-flex items-center rounded-full border border-[hsl(140,70%,45%)] bg-[hsl(140,70%,45%)]/15 px-1.5 py-0.5 text-[10px] font-semibold text-[hsl(140,70%,55%)]"
+                                className="inline-flex items-center rounded-full border border-[hsl(222,82%,66%)] bg-[hsl(222,82%,66%)]/15 px-1.5 py-0.5 text-[10px] font-semibold text-[hsl(222,82%,71%)]"
                                 title={`RS line vs SPY made a new 20-day high ${stock.rsNh20dDaysAgo ?? 0}d ago, price has not confirmed`}
                               >
                                 RS NH +{stock.rsNh20dDaysAgo ?? 0}d
                               </span>
                             ) : stock.rsNh6m ? (
                               <span
-                                className="inline-flex items-center rounded-full border border-[hsl(140,50%,40%)]/60 px-1.5 py-0.5 text-[10px] font-medium text-[hsl(140,50%,55%)]"
+                                className="inline-flex items-center rounded-full border border-[hsl(222,70%,63%)]/60 px-1.5 py-0.5 text-[10px] font-medium text-[hsl(222,70%,71%)]"
                                 title={`RS line vs SPY made a new 6-month high ${stock.rsNh6mDaysAgo ?? 0}d ago, price has not confirmed`}
                               >
                                 6M +{stock.rsNh6mDaysAgo ?? 0}d

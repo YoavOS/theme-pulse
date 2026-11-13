@@ -16,7 +16,7 @@ import type { StockStage } from "@/lib/stageAnalysis";
 export type LeadState = "emerging" | "confirmed" | "mature" | "warning" | "lost" | "lagging" | "neutral";
 
 export const LEAD_INFO: Record<LeadState, { label: string; tip: string; cls: string; order: number }> = {
-  confirmed: { order: 0, label: "Confirmed leader", cls: "bg-emerald-500/15 text-emerald-400", tip: "Top-20% relative strength in most of the last 6 weeks, beating the market over 4, 13 and 26 weeks, most members above their 10- and 40-week lines. The best place to look for setups." },
+  confirmed: { order: 0, label: "Confirmed leader", cls: "bg-blue-500/15 text-blue-400", tip: "Top-20% relative strength in most of the last 6 weeks, beating the market over 4, 13 and 26 weeks, most members above their 10- and 40-week lines. The best place to look for setups." },
   emerging: { order: 1, label: "Emerging", cls: "bg-sky-500/15 text-sky-300", tip: "13-week RS rank jumped 20+ points into the top 30% with the group above a rising 10-week line and half its members above theirs. Early — needs a few more weeks to confirm." },
   mature: { order: 2, label: "Mature", cls: "bg-amber-500/15 text-amber-300", tip: "Still a top performer over 26 weeks, but breadth has stopped improving or volatility is rising. Not a sell signal — tighten stops and be less forgiving of failed breakouts." },
   warning: { order: 3, label: "Peak warning", cls: "bg-orange-500/15 text-orange-300", tip: "At least three warnings together: RS rank down 20+ points from its 13-week high, members above their 10-week line down 15+ points from the peak, volatility up 1.5×, group under its 10-week line. Leadership often ends this way. On your list it predicted weaker groups over the next ~4 weeks, not beyond." },

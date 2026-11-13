@@ -50,8 +50,8 @@ function SentimentBanner({ sentiment, isLoading }: { sentiment: SentimentData | 
 
   const { sentiment: label, score, reasoning } = sentiment;
   const config = {
-    bullish: { emoji: "📈", title: "Bullish News Flow", bg: "rgba(0, 245, 196, 0.08)", border: "rgba(0, 245, 196, 0.2)", text: "text-primary" },
-    bearish: { emoji: "📉", title: "Bearish News Flow", bg: "rgba(239, 68, 68, 0.08)", border: "rgba(239, 68, 68, 0.2)", text: "text-destructive" },
+    bullish: { emoji: "📈", title: "Bullish News Flow", bg: "rgba(111, 159, 245, 0.08)", border: "rgba(111, 159, 245, 0.2)", text: "text-primary" },
+    bearish: { emoji: "📉", title: "Bearish News Flow", bg: "rgba(224, 85, 155, 0.08)", border: "rgba(224, 85, 155, 0.2)", text: "text-destructive" },
     mixed: { emoji: "⚖️", title: "Mixed Signals", bg: "rgba(245, 166, 35, 0.08)", border: "rgba(245, 166, 35, 0.2)", text: "text-[#f5a623]" },
     neutral: { emoji: "📋", title: "Neutral Coverage", bg: "rgba(255,255,255,0.04)", border: "rgba(255,255,255,0.1)", text: "text-muted-foreground" },
   }[label] || { emoji: "📋", title: "Neutral Coverage", bg: "rgba(255,255,255,0.04)", border: "rgba(255,255,255,0.1)", text: "text-muted-foreground" };
@@ -105,8 +105,8 @@ export function SentimentBannerInline({ sentiment, isLoading }: { sentiment: Sen
 
   const { sentiment: label, score, reasoning } = sentiment;
   const config = {
-    bullish: { emoji: "📈", title: "Bullish News Flow", bg: "rgba(0, 245, 196, 0.08)", border: "rgba(0, 245, 196, 0.2)", text: "text-primary" },
-    bearish: { emoji: "📉", title: "Bearish News Flow", bg: "rgba(239, 68, 68, 0.08)", border: "rgba(239, 68, 68, 0.2)", text: "text-destructive" },
+    bullish: { emoji: "📈", title: "Bullish News Flow", bg: "rgba(111, 159, 245, 0.08)", border: "rgba(111, 159, 245, 0.2)", text: "text-primary" },
+    bearish: { emoji: "📉", title: "Bearish News Flow", bg: "rgba(224, 85, 155, 0.08)", border: "rgba(224, 85, 155, 0.2)", text: "text-destructive" },
     mixed: { emoji: "⚖️", title: "Mixed Signals", bg: "rgba(245, 166, 35, 0.08)", border: "rgba(245, 166, 35, 0.2)", text: "text-[#f5a623]" },
     neutral: { emoji: "📋", title: "Neutral Coverage", bg: "rgba(255,255,255,0.04)", border: "rgba(255,255,255,0.1)", text: "text-muted-foreground" },
   }[label] || { emoji: "📋", title: "Neutral Coverage", bg: "rgba(255,255,255,0.04)", border: "rgba(255,255,255,0.1)", text: "text-muted-foreground" };
@@ -191,7 +191,7 @@ export default function NewsPanel({
 
         {/* AI Summary */}
         {(aiSummary || isLoadingSummary) && (
-          <div className="mx-4 mt-3 rounded-lg p-3" style={{ background: "rgba(0, 245, 196, 0.06)", border: "1px solid rgba(0, 245, 196, 0.15)" }}>
+          <div className="mx-4 mt-3 rounded-lg p-3" style={{ background: "rgba(111, 159, 245, 0.06)", border: "1px solid rgba(111, 159, 245, 0.15)" }}>
             <div className="flex items-center gap-1.5 mb-2">
               <span className="relative inline-block h-2 w-2 rounded-full bg-primary">
                 <span className="absolute inset-0 rounded-full bg-primary animate-ping opacity-75" />
@@ -286,7 +286,7 @@ export function NewsTabContent({
 
         {/* AI Summary */}
         {(aiSummary || isLoadingSummary) && (
-          <div className="rounded-lg p-3" style={{ background: "rgba(0, 245, 196, 0.06)", border: "1px solid rgba(0, 245, 196, 0.15)" }}>
+          <div className="rounded-lg p-3" style={{ background: "rgba(111, 159, 245, 0.06)", border: "1px solid rgba(111, 159, 245, 0.15)" }}>
             <div className="flex items-center gap-1.5 mb-2">
               <span className="relative inline-block h-2 w-2 rounded-full bg-primary">
                 <span className="absolute inset-0 rounded-full bg-primary animate-ping opacity-75" />

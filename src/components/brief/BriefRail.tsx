@@ -23,7 +23,7 @@ export default function BriefRail({ data, onOpen }: { data: BriefData; onOpen: (
       </button>
       {next && mins !== null && (
         <button onClick={onOpen} className="flex flex-col items-center gap-1" title={`Next: ${next.event}`}>
-          <span className={`h-2 w-2 rounded-full ${next.impact === "High" ? "bg-[hsl(350,85%,62%)]" : "bg-[hsl(40,90%,55%)]"}`} aria-hidden />
+          <span className={`h-2 w-2 rounded-full ${next.impact === "High" ? "bg-[hsl(330,72%,59%)]" : "bg-[hsl(40,90%,55%)]"}`} aria-hidden />
           <span className="text-center font-mono text-[10.5px] leading-tight text-[hsl(40,90%,62%)]">
             {mins >= 60 ? <>{Math.floor(mins / 60)}h<br />{String(mins % 60).padStart(2, "0")}m</> : `${mins}m`}
           </span>

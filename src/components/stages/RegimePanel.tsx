@@ -4,9 +4,9 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { REGIME_TEXT, regimeSeries, type RegimeColor, type StockStage } from "@/lib/stageAnalysis";
 
 const REGIME_COLOR: Record<RegimeColor, string> = {
-  green: "hsl(152, 60%, 45%)",
+  green: "hsl(222, 82%, 66%)",
   yellow: "hsl(45, 85%, 55%)",
-  red: "hsl(344, 75%, 60%)",
+  red: "hsl(330, 72%, 58%)",
 };
 
 /** Compact regime badge (used on the Bases page). */

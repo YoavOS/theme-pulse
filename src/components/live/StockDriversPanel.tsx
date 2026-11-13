@@ -183,7 +183,7 @@ export default function StockDriversPanel({ open, onOpenChange, ...ctx }: Props)
           {data && (
             <div className="space-y-3">
               <Section
-                color="hsl(160,80%,45%)"
+                color="hsl(222,82%,66%)"
                 icon={<TrendingUp size={13} />}
                 title="Short-Term Drivers"
                 items={data.shortTerm}

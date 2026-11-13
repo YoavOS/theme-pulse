@@ -19,7 +19,7 @@ export default function InsiderBuyBadge({ info }: { info: InsiderInfo | undefine
     info.buys.length > 8 ? `…and ${info.buys.length - 8} more` : "",
   ].filter((x, i) => x !== "" || i === 2).join("\n");
   const cls = info.cluster
-    ? "border-[hsl(150,60%,45%)]/50 bg-[hsl(150,60%,45%)]/15 text-[hsl(150,65%,60%)]"
+    ? "border-[hsl(222,82%,66%)]/50 bg-[hsl(222,82%,66%)]/15 text-[hsl(222,82%,74%)]"
     : "border-[hsl(40,90%,55%)]/40 bg-[hsl(40,90%,55%)]/10 text-[hsl(40,90%,65%)]";
   return (
     <span title={tip} className={`inline-flex shrink-0 items-center gap-1 rounded-full border px-1.5 py-px font-mono text-[10px] leading-4 ${cls}`}>

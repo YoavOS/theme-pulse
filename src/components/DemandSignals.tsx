@@ -3,14 +3,14 @@ import { Zap } from "lucide-react";
 import { useState } from "react";
 
 function getRelVolColor(val: number): string {
-  if (val > 1.8) return "text-[hsl(152,100%,50%)]"; // bright green
+  if (val > 1.8) return "text-[hsl(222,82%,68%)]"; // bright green
   if (val > 1.4) return "text-gain-medium";
   if (val >= 1.1) return "text-yellow-400";
   return "text-muted-foreground";
 }
 
 function getSustainedColor(val: number): string {
-  if (val > 30) return "text-[hsl(152,100%,50%)]";
+  if (val > 30) return "text-[hsl(222,82%,68%)]";
   if (val >= 15) return "text-gain-medium";
   if (val >= 5) return "text-yellow-400";
   return "text-muted-foreground";

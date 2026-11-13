@@ -30,13 +30,13 @@ interface FlagPayload {
 }
 
 const TONE: Record<"go" | "caution" | "stop", { bar: string; text: string; bg: string }> = {
-  go: { bar: "hsl(150,65%,42%)", text: "hsl(150,70%,55%)", bg: "hsl(150,60%,40%,0.10)" },
+  go: { bar: "hsl(222,82%,64%)", text: "hsl(222,82%,71%)", bg: "hsl(222,82%,63%,0.10)" },
   caution: { bar: "hsl(42,90%,52%)", text: "hsl(42,95%,60%)", bg: "hsl(42,90%,50%,0.10)" },
-  stop: { bar: "hsl(0,72%,52%)", text: "hsl(0,80%,66%)", bg: "hsl(0,72%,50%,0.10)" },
+  stop: { bar: "hsl(330,72%,53%)", text: "hsl(330,72%,62%)", bg: "hsl(330,72%,52%,0.10)" },
 };
 const scoreColor = (s: number) =>
-  s >= 1 ? "hsl(150,70%,45%)" : s > 0 ? "hsl(120,50%,50%)" : s === 0 ? "hsl(48,80%,55%)" : s > -1 ? "hsl(28,85%,55%)" : "hsl(0,72%,55%)";
-const fngColor = (x: number) => (x <= 25 ? "hsl(0,72%,55%)" : x <= 45 ? "hsl(28,85%,55%)" : x < 55 ? "hsl(48,80%,55%)" : x < 75 ? "hsl(120,50%,50%)" : "hsl(150,70%,45%)");
+  s >= 1 ? "hsl(222,82%,66%)" : s > 0 ? "hsl(222,70%,68%)" : s === 0 ? "hsl(48,80%,55%)" : s > -1 ? "hsl(28,85%,55%)" : "hsl(330,72%,55%)";
+const fngColor = (x: number) => (x <= 25 ? "hsl(330,72%,55%)" : x <= 45 ? "hsl(28,85%,55%)" : x < 55 ? "hsl(48,80%,55%)" : x < 75 ? "hsl(222,70%,68%)" : "hsl(222,82%,66%)");
 const sign = (x: number, d = 1) => `${x >= 0 ? "+" : ""}${x.toFixed(d)}`;
 
 const FNG_LABELS: Record<string, string> = {
@@ -293,8 +293,8 @@ export default function MarketFlag() {
                           <td className="px-2 py-1 text-right font-mono">{h.up3}%</td>
                           <td className="px-2 py-1 text-right font-mono text-pink-300">{h.worstDd3.toFixed(1)}%</td>
                           <td className="px-2 py-1 text-right font-mono">{h.vol.toFixed(0)}%</td>
-                          <td className={`px-2 py-1 text-right font-mono ${h.momVsSpy > 0 ? "text-emerald-400" : "text-pink-300"}`}>{sign(h.momVsSpy)} <span className="text-muted-foreground">({h.momUp}%)</span></td>
-                          <td className={`px-2 py-1 text-right font-mono ${h.smallVsSpy > 0 ? "text-emerald-400" : "text-pink-300"}`}>{sign(h.smallVsSpy)}</td>
+                          <td className={`px-2 py-1 text-right font-mono ${h.momVsSpy > 0 ? "text-blue-400" : "text-pink-300"}`}>{sign(h.momVsSpy)} <span className="text-muted-foreground">({h.momUp}%)</span></td>
+                          <td className={`px-2 py-1 text-right font-mono ${h.smallVsSpy > 0 ? "text-blue-400" : "text-pink-300"}`}>{sign(h.smallVsSpy)}</td>
                         </tr>
                       );
                     })}
@@ -430,8 +430,8 @@ function Spark({ points }: { points: { x: number; y: number }[] }) {
   const d = points.map((p, k) => `${k ? "L" : "M"}${X(p.x).toFixed(1)},${Y(p.y).toFixed(1)}`).join("");
   return (
     <svg viewBox={`0 0 ${W} ${Hh}`} className="mt-2 h-12 w-full" preserveAspectRatio="none" aria-label="Fear & Greed over the last year">
-      <rect x="0" y={Y(100)} width={W} height={Y(75) - Y(100)} fill="hsl(150,60%,40%,0.10)" />
-      <rect x="0" y={Y(25)} width={W} height={Y(0) - Y(25)} fill="hsl(0,70%,50%,0.10)" />
+      <rect x="0" y={Y(100)} width={W} height={Y(75) - Y(100)} fill="hsl(222,82%,63%,0.10)" />
+      <rect x="0" y={Y(25)} width={W} height={Y(0) - Y(25)} fill="hsl(330,72%,52%,0.10)" />
       <path d={d} fill="none" stroke="hsl(40,90%,60%)" strokeWidth="1.5" vectorEffect="non-scaling-stroke" />
     </svg>
   );

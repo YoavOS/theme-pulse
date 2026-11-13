@@ -137,7 +137,7 @@ export default function StageStockTable({
                   <span className="inline-flex items-center gap-1">
                     <StageBadge r={r} />
                     {r.features?.tt?.pass && (!rsOf || (rsOf(r.symbol) ?? 0) >= 70) && (
-                      <span className="rounded bg-emerald-500/15 px-1 text-[9px] font-medium text-emerald-400" title={`Minervini Trend Template: all 7 price rules${rsOf ? " + RS rank ≥ 70" : " (RS rule not checked here)"} (weekly proxies of the 50/150/200-day MAs)`}>TT</span>
+                      <span className="rounded bg-blue-500/15 px-1 text-[9px] font-medium text-blue-400" title={`Minervini Trend Template: all 7 price rules${rsOf ? " + RS rank ≥ 70" : " (RS rule not checked here)"} (weekly proxies of the 50/150/200-day MAs)`}>TT</span>
                     )}
                     {r.quality && (
                       <span
@@ -207,7 +207,7 @@ export function StageChartPanel({ r }: { r: StockStage }) {
   const f = r.features;
   const levels = [
     ...(f?.rangeHigh ? [{ y: f.rangeHigh, color: "hsl(40,95%,55%)" }] : []),
-    ...(f?.rangeLow ? [{ y: f.rangeLow, color: "hsl(344,80%,65%)", dash: "2 3" }] : []),
+    ...(f?.rangeLow ? [{ y: f.rangeLow, color: "hsl(330,72%,61%)", dash: "2 3" }] : []),
   ];
   // the history strip covers the last ≤52 confirmed weeks of the scan, which ends at r.as_of (a Friday)
   const friday = (t: number) => new Date((t + 4 * 86400) * 1000).toISOString().slice(0, 10);
@@ -218,7 +218,7 @@ export function StageChartPanel({ r }: { r: StockStage }) {
       <div className="mt-1 flex flex-wrap gap-x-3 text-[10px] text-muted-foreground">
         <span>weekly · last {data.c.length} weeks</span>
         <span className="text-[hsl(280,60%,72%)]">— 30w MA</span>
-        {levels.length > 0 && <span><span className="text-[hsl(40,95%,55%)]">— range high</span> · <span className="text-[hsl(344,80%,65%)]">range low</span></span>}
+        {levels.length > 0 && <span><span className="text-[hsl(40,95%,55%)]">— range high</span> · <span className="text-[hsl(330,72%,61%)]">range low</span></span>}
         <span>strip = stage each week (
           {([1, 2, 3, 4] as StageNum[]).map((st) => <span key={st} style={{ color: STAGE_COLORS[st] }}> S{st}</span>)} )</span>
       </div>

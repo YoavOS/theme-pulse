@@ -10,12 +10,12 @@ import { fmtPct, niceMax } from "@/lib/groupDisplay";
  * Both accept a Sector + Industry mapping, which groups the industries under their sector.
  */
 
-export const UP = "hsl(166, 100%, 42%)";
-export const DOWN = "hsl(344, 100%, 65%)";
-const UP_RGB = "166, 100%, 42%";
-const DOWN_RGB = "344, 100%, 65%";
+export const UP = "hsl(222, 82%, 64%)";
+export const DOWN = "hsl(330, 72%, 61%)";
+const UP_RGB = "222, 82%, 64%";
+const DOWN_RGB = "330, 72%, 61%";
 
-const toneClass = (v: number) => (v > 0 ? "text-[hsl(166,100%,42%)]" : v < 0 ? "text-[hsl(344,100%,65%)]" : "text-muted-foreground");
+const toneClass = (v: number) => (v > 0 ? "text-[hsl(222,82%,64%)]" : v < 0 ? "text-[hsl(330,72%,61%)]" : "text-muted-foreground");
 const validOf = (r: ThemeData) => r.valid_count ?? r.up_count + r.down_count;
 
 /* ───────────────────────────── Bars ───────────────────────────── */

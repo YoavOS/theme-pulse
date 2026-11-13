@@ -29,7 +29,7 @@ const pctCls = (v: number | null | undefined) => (typeof v !== "number" ? "text-
 const upShare = (b: Breadth | null | undefined) => (b && b.up + b.down > 0 ? b.up / (b.up + b.down) : null);
 
 const IMPACT_DOT: Record<string, string> = {
-  High: "bg-[hsl(350,85%,62%)]",
+  High: "bg-[hsl(330,72%,59%)]",
   Medium: "bg-[hsl(40,90%,55%)]",
   Low: "bg-muted-foreground/50",
   None: "bg-muted-foreground/30",
@@ -80,7 +80,7 @@ function H({ children, sub, right }: { children: ReactNode; sub?: ReactNode; rig
 
 function GroupChip({ t, onOpen }: { t: ThemeData; onOpen: (t: ThemeData) => void }) {
   const p = t.performance_pct;
-  const tone = p > 0 ? "bg-[hsl(150,70%,34%)]/45 hover:bg-[hsl(150,70%,34%)]/65" : p < 0 ? "bg-[hsl(350,70%,45%)]/45 hover:bg-[hsl(350,70%,45%)]/65" : "bg-muted hover:bg-muted/80";
+  const tone = p > 0 ? "bg-[hsl(222,82%,60%)]/45 hover:bg-[hsl(222,82%,60%)]/65" : p < 0 ? "bg-[hsl(330,72%,49%)]/45 hover:bg-[hsl(330,72%,49%)]/65" : "bg-muted hover:bg-muted/80";
   return (
     <button onClick={() => onOpen(t)} className={`max-w-full truncate rounded px-2 py-0.5 text-[11px] text-foreground transition-colors ${tone}`} title={`Open ${t.theme_name}`}>
       {t.theme_name} <span className="font-mono">{pctTxt(p)}</span>
@@ -185,7 +185,7 @@ export default function BriefPanel({ data, themes, timeframe, groupLabel, onOpen
           <Sun size={15} className="shrink-0 text-[hsl(40,90%,58%)]" aria-hidden />
           <h2 className="font-display text-[15px] font-semibold">Brief</h2>
           <span className="truncate text-[11px] text-muted-foreground">{fmtEtDate(now.toISOString())}</span>
-          <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10.5px] ${session.tone === "open" ? "bg-[hsl(150,70%,40%)]/15 text-gain-medium" : session.tone === "pre" ? "bg-[hsl(40,90%,55%)]/15 text-[hsl(40,90%,62%)]" : "bg-muted text-muted-foreground"}`}>
+          <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10.5px] ${session.tone === "open" ? "bg-[hsl(222,82%,63%)]/15 text-gain-medium" : session.tone === "pre" ? "bg-[hsl(40,90%,55%)]/15 text-[hsl(40,90%,62%)]" : "bg-muted text-muted-foreground"}`}>
             {session.label}
           </span>
           <button onClick={data.refreshAll} className="ml-auto grid h-7 w-7 shrink-0 place-items-center rounded-md border border-border text-muted-foreground hover:bg-accent hover:text-foreground" aria-label="Refresh brief" title="Refresh">
@@ -399,7 +399,7 @@ function EarningsBlock({ rows, loading, leading, groupOf }: { rows: EarningsRow[
               return (
                 <a key={r.symbol} href={`https://www.tradingview.com/chart/?symbol=${encodeURIComponent(r.symbol)}`} target="_blank" rel="noopener noreferrer"
                   title={[r.company, g ? `Group: ${g.theme_name} ${pctTxt(g.performance_pct)}` : null, r.gapPct !== null ? `Gap ${pctTxt(r.gapPct)}` : null].filter(Boolean).join(" · ")}
-                  className={`rounded border px-1.5 py-0.5 font-mono text-[11px] hover:bg-accent ${lead ? "border-[hsl(150,70%,40%)] text-gain-medium" : "border-border text-foreground/85"}`}>
+                  className={`rounded border px-1.5 py-0.5 font-mono text-[11px] hover:bg-accent ${lead ? "border-[hsl(222,82%,63%)] text-gain-medium" : "border-border text-foreground/85"}`}>
                   {lead && "● "}{r.symbol}
                   {r.gapPct !== null && Math.abs(r.gapPct) >= 1 && <span className={`ml-1 ${pctCls(r.gapPct)}`}>{pctTxt(r.gapPct, 0)}</span>}
                 </a>
@@ -426,7 +426,7 @@ function NewsGroup({ g, groupOf, onOpenGroup, onExplain }: { g: DigestGroup; gro
     <div className="rounded-lg border border-border px-3 py-2">
       <div className="mb-1.5 flex items-center gap-2">
         <span className="min-w-0 truncate text-[12px] font-semibold">{g.theme}</span>
-        <span className={`shrink-0 rounded px-1.5 text-[10px] ${g.impact === "High" ? "bg-[hsl(350,85%,62%)]/15 text-[hsl(350,85%,70%)]" : g.impact === "Medium" ? "bg-[hsl(40,90%,55%)]/15 text-[hsl(40,90%,62%)]" : "bg-muted text-muted-foreground"}`}>{g.impact}</span>
+        <span className={`shrink-0 rounded px-1.5 text-[10px] ${g.impact === "High" ? "bg-[hsl(330,72%,59%)]/15 text-[hsl(330,72%,64%)]" : g.impact === "Medium" ? "bg-[hsl(40,90%,55%)]/15 text-[hsl(40,90%,62%)]" : "bg-muted text-muted-foreground"}`}>{g.impact}</span>
       </div>
       {linked.length > 0 && (
         <div className="mb-1.5 flex flex-wrap items-center gap-1">

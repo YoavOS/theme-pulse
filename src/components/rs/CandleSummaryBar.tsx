@@ -29,11 +29,11 @@ export default function CandleSummaryBar({ green, red, known, total, loading, co
       <span className="text-[10px] uppercase tracking-widest text-muted-foreground">Today's Candle</span>
 
       <span className="inline-flex items-center gap-1.5">
-        <span className="h-2 w-2 rounded-full bg-[hsl(140,70%,50%)]" />
-        <span className="font-semibold text-[hsl(140,70%,55%)]">
+        <span className="h-2 w-2 rounded-full bg-[hsl(222,82%,68%)]" />
+        <span className="font-semibold text-[hsl(222,82%,71%)]">
           Green: {green}/{known || 0}
         </span>
-        <span className="font-mono text-[hsl(140,70%,55%)]">({gPct.toFixed(0)}%)</span>
+        <span className="font-mono text-[hsl(222,82%,71%)]">({gPct.toFixed(0)}%)</span>
       </span>
 
       <span className="inline-flex items-center gap-1.5">

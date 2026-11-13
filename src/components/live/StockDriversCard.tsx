@@ -101,7 +101,7 @@ export default function StockDriversCard(props: Props) {
       {data && (
         <div className="grid gap-4 md:grid-cols-2">
           <div className="rounded-lg border border-border/40 bg-background/40 p-3">
-            <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-[hsl(160,80%,45%)]">
+            <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-[hsl(222,82%,66%)]">
               <TrendingUp size={13} /> Short-Term Drivers
             </div>
             <ul className="space-y-1.5 text-[13px] leading-relaxed text-foreground/90">

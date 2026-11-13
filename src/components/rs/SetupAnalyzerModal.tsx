@@ -66,13 +66,13 @@ function percentileRank(value: number | null, sortedDesc: number[]): number {
 }
 
 function tierBadge(score: number): { label: string; color: string } {
-  if (score >= 75) return { label: "A", color: "bg-[hsl(140,70%,45%)] text-white" };
+  if (score >= 75) return { label: "A", color: "bg-[hsl(222,70%,52%)] text-white" };
   if (score >= 55) return { label: "B", color: "bg-[hsl(45,90%,55%)] text-black" };
   return { label: "C", color: "bg-muted text-muted-foreground" };
 }
 
 function scoreColor(score: number): string {
-  if (score >= 75) return "text-[hsl(140,70%,60%)]";
+  if (score >= 75) return "text-[hsl(222,82%,74%)]";
   if (score >= 55) return "text-[hsl(45,90%,60%)]";
   if (score >= 35) return "text-foreground";
   return "text-muted-foreground";
@@ -509,7 +509,7 @@ export default function SetupAnalyzerModal({ open, onOpenChange, universe }: Pro
                         <td className="px-3 py-2">
                           {r.rsNhWindow ? (
                             <div className="flex items-center gap-1.5">
-                              <span className="rounded bg-[hsl(140,70%,45%)]/20 px-1.5 py-0.5 text-[10px] font-semibold text-[hsl(140,70%,60%)]">
+                              <span className="rounded bg-[hsl(222,82%,66%)]/20 px-1.5 py-0.5 text-[10px] font-semibold text-[hsl(222,82%,74%)]">
                                 {r.rsNhWindow} +{r.rsNhDaysAgo}d
                               </span>
                             </div>
@@ -533,7 +533,7 @@ export default function SetupAnalyzerModal({ open, onOpenChange, universe }: Pro
                             {r.catalyst && r.catalyst.upgradeSignal > 0.2 && (
                               <Tooltip>
                                 <TooltipTrigger asChild>
-                                  <Award size={12} className="text-[hsl(140,70%,60%)]" />
+                                  <Award size={12} className="text-[hsl(222,82%,74%)]" />
                                 </TooltipTrigger>
                                 <TooltipContent>Net analyst upgrades vs prior month</TooltipContent>
                               </Tooltip>

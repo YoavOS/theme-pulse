@@ -15,13 +15,13 @@ function pct(v: number | null | undefined) {
 }
 function pctColor(v: number | null | undefined) {
   if (v === null || v === undefined) return "text-muted-foreground";
-  return v >= 0 ? "text-[hsl(160,70%,55%)]" : "text-destructive/80";
+  return v >= 0 ? "text-[hsl(222,82%,71%)]" : "text-destructive/80";
 }
 function concColor(p: number | null | undefined) {
   if (p === null || p === undefined) return "text-muted-foreground";
   if (p > 60) return "text-destructive";
   if (p > 40) return "text-amber-400";
-  return "text-[hsl(160,70%,55%)]";
+  return "text-[hsl(222,82%,71%)]";
 }
 
 export default function MarketDriversWidget() {

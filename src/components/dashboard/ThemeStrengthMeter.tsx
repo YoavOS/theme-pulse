@@ -37,19 +37,19 @@ interface Props {
 
 function rsColor(v: number | null | undefined): string {
   if (v == null || Number.isNaN(v)) return "#6b7280";
-  if (v >= 80) return "#00ff88";
-  if (v >= 60) return "#22c55e";
+  if (v >= 80) return "#5b8def";
+  if (v >= 60) return "#5b8def";
   if (v >= 40) return "#f59e0b";
-  return "#ff4466";
+  return "#e0559b";
 }
 function perfColor(v: number): string {
-  if (v > 0.1) return "#00ff88";
-  if (v < -0.1) return "#ff4466";
+  if (v > 0.1) return "#5b8def";
+  if (v < -0.1) return "#e0559b";
   return "#9ca3af";
 }
 function relVolColor(v: number): string {
-  if (v >= 2.0) return "#00ff88";
-  if (v >= 1.2) return "#22c55e";
+  if (v >= 2.0) return "#5b8def";
+  if (v >= 1.2) return "#5b8def";
   if (v >= 0.8) return "#9ca3af";
   return "#f59e0b";
 }
@@ -69,8 +69,8 @@ function accelerationLabel(fast: number | null, slow: number | null): "up" | "do
 }
 
 function AccelIcon({ dir }: { dir: "up" | "down" | "flat" | "na" }) {
-  if (dir === "up") return <TrendingUp size={11} style={{ color: "#00ff88" }} />;
-  if (dir === "down") return <TrendingDown size={11} style={{ color: "#ff4466" }} />;
+  if (dir === "up") return <TrendingUp size={11} style={{ color: "#5b8def" }} />;
+  if (dir === "down") return <TrendingDown size={11} style={{ color: "#e0559b" }} />;
   if (dir === "flat") return <Minus size={11} style={{ color: "#9ca3af" }} />;
   return <span className="text-muted-foreground">—</span>;
 }
@@ -83,14 +83,14 @@ function breadthLabel(breadthPct: number, avgRsOverall: number | null): {
   label: string;
   color: string;
 } {
-  if (breadthPct >= 70) return { label: "Strong Participation", color: "#00ff88" };
-  if (breadthPct >= 50) return { label: "Good Participation", color: "#22c55e" };
+  if (breadthPct >= 70) return { label: "Strong Participation", color: "#5b8def" };
+  if (breadthPct >= 50) return { label: "Good Participation", color: "#5b8def" };
   if (breadthPct >= 30) {
     if (avgRsOverall != null && avgRsOverall >= 70)
       return { label: "Selective Strength", color: "#f59e0b" };
     return { label: "Weak Participation", color: "#f59e0b" };
   }
-  return { label: "Weak Participation", color: "#ff4466" };
+  return { label: "Weak Participation", color: "#e0559b" };
 }
 
 function VolumeSparkline({ points }: { points: number[] }) {
@@ -106,7 +106,7 @@ function VolumeSparkline({ points }: { points: number[] }) {
   const trending = points[points.length - 1] >= points[0];
   return (
     <svg width={w} height={h} className="inline-block">
-      <path d={d} stroke={trending ? "#00ff88" : "#ff4466"} strokeWidth={1.5} fill="none" />
+      <path d={d} stroke={trending ? "#5b8def" : "#e0559b"} strokeWidth={1.5} fill="none" />
     </svg>
   );
 }
@@ -364,7 +364,7 @@ export default function ThemeStrengthMeter({ theme, open, onOpenChange, mode = "
               </div>
               <div className="rounded-md bg-white/[0.04] border border-white/[0.06] px-2 py-2">
                 <div className="text-[9px] uppercase text-muted-foreground" style={{ fontFamily: DM_MONO }}>Sustained</div>
-                <div className="text-sm font-bold tabular-nums" style={{ fontFamily: DM_MONO, color: metrics?.sustainedVol != null && metrics.sustainedVol >= 0 ? "#00ff88" : metrics?.sustainedVol != null ? "#ff4466" : "#6b7280" }}>
+                <div className="text-sm font-bold tabular-nums" style={{ fontFamily: DM_MONO, color: metrics?.sustainedVol != null && metrics.sustainedVol >= 0 ? "#5b8def" : metrics?.sustainedVol != null ? "#e0559b" : "#6b7280" }}>
                   {metrics?.sustainedVol != null ? `${metrics.sustainedVol >= 0 ? "+" : ""}${metrics.sustainedVol.toFixed(0)}%` : "—"}
                 </div>
               </div>

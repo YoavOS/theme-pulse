@@ -30,7 +30,7 @@ type ListId =
 type LayerId = "leadership" | "momentum" | "setup" | "quality";
 
 const LAYERS: { id: LayerId; label: string; weight: number; icon: typeof Crown; color: string }[] = [
-  { id: "leadership", label: "Leadership", weight: 0.35, icon: Crown, color: "hsl(160, 70%, 50%)" },
+  { id: "leadership", label: "Leadership", weight: 0.35, icon: Crown, color: "hsl(222, 82%, 68%)" },
   { id: "momentum", label: "Momentum", weight: 0.30, icon: Flame, color: "hsl(30, 85%, 55%)" },
   { id: "setup", label: "Setup / Early", weight: 0.20, icon: Boxes, color: "hsl(200, 80%, 55%)" },
   { id: "quality", label: "Superperformance", weight: 0.15, icon: Gem, color: "hsl(280, 65%, 60%)" },
@@ -721,13 +721,13 @@ export default function ThemeSetupAnalyzer({ universe, isOtcSymbol }: Props) {
               <div className="mb-2 text-xs font-semibold text-foreground">Leadership Rotation — Change of Character ({GROUP_MODE_LABEL[groupMode]})</div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <div className="mb-1 flex items-center gap-1 text-[11px] font-semibold text-[hsl(160,70%,50%)]">
+                  <div className="mb-1 flex items-center gap-1 text-[11px] font-semibold text-[hsl(222,82%,68%)]">
                     <ArrowUpRight size={12} /> Rising (momentum &gt; leadership)
                   </div>
                   {themeAggs.filter(t => !t.isUnassigned && t.rotation > 3).slice(0, 8).map(t => (
                     <div key={t.name} className="flex items-center justify-between py-0.5 text-[11px]">
                       <span className="truncate text-foreground">{t.name}</span>
-                      <span className="font-mono text-[hsl(160,70%,50%)]">+{t.rotation.toFixed(1)}</span>
+                      <span className="font-mono text-[hsl(222,82%,68%)]">+{t.rotation.toFixed(1)}</span>
                     </div>
                   ))}
                 </div>

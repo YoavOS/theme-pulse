@@ -26,7 +26,7 @@ const METRIC_LABELS: Record<string, string> = {
 };
 
 function pctColor(pct: number): string {
-  if (pct >= 80) return "bg-[hsl(160,70%,50%)]";
+  if (pct >= 80) return "bg-[hsl(222,82%,68%)]";
   if (pct >= 50) return "bg-[hsl(45,90%,55%)]";
   if (pct >= 25) return "bg-[hsl(25,85%,55%)]";
   return "bg-destructive";

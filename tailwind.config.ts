@@ -52,6 +52,9 @@ export default {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
         },
+        up: "hsl(var(--up))",
+        down: "hsl(var(--down))",
+        warn: "hsl(var(--warn))",
         gain: {
           strong: "hsl(var(--gain-strong))",
           medium: "hsl(var(--gain-medium))",

@@ -57,8 +57,8 @@ export default function ReviewView({ opened, payload, onExit }: { opened: Set<st
               return (
                 <button key={c} onClick={() => choose(k)} disabled={picked !== null}
                   className={`flex w-full items-start gap-2 rounded-md border px-2.5 py-2 text-left text-[13px] leading-snug transition-colors ${
-                    state === "right" ? "border-[hsl(150,60%,45%)] bg-[hsl(150,60%,45%)]/10" : state === "wrong" ? "border-[hsl(25,90%,55%)] bg-[hsl(25,90%,55%)]/10" : state === "dim" ? "border-border/50 opacity-60" : "border-border hover:bg-muted/40"}`}>
-                  <span className="mt-px w-4 shrink-0 font-mono text-[11px] text-muted-foreground">{state === "right" ? <Check size={13} className="text-[hsl(150,60%,58%)]" /> : state === "wrong" ? <XIcon size={13} className="text-[hsl(25,90%,64%)]" /> : String.fromCharCode(65 + k)}</span>
+                    state === "right" ? "border-[hsl(222,82%,66%)] bg-[hsl(222,82%,66%)]/10" : state === "wrong" ? "border-[hsl(25,90%,55%)] bg-[hsl(25,90%,55%)]/10" : state === "dim" ? "border-border/50 opacity-60" : "border-border hover:bg-muted/40"}`}>
+                  <span className="mt-px w-4 shrink-0 font-mono text-[11px] text-muted-foreground">{state === "right" ? <Check size={13} className="text-[hsl(222,82%,73%)]" /> : state === "wrong" ? <XIcon size={13} className="text-[hsl(25,90%,64%)]" /> : String.fromCharCode(65 + k)}</span>
                   <span>{c}</span>
                 </button>
               );
@@ -66,7 +66,7 @@ export default function ReviewView({ opened, payload, onExit }: { opened: Set<st
           </div>
           {picked !== null && (
             <div className="space-y-2">
-              <p className={`text-[12.5px] leading-snug ${picked === q.answer ? "text-[hsl(150,60%,58%)]" : "text-[hsl(25,90%,64%)]"}`}>{picked === q.answer ? "Right." : "Not quite."} <span className="text-foreground">{q.why}</span></p>
+              <p className={`text-[12.5px] leading-snug ${picked === q.answer ? "text-[hsl(222,82%,73%)]" : "text-[hsl(25,90%,64%)]"}`}>{picked === q.answer ? "Right." : "Not quite."} <span className="text-foreground">{q.why}</span></p>
               <button onClick={next} className="rounded-md bg-primary/15 px-3 py-1 text-xs font-medium text-primary hover:bg-primary/25">{i + 1 < queue.length ? "Next" : "Finish"}</button>
             </div>
           )}

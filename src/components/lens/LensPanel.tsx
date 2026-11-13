@@ -48,7 +48,7 @@ function peerTone(p: PeerStat, higherIsBetter: boolean | null) {
   const words = { top: "top fifth", upper: "above the median", middle: "around the median", lower: "below the median", bottom: "bottom fifth" }[p.position];
   const good = higherIsBetter === null ? null : (p.position === "top" || p.position === "upper") === higherIsBetter && p.position !== "middle";
   const bad = higherIsBetter === null ? null : (p.position === "bottom" || p.position === "lower") === higherIsBetter && p.position !== "middle";
-  const cls = good ? "text-[hsl(150,60%,58%)]" : bad ? "text-[hsl(25,90%,64%)]" : "text-[hsl(210,70%,72%)]";
+  const cls = good ? "text-[hsl(222,82%,73%)]" : bad ? "text-[hsl(25,90%,64%)]" : "text-[hsl(210,70%,72%)]";
   return { words, cls };
 }
 
@@ -71,7 +71,7 @@ function PeerBar({ p, higherIsBetter }: { p: PeerStat; higherIsBetter: boolean |
 function benchTone(b: Benchmark, higherIsBetter: boolean | null) {
   const words = b.position === "in line" ? `in line with ${b.industry}` : `${b.position} ${b.industry}`;
   const cls = higherIsBetter === null || b.position === "in line" ? "text-[hsl(210,70%,72%)]"
-    : (b.position === "above") === higherIsBetter ? "text-[hsl(150,60%,58%)]" : "text-[hsl(25,90%,64%)]";
+    : (b.position === "above") === higherIsBetter ? "text-[hsl(222,82%,73%)]" : "text-[hsl(25,90%,64%)]";
   return { words, cls };
 }
 

@@ -37,7 +37,7 @@ export interface LeaderInputs {
 
 export type Bucket = "confirmed" | "emerging" | "price_only" | null;
 export const BUCKET_INFO: Record<Exclude<Bucket, null>, { label: string; tip: string; cls: string }> = {
-  confirmed: { label: "Confirmed leader", tip: "Top fundamentals in its industry AND strong RS (80+): the classic leader in a group.", cls: "bg-[hsl(150,60%,45%)]/15 text-[hsl(150,65%,60%)] border-[hsl(150,60%,45%)]/40" },
+  confirmed: { label: "Confirmed leader", tip: "Top fundamentals in its industry AND strong RS (80+): the classic leader in a group.", cls: "bg-[hsl(222,82%,66%)]/15 text-[hsl(222,82%,74%)] border-[hsl(222,82%,66%)]/40" },
   emerging: { label: "Emerging", tip: "Top fundamentals in its industry, but RS hasn't caught up yet (under 70). Watch for price to confirm.", cls: "bg-[hsl(199,85%,62%)]/15 text-[hsl(199,85%,70%)] border-[hsl(199,85%,62%)]/40" },
   price_only: { label: "Price only", tip: "Strong RS but bottom-half fundamentals for its industry: momentum without the business to back it.", cls: "bg-[hsl(25,90%,55%)]/15 text-[hsl(25,90%,65%)] border-[hsl(25,90%,55%)]/40" },
 };

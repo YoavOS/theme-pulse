@@ -368,11 +368,11 @@ export default function Index() {
 
   const dashboardTabs = [
     { to: "/", label: "Dashboard", icon: <LayoutDashboard size={14} />, active: true, color: "" },
-    { to: "/market-flag", label: "Market Flag", icon: <Flag size={14} />, active: false, color: "text-[hsl(150,70%,45%)]" },
+    { to: "/market-flag", label: "Market Flag", icon: <Flag size={14} />, active: false, color: "text-[hsl(222,82%,66%)]" },
     { to: "/rs-alpha", label: "RS Alpha", icon: <Zap size={14} />, active: false, color: "text-[hsl(280,70%,60%)]" },
     { to: "/stages", label: "Stages", icon: <Layers size={14} />, active: false, color: "text-[hsl(222,82%,64%)]" },
-    { to: "/bases", label: "Bases", icon: <Boxes size={14} />, active: false, color: "text-[hsl(174,70%,50%)]" },
-    { to: "/live", label: "Live Execution", icon: <Activity size={14} />, active: false, color: "text-[hsl(160,80%,45%)]" },
+    { to: "/bases", label: "Bases", icon: <Boxes size={14} />, active: false, color: "text-[hsl(222,82%,68%)]" },
+    { to: "/live", label: "Live Execution", icon: <Activity size={14} />, active: false, color: "text-[hsl(222,82%,66%)]" },
     { to: "/lens", label: "Fundamentals", icon: <GraduationCap size={14} />, active: false, color: "text-[hsl(40,90%,60%)]" },
     { to: "/earnings", label: "Earnings", icon: <DollarSign size={14} />, active: false, color: "text-[hsl(40,90%,55%)]" },
     { to: "/minervini", label: "Minervini", icon: <Trophy size={14} />, active: false, color: "text-[hsl(40,90%,55%)]" },

@@ -83,6 +83,6 @@ export function useSpyBenchmark() {
 export function formatRS(rs: number | null): { text: string; color: string } {
   if (rs === null) return { text: "vs SPY: ~", color: "text-muted-foreground" };
   const sign = rs >= 0 ? "+" : "";
-  const color = rs > 0 ? "text-[hsl(174,80%,50%)]" : rs < 0 ? "text-[hsl(40,80%,50%)]" : "text-muted-foreground";
+  const color = rs > 0 ? "text-[hsl(222,82%,68%)]" : rs < 0 ? "text-[hsl(40,80%,50%)]" : "text-muted-foreground";
   return { text: `vs SPY: ${sign}${rs.toFixed(2)}%`, color };
 }
