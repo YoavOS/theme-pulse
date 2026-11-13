@@ -32,6 +32,99 @@ export type Database = {
         }
         Relationships: []
       }
+      company_year_metrics: {
+        Row: {
+          calc_version: number
+          coverage: number | null
+          economic_profit: number | null
+          fcf: number | null
+          filed: string | null
+          fy_end: string
+          gross_margin: number | null
+          hurdle: number | null
+          invested_capital: number | null
+          margin: number | null
+          nd_ebitda: number | null
+          nopat: number | null
+          op_margin: number | null
+          pooled3: number | null
+          primary_roic: number | null
+          reinvest: number | null
+          rev_growth: number | null
+          revenue: number | null
+          rnd_rev: number | null
+          roe: number | null
+          roic: number | null
+          roic_ex_gw: number | null
+          roic_rd: number | null
+          sbc_rev: number | null
+          shares: number | null
+          spread: number | null
+          symbol: string
+          turnover: number | null
+        }
+        Insert: {
+          calc_version: number
+          coverage?: number | null
+          economic_profit?: number | null
+          fcf?: number | null
+          filed?: string | null
+          fy_end: string
+          gross_margin?: number | null
+          hurdle?: number | null
+          invested_capital?: number | null
+          margin?: number | null
+          nd_ebitda?: number | null
+          nopat?: number | null
+          op_margin?: number | null
+          pooled3?: number | null
+          primary_roic?: number | null
+          reinvest?: number | null
+          rev_growth?: number | null
+          revenue?: number | null
+          rnd_rev?: number | null
+          roe?: number | null
+          roic?: number | null
+          roic_ex_gw?: number | null
+          roic_rd?: number | null
+          sbc_rev?: number | null
+          shares?: number | null
+          spread?: number | null
+          symbol: string
+          turnover?: number | null
+        }
+        Update: {
+          calc_version?: number
+          coverage?: number | null
+          economic_profit?: number | null
+          fcf?: number | null
+          filed?: string | null
+          fy_end?: string
+          gross_margin?: number | null
+          hurdle?: number | null
+          invested_capital?: number | null
+          margin?: number | null
+          nd_ebitda?: number | null
+          nopat?: number | null
+          op_margin?: number | null
+          pooled3?: number | null
+          primary_roic?: number | null
+          reinvest?: number | null
+          rev_growth?: number | null
+          revenue?: number | null
+          rnd_rev?: number | null
+          roe?: number | null
+          roic?: number | null
+          roic_ex_gw?: number | null
+          roic_rd?: number | null
+          sbc_rev?: number | null
+          shares?: number | null
+          spread?: number | null
+          symbol?: string
+          turnover?: number | null
+        }
+        Relationships: []
+      }
       damodaran_benchmarks: {
         Row: {
           as_of: string | null
@@ -506,6 +599,99 @@ export type Database = {
           name?: string | null
           symbol?: string
           updated_at?: string
+        }
+        Relationships: []
+      }
+      proven_strength: {
+        Row: {
+          archetype: string | null
+          archetypes: string[] | null
+          as_of: string | null
+          calc_version: number
+          checks: Json | null
+          cik: number | null
+          computed_at: string
+          cum_ep: number | null
+          error: string | null
+          flags: string[] | null
+          gates: Json | null
+          hurdle: number | null
+          hurdle_source: string | null
+          industry: string | null
+          label: string | null
+          last_10k_filed: string | null
+          median_spread: number | null
+          min_pooled_spread: number | null
+          score: number | null
+          sentence: string | null
+          series: Json | null
+          spread_slope: number | null
+          status: string
+          symbol: string
+          track: string | null
+          why: string | null
+          years_above: number | null
+          years_valid: number | null
+        }
+        Insert: {
+          archetype?: string | null
+          archetypes?: string[] | null
+          as_of?: string | null
+          calc_version: number
+          checks?: Json | null
+          cik?: number | null
+          computed_at?: string
+          cum_ep?: number | null
+          error?: string | null
+          flags?: string[] | null
+          gates?: Json | null
+          hurdle?: number | null
+          hurdle_source?: string | null
+          industry?: string | null
+          label?: string | null
+          last_10k_filed?: string | null
+          median_spread?: number | null
+          min_pooled_spread?: number | null
+          score?: number | null
+          sentence?: string | null
+          series?: Json | null
+          spread_slope?: number | null
+          status: string
+          symbol: string
+          track?: string | null
+          why?: string | null
+          years_above?: number | null
+          years_valid?: number | null
+        }
+        Update: {
+          archetype?: string | null
+          archetypes?: string[] | null
+          as_of?: string | null
+          calc_version?: number
+          checks?: Json | null
+          cik?: number | null
+          computed_at?: string
+          cum_ep?: number | null
+          error?: string | null
+          flags?: string[] | null
+          gates?: Json | null
+          hurdle?: number | null
+          hurdle_source?: string | null
+          industry?: string | null
+          label?: string | null
+          last_10k_filed?: string | null
+          median_spread?: number | null
+          min_pooled_spread?: number | null
+          score?: number | null
+          sentence?: string | null
+          series?: Json | null
+          spread_slope?: number | null
+          status?: string
+          symbol?: string
+          track?: string | null
+          why?: string | null
+          years_above?: number | null
+          years_valid?: number | null
         }
         Relationships: []
       }
