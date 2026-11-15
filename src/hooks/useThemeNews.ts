@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { isAwake } from "@/lib/appSleep";
 
 export interface NewsArticle {
   symbol: string | null;
@@ -144,6 +145,7 @@ export function useThemeNews() {
 
     const top5 = themes.slice(0, 5);
     for (const theme of top5) {
+      if (!isAwake()) break;   // sleep mode: no background news fetches
       const key = getCacheKey(theme.symbols);
       if (themeCache[key] && (Date.now() - themeCache[key].fetchedAt < CACHE_TTL)) {
         setPrefetchedThemes(prev => new Set(prev).add(theme.name));
