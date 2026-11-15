@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
-import { Copy, Download, Loader2, Wand2 } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Copy, Download, FileText, Loader2, Wand2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Textarea } from "@/components/ui/textarea";
@@ -63,6 +63,22 @@ export default function FocusOrganizer({ universe, fundamentalsMap, superperfSet
   const [emaMap, setEmaMap] = useState<Map<string, EmaRead | null> | null>(null);
   const [loading, setLoading] = useState(false);
   const [listSyms, setListSyms] = useState<string[]>([]);
+  const [fileName, setFileName] = useState<string | null>(null);
+  const [dragging, setDragging] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const readFile = async (f?: File | null) => {
+    if (!f) return;
+    if (f.size > 5 * 1024 * 1024) { toast.error("File is too large (max 5 MB)."); return; }
+    try {
+      const t = await f.text();
+      const n = parse(t).length;
+      if (!n) { toast.error("No tickers found in that file."); return; }
+      setRaw(t); setFileName(f.name);
+      toast.success(`Loaded ${n} tickers`, { description: `${f.name} — press Organize` });
+    } catch (e) {
+      toast.error("Could not read the file.", { description: e instanceof Error ? e.message : String(e) });
+    }
+  };
   useEffect(() => { save(OPTS_KEY, opts); }, [opts]);
   useEffect(() => { save(OVR_KEY, overrides); }, [overrides]);
 
@@ -179,8 +195,21 @@ export default function FocusOrganizer({ universe, fundamentalsMap, superperfSet
   let lastStatus: Status | null = null;
   return (
     <div className="space-y-3">
-      <Textarea value={raw} onChange={(e) => setRaw(e.target.value)} rows={4} className="font-mono text-xs"
-        placeholder="Paste your TradingView focus list (sections and NYSE: / NASDAQ: prefixes are fine). SPY, QQQ and IWM always go on top." />
+      <div onDragOver={(e) => { e.preventDefault(); setDragging(true); }} onDragLeave={() => setDragging(false)}
+        onDrop={(e) => { e.preventDefault(); setDragging(false); readFile(e.dataTransfer.files?.[0]); }}
+        className={`space-y-1.5 rounded-lg ${dragging ? "outline outline-2 outline-dashed outline-primary/60" : ""}`}>
+        <div className="flex items-center gap-2 text-[12px]">
+          <button type="button" onClick={() => fileRef.current?.click()}
+            className="inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1 font-medium hover:border-primary/50 hover:text-primary">
+            <FileText size={12} /> Upload file
+          </button>
+          <input ref={fileRef} type="file" accept=".txt,.csv,text/plain,text/csv" className="hidden"
+            onChange={(e) => { readFile(e.target.files?.[0]); e.target.value = ""; }} />
+          <span className="text-muted-foreground">{fileName ? `Loaded ${fileName}` : "the .txt TradingView exports (Watchlist → ⋯ → Export list), or drop it here — or paste below"}</span>
+        </div>
+        <Textarea value={raw} onChange={(e) => { setRaw(e.target.value); setFileName(null); }} rows={4} className="font-mono text-xs"
+          placeholder="Paste your TradingView focus list (sections and NYSE: / NASDAQ: prefixes are fine). SPY, QQQ and IWM always go on top." />
+      </div>
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-[12px]">
         <label className="flex items-center gap-1.5 text-muted-foreground" title="A stock counts as a 21 EMA pullback candidate once it has run this much since its last touch of the daily 21 EMA">
           Pullback candidate after
