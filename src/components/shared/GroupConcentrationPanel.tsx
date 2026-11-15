@@ -3,6 +3,7 @@ import { Copy, Download } from "lucide-react";
 import { toast } from "sonner";
 import { PieChart, Pie, Cell, Tooltip as RechartsTooltip, ResponsiveContainer, Sector } from "recharts";
 import { colorForGroup, GROUP_MODE_LABEL, groupKeyForIndustry, type GroupMode } from "@/lib/groupColors";
+import GroupStageTag from "@/components/shared/GroupStageTag";
 
 export interface ConcentrationItem {
   symbol: string;
@@ -181,7 +182,7 @@ export default function GroupConcentrationPanel({
                     return (
                       <div className="rounded-lg border border-border bg-background px-3 py-2 text-xs shadow-xl">
                         <div className="mb-1 flex items-center justify-between gap-4">
-                          <span className="font-semibold text-foreground">{d.name}</span>
+                          <span className="font-semibold text-foreground">{d.name}<GroupStageTag name={d.name} mode={mode} /></span>
                           <span className="font-mono text-primary">{d.pct.toFixed(1)}%</span>
                         </div>
                         <div className="mb-1.5 font-mono text-[10px] text-muted-foreground">
@@ -224,7 +225,7 @@ export default function GroupConcentrationPanel({
                 }`}
               >
                 <span className="h-2 w-2 rounded-full" style={{ background: colorForGroup(d.name, mode) }} />
-                <span className="font-medium text-foreground">{d.name}</span>
+                <span className="font-medium text-foreground">{d.name}<GroupStageTag name={d.name} mode={mode} badge /></span>
                 <span className="font-mono text-muted-foreground">{d.pct.toFixed(1)}% ({d.count})</span>
                 <span className="font-mono text-muted-foreground">· RS {d.avgRating !== null ? d.avgRating.toFixed(0) : "—"}</span>
                 <span className={`font-mono ${retColor(d.avgRet)}`}>

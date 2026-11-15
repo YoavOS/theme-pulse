@@ -3,6 +3,9 @@
  * heading. Groups are ordered best first (highest average score) and worst
  * last; tickers inside a group are ordered by their own score.
  */
+import { withGroupStage } from "@/lib/groupStage";
+import type { GroupMode } from "@/lib/groupColors";
+
 export interface TvItem { symbol: string; group: string; score: number | null }
 
 export function rankedGroups(items: TvItem[]): { name: string; avg: number | null; symbols: string[] }[] {
@@ -16,9 +19,11 @@ export function rankedGroups(items: TvItem[]): { name: string; avg: number | nul
   return out.sort((a, b) => (b.avg ?? -Infinity) - (a.avg ?? -Infinity) || b.symbols.length - a.symbols.length);
 }
 
-export function tvSectionsText(items: TvItem[]): string {
+/** `stageMode`: the taxonomy of the group names — headers get the group's stage ("Semis - S2");
+ *  "theme" leaves them as they are. */
+export function tvSectionsText(items: TvItem[], stageMode?: GroupMode): string {
   return rankedGroups(items)
-    .map((g) => `###${g.name.replace(/[,\n]/g, " ")}\n${g.symbols.join("\n")}`)
+    .map((g) => `###${(stageMode === "theme" ? g.name : withGroupStage(g.name, stageMode)).replace(/[,\n]/g, " ")}\n${g.symbols.join("\n")}`)
     .join("\n");
 }
 

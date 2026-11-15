@@ -14,6 +14,7 @@ import {
   BREADTH_LABEL, BREADTH_HELP, type VolumeStrength,
 } from "@/lib/groupSignals";
 import { moveBox, toneBox } from "@/lib/moveTint";
+import GroupStageTag from "@/components/shared/GroupStageTag";
 
 const MONO = "'DM Mono', monospace";
 const TF_COL: Record<string, string> = { Today: "Today", "1W": "1W", "1M": "1M", "3M": "3M", Overall: "Score" };
@@ -277,7 +278,7 @@ export default function ThemeDrilldownModal({
         <div className="flex items-start gap-4 border-b border-border px-5 pb-4 pt-5 sm:px-6">
           <div className="min-w-0 flex-1 pr-6">
             <DialogTitle className="text-lg font-bold leading-tight text-foreground sm:text-xl" style={{ fontFamily: "'Syne', sans-serif" }}>
-              {theme.theme_name}
+              {theme.theme_name}<GroupStageTag name={theme.theme_name} />
             </DialogTitle>
             <DialogDescription className="mt-1 text-xs text-muted-foreground">
               {valid.length} stocks · {timeframe === "Today" ? "today" : timeframe === "Overall" ? "overall score" : `last ${timeframe}`}

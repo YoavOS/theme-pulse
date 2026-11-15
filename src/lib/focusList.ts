@@ -1,3 +1,4 @@
+import { withGroupStage } from "@/lib/groupStage";
 /**
  * Focus-list organizer: sorts a watchlist into the user's two setups and orders it for action.
  *
@@ -217,7 +218,7 @@ export function tvText(blocks: Block[], opts: { sectionPerIndustry: boolean; inc
     if (!syms.length) continue;
     syms.forEach((s) => seen.add(s));
     const head = STATUS_INFO[b.status].label.replace(/ — .*/, "");
-    if (opts.sectionPerIndustry) out.push(`###${head} · ${b.industry}`.replace(/[,\n]/g, " "));
+    if (opts.sectionPerIndustry) out.push(`###${head} · ${withGroupStage(b.industry, "industry")}`.replace(/[,\n]/g, " "));
     else if (b.status !== lastStatus) out.push(`###${head}`);
     lastStatus = b.status;
     out.push(...syms);

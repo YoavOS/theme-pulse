@@ -536,7 +536,7 @@ export default function RsAlpha() {
       score: getRsForTab(st, activeTab),
     }));
   };
-  const exportText = (sep: string) => (exFmt === "sections" ? tvSectionsText(exportItems()) : sortedStocks.map((st) => st.symbol).join(sep));
+  const exportText = (sep: string) => (exFmt === "sections" ? tvSectionsText(exportItems(), exGroup) : sortedStocks.map((st) => st.symbol).join(sep));
 
   const displayStocks = showAll ? sortedStocks : sortedStocks.slice(0, 25);
   const hasMore = sortedStocks.length > 25;

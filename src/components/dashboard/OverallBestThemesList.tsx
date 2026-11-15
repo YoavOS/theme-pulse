@@ -4,6 +4,7 @@ import { Trophy } from "lucide-react";
 import type { DashboardWeights } from "./DashboardWeightsPanel";
 import { normalizeDashboardWeights } from "./DashboardWeightsPanel";
 import { moveBox } from "@/lib/moveTint";
+import GroupStageTag from "@/components/shared/GroupStageTag";
 
 interface Props {
   themes: ThemeData[];
@@ -73,7 +74,7 @@ export default function OverallBestThemesList({ themes, weights, onThemeClick }:
                   onClick={() => onThemeClick?.(t)}
                 >
                   <td className="px-3 py-2 text-muted-foreground font-mono">{idx + 1}</td>
-                  <td className="px-3 py-2 font-semibold text-foreground">{t.theme_name}</td>
+                  <td className="px-3 py-2 font-semibold text-foreground">{t.theme_name}<GroupStageTag name={t.theme_name} /></td>
                   <td className={`px-3 py-2 text-right font-mono font-bold ${colorFor(t.performance_pct)}`}>
                     {fmt(t.performance_pct)}
                   </td>

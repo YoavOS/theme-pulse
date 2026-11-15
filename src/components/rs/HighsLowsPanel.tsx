@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { Segmented } from "@/components/Explainer";
 import { GROUP_MODE_LABEL, groupKeyForIndustry, type GroupMode } from "@/lib/groupColors";
 import { EXPORT_FORMAT_LABEL, tvSectionsText, type ExportFormat } from "@/lib/tvSections";
+import GroupStageTag from "@/components/shared/GroupStageTag";
 
 /**
  * RS Alpha — new 52-week highs and lows in one panel with one timeframe (Industry Leaders styling).
@@ -125,7 +126,7 @@ export default function HighsLowsPanel({ stocks, loading, range, onRange, mode, 
   const [fmt, setFmt] = useState<ExportFormat>(() => { try { return (localStorage.getItem("rs-hl-format") as ExportFormat) || "lines"; } catch { return "lines"; } });
   const pickFmt = (f: ExportFormat) => { setFmt(f); try { localStorage.setItem("rs-hl-format", f); } catch { /* ignore */ } };
   const textFor = (list: HlStock[], sep: string) =>
-    fmt === "sections" ? tvSectionsText(list.map((s) => ({ symbol: s.symbol, group: groupOf(s), score: s.rating }))) : list.map((s) => s.symbol).join(sep);
+    fmt === "sections" ? tvSectionsText(list.map((s) => ({ symbol: s.symbol, group: groupOf(s), score: s.rating })), mode) : list.map((s) => s.symbol).join(sep);
   const exportList = (list: HlStock[], what: "highs" | "lows") => {
     if (!list.length) return;
     const blob = new Blob([textFor(list, "\n") + "\n"], { type: "text/plain" });
@@ -253,7 +254,7 @@ export default function HighsLowsPanel({ stocks, loading, range, onRange, mode, 
                         {isOpen ? <ChevronDown size={12} /> : <ChevronRight size={12} />}{!narrow && i + 1}
                       </span>
                       <span className="min-w-0 py-1.5">
-                        <span className="flex items-center gap-1 truncate text-[12.5px] font-medium">{isLead && <Crown size={11} className="shrink-0 text-[hsl(40,90%,60%)]" />}<span className="truncate">{g.name}</span></span>
+                        <span className="flex items-center gap-1 truncate text-[12.5px] font-medium">{isLead && <Crown size={11} className="shrink-0 text-[hsl(40,90%,60%)]" />}<span className="truncate">{g.name}</span><GroupStageTag name={g.name} mode={mode} badge /></span>
                         <span className="block text-[10.5px] text-muted-foreground">{g.n} stocks</span>
                       </span>
                       <span className={`flex items-center justify-end px-1.5 font-mono text-[12.5px] tabular-nums ${hiCell(hs)} ${g.highs.length ? HI : "text-muted-foreground/60"}`}>{g.highs.length || "·"}</span>

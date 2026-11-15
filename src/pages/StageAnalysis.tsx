@@ -24,6 +24,7 @@ import {
   REGIME_TEXT, STAGE_COLORS, applyLive, loadMarketStages, loadStages, onStagesUpdated, type MarketMember, STAGE_NAMES, STAGE_TIPS, SUBSTAGE_TIPS, groupHealth, isStageScanRunning, regimeSeries, runStageScan, stageWeeksAgo,
   type StageNum, type StockStage,
 } from "@/lib/stageAnalysis";
+import GroupStageTag from "@/components/shared/GroupStageTag";
 
 const MODES: GroupMode[] = ["sector", "industry", "subIndustry", "theme"];
 const MODE_KEY = "stage_group_mode_v1";
@@ -469,7 +470,7 @@ export default function StageAnalysis() {
                   <span>% of classified stocks, weekly</span>
                 </>}
               />
-              <StageExportBar rows={aligned} rsOf={rsOf} groupOf={firstGroup} groupLabel={GROUP_MODE_LABEL[mode]} scopeLabel={scope === "market" ? "the whole market" : "your list"} />
+              <StageExportBar rows={aligned} rsOf={rsOf} groupOf={firstGroup} mode={mode} groupLabel={GROUP_MODE_LABEL[mode]} scopeLabel={scope === "market" ? "the whole market" : "your list"} />
             </section>
 
             {/* Groups — Deepvue layout */}
@@ -510,7 +511,7 @@ export default function StageAnalysis() {
                             <td className="max-w-[300px] px-2 py-3.5">
                               <span className="inline-flex min-w-0 items-center gap-1.5 text-[15px] font-semibold">
                                 {open ? <ChevronDown size={14} className="shrink-0" /> : <ChevronRight size={14} className="shrink-0 text-muted-foreground" />}
-                                <span className="truncate">{g.name}</span>
+                                <span className="truncate">{g.name}<GroupStageTag name={g.name} mode={mode} /></span>
                                 <span className="text-[12px] font-normal text-muted-foreground">{g.count}</span>
                                 {(() => {
                                   const L = leadBy.get(g.name);
@@ -666,7 +667,7 @@ export default function StageAnalysis() {
             <div id="sa-breadth" className="scroll-mt-12"><RegimePanel rows={regimeRows} scopeLabel={scope === "market" ? "the whole market" : "your list"} /></div>
 
             <div id="sa-rotation" className="scroll-mt-12">
-              <RotationPanel groups={groups} asOf={asOf} modeLabel={GROUP_MODE_LABEL[mode]} minMembers={minGroupSize} onOpen={(name, rs) => openList(`${name} — stocks by stage`, rs)} />
+              <RotationPanel groups={groups} asOf={asOf} mode={mode} modeLabel={GROUP_MODE_LABEL[mode]} minMembers={minGroupSize} onOpen={(name, rs) => openList(`${name} — stocks by stage`, rs)} />
             </div>
 
             <HowItWorks title="How to read this page & how stages tested">

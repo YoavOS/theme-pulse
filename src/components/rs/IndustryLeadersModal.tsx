@@ -18,6 +18,7 @@ import { STATE_NAMES, type StockBase } from "@/lib/bases";
 import { BUCKET_INFO, LEADER_PCT, MIN_COVERAGE, PILLARS, buildLeaderInputs, rankIndustries, rsRatings, type IndustrySummary, type LeaderRow } from "@/lib/industryLeaders";
 import { TIMEFRAMES, rankGroups, type GroupRank, type RsInput, type Timeframe } from "@/lib/industryRanking";
 import IndustryExportTab from "@/components/rs/IndustryExportTab";
+import GroupStageTag from "@/components/shared/GroupStageTag";
 
 /**
  * Industry Leaders — the best businesses in each industry, ranked against their own peers.
@@ -281,7 +282,7 @@ export default function IndustryLeadersModal({ open, onOpenChange, stocks, isOtc
                     <tr key={g.group} onClick={() => setView(g.group)} className="cursor-pointer border-b border-border/40 hover:bg-muted/30">
                       <td className="px-3 py-1.5 font-mono text-xs text-muted-foreground">{gr.rank}</td>
                       <td className="max-w-[240px] px-2 py-1.5">
-                        <div className="truncate font-medium" title={g.group}>{g.group}</div>
+                        <div className="truncate font-medium" title={g.group}>{g.group}<GroupStageTag name={g.group} mode={mode} badge /></div>
                         <div className="text-[11px] text-muted-foreground">{g.ranked} ranked · {g.members} stocks{gr.lowConfidence ? <span className="text-[hsl(40,90%,62%)]" title="Fewer than 5 stocks: rank pulled toward the market average"> · small</span> : null}</div>
                       </td>
                       <td className="px-2 py-1.5">
@@ -315,7 +316,7 @@ export default function IndustryLeadersModal({ open, onOpenChange, stocks, isOtc
             /* ── One industry: all members ranked ── */
             <div className="space-y-3 p-5">
               <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
-                <h3 className="text-lg font-semibold">{current.group}</h3>
+                <h3 className="text-lg font-semibold">{current.group}<GroupStageTag name={current.group} mode={mode} /></h3>
                 <span className="text-xs text-muted-foreground">#{sel?.g.rank} of {industries.length} on {tfInfo.label} · strength {sel?.g.pct} · {sel ? Math.round(sel.g.breadth) : "—"}% of members beating SPY · {current.members} stocks, {current.ranked} with enough data</span>
               </div>
 

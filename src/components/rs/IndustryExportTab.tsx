@@ -6,6 +6,8 @@ import { Slider } from "@/components/ui/slider";
 import { savedScore, type ProfileKey, type SavedRow } from "@/lib/superperfProfiles";
 import type { IndustrySummary } from "@/lib/industryLeaders";
 import { TV_SAFE_LIMIT, buildTvText, tvSectionHeader, type GroupRank } from "@/lib/industryRanking";
+import GroupStageTag from "@/components/shared/GroupStageTag";
+import { withGroupStage } from "@/lib/groupStage";
 
 /**
  * Export tab of the Industry Leaders panel: industries in the panel's order (strongest first on the
@@ -64,7 +66,7 @@ export default function IndustryExportTab({ groups, fundBy, membersOf, rating, s
   }, [groups, fundBy, membersOf, rating, savedBy, tfRs, st]);
 
   const out = useMemo(() => buildTvText(sections.map((s) => ({
-    name: st.headerInfo ? tvSectionHeader(s.g.rank, s.g.group, `${tfLabel} ${s.g.pct}`) : s.g.group,
+    name: st.headerInfo ? tvSectionHeader(s.g.rank, withGroupStage(s.g.group, undefined, 999), `${tfLabel} ${s.g.pct}`) : withGroupStage(s.g.group),
     symbols: s.stocks.map((x) => x.sym),
   }))), [sections, st.headerInfo, tfLabel]);
 
@@ -117,7 +119,7 @@ export default function IndustryExportTab({ groups, fundBy, membersOf, rating, s
               <li key={g.group} className="grid grid-cols-[2rem_minmax(0,16rem)_minmax(0,1fr)] items-start gap-3 rounded-md border border-border/50 px-2 py-1.5">
                 <span className="pt-0.5 text-right font-mono text-xs text-muted-foreground">{g.rank}</span>
                 <span className="min-w-0">
-                  <span className="block truncate text-sm font-medium" title={g.group}>{g.group}</span>
+                  <span className="block truncate text-sm font-medium" title={g.group}>{g.group}<GroupStageTag name={g.group} /></span>
                   <span className="text-[11px] text-muted-foreground">score {g.pct} · {Math.round(g.breadth)}% up · {g.members} stocks</span>
                 </span>
                 <span className="flex flex-wrap gap-1">

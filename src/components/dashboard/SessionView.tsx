@@ -6,6 +6,7 @@ import { marketClock, useLiveSession, type SessionQuote } from "@/hooks/useLiveS
 import { GroupBars, GroupCards } from "@/components/dashboard/GroupDisplays";
 import { Segmented } from "@/components/Explainer";
 import { fmtPct } from "@/lib/groupDisplay";
+import GroupStageTag from "@/components/shared/GroupStageTag";
 
 type SessionDisplay = "quad" | "bars" | "cards";
 const DISPLAYS: { value: SessionDisplay; label: string; title: string }[] = [
@@ -139,7 +140,7 @@ export default function SessionView({ groupMode, baseThemes, industryBySymbol, o
               <button key={r.name} onClick={() => onOpen(r.theme)} title={`${r.name}: gap ${fmt(r.gap)}, since the open ${fmt(r.open)}, today ${fmt(r.today)} · ${r.n} stocks with live quotes, ${r.up} up since the open — click for the stocks`}
                 className="grid grid-cols-[minmax(0,1fr)_64px_70px] items-center gap-x-2 border-b border-border/30 py-1.5 text-left hover:bg-accent/40">
                 <span className="min-w-0 truncate text-[12.5px]">
-                  {r.name}
+                  {r.name}<GroupStageTag name={r.name} />
                   {r.sector && <span className="ml-1.5 text-[10.5px] text-muted-foreground">{r.sector}</span>}
                 </span>
                 <span className={`text-right font-mono text-[11.5px] tabular-nums ${Math.abs(r.gap) < FLAT ? "text-muted-foreground" : tone(r.gap)}`}>{fmt(r.gap)}</span>

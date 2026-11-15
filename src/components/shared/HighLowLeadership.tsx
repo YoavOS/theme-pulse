@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { ArrowUpRight, ArrowDownRight, Copy } from "lucide-react";
 import { toast } from "sonner";
 import { colorForGroup, GROUP_MODE_LABEL, groupKeyForIndustry, type GroupMode } from "@/lib/groupColors";
+import GroupStageTag from "@/components/shared/GroupStageTag";
 
 export interface HighLowItem {
   symbol: string;
@@ -80,7 +81,7 @@ function Column({ rows, side, mode }: { rows: GroupRow[]; side: "high" | "low"; 
             className="flex w-full items-center gap-2 py-1 text-left text-[11px] hover:bg-muted/20"
           >
             <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: colorForGroup(r.name, mode) }} />
-            <span className="min-w-0 flex-1 truncate text-foreground">{r.name}</span>
+            <span className="min-w-0 flex-1 truncate text-foreground">{r.name}<GroupStageTag name={r.name} mode={mode} badge /></span>
             <span className={`font-mono ${tone}`}>{r.hits}</span>
             <span className="w-12 text-right font-mono text-muted-foreground">{r.pct.toFixed(0)}%</span>
             <span className="w-14 text-right font-mono text-muted-foreground">

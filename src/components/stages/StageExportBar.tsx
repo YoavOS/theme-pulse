@@ -15,8 +15,9 @@ type Fmt = "lines" | "groups";
 const FMT_KEY = "stage_export_fmt_v1";
 const STAGE_LABEL: Record<1 | 2 | 3 | 4, string> = { 1: "Stage 1 — Basing", 2: "Stage 2 — Advancing", 3: "Stage 3 — Topping", 4: "Stage 4 — Declining" };
 
-export default function StageExportBar({ rows, rsOf, groupOf, groupLabel, scopeLabel }: {
+export default function StageExportBar({ rows, rsOf, groupOf, mode, groupLabel, scopeLabel }: {
   rows: StockStage[];
+  mode?: import("@/lib/groupColors").GroupMode;
   rsOf: (s: string) => number | null;
   groupOf: (s: string) => string;
   groupLabel: string;
@@ -39,7 +40,7 @@ export default function StageExportBar({ rows, rsOf, groupOf, groupLabel, scopeL
     }
     const list = of(k);
     return fmt === "groups"
-      ? tvSectionsText(list.map((r) => ({ symbol: r.symbol, group: groupOf(r.symbol), score: rsOf(r.symbol) })))
+      ? tvSectionsText(list.map((r) => ({ symbol: r.symbol, group: groupOf(r.symbol), score: rsOf(r.symbol) })), mode)
       : list.map((r) => r.symbol).join(sep);
   };
   const count = (k: 1 | 2 | 3 | 4 | "all") => (k === "all" ? rows.filter((r) => r.stage >= 1).length : of(k).length);

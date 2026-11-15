@@ -48,6 +48,7 @@ import ClassificationCoverage from "@/components/dashboard/ClassificationCoverag
 import { buildGroupedThemes, buildUniverseGroups } from "@/lib/groupThemes";
 import type { PerfCache } from "@/hooks/useFullScan";
 import { GROUP_MODE_LABEL, type GroupMode, groupKeyForIndustry } from "@/lib/groupColors";
+import { GroupStageModeContext } from "@/lib/groupStage";
 
 const TIMEFRAMES = ["Today", "1W", "1M", "3M", "Overall"] as const;
 const GROUP_MODE_PLURAL: Record<GroupMode, string> = {
@@ -390,6 +391,7 @@ export default function Index() {
   ];
 
   return (
+    <GroupStageModeContext.Provider value={isMixed ? undefined : groupMode}>
     <div className="relative flex min-h-screen items-start bg-background">
       <div className="min-w-0 flex-1">
       {isStale && isLive && (
@@ -948,5 +950,6 @@ export default function Index() {
         </aside>
       )}
     </div>
+    </GroupStageModeContext.Provider>
   );
 }

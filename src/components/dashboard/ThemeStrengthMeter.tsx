@@ -5,6 +5,7 @@ import { supabase as _supa } from "@/integrations/supabase/client";
 import ThemeStory from "@/components/dashboard/ThemeStory";
 import { Loader2, TrendingUp, TrendingDown, Minus, Sparkles, Zap } from "lucide-react";
 import { moveBox } from "@/lib/moveTint";
+import GroupStageTag from "@/components/shared/GroupStageTag";
 
 const supabase: any = _supa;
 const DM_MONO = "'DM Mono', monospace";
@@ -274,7 +275,7 @@ export default function ThemeStrengthMeter({ theme, open, onOpenChange, mode = "
             Theme Strength Meter
           </SheetTitle>
           <div className="flex items-baseline justify-between gap-2 mt-1">
-            <span className="text-sm text-muted-foreground truncate">{theme.theme_name}</span>
+            <span className="text-sm text-muted-foreground truncate">{theme.theme_name}<GroupStageTag name={theme.theme_name} /></span>
             <span className="text-lg font-bold tabular-nums" style={{ fontFamily: DM_MONO, color: perfColor(theme.performance_pct) }}>
               {sign}{theme.performance_pct.toFixed(2)}%
             </span>
