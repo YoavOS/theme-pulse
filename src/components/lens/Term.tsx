@@ -1,4 +1,5 @@
-import { Fragment, useMemo, type ReactNode } from "react";
+import { Fragment, useContext, useMemo, type ReactNode } from "react";
+import { TermCompanyContext } from "@/lib/lens/termContext";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { GLOSSARY_BY_ID, GLOSSARY_RE, entryFor, type GlossaryEntry } from "@/lib/lens/glossary";
 
@@ -8,6 +9,7 @@ import { GLOSSARY_BY_ID, GLOSSARY_RE, entryFor, type GlossaryEntry } from "@/lib
  */
 export function Term({ entry, id, children }: { entry?: GlossaryEntry; id?: string; children?: ReactNode }) {
   const e = entry ?? (id ? GLOSSARY_BY_ID.get(id) : undefined);
+  const forCompany = useContext(TermCompanyContext);
   if (!e) return <>{children}</>;
   const stop = (ev: React.SyntheticEvent) => { ev.stopPropagation(); };
   return (
@@ -27,8 +29,21 @@ export function Term({ entry, id, children }: { entry?: GlossaryEntry; id?: stri
         <div className="text-[13px] font-semibold text-foreground">{e.term}</div>
         <p className="text-foreground/90">{e.def}</p>
         {e.why && <p className="text-muted-foreground"><span className="font-semibold text-foreground/80">Why it matters: </span>{e.why}</p>}
+        <CompanyLines id={e.id} get={forCompany} />
       </PopoverContent>
     </Popover>
+  );
+}
+
+/** "For SYMBOL: …" — the company's own number, in plain words and against its industry. */
+function CompanyLines({ id, get }: { id: string; get: ((entryId: string) => { symbol: string; lines: string[] } | null) | null }) {
+  const note = get?.(id);
+  if (!note) return null;
+  return (
+    <div className="mt-1 space-y-1 rounded-md border border-primary/25 bg-primary/[0.06] p-2">
+      <div className="text-[11px] font-semibold uppercase tracking-wide text-primary">For {note.symbol}</div>
+      {note.lines.map((l, i) => <p key={i} className={i === 0 ? "text-foreground" : "text-foreground/85"}>{l}</p>)}
+    </div>
   );
 }
 

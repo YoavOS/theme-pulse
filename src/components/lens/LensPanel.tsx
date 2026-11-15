@@ -13,6 +13,8 @@ import ProvenBadge from "@/components/proven/ProvenBadge";
 import { useProvenOne } from "@/hooks/useProvenStrength";
 import { toneBox, type Tone } from "@/lib/moveTint";
 import { AutoTerms, Term } from "./Term";
+import { TermCompanyContext } from "@/lib/lens/termContext";
+import { companyNote } from "@/lib/lens/companyMeaning";
 
 /**
  * Fundamentals Lens — a full tab that folds into a narrow side-panel column when its window is narrow; it teaches fundamentals on the stock you're
@@ -401,10 +403,12 @@ export default function LensPanel({ symbol: symbolProp, onSymbolChange, onClose,
   const opened = useMemo(() => new Set(Object.keys(progress)), [progress]);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const dueCount = useMemo(() => dueQuestions(opened).length, [opened, reviewTick]);
+  const forCompany = useMemo(() => (entryId: string) => companyNote(entryId, data, byId), [data, byId]);
   const dm = data?.damodaran && data.damodaran.match !== "market" ? data.damodaran : null;
   const asOf = dm?.asOf ?? null;
 
   return (
+    <TermCompanyContext.Provider value={data ? forCompany : null}>
     <div ref={rootRef} className="flex h-full min-h-0 flex-col bg-background text-foreground">
       {/* Header */}
       <div className={`sticky top-0 z-10 border-b border-border bg-background/95 backdrop-blur ${wide ? "px-6 py-3" : "px-3 py-2"}`}>
@@ -503,7 +507,7 @@ export default function LensPanel({ symbol: symbolProp, onSymbolChange, onClose,
 
             {data.lifeCycle && <StageCard p={data} />}
             <TrackRecordCard row={proven.row} loading={proven.loading} />
-            {data.valuation && <PriceStoryCard key={data.symbol} p={data} proven={proven.row} />}
+            {data.valuation && !wide && <PriceStoryCard key={data.symbol} p={data} proven={proven.row} />}
             <IndustryCard p={data} />
 
             {/* Foundations */}
@@ -516,7 +520,9 @@ export default function LensPanel({ symbol: symbolProp, onSymbolChange, onClose,
             </section>
             </div>
 
-            {/* Concepts, by pillar */}
+            {/* Concepts, by pillar — on wide screens the price card leads this column, laid out across it */}
+            <div className="space-y-3">
+            {data.valuation && wide && <PriceStoryCard key={data.symbol} p={data} proven={proven.row} wide />}
             <div className={veryWide ? "columns-2 gap-3" : "space-y-3"}>
 
             {/* Pillars */}
@@ -537,6 +543,7 @@ export default function LensPanel({ symbol: symbolProp, onSymbolChange, onClose,
               );
             })}
             </div>
+            </div>
            </div>
 
             <footer className={`space-y-1 pb-2 text-[10.5px] leading-snug text-muted-foreground ${wide ? "pt-2" : ""}`}>
@@ -550,5 +557,6 @@ export default function LensPanel({ symbol: symbolProp, onSymbolChange, onClose,
        </div>
       </div>
     </div>
+    </TermCompanyContext.Provider>
   );
 }
