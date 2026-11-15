@@ -4,6 +4,7 @@ import { buildGauge, dailyBreadth, loadPulse, momentumSeries, VERDICT_TEXT, type
 import { loadHistory } from "@/lib/rsHistory";
 import type { StockStage } from "@/lib/stageAnalysis";
 import { toneBox } from "@/lib/moveTint";
+import { isAwake, onWake } from "@/lib/appSleep";
 
 const DM_MONO = "'DM Mono', monospace";
 const LEVEL: Record<Level, { label: string; cls: string; dot: string }> = {
@@ -36,9 +37,12 @@ export default function MomentumGauge({ rows, onVerdict }: { rows: StockStage[];
   useEffect(() => {
     void refresh();
     // The fast inputs move during the day: refresh every 5 minutes while the tab is visible.
-    const id = window.setInterval(() => { if (document.visibilityState === "visible") void refresh(); }, 5 * 60_000);
+    let last = Date.now();
+    const tick = () => { if (isAwake() && Date.now() - last >= 5 * 60_000) { last = Date.now(); void refresh(); } };
+    const id = window.setInterval(tick, 60_000);
+    const off = onWake(tick);
     loadHistory(40).then((pts) => setMom(momentumSeries(pts))).catch(() => setMom([]));
-    return () => window.clearInterval(id);
+    return () => { window.clearInterval(id); off(); };
   }, []);
 
   const breadth = useMemo(() => dailyBreadth(rows), [rows]);

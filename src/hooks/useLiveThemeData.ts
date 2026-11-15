@@ -35,6 +35,7 @@ export function useLiveThemeData(timeframe: string = "Today") {
   const { toast } = useToast();
   const [state, setState] = useState<LiveDataState>(DEMO_STATE);
   const mountedRef = useRef(true);
+  const lastVerifyRef = useRef(Date.now());
   const themesRef = useRef(state.themes);
   const timeframeRef = useRef(timeframe);
   const initializedRef = useRef(false);
@@ -115,7 +116,9 @@ export function useLiveThemeData(timeframe: string = "Today") {
         });
       }
 
-      // Verify with Supabase
+      // Verify with Supabase — at most every 10 minutes (each alt-tab back fired this, waking the database)
+      if (Date.now() - lastVerifyRef.current < 10 * 60_000) return;
+      lastVerifyRef.current = Date.now();
       loadScanCache().then((cached) => {
         if (!mountedRef.current) return;
         if (cached && cached.themes.length > 0) {

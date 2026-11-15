@@ -3,8 +3,11 @@
 // Runs at 22:05, 22:45 and 23:25 UTC on weekdays (pg_cron, migration 20261109090000), inside the
 // existing after-close window. Each run:
 //   1. reads up to DAYS_PER_RUN daily index files not read yet (newest first, looking back
-//      LOOKBACK_DAYS, so the first evenings also fill in the last few months), and stores every
-//      10-Q / 10-K / 20-F / 40-F and Form 4 filed by a universe stock in sec_filings;
+//      LOOKBACK_DAYS, so the first evenings also fill in the last few months), and stores in
+//      sec_filings every 10-Q / 10-K / 20-F / 40-F filed by ANY listed company (so a stock added to
+//      the universe later still has its latest report on record — superperf-refresh and
+//      proven-strength rescore from it), and every Form 4 filed for a universe stock;
+//      days read by an older version of this function are read again once (INDEX_VERSION);
 //   2. parses pending Form 4s (newest first) into insider_trades: open-market purchases (P) and
 //      sales (S), with the insider's role and whether the trade was under a 10b5-1 plan.
 // superperf-refresh then rescores any stock whose periodic report landed after its last score.
@@ -31,7 +34,9 @@ const SB_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
 const TIME_BUDGET_MS = 45_000;
 const LOOKBACK_DAYS = 95;
-const DAYS_PER_RUN = 5;
+const DAYS_PER_RUN = 8;
+/** Bump to make every day in the lookback be read once more (v2: periodic reports of all listed companies). */
+const INDEX_VERSION = 2;
 const FORM4_MAX_AGE_DAYS = 120;
 const FORM4_BATCH = 400;
 const CONCURRENCY = 4;
@@ -89,8 +94,9 @@ Deno.serve(async (req) => {
     }
 
     // ── 1) Daily index files ────────────────────────────────────────────────
-    const done = new Set((await readAll<{ day: string }>(sb, "sec_index_days", "day",
-      (q) => q.gte("day", isoDay(Date.now() - LOOKBACK_DAYS * DAY_MS)))).map((r) => r.day));
+    const done = new Set((await readAll<{ day: string; status: string; version: number | null }>(sb, "sec_index_days", "day, status, version",
+      (q) => q.gte("day", isoDay(Date.now() - LOOKBACK_DAYS * DAY_MS))))
+      .filter((r) => r.status === "missing" || (r.version ?? 1) >= INDEX_VERSION).map((r) => r.day));
     const days: string[] = [];
     for (let i = 0; i <= LOOKBACK_DAYS; i++) {
       const t = Date.now() - i * DAY_MS, wd = new Date(t).getUTCDay();
@@ -105,8 +111,13 @@ Deno.serve(async (req) => {
       const universe = new Map<string, string>();   // SEC-style ticker (BRK-B) → app ticker (BRK.B)
       for (const u of uni) if (u.symbol && !isOtc(u.symbol)) universe.set(u.symbol.toUpperCase().replace(".", "-"), u.symbol.toUpperCase());
       const cikTickers = await fetchCikTickers();
-      const symOfCik = new Map<number, string>();
-      for (const [cik, ts] of cikTickers) { const hit = ts.find((t) => universe.has(t)); if (hit) symOfCik.set(cik, universe.get(hit)!); }
+      const symOfCik = new Map<number, string>();   // universe stocks (Form 4s are kept for these only)
+      const anyOfCik = new Map<number, string>();   // every listed company (periodic reports)
+      for (const [cik, ts] of cikTickers) {
+        const hit = ts.find((t) => universe.has(t));
+        if (hit) symOfCik.set(cik, universe.get(hit)!);
+        if (ts.length) anyOfCik.set(cik, hit ? universe.get(hit)! : ts[0].toUpperCase().replace("-", "."));
+      }
       const forms = new Set([...PERIODIC_FORMS, ...INSIDER_FORMS]);
 
       for (const day of todo) {
@@ -122,7 +133,7 @@ Deno.serve(async (req) => {
         const rows: IndexRow[] = parseMasterIndex(text, forms);
         const keep = new Map<string, Record<string, unknown>>();
         for (const r of rows) {
-          const symbol = symOfCik.get(r.cik);
+          const symbol = INSIDER_FORMS.has(r.form) ? symOfCik.get(r.cik) : anyOfCik.get(r.cik);
           if (!symbol || keep.has(r.accession)) continue;      // Form 4s are listed under issuer AND insider
           const old4 = INSIDER_FORMS.has(r.form) && ageDays > FORM4_MAX_AGE_DAYS;
           keep.set(r.accession, { accession: r.accession, symbol, cik: r.cik, form: r.form, filed: r.filed, path: r.path, parsed: old4 });
@@ -132,7 +143,7 @@ Deno.serve(async (req) => {
           const { error } = await sb.from("sec_filings").upsert(list.slice(i, i + 500), { onConflict: "accession", ignoreDuplicates: true });
           if (error) throw error;
         }
-        await sb.from("sec_index_days").upsert({ day, status: "ok", rows_kept: list.length }, { onConflict: "day" });
+        await sb.from("sec_index_days").upsert({ day, status: "ok", rows_kept: list.length, version: INDEX_VERSION }, { onConflict: "day" });
         indexRead++; filingsKept += list.length;
       }
     }

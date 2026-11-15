@@ -24,6 +24,7 @@ import { lazyPage } from "@/lib/lazyPage";
 import AppErrorBoundary from "@/components/AppErrorBoundary";
 import { scheduleStorageCleanup } from "@/lib/storageHygiene";
 import { autoRunClassificationOncePerDay } from "@/lib/classification";
+import SleepOverlay from "@/components/SleepOverlay";
 
 const queryClient = new QueryClient();
 
@@ -48,6 +49,7 @@ const App = () => (
         <Toaster />
         <Sonner />
         <ClassificationAutoRunner />
+        <SleepOverlay />
         <BrowserRouter>
           <AppErrorBoundary>
           <Suspense fallback={<PageLoading />}>

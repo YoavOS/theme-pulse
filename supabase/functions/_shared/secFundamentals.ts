@@ -236,8 +236,8 @@ export async function secCik(symbol: string): Promise<number | null> {
 }
 
 const secCache = new Map<string, { at: number; v: { quarters: SecQuarter[]; annual: SecQuarter[]; status: string } }>();
-export async function fetchSecQuarters(symbol: string): Promise<{ quarters: SecQuarter[]; annual: SecQuarter[]; status: string }> {
-  const hit = secCache.get(symbol);
+export async function fetchSecQuarters(symbol: string, fresh = false): Promise<{ quarters: SecQuarter[]; annual: SecQuarter[]; status: string }> {
+  const hit = fresh ? undefined : secCache.get(symbol);
   if (hit && Date.now() - hit.at < 12 * 3600_000) return hit.v;
   try {
     const cik = await secCik(symbol);

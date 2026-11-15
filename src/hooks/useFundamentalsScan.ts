@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { isAwake } from "@/lib/appSleep";
 
 export interface FundamentalsScanProgress {
   status: "idle" | "running" | "paused" | "complete";
@@ -71,7 +72,7 @@ export function useFundamentalsScan() {
       return;
     }
     if (pollRef.current) return;
-    pollRef.current = window.setInterval(loadProgress, 10000);
+    pollRef.current = window.setInterval(() => { if (isAwake()) loadProgress(); }, 10000);
     return () => { if (pollRef.current) { window.clearInterval(pollRef.current); pollRef.current = null; } };
   }, [progress.status, loadProgress]);
 
