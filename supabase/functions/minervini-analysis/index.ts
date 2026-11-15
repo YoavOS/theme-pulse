@@ -1577,7 +1577,7 @@ async function buildBundle(symbol: string, force: boolean) {
   const { stockFund, fundCache } = force ? { stockFund: null, fundCache: null } : await readCachedFundamentals(sb, symbol, quality);
 
   // ----- Primary source: SEC EDGAR (the filings themselves, clean 3-month quarters, US filers) -----
-  const sec = await fetchSecQuarters(symbol);
+  const sec = await fetchSecQuarters(symbol, force);
   quality.sourceStatus["SEC EDGAR"] = sec.status;
   const secQ = sec.quarters.map(secToPoint), secA = sec.annual.map(secToPoint);
   if (secQ.length) quality.sources.push(`SEC EDGAR filings (${secQ.length}Q/${secA.length}A)`);

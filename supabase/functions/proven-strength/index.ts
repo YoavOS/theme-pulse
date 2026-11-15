@@ -3,7 +3,7 @@
 //
 //   POST { symbol }                         compute one now (also used on demand by the app)
 //   POST { action: "batch", limit?, force? } scheduled: work through the RS universe, missing first,
-//                                           then the stalest (≥ 14 days); a company is re-scored only
+//                                           then any company that filed a new annual report (sec_filings), then the stalest (≥ 90 days); re-scored only
 //                                           when a newer 10-K appears, the scoring version changes, or it
 //                                           was scored before Damodaran's figures were loaded.
 //                                           Skipped entirely until the Damodaran table is loaded.
@@ -23,7 +23,7 @@ import { classifyLifeCycle, computeMetrics, parseLensHistory } from "../_shared/
 const SB_URL = Deno.env.get("SUPABASE_URL")!;
 const SB_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const STALE_MS = 7 * 86400_000;        // on-demand: serve a stored score younger than this
-const BATCH_STALE_MS = 14 * 86400_000; // batch: re-check a company this often (10-Ks are yearly)
+const BATCH_STALE_MS = 90 * 86400_000; // batch: safety re-check; new annual reports are spotted from sec_filings
 const BUDGET_MS = 100_000;       // stay well inside the 150 s response / wall-clock limits
 const CONCURRENCY = 2;           // companyfacts JSON can be 10+ MB — keep memory (256 MB) and CPU per run low
 const MAX_BATCH = 40;            // hard cap per run, whatever the caller asks (CPU budget per request)
@@ -157,11 +157,26 @@ Deno.serve(async (req) => {
       for (const r of data ?? []) known.set(r.symbol, r);
       if (!data || data.length < 1000) break;
     }
+    // Annual reports filed since a company was scored (sec-filings-watch records every listed company's
+    // 10-K / 20-F / 40-F nightly) → rescore it then, instead of downloading its filings every few weeks.
+    const newAnnual = new Map<string, string>();
+    const since = new Date(Date.now() - 400 * 86400_000).toISOString().slice(0, 10);
+    for (let from = 0; ; from += 1000) {
+      const { data, error } = await sb.from("sec_filings").select("symbol, filed").in("form", ["10-K", "20-F", "40-F"]).gte("filed", since).range(from, from + 999);
+      if (error) break;                                  // table missing: fall back to the age check
+      for (const r of (data ?? []) as { symbol: string; filed: string }[]) if (r.filed > (newAnnual.get(r.symbol) ?? "")) newAnnual.set(r.symbol, r.filed);
+      if (!data || data.length < 1000) break;
+    }
+    const filedSinceScore = (sym: string, k: { last_10k_filed: string | null; computed_at: string }) => {
+      const f = newAnnual.get(sym);
+      return !!f && f > (k.last_10k_filed ?? "") && f >= k.computed_at.slice(0, 10);
+    };
     const now = Date.now();
     const due = universe
       .map((u) => ({ ...u, symbol: u.symbol.toUpperCase(), k: known.get(u.symbol.toUpperCase()) }))
       .filter((u) => body.force === true || !u.k || u.k.calc_version !== PROVEN_VERSION || scoredWithoutBench(u.k, bench)
-        || (u.k.status === "error" && now - Date.parse(u.k.computed_at) > ERROR_RETRY_MS) || now - Date.parse(u.k.computed_at) > BATCH_STALE_MS)
+        || (u.k.status === "error" && now - Date.parse(u.k.computed_at) > ERROR_RETRY_MS) || filedSinceScore(u.symbol, u.k)
+        || now - Date.parse(u.k.computed_at) > BATCH_STALE_MS)
       .sort((a, b) => (a.k ? Date.parse(a.k.computed_at) : 0) - (b.k ? Date.parse(b.k.computed_at) : 0))
       .slice(0, limit);
 

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { isAwake, onWake } from "@/lib/appSleep";
 
 /**
  * Live session quotes for the theme tickers (fetch-themes "Today"), shared by the Tracker's
@@ -70,9 +71,10 @@ export function useLiveSession(active: boolean) {
     else setLive(shared);
     const id = window.setInterval(() => {
       setTick((n) => n + 1);
-      if (document.visibilityState === "visible" && marketClock().open) refresh();
+      if (isAwake() && marketClock().open) refresh();
     }, REFRESH_MS);
-    return () => window.clearInterval(id);
+    const off = onWake(() => { if (marketClock().open && (!shared || Date.now() - shared.fetchedAt > REFRESH_MS)) refresh(); });
+    return () => { window.clearInterval(id); off(); };
   }, [active, refresh]);
 
   return { live, loading, error, refresh };

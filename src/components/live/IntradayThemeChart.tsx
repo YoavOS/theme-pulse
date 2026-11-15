@@ -6,6 +6,7 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { isAwake } from "@/lib/appSleep";
 
 interface Series {
   ts: number[];
@@ -87,7 +88,7 @@ export default function IntradayThemeChart({ open, symbols, themeLabel, onClose 
   useEffect(() => {
     if (!open || !autoRefresh) return;
     // Skip refreshes while the tab is hidden (no point downloading data nobody sees).
-    const id = setInterval(() => { if (document.visibilityState === "visible") fetchData(); }, 30000);
+    const id = setInterval(() => { if (isAwake()) fetchData(); }, 30000);
     return () => clearInterval(id);
   }, [open, autoRefresh, fetchData]);
 

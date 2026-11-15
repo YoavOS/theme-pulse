@@ -1,7 +1,8 @@
 // superperf-refresh — keeps the Superperformance list fresh in the background.
 //
-// Runs every 20 minutes between 22:00 and 23:40 UTC on weekdays (pg_cron, migrations 20261101090000
-// and 20261101130000), so the backend is idle the rest of the day. Each run rescores a small
+// Runs a few times in one short after-close window on weekdays (pg_cron; see the deploy notes for the
+// schedule), so the backend is idle the rest of the day. A stock that just reported is rescored with
+// fresh data (force: skips minervini-analysis's caches), so a new quarter is never missed. Each run rescores a small
 // batch of stocks that are due, by calling minervini-analysis in its quick "minimal" mode, and
 // stores every profile score + a compact breakdown + the company's report dates.
 //
@@ -105,11 +106,11 @@ function dueList(universe: string[], rows: Map<string, Row>, now: number, filed:
   return { reported, newFiling, missing, old: old.map((x) => x.s), all: [...reported, ...missing, ...old.map((x) => x.s)] };
 }
 
-async function scoreOne(symbol: string) {
+async function scoreOne(symbol: string, force = false) {
   const res = await fetch(`${SB_URL}/functions/v1/minervini-analysis`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${SB_KEY}`, apikey: SB_KEY },
-    body: JSON.stringify({ symbol, minimal: true, profiles: LEGACY, breakdown: true }),
+    body: JSON.stringify({ symbol, minimal: true, profiles: LEGACY, breakdown: true, force }),
   });
   const data = await res.json().catch(() => null);
   if (!res.ok || !data || data.error) throw new Error(data?.error ?? `HTTP ${res.status}`);
@@ -156,13 +157,14 @@ Deno.serve(async (req) => {
     }
 
     const batch = due.all.slice(0, BATCH);
+    const fresh = new Set(due.reported);   // just reported → bypass every cache
     let next = 0, scored = 0;
     const failed: string[] = [];
     const worker = async () => {
       while (next < batch.length && Date.now() - started < TIME_BUDGET_MS) {
         const sym = batch[next++];
         try {
-          const row = await scoreOne(sym);
+          const row = await scoreOne(sym, fresh.has(sym));
           const { error } = await sb.from("superperformance_stocks").upsert(row, { onConflict: "symbol" });
           if (error) throw error;
           scored++;

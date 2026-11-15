@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { supabase as _supabaseTyped } from "@/integrations/supabase/client";
+import { isAwake } from "@/lib/appSleep";
 const supabase: any = _supabaseTyped;
 
 // ── Filter thresholds (single source of truth — must match process-universe-queue/index.ts) ──
@@ -205,7 +206,7 @@ export function useRsAlpha() {
       return;
     }
     if (pollRef.current) return;
-    pollRef.current = window.setInterval(loadProgress, 10000);
+    pollRef.current = window.setInterval(() => { if (isAwake()) loadProgress(); }, 10000);
     return () => {
       if (pollRef.current) { window.clearInterval(pollRef.current); pollRef.current = null; }
     };
