@@ -995,18 +995,21 @@ export type Database = {
           processed_at: string
           rows_kept: number
           status: string
+          version: number
         }
         Insert: {
           day: string
           processed_at?: string
           rows_kept?: number
           status: string
+          version?: number
         }
         Update: {
           day?: string
           processed_at?: string
           rows_kept?: number
           status?: string
+          version?: number
         }
         Relationships: []
       }
