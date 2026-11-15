@@ -29,6 +29,7 @@ import RsRatingBadge from "@/components/rs/RsRatingBadge";
 import { useDailyCandles } from "@/hooks/useDailyCandles";
 import CandleSummaryBar from "@/components/rs/CandleSummaryBar";
 import ThemeSetupAnalyzer from "@/components/rs/ThemeSetupAnalyzer";
+import FocusOrganizer from "@/components/rs/FocusOrganizer";
 import { GROUP_MODE_LABEL, groupKeyForIndustry, type GroupMode } from "@/lib/groupColors";
 import { EXPORT_FORMAT_LABEL, type ExportFormat } from "@/lib/tvSections";
 import { useCuratedThemes } from "@/hooks/useCuratedThemes";
@@ -179,7 +180,7 @@ export default function CustomListAnalyzerModal({
   const [raw, setRaw] = useState<string>("");
   const [analyzed, setAnalyzed] = useState<boolean>(false);
   const [dragOver, setDragOver] = useState<boolean>(false);
-  const [mode, setMode] = useState<"simple" | "theme_setup">("simple");
+  const [mode, setMode] = useState<"simple" | "theme_setup" | "focus">("simple");
   const [lastFileName, setLastFileName] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -571,18 +572,20 @@ export default function CustomListAnalyzerModal({
       <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <ListChecks size={18} /> {mode === "simple" ? `Custom List Analyzer · ${tabLabel}` : "Theme Setup Analyzer"}
+            <ListChecks size={18} /> {mode === "simple" ? `Custom List Analyzer · ${tabLabel}` : mode === "focus" ? "Organize my focus list" : "Theme Setup Analyzer"}
           </DialogTitle>
           <DialogDescription>
             {mode === "simple"
               ? <>Paste, upload (.txt) or drop a TradingView list. Exchange prefixes like <code>NYSE:</code> / <code>NASDAQ:</code> are stripped automatically.</>
+              : mode === "focus"
+              ? <>Sorts your watchlist into 21 EMA pullbacks and breakouts, closest to the trigger first, in industry blocks with each stock's strongest peers next to it — ready to import back into TradingView.</>
               : <>Combine multiple screens (RS, Superperformance, Clean EMA, 52W Highs, Volume, Coil) into a layered theme setup ranking.</>}
           </DialogDescription>
         </DialogHeader>
 
         {/* Mode toggle */}
         <div className="flex items-center gap-1 rounded-lg border border-border bg-muted/20 p-1 text-xs">
-          {([["simple", "Simple Analyze"], ["theme_setup", "Theme Setup Analyzer"]] as const).map(([id, label]) => (
+          {([["simple", "Simple Analyze"], ["focus", "Organize focus list"], ["theme_setup", "Theme Setup Analyzer"]] as const).map(([id, label]) => (
             <button
               key={id}
               onClick={() => setMode(id)}
@@ -593,7 +596,9 @@ export default function CustomListAnalyzerModal({
           ))}
         </div>
 
-        {mode === "theme_setup" ? (
+        {mode === "focus" ? (
+          <FocusOrganizer universe={universe} fundamentalsMap={fundamentalsMap} superperfSets={superperfSets} stageMap={stageMap} baseMap={baseMap} />
+        ) : mode === "theme_setup" ? (
           <ThemeSetupAnalyzer universe={universe} isOtcSymbol={isOtcSymbol} />
         ) : !analyzed ? (
 
