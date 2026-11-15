@@ -67,7 +67,7 @@ function Slider({ label, plain, value, min, max, step, unit, onChange, hint }: {
   );
 }
 
-export default function PriceStoryCard({ p, proven }: { p: LensPayload; proven: ProvenRow | null }) {
+export default function PriceStoryCard({ p, proven, wide = false }: { p: LensPayload; proven: ProvenRow | null; /** lay the sections side by side (wide screens) */ wide?: boolean }) {
   const v = p.valuation;
   const [open, setOpen] = useState(true);
   const [learn, setLearn] = useState(false);
@@ -150,11 +150,12 @@ export default function PriceStoryCard({ p, proven }: { p: LensPayload; proven: 
       </button>
       {open && (
         <div className="space-y-3.5 px-3 pb-3">
-          <p className="text-[13.5px] leading-snug">{headline}</p>
+          <p className={`leading-snug ${wide ? "max-w-5xl text-[14.5px]" : "text-[13.5px]"}`}>{headline}</p>
           {im.kind === "ok" && growthAsk !== null && growthAsk >= 20 && (
             <p className="text-[11.5px] leading-snug text-muted-foreground">For perspective: of companies growing over 20% a year in 1994, only 13% were still growing that fast ten years later (<a href={MCKINSEY} target="_blank" rel="noopener noreferrer" className="underline">McKinsey</a>). Fast growth is hard to keep.</p>
           )}
 
+          <div className={wide ? "grid items-start gap-5 [grid-template-columns:repeat(auto-fit,minmax(300px,1fr))]" : "space-y-3.5"}>
           {/* three ready-made stories */}
           <div className="space-y-1.5">
             <div className="text-[12px] font-semibold">Three ways the story could go</div>
@@ -210,6 +211,9 @@ export default function PriceStoryCard({ p, proven }: { p: LensPayload; proven: 
             </div>
           )}
 
+          </div>
+          <div className={wide ? "grid items-start gap-5 [grid-template-columns:repeat(auto-fit,minmax(300px,1fr))]" : "space-y-3.5"}>
+          <div className="space-y-1.5">
           {/* learn: what's a story */}
           <button onClick={() => setLearn(!learn)} className="flex items-center gap-1 text-[11.5px] text-primary hover:underline">What's a "story" in valuation? <ChevronDown size={12} className={learn ? "rotate-180" : ""} /></button>
           {learn && (
@@ -223,6 +227,8 @@ export default function PriceStoryCard({ p, proven }: { p: LensPayload; proven: 
             </div>
           )}
 
+          </div>
+          <div className="space-y-1.5">
           {/* optional experiment */}
           <button onClick={() => setLab(!lab)} className="flex items-center gap-1 text-[11.5px] text-primary hover:underline">Experiment yourself (optional) <ChevronDown size={12} className={lab ? "rotate-180" : ""} /></button>
           {lab && labStory && labRes && (
@@ -242,6 +248,8 @@ export default function PriceStoryCard({ p, proven }: { p: LensPayload; proven: 
             </div>
           )}
 
+          </div>
+          </div>
           <p className="text-[10.5px] leading-snug text-muted-foreground">
             A simplified version of Damodaran's approach — his break-even reading of prices (<a href={TRILLION_POST} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-0.5 underline">Trillion Dollar Market Caps, Dec 2025 <ExternalLink size={9} /></a>) and his business × price matrix (<a href={PARADOX_POST} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-0.5 underline">Explaining a Paradox, 2017 <ExternalLink size={9} /></a>). Assumes a 10-year forecast, a {RISK_FREE}% long-run growth ceiling, and today's price including debt minus cash. A way to think, not a recommendation.
           </p>
