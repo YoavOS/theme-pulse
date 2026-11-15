@@ -1,4 +1,5 @@
 import type { ThemeData } from "@/data/themeData";
+import GroupStageTag from "@/components/shared/GroupStageTag";
 
 /**
  * Heatmap display for the Tracker: the same group averages as the bar list, drawn as tiles.
@@ -35,7 +36,7 @@ export function HeatTiles({ rows, scale, onOpen }: { rows: ThemeData[]; scale: n
             className="flex min-h-[74px] flex-col justify-between rounded-md p-2 text-left text-white ring-inset transition hover:ring-1 hover:ring-white/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
             style={{ background: heatFill(r.performance_pct, scale) }}
           >
-            <span className="line-clamp-2 text-[11.5px] font-medium leading-tight">{r.theme_name}</span>
+            <span className="line-clamp-2 text-[11.5px] font-medium leading-tight">{r.theme_name}<GroupStageTag name={r.theme_name} badge onFill /></span>
             <span className="flex items-end justify-between gap-1">
               <span className="font-mono text-[15px] font-semibold tabular-nums">{fmt(r.performance_pct)}</span>
               <span className="font-mono text-[10px] opacity-75">{r.up_count}/{b.valid}↑</span>

@@ -35,6 +35,8 @@ import { EXPORT_FORMAT_LABEL, type ExportFormat } from "@/lib/tvSections";
 import { useCuratedThemes } from "@/hooks/useCuratedThemes";
 import { useInsiderBuys } from "@/hooks/useInsiderBuys";
 import InsiderBuyBadge from "@/components/rs/InsiderBuyBadge";
+import GroupStageTag from "@/components/shared/GroupStageTag";
+import { withGroupStage } from "@/lib/groupStage";
 
 
 export type AnalyzerTab = "overall" | "1d" | "1w" | "1m" | "3m" | "6m";
@@ -508,7 +510,7 @@ export default function CustomListAnalyzerModal({
   const exportSymbols = fmt === "sections" ? sections.flatMap((g) => g.stocks.map((s) => s.symbol)) : rows.map((s) => s.symbol);
   const exportText = (sep: string) =>
     fmt === "sections"
-      ? sections.map((g) => `###${g.name.replace(/[,\n]/g, " ")}\n${g.stocks.map((s) => s.symbol).join("\n")}`).join("\n")
+      ? sections.map((g) => `###${(groupBy === "theme" ? g.name : withGroupStage(g.name, groupBy)).replace(/[,\n]/g, " ")}\n${g.stocks.map((s) => s.symbol).join("\n")}`).join("\n")
       : exportSymbols.join(sep);
   const toggleSection = (name: string) => setCollapsed((prev) => { const n = new Set(prev); if (n.has(name)) n.delete(name); else n.add(name); return n; });
 
@@ -962,7 +964,7 @@ export default function CustomListAnalyzerModal({
                               <span className="inline-flex items-center gap-2 text-[11px]">
                                 <span className="w-3 text-muted-foreground">{closed ? "▸" : "▾"}</span>
                                 <span className="font-mono text-muted-foreground">###</span>
-                                <span className="font-semibold text-foreground">{g.name}</span>
+                                <span className="font-semibold text-foreground">{g.name}<GroupStageTag name={g.name} mode={groupBy} /></span>
                                 <span className="rounded-full bg-background px-1.5 font-mono text-[10px] text-muted-foreground">{g.stocks.length}</span>
                                 {g.avg !== null && (
                                   <span className={`font-mono text-[10px] ${g.avg >= 0 ? "text-[hsl(222,82%,71%)]" : "text-destructive/80"}`}>avg RS {pctDisplay(g.avg)}</span>

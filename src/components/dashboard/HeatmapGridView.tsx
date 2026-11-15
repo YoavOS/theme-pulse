@@ -8,6 +8,7 @@ import {
 } from "@/lib/groupSignals";
 import VolumeBar from "@/components/dashboard/VolumeBar";
 import { heatScale } from "@/components/dashboard/SectorIndustryHeatmap";
+import GroupStageTag from "@/components/shared/GroupStageTag";
 
 type BreadthFilter = "all" | "broad-up" | "narrow-up" | "broad-down";
 const FILTERS: { key: BreadthFilter; label: string; tip: string }[] = [
@@ -303,7 +304,7 @@ export default function HeatmapGridView({
             >
               <div className={`flex flex-col items-center justify-center h-full p-1.5 text-center ${sig?.vol ? "pb-4" : ""}`}>
                 <span className="text-[10px] font-medium text-white/70 leading-tight line-clamp-3 [overflow-wrap:anywhere]" title={t.theme_name}>
-                  {truncateThemeName(t.theme_name)}
+                  {truncateThemeName(t.theme_name)}<GroupStageTag name={t.theme_name} badge onFill />
                 </span>
                 <span
                   className="text-sm font-bold text-white mt-0.5"
@@ -350,7 +351,7 @@ export default function HeatmapGridView({
                     width: TOOLTIP_WIDTH,
                   }}
                 >
-                  <div className="font-['Syne',sans-serif] font-semibold text-foreground text-sm truncate">{t.theme_name}</div>
+                  <div className="font-['Syne',sans-serif] font-semibold text-foreground text-sm truncate">{t.theme_name}<GroupStageTag name={t.theme_name} /></div>
                   {leader && (
                     <div className="mt-0.5 text-[10.5px] text-muted-foreground truncate" style={{ fontFamily: DM_MONO }}>
                       Led by <span className="text-foreground font-semibold">{leader.symbol}</span>{" "}

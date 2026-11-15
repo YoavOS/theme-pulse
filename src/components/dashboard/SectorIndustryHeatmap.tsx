@@ -4,6 +4,7 @@ import { heatFill } from "@/components/dashboard/TrackerDisplays";
 import VolumeBar from "@/components/dashboard/VolumeBar";
 import { groupVolume } from "@/lib/groupSignals";
 import type { TickerVolume } from "@/hooks/useVolumeData";
+import GroupStageTag from "@/components/shared/GroupStageTag";
 
 /**
  * Sector + Industry heatmap: one row per sector (ranked by its stock-weighted average move),
@@ -77,7 +78,7 @@ export default function SectorIndustryHeatmap({ industries, sectorOf, onOpen, la
             className="flex items-center justify-between gap-2 rounded-md px-1.5 py-1 text-left hover:bg-accent/40 sm:flex-col sm:items-start sm:justify-center"
             title={`${b.name}: all ${b.stocks} stocks — click to open`}
           >
-            <span className="text-[12.5px] font-semibold leading-tight">{b.name}</span>
+            <span className="text-[12.5px] font-semibold leading-tight">{b.name}<GroupStageTag name={b.name} /></span>
             <span className="flex items-baseline gap-2">
               <span className={`font-mono text-xs font-semibold ${b.avg > 0.005 ? "text-[hsl(222,82%,64%)]" : b.avg < -0.005 ? "text-[hsl(330,72%,61%)]" : "text-muted-foreground"}`}>{fmt(b.avg)}</span>
               <span className="font-mono text-[10px] text-muted-foreground">{b.stocks} stocks · {Math.round((b.up / b.stocks) * 100)}% up</span>
@@ -95,7 +96,7 @@ export default function SectorIndustryHeatmap({ industries, sectorOf, onOpen, la
                   className="relative flex h-[62px] min-w-0 flex-col justify-between rounded-md px-2 pb-3 pt-1.5 text-left text-white ring-inset transition hover:ring-1 hover:ring-white/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                   style={{ flex: `${Math.max(1, n)} 1 ${Math.min(220, 96 + n * 3)}px`, background: heatFill(t.performance_pct, scale) }}
                 >
-                  <span className="line-clamp-2 text-[11px] font-medium leading-tight">{t.theme_name}</span>
+                  <span className="line-clamp-2 text-[11px] font-medium leading-tight">{t.theme_name}<GroupStageTag name={t.theme_name} badge onFill /></span>
                   <span className="flex min-w-0 items-end justify-between gap-1">
                     <span className="shrink-0 font-mono text-[13px] font-semibold tabular-nums">{fmt(t.performance_pct)}</span>
                     <span className="min-w-0 truncate whitespace-nowrap font-mono text-[9.5px] opacity-75">{t.up_count}/{n}↑{vol ? ` · ${vol.ratio.toFixed(1)}×` : ""}</span>

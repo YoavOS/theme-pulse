@@ -2,6 +2,7 @@ import { useState, type ReactNode } from "react";
 import type { ThemeData } from "@/data/themeData";
 import { buildSectorBlocks } from "@/components/dashboard/SectorIndustryHeatmap";
 import { fmtPct, niceMax } from "@/lib/groupDisplay";
+import GroupStageTag from "@/components/shared/GroupStageTag";
 
 /**
  * Shared displays for any ranked list of groups (themes, industries, sectors…):
@@ -37,7 +38,7 @@ export function BarRow({ r, scale, onOpen, strong = false, indent = false, value
   return (
     <button onClick={() => onOpen(r)} className={BAR_GRID}
       title={title ?? `${r.theme_name}: ${fmtPct(v)} average of ${valid} stock${valid === 1 ? "" : "s"}${r.na_count ? ` (${r.na_count} without data)` : ""} — click to open`}>
-      <span className={`truncate text-xs ${strong ? "font-semibold" : indent ? "font-medium text-foreground/85" : "font-medium"} ${indent ? "pl-3" : ""}`}>{r.theme_name}</span>
+      <span className={`truncate text-xs ${strong ? "font-semibold" : indent ? "font-medium text-foreground/85" : "font-medium"} ${indent ? "pl-3" : ""}`}>{r.theme_name}<GroupStageTag name={r.theme_name} badge /></span>
       <span className={`relative rounded-[3px] bg-muted/40 ${strong ? "h-3.5" : indent ? "h-2.5" : "h-3"}`}>
         <span className="absolute -bottom-[3px] -top-[3px] left-1/2 w-px bg-border" />
         <span className="absolute bottom-0 top-0 rounded-[3px]"
@@ -135,7 +136,7 @@ export function GroupCard({ r, onOpen, value, sub, strong = false, title }: {
       className="flex min-w-0 items-center gap-1.5 rounded-xl border px-2.5 py-2.5 text-left transition hover:brightness-125 sm:gap-2 sm:px-4 sm:py-3"
       style={c ? { background: `hsla(${c}, 0.06)`, borderColor: `hsla(${c}, 0.32)` } : { background: "hsl(var(--muted) / 0.25)", borderColor: "hsl(var(--border))" }}>
       <span className="min-w-0 flex-1">
-        <span className={`block truncate text-[12.5px] tracking-tight sm:text-[15px] sm:tracking-normal ${strong ? "font-bold" : "font-semibold"}`}>{r.theme_name}</span>
+        <span className={`block truncate text-[12.5px] tracking-tight sm:text-[15px] sm:tracking-normal ${strong ? "font-bold" : "font-semibold"}`}>{r.theme_name}<GroupStageTag name={r.theme_name} badge /></span>
         {sub && <span className="block truncate text-[10.5px] text-muted-foreground">{sub}</span>}
       </span>
       <span className={`shrink-0 text-[12.5px] font-bold tabular-nums tracking-tight sm:text-[15px] ${toneClass(v)}`}>{fmtPct(v)}</span>
@@ -162,7 +163,7 @@ export function GroupCards({ rows, onOpen, sectorOf, value, sub, title }: {
         {buildSectorBlocks(rows, sectorOf).map((b) => (
           <section key={b.name}>
             <button onClick={() => onOpen(b.theme)} className="mb-1.5 flex w-full items-baseline gap-2 px-1 text-left hover:opacity-80" title={`${b.name}: ${fmtPct(b.avg)} across ${b.stocks} stocks — click for all of them`}>
-              <span className="text-[13px] font-bold">{b.name}</span>
+              <span className="text-[13px] font-bold">{b.name}<GroupStageTag name={b.name} /></span>
               <span className={`font-mono text-[12px] font-semibold ${toneClass(b.avg)}`}>{fmtPct(b.avg)}</span>
               <span className="text-[10.5px] text-muted-foreground">{b.industries.length} industries · {b.up}/{b.stocks} up</span>
             </button>

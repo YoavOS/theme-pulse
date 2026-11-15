@@ -3,6 +3,7 @@ import { useMemo, useState } from "react";
 import { SectionHead, Segmented } from "@/components/Explainer";
 import { ordinal } from "@/lib/utils";
 import { STAGE_COLORS, stageWeeksAgo, type StockStage } from "@/lib/stageAnalysis";
+import GroupStageTag from "@/components/shared/GroupStageTag";
 
 /**
  * Stage 2 rotation — groups ranked by the share of their stocks in Stage 2, now vs N weeks ago.
@@ -27,8 +28,9 @@ function share(members: StockStage[], ago: number) {
   return tot >= ROT_MIN ? { pct: (s2 / tot) * 100, tot } : null;
 }
 
-export default function RotationPanel({ groups, asOf, modeLabel, minMembers, onOpen }: {
+export default function RotationPanel({ groups, asOf, mode, modeLabel, minMembers, onOpen }: {
   groups: { name: string; members: StockStage[] }[];
+  mode?: import("@/lib/groupColors").GroupMode;
   asOf: string | null;
   modeLabel: string;
   minMembers: number;
@@ -86,7 +88,7 @@ export default function RotationPanel({ groups, asOf, modeLabel, minMembers, onO
                 title={`${r.name}: ${r.then.toFixed(0)}% → ${r.now.toFixed(0)}% of its ${r.n} stocks in Stage 2 · ranked ${ordinal(r.rankThen)} → ${ordinal(r.rankNow)} of ${rows.length}`}
               >
                 <span className="flex items-baseline gap-2">
-                  <span className="min-w-0 flex-1 truncate text-xs font-medium">{r.name} <span className="font-normal text-muted-foreground">({r.n})</span></span>
+                  <span className="min-w-0 flex-1 truncate text-xs font-medium">{r.name}<GroupStageTag name={r.name} mode={mode} badge /> <span className="font-normal text-muted-foreground">({r.n})</span></span>
                   <span className="shrink-0 font-mono text-[11px]">
                     <span className="text-muted-foreground">{r.then.toFixed(0)}%</span>
                     <span className="mx-0.5 text-muted-foreground">→</span>

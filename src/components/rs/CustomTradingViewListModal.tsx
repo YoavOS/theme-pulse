@@ -36,6 +36,7 @@ import {
   coilConfigKey,
   type CoilConfig,
 } from "@/hooks/useSetupMetrics";
+import GroupStageTag from "@/components/shared/GroupStageTag";
 
 
 export type CustomListTab = "overall" | "1d" | "1w" | "1m" | "3m" | "6m";
@@ -614,7 +615,7 @@ export default function CustomTradingViewListModal({
     }));
   }, [fmt, groupBy, filtered, curatedThemes, getRsForTab, tabId]);
   const sections = useMemo(() => (fmt === "sections" ? rankedGroups(sectionItems) : []), [fmt, sectionItems]);
-  const exportText = (sep: string) => (fmt === "sections" ? tvSectionsText(sectionItems) : symbols.join(sep));
+  const exportText = (sep: string) => (fmt === "sections" ? tvSectionsText(sectionItems, groupBy) : symbols.join(sep));
 
   const handleCopy = async () => {
     try {
@@ -1284,7 +1285,7 @@ export default function CustomTradingViewListModal({
                 <div className="mt-1.5 space-y-0.5 font-mono text-[10px] text-muted-foreground">
                   {sections.slice(0, 5).map((g, i) => (
                     <div key={g.name} className="truncate" title={g.symbols.join(", ")}>
-                      <span className="text-foreground">{i + 1}. {g.name}</span>
+                      <span className="text-foreground">{i + 1}. {g.name}<GroupStageTag name={g.name} mode={groupBy} badge /></span>
                       {g.avg !== null && <span> · avg RS {g.avg.toFixed(1)}</span>} · {g.symbols.slice(0, 6).join(", ")}{g.symbols.length > 6 ? ` +${g.symbols.length - 6}` : ""}
                     </div>
                   ))}

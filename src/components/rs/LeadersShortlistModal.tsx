@@ -16,6 +16,7 @@ import {
   FUNDAMENTAL_KEYS, MATCH_LABEL, PROFILE_BY_KEY, breakoutSetup, getMinCoverage, matchCount, savedScore, shortTermMomentum,
   type MatchMode, type ProfileKey,
 } from "@/lib/superperfProfiles";
+import GroupStageTag from "@/components/shared/GroupStageTag";
 
 /**
  * Leaders shortlist: the few stocks that are strong on every front at once —
@@ -187,7 +188,7 @@ export default function LeadersShortlistModal({ open, onOpenChange, stocks, isOt
   const copy = async (text: string, msg: string) => {
     try { await navigator.clipboard.writeText(text); toast.success(msg); } catch { toast.error("Copy failed"); }
   };
-  const sectionsText = () => tvSectionsText(rows.map((r) => ({ symbol: r.s.symbol, group: r.group, score: r.composite })));
+  const sectionsText = () => tvSectionsText(rows.map((r) => ({ symbol: r.s.symbol, group: r.group, score: r.composite })), "industry");
   const download = () => {
     const blob = new Blob([sectionsText()], { type: "text/plain;charset=utf-8" });
     const url = URL.createObjectURL(blob);
@@ -346,7 +347,7 @@ export default function LeadersShortlistModal({ open, onOpenChange, stocks, isOt
                           {r.erDays !== null && r.erDays >= 0 && r.erDays <= 21 && <span className="ml-1.5 rounded bg-[hsl(40,80%,50%)]/15 px-1 text-[10px] text-[hsl(40,90%,62%)]">ER {r.erDays}d</span>}
                           <span className="ml-1.5 align-middle"><InsiderBuyBadge info={insiders.get(r.s.symbol.toUpperCase())} /></span>
                         </td>
-                        <td className="max-w-[160px] truncate px-2 py-1.5 text-xs text-muted-foreground" title={r.group}>{r.group}</td>
+                        <td className="max-w-[160px] truncate px-2 py-1.5 text-xs text-muted-foreground" title={r.group}>{r.group}<GroupStageTag name={r.group} mode="industry" badge /></td>
                         <td className="px-2 py-1.5 text-xs">
                           {r.stage ? <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full" style={{ background: STAGE_COLORS[r.stage.stage] }} />{r.stage.substage || r.stage.stage}</span> : "—"}
                         </td>

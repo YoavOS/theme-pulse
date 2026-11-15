@@ -16,6 +16,7 @@ import {
   MARKET, STATUS_INFO, buildBlocks, classify, quality, readEma, tvText,
   type Bar, type Block, type BaseRead, type EmaRead, type Row, type Status,
 } from "@/lib/focusList";
+import GroupStageTag from "@/components/shared/GroupStageTag";
 
 /**
  * Organize my focus list: paste the TradingView watchlist → SPY / QQQ / IWM on top, then every stock
@@ -267,7 +268,7 @@ export default function FocusOrganizer({ universe, fundamentalsMap, superperfSet
                   )}
                   <div className="rounded-xl border border-border/70 bg-card/50 p-2.5" style={toneBox(tone, info.order === 0 ? 0.55 : 0.3)}>
                     <div className="mb-1 flex flex-wrap items-baseline gap-x-2 text-[12px]">
-                      <span className="font-semibold">{b.industry}</span>
+                      <span className="font-semibold">{b.industry}<GroupStageTag name={b.industry} mode="industry" /></span>
                       <span className="text-muted-foreground">{own} yours{b.rows.length > own ? ` + ${b.rows.length - own} peer${b.rows.length - own > 1 ? "s" : ""}` : ""}</span>
                       {h && h.n >= 3 && (
                         <span className="text-[11px]" style={{ color: h.up / h.n >= 0.6 ? "hsl(var(--up))" : h.up / h.n <= 0.4 ? "hsl(var(--down))" : "hsl(var(--warn))" }}
