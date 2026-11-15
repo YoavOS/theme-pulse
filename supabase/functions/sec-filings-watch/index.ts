@@ -94,9 +94,18 @@ Deno.serve(async (req) => {
     }
 
     // ── 1) Daily index files ────────────────────────────────────────────────
-    const done = new Set((await readAll<{ day: string; status: string; version: number | null }>(sb, "sec_index_days", "day, status, version",
-      (q) => q.gte("day", isoDay(Date.now() - LOOKBACK_DAYS * DAY_MS))))
-      .filter((r) => r.status === "missing" || (r.version ?? 1) >= INDEX_VERSION).map((r) => r.day));
+    // Works before and after the migration that adds sec_index_days.version (until then: old behaviour).
+    const sinceDay = isoDay(Date.now() - LOOKBACK_DAYS * DAY_MS);
+    let hasVersion = true;
+    let dayRows: { day: string; status: string; version?: number | null }[];
+    try {
+      dayRows = await readAll(sb, "sec_index_days", "day, status, version", (q) => q.gte("day", sinceDay));
+    } catch {
+      hasVersion = false;
+      dayRows = await readAll(sb, "sec_index_days", "day, status", (q) => q.gte("day", sinceDay));
+    }
+    const done = new Set(dayRows
+      .filter((r) => !hasVersion || r.status === "missing" || (r.version ?? 1) >= INDEX_VERSION).map((r) => r.day));
     const days: string[] = [];
     for (let i = 0; i <= LOOKBACK_DAYS; i++) {
       const t = Date.now() - i * DAY_MS, wd = new Date(t).getUTCDay();
@@ -143,7 +152,7 @@ Deno.serve(async (req) => {
           const { error } = await sb.from("sec_filings").upsert(list.slice(i, i + 500), { onConflict: "accession", ignoreDuplicates: true });
           if (error) throw error;
         }
-        await sb.from("sec_index_days").upsert({ day, status: "ok", rows_kept: list.length, version: INDEX_VERSION }, { onConflict: "day" });
+        await sb.from("sec_index_days").upsert({ day, status: "ok", rows_kept: list.length, ...(hasVersion ? { version: INDEX_VERSION } : {}) }, { onConflict: "day" });
         indexRead++; filingsKept += list.length;
       }
     }
