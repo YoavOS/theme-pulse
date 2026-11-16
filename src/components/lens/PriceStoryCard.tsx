@@ -4,6 +4,8 @@ import type { LensPayload } from "@/lib/lens/types";
 import type { ProvenRow } from "@/lib/proven/types";
 import { buildScenarios, demandVsHistory, impliedGrowth, returnOnNewCapital, sizeMultiple, type Implied, type Scenario, type Story } from "@/lib/lens/valuation";
 import { AutoTerms, Term } from "./Term";
+import { ltr, useLensLang } from "@/lib/lens/i18n";
+import { HE_SCENARIO_NAME, heScenarioPlain } from "@/lib/lens/he/price";
 
 // "What the price is betting on" — written for someone new to fundamentals. The app builds the stories
 // (from the company's own numbers and its industry's averages) and explains them; experimenting with the
@@ -46,22 +48,40 @@ const CELL: Record<Biz, Record<Ask, string>> = {
   },
 };
 
+const CELL_HE: Record<Biz, Record<Ask, string>> = {
+  good: {
+    less: "עסק טוב שהמחיר שלו מבקש פחות ממה שהוא עושה — הפינה במטריצה שלו שבה איכות העסק והמחיר מתיישבים הכי טוב (הוא עדיין היה שואל אם ההנהלה מתנהגת בהתאם לגיל החברה).",
+    same: "עסק טוב שמתומחר להמשך של אותו דבר. הבעלים ירוויחו בערך את מה שהעסק מרוויח — לא מציאה, לא בועה.",
+    more: "מה שהוא מכנה \"להעריץ, אבל לא לקנות\": עסק נהדר שהמחיר שלו כבר מבקש יותר ממה שהוא סיפק.",
+  },
+  unproven: {
+    less: "המחיר מבקש פחות ממה שהעסק עושה, אבל הרקורד שלו קצר או נשחק — הסיפור עוד צריך להוכיח את עצמו.",
+    same: "מתומחר להמשך הסיפור. בסדר אם הוא יימשך; הרקורד שיגבה אותו עוד לא קיים.",
+    more: "מתומחר לסיפור גדול בלי רקורד מוכח — המקום שבו תקוות ותוצאות יכולות להיפרד בצורה החדה ביותר.",
+  },
+  weak: {
+    less: "עסק חלש שמתומחר נמוך. המטריצה שלו מאפשרת שעסק חלש יהיה השקעה טובה במחיר הנכון — אבל משהו צריך להשתנות.",
+    same: "עסק שלא הרוויח את עלות ההון שלו, מתומחר כאילו זה בסדר — הצד הלא נכון של העסקה לבעלים, לפי המטריצה שלו.",
+    more: "עסק שלא הרוויח את עלות ההון שלו, מתומחר לצמיחה — הפינה הגרועה ביותר במטריצה שלו: צמיחה בתשואות כאלה הורסת ערך.",
+  },
+};
+
 /** One plain line for a scenario's answer. */
-function answerText(im: Implied, past: number | null): { text: string; tone: Tone } {
-  if (im.kind === "growth_destroys") return { text: "growth can't get it there", tone: "hard" };
-  if (im.kind === "beyond") return { text: "needs more than any realistic growth", tone: "hard" };
-  if (im.kind === "shrink") return { text: "the price makes sense even if sales shrink", tone: "good" };
+function answerText(im: Implied, past: number | null, he = false): { text: string; tone: Tone } {
+  if (im.kind === "growth_destroys") return { text: he ? "צמיחה לא תביא אותה לשם" : "growth can't get it there", tone: "hard" };
+  if (im.kind === "beyond") return { text: he ? "צריכה יותר מכל צמיחה מציאותית" : "needs more than any realistic growth", tone: "hard" };
+  if (im.kind === "shrink") return { text: he ? "המחיר הגיוני גם אם המכירות יתכווצו" : "the price makes sense even if sales shrink", tone: "good" };
   const d = demandVsHistory(im.growth, past);
   const tone: Tone = d === "less" || d === "same" ? "good" : d === "more" ? "mid" : d === "much_more" ? "hard" : im.growth <= 15 ? "mid" : "hard";
-  return { text: `needs about ${im.growth.toFixed(0)}% sales growth a year`, tone };
+  return { text: he ? `צריכה צמיחה של כ-${ltr(im.growth.toFixed(0) + "%")} במכירות בשנה` : `needs about ${im.growth.toFixed(0)}% sales growth a year`, tone };
 }
 
 function Slider({ label, plain, value, min, max, step, unit, onChange, hint }: { label: string; plain: string; value: number; min: number; max: number; step: number; unit: string; onChange: (v: number) => void; hint?: string }) {
   return (
     <label className="block space-y-0.5">
-      <div className="flex justify-between text-[11.5px]"><span className="font-medium">{label}</span><span className="font-mono tabular-nums">{value.toFixed(step < 1 ? 1 : 0)}{unit}</span></div>
+      <div className="flex justify-between text-[11.5px]"><span className="font-medium">{label}</span><span className="font-mono tabular-nums" dir="ltr">{value.toFixed(step < 1 ? 1 : 0)}{unit}</span></div>
       <div className="text-[10.5px] text-muted-foreground"><AutoTerms text={plain} /></div>
-      <input type="range" min={min} max={max} step={step} value={value} onChange={(e) => onChange(Number(e.target.value))} className="w-full accent-[hsl(var(--primary))]" />
+      <input type="range" dir="ltr" min={min} max={max} step={step} value={value} onChange={(e) => onChange(Number(e.target.value))} className="w-full accent-[hsl(var(--primary))]" />
       {hint && <div className="text-[10px] text-muted-foreground">{hint}</div>}
     </label>
   );
@@ -69,6 +89,7 @@ function Slider({ label, plain, value, min, max, step, unit, onChange, hint }: {
 
 export default function PriceStoryCard({ p, proven, wide = false }: { p: LensPayload; proven: ProvenRow | null; /** lay the sections side by side (wide screens) */ wide?: boolean }) {
   const v = p.valuation;
+  const he = useLensLang() === "he";
   const [open, setOpen] = useState(true);
   const [learn, setLearn] = useState(false);
   const [lab, setLab] = useState(false);
@@ -83,9 +104,11 @@ export default function PriceStoryCard({ p, proven, wide = false }: { p: LensPay
   const labRes = useMemo(() => (labStory ? impliedGrowth(labStory, ev) : null), [labStory, ev]);
   if (!v || !typical) return null;
 
-  const S = p.symbol;
+  const S = he ? ltr(p.symbol) : p.symbol;
+  const U = (x: number) => (he ? ltr(usd(x)) : usd(x));
+  const P = (x: number | null | undefined, d = 0) => (he ? ltr(pct(x, d)) : pct(x, d));
   const past = v.pastGrowth3y ?? v.pastGrowth1y;
-  const pastWhen = v.pastGrowth3y !== null ? "a year over the last three years" : "last year";
+  const pastWhen = he ? (v.pastGrowth3y !== null ? "בשנה, בממוצע על פני שלוש השנים האחרונות" : "בשנה האחרונה") : v.pastGrowth3y !== null ? "a year over the last three years" : "last year";
   const im = typical.implied;
   const mult = sizeMultiple(im, v.revenue);
   const marginJump = typical.story.targetMargin - v.opMargin;
@@ -100,7 +123,23 @@ export default function PriceStoryCard({ p, proven, wide = false }: { p: LensPay
 
   // ── the price in one sentence ──
   let headline: React.ReactNode;
-  if (im.kind === "ok") {
+  if (he) {
+    if (im.kind === "ok") {
+      const d = gAsk;
+      headline = (
+        <>במחיר של {U(ev)}, {S} צריכה להגדיל את המכירות שלה בכ-<b>{ltr(im.growth.toFixed(0) + "%")} בשנה</b> בחמש השנים הבאות
+          {marginJump > 1 ? <>, ובמקביל להפוך לרווחית כמו החברה הממוצעת בענף שלה (מ-{P(v.opMargin)} ל-{P(typical.story.targetMargin)} מהמכירות שנשארים כרווח תפעולי)</> : null}.
+          {mult ? <> עד השנה העשירית היא תהיה גדולה בערך פי <b>{ltr(mult.toFixed(1))}</b> מהיום.</> : null}
+          {past !== null && <> היא צמחה ב-{P(past)} {pastWhen} — כך שהמחיר דורש {d === "less" ? "פחות צמיחה ממה שהיא מספקת" : d === "same" ? "בערך את הצמיחה שהיא מספקת" : "יותר צמיחה ממה שהיא מספקת"}{marginAsk === 2 ? <>, אבל גם <b>שיעור רווח גבוה בהרבה ממה שהראתה</b> — זה ההימור האמיתי</> : marginAsk === 1 ? <>, ובנוסף שיעור רווח גבוה מזה של היום</> : null}.</>}</>
+      );
+    } else if (im.kind === "growth_destroys") {
+      headline = <>גם אם {S} תהפוך לרווחית כמו הענף שלה, כל דולר חדש שהיא משקיעה ירוויח פחות ממה שהוא עולה — כך שצמיחה לא יכולה להסביר את המחיר של {U(ev)}. המחיר מהמר על עסק רווחי הרבה יותר מהממוצע בענף שלה.</>;
+    } else if (im.kind === "beyond") {
+      headline = <>אפילו צמיחה מהירה מאוד לא מגיעה למחיר של {U(ev)} עם סיפור טיפוסי. המחיר מניח ש-{S} תהפוך לרווחית הרבה יותר או לגדולה הרבה יותר מחברה ממוצעת בענף שלה.</>;
+    } else {
+      headline = <>המחיר של {U(ev)} עבור {S} היה הגיוני גם אם המכירות שלה היו מתכווצות. השוק מצפה ממנה למעט.</>;
+    }
+  } else if (im.kind === "ok") {
     const d = gAsk;
     headline = (
       <>For its price of {usd(ev)}, {S} has to grow its sales about <b>{im.growth.toFixed(0)}% a year</b> for the next five years
@@ -117,7 +156,12 @@ export default function PriceStoryCard({ p, proven, wide = false }: { p: LensPay
   }
 
   // ── possible / plausible / probable (typical story) ──
-  const possible: { tone: Tone; chip: string; text: string } = mult === null
+  const possible: { tone: Tone; chip: string; text: string } = he ? (mult === null
+    ? { tone: im.kind === "shrink" ? "good" : "hard", chip: im.kind === "shrink" ? "קל" : "לא ברור", text: im.kind === "shrink" ? "המחיר לא צריך שהיא תגדל בכלל." : "אף קצב צמיחה לא גורם לסיפור הזה לעבוד, כך ששאלת הגודל בכלל לא עולה." }
+    : mult <= 3 ? { tone: "good", chip: "גודל בהישג יד", text: `היא צריכה לגדול בערך פי ${ltr(mult.toFixed(1))} ב-10 שנים (מכירות של כ-${U(im.kind === "ok" ? im.path[9].revenue : 0)}).` }
+    : mult <= 10 ? { tone: "mid", chip: "קפיצה גדולה", text: `היא צריכה לגדול בערך פי ${ltr(mult.toFixed(1))} ב-10 שנים (מכירות של כ-${U(im.kind === "ok" ? im.path[9].revenue : 0)}). האם השוק שלה גדול מספיק לזה? זו שאלה של שיקול דעת — והשאלה הראשונה של דמודרן.` }
+    : { tone: "hard", chip: "קפיצה עצומה", text: `היא צריכה לגדול בערך פי ${ltr(mult.toFixed(0))} ב-10 שנים (מכירות של כ-${U(im.kind === "ok" ? im.path[9].revenue : 0)}). מעט שווקים יכולים להכיל כל כך הרבה צמיחה של חברה אחת.` })
+    : mult === null
     ? { tone: im.kind === "shrink" ? "good" : "hard", chip: im.kind === "shrink" ? "Easy" : "Unclear", text: im.kind === "shrink" ? "The price doesn't need it to get bigger at all." : "No growth rate makes this story work, so the size question doesn't even arise." }
     : mult <= 3 ? { tone: "good", chip: "Reachable size", text: `It needs to become about ${mult.toFixed(1)}× bigger in 10 years (sales of ~${usd(im.kind === "ok" ? im.path[9].revenue : 0)}).` }
     : mult <= 10 ? { tone: "mid", chip: "Big leap", text: `It needs to become about ${mult.toFixed(1)}× bigger in 10 years (sales of ~${usd(im.kind === "ok" ? im.path[9].revenue : 0)}). Is its market big enough for that? That's your judgement — and Damodaran's first question.` }
@@ -125,14 +169,25 @@ export default function PriceStoryCard({ p, proven, wide = false }: { p: LensPay
   const growthAsk = im.kind === "ok" ? im.growth : null;
   const dPast = growthAsk !== null ? demandVsHistory(growthAsk, past) : null;
   const plausibleParts: string[] = [];
+  if (he) {
+    if (growthAsk !== null) plausibleParts.push(past !== null ? `היא צריכה ${P(growthAsk)} בשנה; היא סיפקה ${P(past)} ${pastWhen}${v.industryGrowth5y !== null ? `, והענף שלה צמח ב-${P(v.industryGrowth5y)} בשנה על פני חמש שנים` : ""}.` : `היא צריכה ${P(growthAsk)} בשנה.`);
+    if (marginJump > 5) plausibleParts.push(`היא גם צריכה להעלות את שיעור הרווח שלה מ-${P(v.opMargin)} ל-${P(typical.story.targetMargin)} — שינוי גדול לכל עסק.`);
+  } else {
   if (growthAsk !== null) plausibleParts.push(past !== null ? `It needs ${pct(growthAsk)} a year; it delivered ${pct(past)} ${pastWhen}${v.industryGrowth5y !== null ? `, and its industry grew ${pct(v.industryGrowth5y)} a year over five years` : ""}.` : `It needs ${pct(growthAsk)} a year.`);
   if (marginJump > 5) plausibleParts.push(`It also has to raise its profit margin from ${pct(v.opMargin)} to ${pct(typical.story.targetMargin)} — a big change for any business.`);
+  }
   const plausibleTone: Tone = im.kind !== "ok" ? "hard" : (dPast === "much_more" || marginJump > 15) ? "hard" : (dPast === "more" || marginJump > 5) ? "mid" : "good";
-  const plausible = { tone: plausibleTone, chip: plausibleTone === "good" ? "Within its record" : plausibleTone === "mid" ? "A stretch" : "Beyond its record", text: plausibleParts.join(" ") || "The numbers don't support this story at any growth rate." };
+  const plausible = he
+    ? { tone: plausibleTone, chip: plausibleTone === "good" ? "בתוך הרקורד שלה" : plausibleTone === "mid" ? "מתיחה" : "מעבר לרקורד שלה", text: plausibleParts.join(" ") || "המספרים לא תומכים בסיפור הזה בשום קצב צמיחה." }
+    : { tone: plausibleTone, chip: plausibleTone === "good" ? "Within its record" : plausibleTone === "mid" ? "A stretch" : "Beyond its record", text: plausibleParts.join(" ") || "The numbers don't support this story at any growth rate." };
   const biz = bizOf(proven?.label);
   const ageCheck = proven?.checks?.find((c) => c.id === "age");
   const probableTone: Tone = !biz ? "mid" : biz === "good" && ageCheck?.pass !== false ? "good" : biz === "weak" ? "hard" : "mid";
-  const probable = {
+  const probable = he ? {
+    tone: probableTone,
+    chip: probableTone === "good" ? "נתמך ברקורד שלה" : probableTone === "mid" ? "ראיות מעורבות" : "עוד לא נתמך",
+    text: `${proven?.sentence ? `הרקורד שלה: ${proven.sentence}` : "הרקורד שלה עוד לא קיבל ציון."}${ageCheck ? ` ${ageCheck.pass === false ? `והיא לא מתנהגת בהתאם לגילה: ${ageCheck.miss}.` : ageCheck.pass ? "היא משתמשת בהון שלה כפי שחברה בגילה צריכה." : ""}` : ""}`,
+  } : {
     tone: probableTone,
     chip: probableTone === "good" ? "Backed by its record" : probableTone === "mid" ? "Mixed evidence" : "Not backed yet",
     text: `${proven?.sentence ? `Its track record: ${proven.sentence.charAt(0).toLowerCase()}${proven.sentence.slice(1)}` : "Its track record isn't scored yet."}${ageCheck ? ` ${ageCheck.pass === false ? `And it isn't acting its age: ${ageCheck.miss}.` : ageCheck.pass ? "It's using its capital the way a company its age should." : ""}` : ""}`,
@@ -141,10 +196,10 @@ export default function PriceStoryCard({ p, proven, wide = false }: { p: LensPay
 
   return (
     <section className="rounded-lg border border-border">
-      <button onClick={() => setOpen(!open)} className="flex w-full items-center gap-2 px-3 py-2.5 text-left hover:bg-muted/30">
+      <button onClick={() => setOpen(!open)} className="flex w-full items-center gap-2 px-3 py-2.5 text-start hover:bg-muted/30">
         <span className="min-w-0 flex-1">
-          <span className="block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground"><Term id="reverse_dcf">What the price is betting on</Term></span>
-          <span className="block text-[11px] text-muted-foreground">A share price is a bet on the future. Here's what has to come true for this one to make sense.</span>
+          <span className="block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground"><Term id="reverse_dcf">{he ? "על מה המחיר מהמר" : "What the price is betting on"}</Term></span>
+          <span className="block text-[11px] text-muted-foreground">{he ? "מחיר מניה הוא הימור על העתיד. הנה מה שצריך להתממש כדי שהמחיר הזה יהיה הגיוני." : "A share price is a bet on the future. Here's what has to come true for this one to make sense."}</span>
         </span>
         <ChevronDown size={14} className={`shrink-0 text-muted-foreground transition-transform ${open ? "rotate-180" : ""}`} />
       </button>
@@ -152,62 +207,74 @@ export default function PriceStoryCard({ p, proven, wide = false }: { p: LensPay
         <div className="space-y-3.5 px-3 pb-3">
           <p className={`leading-snug ${wide ? "max-w-5xl text-[14.5px]" : "text-[13.5px]"}`}>{headline}</p>
           {im.kind === "ok" && growthAsk !== null && growthAsk >= 20 && (
-            <p className="text-[11.5px] leading-snug text-muted-foreground">For perspective: of companies growing over 20% a year in 1994, only 13% were still growing that fast ten years later (<a href={MCKINSEY} target="_blank" rel="noopener noreferrer" className="underline">McKinsey</a>). Fast growth is hard to keep.</p>
+            <p className="text-[11.5px] leading-snug text-muted-foreground">{he
+              ? <>לפרופורציה: מתוך החברות שצמחו ביותר מ-{ltr("20%")} בשנה ב-{ltr("1994")}, רק {ltr("13%")} עדיין צמחו בקצב כזה עשר שנים אחר כך (<a href={MCKINSEY} target="_blank" rel="noopener noreferrer" className="underline">McKinsey</a>). קשה לשמור על צמיחה מהירה.</>
+              : <>For perspective: of companies growing over 20% a year in 1994, only 13% were still growing that fast ten years later (<a href={MCKINSEY} target="_blank" rel="noopener noreferrer" className="underline">McKinsey</a>). Fast growth is hard to keep.</>}</p>
           )}
 
           <div className={wide ? "grid items-start gap-5 [grid-template-columns:repeat(auto-fit,minmax(300px,1fr))]" : "space-y-3.5"}>
           {/* three ready-made stories */}
           <div className="space-y-1.5">
-            <div className="text-[12px] font-semibold">Three ways the story could go</div>
+            <div className="text-[12px] font-semibold">{he ? "שלוש דרכים שבהן הסיפור יכול להתפתח" : "Three ways the story could go"}</div>
             <div className="space-y-1.5">
               {scenarios.map((s) => {
-                const a = answerText(s.implied, past);
+                const a = answerText(s.implied, past, he);
                 return (
                   <div key={s.id} className="rounded-md bg-muted/20 p-2">
                     <div className="flex items-center gap-2">
-                      <span className="text-[12px] font-semibold">{s.name}</span>
-                      <span className="ml-auto"><Chip tone={a.tone}>{a.text}</Chip></span>
+                      <span className="text-[12px] font-semibold">{he ? HE_SCENARIO_NAME[s.id] : s.name}</span>
+                      <span className="ms-auto"><Chip tone={a.tone}>{a.text}</Chip></span>
                     </div>
-                    <div className="text-[11.5px] leading-snug text-muted-foreground">If {S} <AutoTerms text={s.plain} />.</div>
+                    <div className="text-[11.5px] leading-snug text-muted-foreground">{he ? <>אם {S} <AutoTerms text={heScenarioPlain(s.id, v)} />.</> : <>If {S} <AutoTerms text={s.plain} />.</>}</div>
                   </div>
                 );
               })}
             </div>
+            {he ? (
+            <p className="text-[11.5px] leading-snug">
+              <span className="font-semibold">מה לשים לב: </span>
+              ככל שהעסק טוב יותר — יותר רווח שנשאר מכל מכירה (<Term id="operating_margin">שיעור רווח</Term>), פחות כסף שנדרש כדי לצמוח (<Term id="sales_to_capital">מכירות להון</Term>) — כך המחיר צריך פחות צמיחה. ערך נובע מצמיחה <em>וגם</em> ממה שהצמיחה הזו עולה.
+              {cautious.implied.kind === "growth_destroys" && <> בסיפור הזהיר הצמיחה אפילו <em>מורידה</em> את הערך: בשיעור הרווח של היום, כל דולר חדש שמושקע מרוויח בערך {P(roNewToday)}, פחות מה-{P(v.costOfCapital, 1)} שהכסף הזה עולה. צמיחה עוזרת רק לעסק שמרוויח יותר מ<Term id="cost_of_capital">עלות ההון</Term> שלו.</>}
+            </p>
+            ) : (
             <p className="text-[11.5px] leading-snug">
               <span className="font-semibold">What to notice: </span>
               the better the business — more profit kept from each sale (<Term id="operating_margin">margin</Term>), less money needed to grow (<Term id="sales_to_capital">sales to capital</Term>) — the less growth the price needs. Value comes from growth <em>and</em> from what that growth costs.
               {cautious.implied.kind === "growth_destroys" && <> In the cautious story growth even <em>lowers</em> value: at today's margin, each new dollar invested earns about {pct(roNewToday)}, less than the {pct(v.costOfCapital, 1)} that money costs. Growth only helps a business that earns more than its <Term id="cost_of_capital">cost of capital</Term>.</>}
             </p>
+            )}
           </div>
 
           {/* the 3P test */}
           <div className="space-y-1.5">
-            <div className="text-[12px] font-semibold"><Term id="three_p">Damodaran's three questions</Term> about the typical story</div>
-            {([["Possible?", "Could it get that big?", possible], ["Plausible?", "Do the numbers fit what it has shown?", plausible], ["Probable?", "Is there evidence it will happen?", probable]] as const).map(([q, sub, r]) => (
+            <div className="text-[12px] font-semibold">{he ? <><Term id="three_p">שלוש השאלות של דמודרן</Term> על הסיפור הטיפוסי</> : <><Term id="three_p">Damodaran's three questions</Term> about the typical story</>}</div>
+            {(he
+              ? [["אפשרי?", "האם היא יכולה להגיע לגודל כזה?", possible], ["סביר?", "האם המספרים מתאימים למה שהיא הראתה?", plausible], ["מסתבר?", "האם יש ראיות שזה יקרה?", probable]] as const
+              : [["Possible?", "Could it get that big?", possible], ["Plausible?", "Do the numbers fit what it has shown?", plausible], ["Probable?", "Is there evidence it will happen?", probable]] as const).map(([q, sub, r]) => (
               <div key={q} className="space-y-0.5">
-                <div className="flex items-center gap-2 text-[12px]"><span className="font-semibold">{q}</span><span className="text-muted-foreground">{sub}</span><span className="ml-auto"><Chip tone={r.tone}>{r.chip}</Chip></span></div>
+                <div className="flex items-center gap-2 text-[12px]"><span className="font-semibold">{q}</span><span className="text-muted-foreground">{sub}</span><span className="ms-auto"><Chip tone={r.tone}>{r.chip}</Chip></span></div>
                 <p className="text-[11.5px] leading-snug text-muted-foreground"><AutoTerms text={r.text} /></p>
               </div>
             ))}
-            <p className="text-[11px] leading-snug text-muted-foreground">Many stories pass the first question and fail the last. Possible is easy; probable is the hard part.</p>
+            <p className="text-[11px] leading-snug text-muted-foreground">{he ? "סיפורים רבים עוברים את השאלה הראשונה ונכשלים באחרונה. אפשרי זה קל; מסתבר זה החלק הקשה." : "Many stories pass the first question and fail the last. Possible is easy; probable is the hard part."}</p>
           </div>
 
           {/* good company vs good investment */}
           {biz && ask && (
             <div className="space-y-1.5">
-              <div className="text-[12px] font-semibold"><Term id="good_company">Good company ≠ good investment</Term></div>
-              <p className="text-[11.5px] leading-snug text-muted-foreground">Damodaran asks two separate questions: is this a good business, and is the price asking too much? A great company can be a poor investment if the price already assumes everything goes right. Here "what it has shown" means both its growth and its profit margin.</p>
+              <div className="text-[12px] font-semibold"><Term id="good_company">{he ? "חברה טובה ≠ השקעה טובה" : "Good company ≠ good investment"}</Term></div>
+              <p className="text-[11.5px] leading-snug text-muted-foreground">{he ? "דמודרן שואל שתי שאלות נפרדות: האם זה עסק טוב, והאם המחיר מבקש יותר מדי? חברה נהדרת יכולה להיות השקעה גרועה אם המחיר כבר מניח שהכול ילך כשורה. כאן \"מה שהיא הראתה\" פירושו גם הצמיחה שלה וגם שיעור הרווח שלה." : "Damodaran asks two separate questions: is this a good business, and is the price asking too much? A great company can be a poor investment if the price already assumes everything goes right. Here \"what it has shown\" means both its growth and its profit margin."}</p>
               <div className="grid grid-cols-[auto_repeat(3,minmax(0,1fr))] gap-px overflow-hidden rounded-md border border-border text-[10px]">
                 <div className="bg-muted/30 p-1" />
-                {(["less", "same", "more"] as Ask[]).map((a) => <div key={a} className="bg-muted/30 p-1 text-center text-muted-foreground">{a === "less" ? "price asks less than it has shown" : a === "same" ? "about what it has shown" : "more than it has shown"}</div>)}
+                {(["less", "same", "more"] as Ask[]).map((a) => <div key={a} className="bg-muted/30 p-1 text-center text-muted-foreground">{he ? (a === "less" ? "המחיר מבקש פחות ממה שהראתה" : a === "same" ? "בערך מה שהראתה" : "יותר ממה שהראתה") : a === "less" ? "price asks less than it has shown" : a === "same" ? "about what it has shown" : "more than it has shown"}</div>)}
                 {(["good", "unproven", "weak"] as Biz[]).map((b) => (
                   <Fragment key={b}>
-                    <div className="bg-muted/30 p-1 text-muted-foreground">{b === "good" ? "Proven business" : b === "unproven" ? "Unproven / slipping" : "Not earning its cost"}</div>
+                    <div className="bg-muted/30 p-1 text-muted-foreground">{he ? (b === "good" ? "עסק מוכח" : b === "unproven" ? "לא מוכח / נשחק" : "לא מרוויח את עלותו") : b === "good" ? "Proven business" : b === "unproven" ? "Unproven / slipping" : "Not earning its cost"}</div>
                     {(["less", "same", "more"] as Ask[]).map((a) => <div key={b + a} className={`p-1 ${b === biz && a === ask ? "bg-primary/25 ring-1 ring-primary" : "bg-background"}`} />)}
                   </Fragment>
                 ))}
               </div>
-              <p className="text-[12px] leading-snug"><AutoTerms text={CELL[biz][ask]} /></p>
+              <p className="text-[12px] leading-snug"><AutoTerms text={(he ? CELL_HE : CELL)[biz][ask]} /></p>
             </div>
           )}
 
@@ -215,8 +282,18 @@ export default function PriceStoryCard({ p, proven, wide = false }: { p: LensPay
           <div className={wide ? "grid items-start gap-5 [grid-template-columns:repeat(auto-fit,minmax(300px,1fr))]" : "space-y-3.5"}>
           <div className="space-y-1.5">
           {/* learn: what's a story */}
-          <button onClick={() => setLearn(!learn)} className="flex items-center gap-1 text-[11.5px] text-primary hover:underline">What's a "story" in valuation? <ChevronDown size={12} className={learn ? "rotate-180" : ""} /></button>
-          {learn && (
+          <button onClick={() => setLearn(!learn)} className="flex items-center gap-1 text-[11.5px] text-primary hover:underline">{he ? "מה זה \"סיפור\" בהערכת שווי?" : <>What's a "story" in valuation?</>} <ChevronDown size={12} className={learn ? "rotate-180" : ""} /></button>
+          {learn && he && (
+            <div className="space-y-1 rounded-md bg-muted/20 p-2.5 text-[11.5px] leading-snug">
+              <p><Term id="damodaran">דמודרן</Term> אומר שכל מחיר הוא <Term id="story">סיפור שמסופר במספרים</Term>. כל סיפור של חברה עוסק בארבעה דברים:</p>
+              <p><b>כמה גדולה?</b> — באיזה קצב המכירות צומחות, ועד כמה החברה יכולה לגדול.</p>
+              <p><b>כמה רווחית?</b> — כמה מכל דולר מכירות היא שומרת כרווח תפעולי (<Term id="operating_margin">שיעור הרווח התפעולי</Term> שלה).</p>
+              <p><b>כמה עולה לה לצמוח?</b> — כמה כסף היא צריכה להחזיר לעסק (<Term id="reinvestment">השקעה מחדש</Term>) על כל דולר חדש של מכירות.</p>
+              <p><b>כמה מסוכנת?</b> — התשואה שמשקיעים דורשים בעבור הסיכון הזה (<Term id="cost_of_capital">עלות ההון</Term> שלה, {P(v.costOfCapital, 1)} בענף שלה).</p>
+              <p>האפליקציה ממלאת את אלה מהמספרים של החברה עצמה ומהממוצעים של הענף שלה, ואז שואלת איזו צמיחה המחיר צריך. אין צורך לקבוע שום דבר.</p>
+            </div>
+          )}
+          {learn && !he && (
             <div className="space-y-1 rounded-md bg-muted/20 p-2.5 text-[11.5px] leading-snug">
               <p><Term id="damodaran">Damodaran</Term> says every price is a <Term id="story">story told in numbers</Term>. Every company story is about four things:</p>
               <p><b>How big?</b> — how fast sales grow, and how large the company can become.</p>
@@ -230,29 +307,38 @@ export default function PriceStoryCard({ p, proven, wide = false }: { p: LensPay
           </div>
           <div className="space-y-1.5">
           {/* optional experiment */}
-          <button onClick={() => setLab(!lab)} className="flex items-center gap-1 text-[11.5px] text-primary hover:underline">Experiment yourself (optional) <ChevronDown size={12} className={lab ? "rotate-180" : ""} /></button>
+          <button onClick={() => setLab(!lab)} className="flex items-center gap-1 text-[11.5px] text-primary hover:underline">{he ? "לנסות בעצמך (לא חובה)" : "Experiment yourself (optional)"} <ChevronDown size={12} className={lab ? "rotate-180" : ""} /></button>
           {lab && labStory && labRes && (
             <div className="space-y-2 rounded-md bg-muted/20 p-2.5">
-              <p className="text-[11px] text-muted-foreground">Starts from the typical story. Move one lever and watch how much growth the price then needs.</p>
-              <Slider label="How profitable it becomes" plain="Operating margin it reaches in 5 years — the share of sales it keeps as operating profit." value={labStory.targetMargin} min={-10} max={60} step={0.5} unit="%" onChange={setMargin}
-                hint={`today ${pct(v.opMargin, 1)}${v.industryOpMargin !== null ? ` · industry average ${pct(v.industryOpMargin, 1)}` : ""}`} />
-              <Slider label="How much it costs to grow" plain="Sales it gets for each $1 it reinvests — higher means growth is cheaper." value={labStory.salesToCapital} min={0.2} max={6} step={0.1} unit="×" onChange={setS2c}
-                hint={`${v.salesToCapital !== null ? `today ${v.salesToCapital.toFixed(2)}×` : ""}${v.industrySalesToCapital !== null ? ` · industry ${v.industrySalesToCapital.toFixed(2)}×` : ""}`} />
-              <Slider label="How risky" plain="The yearly return investors demand for this kind of business (cost of capital)." value={labStory.costOfCapital} min={4} max={16} step={0.1} unit="%" onChange={setWacc} hint={v.costOfCapitalSource} />
+              <p className="text-[11px] text-muted-foreground">{he ? "מתחילים מהסיפור הטיפוסי. אפשר להזיז מנוף אחד ולראות כמה צמיחה המחיר צריך אז." : "Starts from the typical story. Move one lever and watch how much growth the price then needs."}</p>
+              <Slider label={he ? "כמה רווחית היא תהיה" : "How profitable it becomes"} plain={he ? "שיעור הרווח התפעולי שהיא מגיעה אליו בעוד 5 שנים — החלק מהמכירות שהיא שומרת כרווח תפעולי." : "Operating margin it reaches in 5 years — the share of sales it keeps as operating profit."} value={labStory.targetMargin} min={-10} max={60} step={0.5} unit="%" onChange={setMargin}
+                hint={he ? `היום ${ltr(pct(v.opMargin, 1))}${v.industryOpMargin !== null ? ` · ממוצע הענף ${ltr(pct(v.industryOpMargin, 1))}` : ""}` : `today ${pct(v.opMargin, 1)}${v.industryOpMargin !== null ? ` · industry average ${pct(v.industryOpMargin, 1)}` : ""}`} />
+              <Slider label={he ? "כמה עולה לה לצמוח" : "How much it costs to grow"} plain={he ? "המכירות שהיא מקבלת על כל דולר שהיא משקיעה מחדש — גבוה יותר אומר שהצמיחה זולה יותר." : "Sales it gets for each $1 it reinvests — higher means growth is cheaper."} value={labStory.salesToCapital} min={0.2} max={6} step={0.1} unit="×" onChange={setS2c}
+                hint={he ? `${v.salesToCapital !== null ? `היום ${ltr(v.salesToCapital.toFixed(2) + "×")}` : ""}${v.industrySalesToCapital !== null ? ` · ענף ${ltr(v.industrySalesToCapital.toFixed(2) + "×")}` : ""}` : `${v.salesToCapital !== null ? `today ${v.salesToCapital.toFixed(2)}×` : ""}${v.industrySalesToCapital !== null ? ` · industry ${v.industrySalesToCapital.toFixed(2)}×` : ""}`} />
+              <Slider label={he ? "כמה מסוכנת" : "How risky"} plain={he ? "התשואה השנתית שמשקיעים דורשים מעסק מהסוג הזה (עלות ההון)." : "The yearly return investors demand for this kind of business (cost of capital)."} value={labStory.costOfCapital} min={4} max={16} step={0.1} unit="%" onChange={setWacc} hint={v.costOfCapitalSource} />
               <p className="text-[12.5px] leading-snug">
-                {labRes.kind === "ok" ? <>The price would then need about <b>{labRes.growth.toFixed(0)}%</b> sales growth a year.</>
+                {he ? (labRes.kind === "ok" ? <>המחיר יצטרך אז צמיחה של כ-<b>{ltr(labRes.growth.toFixed(0) + "%")}</b> במכירות בשנה.</>
+                  : labRes.kind === "growth_destroys" ? <>עם המספרים האלה, הצמיחה מורידה את הערך — כל דולר חדש ירוויח בערך {P(returnOnNewCapital(labStory), 1)}, פחות מהעלות שלו, {P(labStory.costOfCapital, 1)}.</>
+                  : labRes.kind === "beyond" ? <>שום צמיחה מציאותית לא מגיעה למחיר עם המספרים האלה.</> : <>המחיר הגיוני גם אם המכירות יתכווצו.</>)
+                  : labRes.kind === "ok" ? <>The price would then need about <b>{labRes.growth.toFixed(0)}%</b> sales growth a year.</>
                   : labRes.kind === "growth_destroys" ? <>With these numbers, growth lowers value — each new dollar would earn about {pct(returnOnNewCapital(labStory), 1)}, less than its {pct(labStory.costOfCapital, 1)} cost.</>
                   : labRes.kind === "beyond" ? <>No realistic growth reaches the price with these numbers.</> : <>The price makes sense even if sales shrink.</>}
               </p>
-              <button onClick={() => { setMargin(null); setS2c(null); setWacc(null); }} className="text-[11px] text-muted-foreground underline">Reset to the typical story</button>
+              <button onClick={() => { setMargin(null); setS2c(null); setWacc(null); }} className="text-[11px] text-muted-foreground underline">{he ? "חזרה לסיפור הטיפוסי" : "Reset to the typical story"}</button>
             </div>
           )}
 
           </div>
           </div>
+          {he ? (
+          <p className="text-[10.5px] leading-snug text-muted-foreground">
+            גרסה מפושטת של הגישה של דמודרן — הקריאה שלו במחירים כנקודת איזון (<a href={TRILLION_POST} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-0.5 underline">Trillion Dollar Market Caps, דצמ׳ 2025 <ExternalLink size={9} /></a>) ומטריצת העסק × המחיר שלו (<a href={PARADOX_POST} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-0.5 underline">Explaining a Paradox, 2017 <ExternalLink size={9} /></a>). מניחה תחזית של 10 שנים, תקרת צמיחה לטווח ארוך של {ltr(RISK_FREE + "%")}, ומחיר של היום שכולל את החוב פחות המזומנים. דרך לחשוב, לא המלצה.
+          </p>
+          ) : (
           <p className="text-[10.5px] leading-snug text-muted-foreground">
             A simplified version of Damodaran's approach — his break-even reading of prices (<a href={TRILLION_POST} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-0.5 underline">Trillion Dollar Market Caps, Dec 2025 <ExternalLink size={9} /></a>) and his business × price matrix (<a href={PARADOX_POST} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-0.5 underline">Explaining a Paradox, 2017 <ExternalLink size={9} /></a>). Assumes a 10-year forecast, a {RISK_FREE}% long-run growth ceiling, and today's price including debt minus cash. A way to think, not a recommendation.
           </p>
+          )}
         </div>
       )}
     </section>
