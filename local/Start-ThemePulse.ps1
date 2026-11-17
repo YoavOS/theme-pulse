@@ -155,6 +155,9 @@ if (-not (Test-Path $stamp) -or (Get-Content $stamp -ErrorAction SilentlyContinu
 Say "Starting the database and backend (the first time downloads about 2 GB - be patient)"
 npx --yes supabase@latest start
 if ($LASTEXITCODE -ne 0) { Fail "The database didn't start (see the messages above)." }
+# app updates may bring new database changes: apply any that this database hasn't had yet
+npx --yes supabase@latest migration up --local
+if ($LASTEXITCODE -ne 0) { Write-Host "Some database updates didn't apply - see the messages above." -ForegroundColor Yellow }
 
 $status = npx --yes supabase@latest status -o env 2> $null
 $vals = @{}
