@@ -140,3 +140,6 @@ verify_jwt = false
 
 [functions.company-file]
 verify_jwt = false
+
+[functions.pattern-finder]
+verify_jwt = false
