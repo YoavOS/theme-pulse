@@ -135,7 +135,7 @@ if (-not (Test-Path $today)) {
 
 # -- 8. Backend functions and the website, each in its own window --------------------------
 Say "Starting the backend functions"
-Start-Process powershell -ArgumentList "-NoExit", "-Command", "`$host.ui.RawUI.WindowTitle = 'Theme Pulse - backend (keep open)'; Set-Location '$Root'; npx --yes supabase@latest functions serve --env-file supabase\functions\.env" -WindowStyle Minimized
+Start-Process powershell -ArgumentList "-NoExit", "-Command", "`$host.ui.RawUI.WindowTitle = 'Theme Pulse - backend (keep open)'; Set-Location '$Root'; npx --yes supabase@latest functions serve --env-file supabase\functions\.env 2>&1 | Tee-Object -FilePath (Join-Path '$LogDir' ('backend-' + (Get-Date -Format 'yyyy-MM-dd_HH-mm') + '.log'))" -WindowStyle Minimized
 
 Say "Starting the app"
 Start-Process powershell -ArgumentList "-NoExit", "-Command", "`$host.ui.RawUI.WindowTitle = 'Theme Pulse - app (keep open)'; Set-Location '$Root'; npm run dev -- --port 8080 --strictPort" -WindowStyle Minimized

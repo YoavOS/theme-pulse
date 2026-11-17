@@ -71,6 +71,10 @@ BEGIN
     -- the yearly Damodaran load also runs whenever its tables are still empty (first start)
     IF s->>'step' = 'damodaran' AND last IS NOT NULL AND EXISTS (SELECT 1 FROM public.damodaran_loads) THEN CONTINUE; END IF;
     IF last IS NOT NULL AND last >= (s->>'slot')::timestamptz THEN CONTINUE; END IF;
+    -- the nightly jobs work on the stock universe: wait until the first universe scan has filled it
+    IF (s->>'slot')::timestamptz = nightly AND NOT EXISTS (SELECT 1 FROM public.qualified_rs_universe LIMIT 1) THEN
+      RETURN 'waiting for the first universe scan';
+    END IF;
     IF s ? 'sql' THEN PERFORM public.trim_yahoo_cache();
     ELSE PERFORM public.local_call(s->>'fn', s->'body'); END IF;
     INSERT INTO public.local_runs(step, last_done) VALUES (s->>'step', now())
