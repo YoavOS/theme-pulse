@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { ArrowLeft, BarChart3, Bot, ChevronDown, Cpu, Cloud, FileText, FileSearch, ListChecks, Loader2, Sparkles, MessageSquare, RefreshCw, Search, Send, LineChart, Sunrise } from "lucide-react";
+import { ArrowLeft, BarChart3, Bot, ChevronDown, Cpu, Cloud, FileText, FileSearch, ListChecks, Loader2, NotebookPen, Sparkles, MessageSquare, RefreshCw, Search, Send, LineChart, Sunrise } from "lucide-react";
 import TodayList from "@/components/ai/TodayList";
 import FocusReview from "@/components/ai/FocusReview";
 import FilingsView from "@/components/ai/FilingsView";
 import PatternsView from "@/components/ai/PatternsView";
+import JournalView from "@/components/ai/JournalView";
 import { touchLab, useLabUsage } from "@/lib/labs";
 import { toast } from "sonner";
 import AiMarkdown from "@/components/ai/AiMarkdown";
@@ -17,7 +18,7 @@ import {
  * AI Analyst (/ai). The AI on your PC (Ollama) reads the app's own data: tonight's market report,
  * ask-your-data chat, and a one-stock analysis. Falls back to the free cloud keys when the PC model is off.
  */
-type Tab = "today" | "report" | "ask" | "stock" | "filings" | "focus" | "patterns";
+type Tab = "today" | "report" | "ask" | "stock" | "filings" | "focus" | "patterns" | "journal";
 const TABS: { id: Tab; label: string; he: string; icon: JSX.Element }[] = [
   { id: "today", label: "Today's list", he: "הרשימה של היום", icon: <Sunrise size={14} /> },
   { id: "report", label: "Market report", he: "דוח שוק", icon: <FileText size={14} /> },
@@ -25,6 +26,7 @@ const TABS: { id: Tab; label: string; he: string; icon: JSX.Element }[] = [
   { id: "stock", label: "One stock", he: "מניה אחת", icon: <LineChart size={14} /> },
   { id: "filings", label: "From the filings", he: "מתוך הדוחות", icon: <FileSearch size={14} /> },
   { id: "patterns", label: "Pattern finder", he: "מוצא הדפוסים", icon: <Sparkles size={14} /> },
+  { id: "journal", label: "Journal review", he: "סקירת היומן", icon: <NotebookPen size={14} /> },
   { id: "focus", label: "Focus-list review", he: "סקירת רשימת המעקב", icon: <ListChecks size={14} /> },
 ];
 
@@ -69,6 +71,7 @@ export default function AiAnalyst() {
         {tab === "focus" && <FocusReview lang={lang} />}
         {tab === "filings" && <FilingsView lang={lang} />}
         {tab === "patterns" && <PatternsView lang={lang} />}
+        {tab === "journal" && <JournalView lang={lang} />}
         {tab === "report" && <ReportView lang={lang} />}
         {tab === "ask" && <AskView lang={lang} />}
         {tab === "stock" && <StockView lang={lang} initial={params.get("symbol")} onSymbol={(s) => { const p = new URLSearchParams(params); p.set("tab", "stock"); p.set("symbol", s); setParams(p, { replace: true }); }} />}

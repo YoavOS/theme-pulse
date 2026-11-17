@@ -15,6 +15,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/cors.ts";
 import { extractJson, hasAnyLlm, llmFetch } from "../_shared/llm.ts";
 import { DATA_GUIDE, headlines, langLine, liveColumns, marketDigest, sql, stockProfile } from "../_shared/aiData.ts";
+import { tradeContext } from "../_shared/journal.ts";
 
 const SB_URL = Deno.env.get("SUPABASE_URL")!;
 const SB_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -241,6 +242,52 @@ FACTS (JSON):\n${clip(facts, 26000)}` },
   return json(row);
 }
 
+// ---------------------------------------------------------------- journal review (thinking and entries, not execution)
+async function journal(sb: any, body: any) {
+  const lang = body.lang === "he" ? "he" : "en";
+  const { data: trades } = await sb.from("journal_entries").select("*").order("entry_date", { ascending: false }).limit(150);
+  if (!trades?.length) return json({ error: "The journal is empty — add trades first." }, 400);
+  const syms = [...new Set(trades.map((t: any) => t.symbol))] as string[];
+  const { data: arr } = await sb.rpc("bars_arrays", { syms: [...syms, "SPY"], n: 1400 });
+  const bars = new Map((arr ?? []).map((r: any) => [r.symbol, { d: r.d, h: r.h, l: r.l, c: r.c, v: (r.v ?? []).map((x: any) => Number(x ?? 0)) }]));
+  const spy: any = bars.get("SPY");
+  const { data: uni } = await sb.from("qualified_rs_universe").select("symbol, sector").in("symbol", syms);
+  const industry = new Map((uni ?? []).map((u: any) => [u.symbol, u.sector]));
+  const rows: any[] = [];
+  for (const t of trades) {
+    const b: any = bars.get(t.symbol);
+    const ctx = b && spy ? tradeContext(b, spy, { ...t, entry_price: t.entry_price != null ? Number(t.entry_price) : null, exit_price: t.exit_price != null ? Number(t.exit_price) : null }) : null;
+    // how strong was its industry, and how many similar setups were there that week (pattern samples)
+    let peers: any = null;
+    if (ctx) {
+      const lo = new Date(Date.parse(t.entry_date) - 7 * 864e5).toISOString().slice(0, 10), hi = new Date(Date.parse(t.entry_date) + 3 * 864e5).toISOString().slice(0, 10);
+      const sim = await sql(sb, `select count(*) n, round(100.0*avg(win::int),1) win_pct from pattern_samples where d between '${lo}' and '${hi}' and f[2] >= 40 and abs(f[1]) <= 0.6 and win is not null`, 1).catch(() => []);
+      const ind = industry.get(t.symbol);
+      const indRs = ind ? await sql(sb, `select round(percentile_cont(0.5) within group (order by f[3])::numeric,1) ind_rs, (select round(percentile_cont(0.5) within group (order by f[3])::numeric,1) from pattern_samples where d between '${lo}' and '${hi}') all_rs from pattern_samples where d between '${lo}' and '${hi}' and industry = '${String(ind).replace(/'/g, "''")}'`, 1).catch(() => []) : [];
+      peers = { industry: ind ?? null, industryMedianRs3m: indRs[0]?.ind_rs ?? null, universeMedianRs3m: indRs[0]?.all_rs ?? null, similar21EmaSetupsThatWeek: sim[0]?.n ?? null, theirBigWinnerRatePct: sim[0]?.win_pct ?? null };
+    }
+    rows.push({ symbol: t.symbol, entry: t.entry_date, exit: t.exit_date, setup: t.setup, thesis: t.thesis, conviction: t.conviction, invalidation: t.invalidation, notes: t.notes, ...(ctx ?? { context: "no price history" }), peers });
+  }
+  const closed = rows.filter((r) => r.outcome && !r.outcome.open);
+  const summary = { trades: rows.length, closed: closed.length, winners: closed.filter((r) => r.outcome.returnPct > 0).length,
+    avgReturn: closed.length ? +(closed.reduce((s, r) => s + r.outcome.returnPct, 0) / closed.length).toFixed(1) : null,
+    withThesis: rows.filter((r) => r.thesis).length, withInvalidation: rows.filter((r) => r.invalidation).length };
+  const r = await chat([
+    { role: "system", content: `You review a momentum trader's journal (21 EMA pullbacks and breakouts). Focus on THINKING and STOCK SELECTION / ENTRY — not on execution, stops or exits. ${langLine(lang)} ${lang === "he" ? "Address the reader in gender-neutral Hebrew (plural or impersonal forms)." : ""} Use only the data; be specific, kind and direct. No buy/sell advice on tickers.` },
+    { role: "user", content: `Review my journal. Sections:
+## What my good trades had in common at entry (compare the entry context of winners vs losers: run size, distance from the 21 EMA, pullback depth, RS, industry strength, the market's trend, volume).
+## What I don't seem to think about — things my notes/thesis never mention but the data shows mattered (e.g. industry strength, the market's trend, earnings timing, how extended the stock was, what would prove me wrong). Quote my own words where useful.
+## Setups I passed on — what the similar 21 EMA setups of the same weeks did, compared with mine.
+## Questions to ask before the next entry — 5 short questions built from my own patterns.
+If there are few trades, say how little can be concluded.
+Summary: ${JSON.stringify(summary)}
+Trades (newest first; atEntry = the session before entry):\n${clip(rows, 22000)}` },
+  ], { label: "ai-journal", maxTokens: 3500 });
+  const content = r.msg.content ?? "";
+  await sb.from("ai_reports").insert({ kind: "journal", day: today(), lang, subject: "journal", title: "Journal review", content, data: { summary, rows }, model: `${r.provider}/${r.model}` });
+  return json({ content, summary, rows, provider: r.provider, model: r.model });
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   try {
@@ -274,6 +321,7 @@ Deno.serve(async (req) => {
     if (action === "report") return await report(sb, body);
     if (action === "lines") return await lines(sb, body);
     if (action === "longstory") return await longStory(sb, body);
+    if (action === "journal") return await journal(sb, body);
     return json({ error: `unknown action ${action}` }, 400);
   } catch (e) {
     console.error("[ai-analyst]", e);
