@@ -1,3 +1,4 @@
+import { IndustryRealityPanel, RarityPanel } from "./EvidencePanels";
 import { useEffect, useMemo, useState } from "react";
 import { ExternalLink, Lightbulb } from "lucide-react";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -186,6 +187,11 @@ export default function IdeasView({ onOpen, active = true }: { onOpen: (symbol: 
       <section className="grid items-start gap-3 lg:grid-cols-2">
         <GrowthLab />
         {rows ? <ComparePairs rows={rows} onOpen={onOpen} /> : <div className="rounded-lg border border-border p-3 text-xs text-muted-foreground">Loading companies…</div>}
+      </section>
+
+      <section className="grid items-start gap-3 lg:grid-cols-2">
+        <RarityPanel />
+        <IndustryRealityPanel />
       </section>
 
       <section className="space-y-2">

@@ -61,6 +61,7 @@ DECLARE
     jsonb_build_object('step', 'proven-1', 'slot', nightly, 'fn', 'proven-strength', 'body', '{"action":"batch"}'::jsonb),
     jsonb_build_object('step', 'proven-2', 'slot', nightly, 'fn', 'proven-strength', 'body', '{"action":"batch"}'::jsonb),
     jsonb_build_object('step', 'proven-3', 'slot', nightly, 'fn', 'proven-strength', 'body', '{"action":"batch"}'::jsonb),
+    jsonb_build_object('step', 'lookalikes', 'slot', nightly, 'fn', 'proven-lookalikes', 'body', '{}'::jsonb),
     -- the AI's nightly market report (local model), English then Hebrew
     jsonb_build_object('step', 'ai-report-en', 'slot', nightly, 'fn', 'ai-analyst', 'body', '{"action":"report","lang":"en","fresh":true}'::jsonb),
     jsonb_build_object('step', 'ai-report-he', 'slot', nightly, 'fn', 'ai-analyst', 'body', '{"action":"report","lang":"he"}'::jsonb),

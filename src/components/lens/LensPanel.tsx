@@ -9,6 +9,8 @@ import ReviewView from "./ReviewView";
 import { dueQuestions } from "@/lib/lens/review";
 import TrackRecordCard from "@/components/proven/TrackRecordCard";
 import PriceStoryCard from "./PriceStoryCard";
+import LimitsCard from "./LimitsCard";
+import LookalikesCard from "./LookalikesCard";
 import ProvenBadge from "@/components/proven/ProvenBadge";
 import { useProvenOne } from "@/hooks/useProvenStrength";
 import { toneBox, type Tone } from "@/lib/moveTint";
@@ -507,6 +509,8 @@ export default function LensPanel({ symbol: symbolProp, onSymbolChange, onClose,
 
             {data.lifeCycle && <StageCard p={data} />}
             <TrackRecordCard row={proven.row} loading={proven.loading} />
+            <LookalikesCard symbol={data.symbol} onOpen={(s) => { setInput(s); setOwn(s); onSymbolChange?.(s); }} />
+            <LimitsCard p={data} proven={proven.row} />
             {data.valuation && !wide && <PriceStoryCard key={data.symbol} p={data} proven={proven.row} />}
             <IndustryCard p={data} />
 

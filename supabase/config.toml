@@ -134,3 +134,6 @@ verify_jwt = false
 
 [functions.daily-lists]
 verify_jwt = false
+
+[functions.proven-lookalikes]
+verify_jwt = false
