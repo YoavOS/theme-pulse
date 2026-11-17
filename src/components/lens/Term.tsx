@@ -27,7 +27,7 @@ export function Term({ entry, id, children }: { entry?: GlossaryEntry; id?: stri
           role="button" tabIndex={0}
           onClick={(ev) => { ev.stopPropagation(); }}
           onKeyDown={(ev) => { if (ev.key === "Enter" || ev.key === " ") ev.stopPropagation(); }}
-          className="cursor-help underline decoration-dotted decoration-from-font underline-offset-[3px] hover:decoration-solid hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary rounded-sm"
+          className="cursor-help underline decoration-dotted decoration-muted-foreground/40 underline-offset-[4px] hover:decoration-solid hover:decoration-primary hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary rounded-sm"
           aria-label={he ? `מה זה ${e.term}?` : `What is ${e.term}?`}
         >
           {children ?? e.term}

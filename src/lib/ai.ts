@@ -44,3 +44,29 @@ export const aiStatus = () => call<AiStatus>({ action: "status" });
 const LANG_KEY = "ai_lang_v1";
 export function readAiLang(): AiLang { try { return localStorage.getItem(LANG_KEY) === "he" ? "he" : "en"; } catch { return "en"; } }
 export function saveAiLang(l: AiLang) { try { localStorage.setItem(LANG_KEY, l); } catch { /* private mode */ } }
+
+// ── From the filings ─────────────────────────────────────────────────────────────
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function callFile<T = any>(body: Record<string, unknown>): Promise<T> {
+  const { data, error } = await supabase.functions.invoke("company-file", { body });
+  if (error) {
+    let msg = error.message;
+    try { const ctx = (error as { context?: Response }).context; if (ctx) { const j = await ctx.json(); if (j?.error) msg = j.error; } } catch { /* keep message */ }
+    throw new Error(msg);
+  }
+  if (data?.error) throw new Error(data.error);
+  return data as T;
+}
+export interface Quoted { quote?: string; source?: string; verified?: boolean }
+export interface CompanyFile {
+  story?: string; segments?: { name: string; what: string }[]; customers?: { concentration: string } & Quoted; competitors?: string[];
+  edge_claims?: ({ claim: string } & Quoted)[];
+  three_p?: Record<"possible" | "plausible" | "probable", { verdict: string; why: string }>;
+  words_vs_numbers?: ({ claim: string; numbers_say: string; agrees: string } & Quoted)[];
+  guidance?: { text: string } & Quoted; backlog?: string | null; watch?: string[];
+  riskChanges?: { summary?: string | null; notable?: { heading: string; kind: string; why: string }[]; added: number; removed: number; since?: string; allAdded?: string[]; allRemoved?: string[] };
+  sources?: { tenK: { url: string; filed: string }; release: { url: string; filed: string } | null };
+  rpo?: { end: string; val: number }[];
+}
+export const fileGet = (symbol: string, lang: AiLang) => callFile<{ file: { data: CompanyFile; model: string | null; created_at: string } | null }>({ symbol, lang, step: "get" });
+export const fileStep = (symbol: string, lang: AiLang, step: "prepare" | "story" | "risks") => callFile({ symbol, lang, step });
