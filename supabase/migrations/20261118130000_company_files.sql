@@ -27,3 +27,19 @@ DROP POLICY IF EXISTS "company_files read" ON public.company_files;
 CREATE POLICY "company_files read" ON public.company_files FOR SELECT USING (true);
 GRANT SELECT ON public.company_files TO anon, authenticated;
 GRANT ALL ON public.filing_texts, public.company_files TO service_role;
+
+-- "The long story": a long, readable walk through a company's numbers, written by the AI from the Lens facts.
+CREATE TABLE IF NOT EXISTS public.long_stories (
+  symbol      text NOT NULL,
+  lang        text NOT NULL,
+  facts_at    text,              -- the Lens computation it was written from
+  content     text,
+  model       text,
+  created_at  timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (symbol, lang)
+);
+ALTER TABLE public.long_stories ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "long_stories read" ON public.long_stories;
+CREATE POLICY "long_stories read" ON public.long_stories FOR SELECT USING (true);
+GRANT SELECT ON public.long_stories TO anon, authenticated;
+GRANT ALL ON public.long_stories TO service_role;

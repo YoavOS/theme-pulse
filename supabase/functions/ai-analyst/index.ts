@@ -206,6 +206,41 @@ Items:\n${clip(todo.map((t: any) => ({ list: t.list, symbol: t.symbol, group: t.
   return json({ ok: true, day: last.day, lang, written, provider: r.provider, model: r.model });
 }
 
+// ---------------------------------------------------------------- the long story (Fundamentals Lens)
+async function longStory(sb: any, body: any) {
+  const lang = body.lang === "he" ? "he" : "en";
+  const symbol = String(body.symbol ?? "").toUpperCase();
+  const facts = body.facts;
+  if (!symbol || !facts) return json({ error: "symbol and facts required" }, 400);
+  const factsAt = String(body.factsAt ?? "");
+  if (!body.refresh) {
+    const { data } = await sb.from("long_stories").select("content, model, created_at, facts_at").eq("symbol", symbol).eq("lang", lang).maybeSingle();
+    if (data?.content && data.facts_at === factsAt) return json({ ...data, cached: true });
+  }
+  const r = await chat([
+    { role: "system", content: `You are a patient teacher of company analysis in the spirit of Aswath Damodaran, writing for a momentum trader who is a beginner in fundamentals.
+${lang === "he" ? "Write in natural, fluent Hebrew (not translated-sounding), gender-neutral when addressing the reader (use plural or impersonal forms). Keep tickers and standard abbreviations (ROIC, EBITDA) as they are." : "Write in warm, clear English."}
+Use ONLY the facts given; never invent a number. Every number you mention must appear in the facts. No buy/sell advice and no price targets.` },
+    { role: "user", content: `Write "the long story" of ${symbol}: a long, flowing explanation (about 900–1300 words) of what its numbers say, so the reader doesn't have to read each metric.
+Not a list of metrics — connect them. Use markdown with these sections:
+## The business in one paragraph — what kind of company this is by its numbers, and its stage of life.
+## How it makes its money — margins and how hard it works its capital, together; how that compares with its industry; whether it earns more than its capital costs and for how long (the track record).
+## How it grows, and what growth costs — growth, reinvestment, the return on that reinvestment; whether growth adds value here.
+## Is the profit real? — profit vs cash, stock-based pay, dilution, what happens to the cash.
+## How safe is it? — debt and coverage, given how steady it is.
+## What the price is betting on — what the price assumes, against the record (good company vs good investment).
+## What the numbers can't tell you — the limits for THIS company, and the questions only its story can answer.
+## What to watch next — 3 to 5 concrete things in the next reports.
+Explain every idea in plain words the first time it appears. Compare with the industry wherever the facts give an industry figure.
+FACTS (JSON):\n${clip(facts, 26000)}` },
+  ], { label: "ai-longstory", maxTokens: 5000 });
+  const content = r.msg.content ?? "";
+  if (!content.trim()) return json({ error: "empty answer" }, 502);
+  const row = { symbol, lang, facts_at: factsAt, content, model: `${r.provider}/${r.model}`, created_at: new Date().toISOString() };
+  await sb.from("long_stories").upsert(row, { onConflict: "symbol,lang" });
+  return json(row);
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   try {
@@ -238,6 +273,7 @@ Deno.serve(async (req) => {
     if (action === "focus") return await focus(sb, body);
     if (action === "report") return await report(sb, body);
     if (action === "lines") return await lines(sb, body);
+    if (action === "longstory") return await longStory(sb, body);
     return json({ error: `unknown action ${action}` }, 400);
   } catch (e) {
     console.error("[ai-analyst]", e);
