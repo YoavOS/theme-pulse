@@ -137,3 +137,6 @@ verify_jwt = false
 
 [functions.proven-lookalikes]
 verify_jwt = false
+
+[functions.company-file]
+verify_jwt = false
