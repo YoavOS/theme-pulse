@@ -90,7 +90,7 @@ function PeerBar({ p, higherIsBetter }: { p: PeerStat; higherIsBetter: boolean |
 
 function benchTone(b: Benchmark, higherIsBetter: boolean | null, he = false) {
   const words = he
-    ? (b.position === "in line" ? `בקו אחד עם ${b.industry}` : `${b.position === "above" ? "מעל" : "מתחת ל-"}${b.position === "above" ? " " : ""}${b.industry}`)
+    ? (b.position === "in line" ? `בדומה לממוצע הענף (${b.industry})` : `${b.position === "above" ? "מעל " : "מתחת ל"}ממוצע הענף (${b.industry})`)
     : b.position === "in line" ? `in line with ${b.industry}` : `${b.position} ${b.industry}`;
   const cls = higherIsBetter === null || b.position === "in line" ? "text-[hsl(210,70%,72%)]"
     : (b.position === "above") === higherIsBetter ? "text-[hsl(222,82%,73%)]" : "text-[hsl(25,90%,64%)]";
@@ -105,7 +105,7 @@ function BenchLine({ b, higherIsBetter, asOf }: { b: Benchmark; higherIsBetter: 
       <div className="flex justify-between gap-2" title={he
         ? `הנתון המצרפי של דמודרן ל-${b.industry}${b.n ? ` (${b.n} חברות אמריקאיות)` : ""}${asOf ? `, נתוני ${asOf}` : ""}. השוק כולו: ${b.market ?? "אין נתון"}.`
         : `Damodaran's aggregate for ${b.industry}${b.n ? ` (${b.n} US firms)` : ""}${asOf ? `, ${asOf} data` : ""}. Whole market: ${b.market ?? "n/a"}.`}>
-        <span className={t.cls}>{he ? <><Term id="damodaran_industry">ממוצע</Term> {t.words}</> : <>{t.words} <Term id="damodaran_industry">avg</Term></>}</span>
+        <span className={t.cls}>{he ? <Term id="damodaran_industry">{t.words}</Term> : <>{t.words} <Term id="damodaran_industry">avg</Term></>}</span>
         <span className="whitespace-nowrap font-mono text-muted-foreground">{he ? "ענף" : "industry"} {b.display}{b.market ? ` · ${he ? "שוק" : "market"} ${b.market}` : ""}</span>
       </div>
       {b.smallSample && <p className="text-muted-foreground">{he ? <>רק {ltr(b.n)} חברות בענף הזה — הממוצע רועש.</> : <>Only {b.n} firms in this industry — the average is noisy.</>}</p>}
@@ -284,7 +284,7 @@ function ConceptView({ c, symbol, stageLabel, seen, asOf = null, p }: { c: Conce
   const toggle = () => { const o = !open; setOpen(o); if (o) markConcept(c.id, symbol, 1); };
   const pick = (l: 1 | 2 | 3) => { setLevel(l); markConcept(c.id, symbol, l); };
   const tone = prim?.peer ? { ...peerTone(prim.peer, c.higherIsBetter, he), words: he ? `${peerTone(prim.peer, c.higherIsBetter, he).words} ב-${prim.peer.group}` : `${peerTone(prim.peer, c.higherIsBetter).words} of ${prim.peer.group}` }
-    : prim?.bench ? { ...benchTone(prim.bench, c.higherIsBetter, he), words: he ? `ממוצע ${benchTone(prim.bench, c.higherIsBetter, he).words}` : `${benchTone(prim.bench, c.higherIsBetter).words} avg` } : null;
+    : prim?.bench ? { ...benchTone(prim.bench, c.higherIsBetter, he), words: he ? benchTone(prim.bench, c.higherIsBetter, he).words : `${benchTone(prim.bench, c.higherIsBetter).words} avg` } : null;
   return (
     <div className="border-b border-border/50 last:border-0">
       <button onClick={toggle} aria-expanded={open} className="flex w-full items-center gap-2 px-3 py-2.5 text-start hover:bg-muted/30">
