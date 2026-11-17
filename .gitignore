@@ -32,3 +32,4 @@ local/backups/
 local/app-source.tar.gz
 supabase/.temp/
 supabase/.branches/
+local/ai.env
