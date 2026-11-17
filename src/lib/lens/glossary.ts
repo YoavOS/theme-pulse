@@ -329,23 +329,28 @@ export const GLOSSARY: GlossaryEntry[] = [
     why: "His central idea: value comes from cash flows, growth and risk — and every number should tell a story." },
 ];
 
-/** Every spelling → entry, longest spellings first (so "Operating margin" wins over "margin"). */
-export const GLOSSARY_BY_ID = new Map(GLOSSARY.map((g) => [g.id, g]));
-const SPELLINGS: { text: string; entry: GlossaryEntry; caps: boolean }[] = GLOSSARY
-  .flatMap((g) => [g.term, ...(g.also ?? [])].map((t) => ({ text: t, entry: g, caps: /^[A-Z0-9&/\-·]+$/.test(t.replace(/\s/g, "")) && /[A-Z]/.test(t) && t.length <= 6 })))
-  .sort((a, b) => b.text.length - a.text.length);
-const BY_LOWER = new Map<string, { entry: GlossaryEntry; caps: boolean; text: string }[]>();
-for (const s of SPELLINGS) {
-  const k = s.text.toLowerCase();
-  BY_LOWER.set(k, [...(BY_LOWER.get(k) ?? []), s]);
-}
+/** A matcher over a set of entries: one regex for every spelling (longest first, so "Operating margin"
+ *  wins over "margin") and the entry each match refers to. Hebrew text may carry one-letter prefixes
+ *  (ה, ו, ב, ל, מ, ש, כ) glued to a term; they're matched in group 1 and kept outside the link. */
+export interface GlossaryMatcher { byId: Map<string, GlossaryEntry>; re: RegExp; entryFor: (match: string) => GlossaryEntry | null; prefixed: boolean }
 const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&");
-/** One regex for all spellings; term edges must not touch letters/digits. */
-export const GLOSSARY_RE = new RegExp(`(?<![A-Za-z0-9])(${[...new Set(SPELLINGS.map((s) => s.text.toLowerCase()))].map(esc).join("|")})(?![A-Za-z0-9])`, "gi");
-
-/** The entry a matched piece of text refers to (respects the capitals-only rule for acronyms). */
-export function entryFor(match: string): GlossaryEntry | null {
-  const cands = BY_LOWER.get(match.toLowerCase()) ?? [];
-  for (const c of cands) if (!c.caps || c.text === match) return c.entry;
-  return null;
+export function buildMatcher(entries: GlossaryEntry[], hebrew = false): GlossaryMatcher {
+  const spellings = entries
+    .flatMap((g) => [g.term, ...(g.also ?? [])].map((t) => ({ text: t, entry: g, caps: /^[A-Z0-9&/\-·]+$/.test(t.replace(/\s/g, "")) && /[A-Z]/.test(t) && t.length <= 6 })))
+    .sort((a, b) => b.text.length - a.text.length);
+  const byLower = new Map<string, { entry: GlossaryEntry; caps: boolean; text: string }[]>();
+  for (const s of spellings) { const k = s.text.toLowerCase(); byLower.set(k, [...(byLower.get(k) ?? []), s]); }
+  const alts = [...new Set(spellings.map((s) => s.text.toLowerCase()))].map(esc).join("|");
+  const re = hebrew
+    ? new RegExp(`(?<![\u0590-\u05FFA-Za-z0-9])([והבכלמש]{0,3})(${alts})(?![\u0590-\u05FFA-Za-z0-9])`, "gi")
+    : new RegExp(`(?<![A-Za-z0-9])()(${alts})(?![A-Za-z0-9])`, "gi");
+  return {
+    byId: new Map(entries.map((g) => [g.id, g])), re, prefixed: hebrew,
+    entryFor: (match: string) => { for (const c of byLower.get(match.toLowerCase()) ?? []) if (!c.caps || c.text === match) return c.entry; return null; },
+  };
 }
+export const GLOSSARY_EN = buildMatcher(GLOSSARY);
+/** Back-compat names (English). */
+export const GLOSSARY_BY_ID = GLOSSARY_EN.byId;
+export const GLOSSARY_RE = GLOSSARY_EN.re;
+export const entryFor = GLOSSARY_EN.entryFor;
