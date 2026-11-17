@@ -199,7 +199,7 @@ Deno.serve(async (req) => {
         try {
           const r = await fetch(`${url}/api/tags`, { signal: AbortSignal.timeout(4000) });
           const j = await r.json();
-          local = { configured: true, reachable: true, model: Deno.env.get("LOCAL_LLM_MODEL") || "qwen3:32b", installed: (j.models ?? []).map((m: any) => m.name) };
+          local = { configured: true, reachable: true, model: Deno.env.get("LOCAL_LLM_MODEL") || "qwen3.8:27b", installed: (j.models ?? []).map((m: any) => m.name) };
         } catch (e) { local = { configured: true, reachable: false, error: e instanceof Error ? e.message : String(e) }; }
       }
       return json({ local, cloudFallback: !!(Deno.env.get("GEMINI_API_KEY") || Deno.env.get("GROQ_API_KEY")) });

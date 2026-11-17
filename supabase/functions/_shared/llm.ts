@@ -42,7 +42,7 @@ const OPENROUTER_MODEL = env("OPENROUTER_MODEL") || "openai/gpt-oss-120b:free";
 const GEMINI_TIMEOUT_MS = 30_000;
 const OTHER_TIMEOUT_MS = 40_000;
 const LOCAL_URL = env("LOCAL_LLM_URL").replace(/\/+$/, "");
-const LOCAL_MODEL = env("LOCAL_LLM_MODEL") || "qwen3:32b";
+const LOCAL_MODEL = env("LOCAL_LLM_MODEL") || "qwen3.8:27b";
 const LOCAL_CTX = Number(env("LOCAL_LLM_CTX")) || 32768;
 const LOCAL_THINK = env("LOCAL_LLM_THINK") === "true";
 // a local model has no wall-clock limit to respect, but a big prompt takes a while to read

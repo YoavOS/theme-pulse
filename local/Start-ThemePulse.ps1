@@ -87,7 +87,7 @@ Copy-Item $Keys (Join-Path $Root "supabase\functions\.env") -Force
 # to the free cloud keys (Gemini / Groq) in keys.env.
 $AiEnv = Join-Path $Root "local\ai.env"
 if (-not (Test-Path $AiEnv)) { Copy-Item (Join-Path $Root "local\ai.example.env") $AiEnv }
-$aiModel = "qwen3:32b"; $aiOn = $true; $aiCtx = "32768"
+$aiModel = "qwen3.8:27b"; $aiOn = $true; $aiCtx = "32768"
 foreach ($line in (Get-Content $AiEnv)) {
   if ($line -match '^\s*LOCAL_LLM_MODEL\s*=\s*(\S+)') { $aiModel = $matches[1] }
   if ($line -match '^\s*LOCAL_LLM_CTX\s*=\s*(\d+)') { $aiCtx = $matches[1] }
@@ -126,7 +126,7 @@ if ($aiOn) {
       Write-Host ("Models on this PC: " + ($(if ($names.Count) { $names -join ", " } else { "none yet" })))
       $want = if ($aiModel -match ':') { $aiModel } else { "${aiModel}:latest" }
       if ($names -notcontains $want) {
-        $ans = Read-Host "Download the AI model $aiModel now? It is about 20 GB, once. (Y/n)"
+        $ans = Read-Host "Download the AI model $aiModel now? It is about 18 GB, once. (Y/n)"
         if ($ans -notmatch '^[nN]') {
           & $ollamaExe pull $aiModel
           $tags = Test-Ollama; $names = @($tags.models | ForEach-Object { $_.name })
