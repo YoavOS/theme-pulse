@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { ArrowLeft, BookOpen, Bot, Brain, ChevronDown, ExternalLink, GraduationCap, Info, Loader2, RefreshCw, Search, Sparkles, X } from "lucide-react";
+import { ArrowLeft, BookOpen, Brain, ChevronDown, ExternalLink, GraduationCap, Info, Loader2, RefreshCw, Search, Sparkles, X } from "lucide-react";
 import { useFundamentalsLens, useLensExplanation } from "@/hooks/useFundamentalsLens";
 import { PILLAR_INFO, STAGE_ORDER, STAGE_SHORT, type Benchmark, type ConceptCard, type LensPayload, type Lecture, type Metric, type PeerStat } from "@/lib/lens/types";
 import { PROGRESS_EVENT, markConcept, readProgress } from "@/lib/lens/progress";
@@ -433,7 +433,6 @@ export default function LensPanel({ symbol: symbolProp, onSymbolChange, onClose,
             <Brain size={14} />
             {dueCount > 0 && !reviewing && <span className="absolute -right-1 -top-1 min-w-[14px] rounded-full bg-primary px-0.5 text-center text-[9px] font-bold leading-[14px] text-primary-foreground">{dueCount > 9 ? "9+" : dueCount}</span>}
           </button>
-          {symbol && <Link to={`/ai?tab=stock&symbol=${encodeURIComponent(symbol)}`} title="Ask the AI analyst about this stock" className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"><Bot size={14} /></Link>}
           {onClose && <button onClick={onClose} aria-label="Close" className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"><X size={14} /></button>}
         </div>
         {data && (

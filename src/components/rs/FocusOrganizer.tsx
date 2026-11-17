@@ -1,7 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Bot, Copy, Download, FileText, Loader2, Wand2, X } from "lucide-react";
-import { aiFocus, readAiLang } from "@/lib/ai";
-import AiMarkdown from "@/components/ai/AiMarkdown";
+import { Copy, Download, FileText, Loader2, Wand2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Textarea } from "@/components/ui/textarea";
@@ -195,23 +193,6 @@ export default function FocusOrganizer({ universe, fundamentalsMap, superperfSet
     toast.success("Downloaded — import it in TradingView (Watchlist → Import list).");
   };
 
-  const [review, setReview] = useState<{ busy: boolean; text: string | null; model?: string }>({ busy: false, text: null });
-  const runReview = async () => {
-    setReview({ busy: true, text: null });
-    try {
-      const payload = blocks.map((b) => ({
-        title: `${STATUS_INFO[b.status].label} · ${b.industry}`,
-        symbols: b.rows.filter((r) => !r.peer).map((r) => r.symbol),
-        notes: b.rows.filter((r) => !r.peer).map((r) => `${r.symbol}: ${r.cls.reason}`),
-      })).filter((b) => b.symbols.length);
-      const r = await aiFocus(payload, readAiLang());
-      setReview({ busy: false, text: r.content, model: `${r.provider}/${r.model}` });
-    } catch (e) {
-      setReview({ busy: false, text: null });
-      toast.error(e instanceof Error ? e.message : String(e));
-    }
-  };
-
   let lastStatus: Status | null = null;
   return (
     <div className="space-y-3">
@@ -259,22 +240,10 @@ export default function FocusOrganizer({ universe, fundamentalsMap, superperfSet
           <div className="flex flex-wrap items-center gap-2 border-t border-border pt-3 text-[11.5px] text-muted-foreground">
             <span>{listSyms.length} stocks{asOf ? ` · daily data to ${asOf}` : ""}{missing ? ` · ${missing} without price history` : ""}</span>
             <span className="ml-auto inline-flex gap-1.5">
-              <button onClick={runReview} disabled={review.busy} title="The AI reviews the list: strongest setups, weak spots, concentration" className="inline-flex items-center gap-1 rounded-md border border-[hsl(160,70%,45%)]/40 bg-[hsl(160,70%,45%)]/10 px-2 py-1 font-medium text-[hsl(160,70%,55%)] hover:bg-[hsl(160,70%,45%)]/20 disabled:opacity-60">
-                {review.busy ? <Loader2 size={11} className="animate-spin" /> : <Bot size={11} />} AI review
-              </button>
               <button onClick={() => { navigator.clipboard.writeText(text); toast.success("Copied the organized list."); }} className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 hover:text-foreground"><Copy size={11} /> Copy</button>
               <button onClick={download} className="inline-flex items-center gap-1 rounded-md border border-primary/40 bg-primary/10 px-2 py-1 font-medium text-primary hover:bg-primary/20"><Download size={11} /> TradingView .txt</button>
             </span>
           </div>
-
-          {review.busy && <div className="flex items-center gap-2 rounded-lg border border-border bg-card p-3 text-[12.5px] text-muted-foreground"><Loader2 size={13} className="animate-spin text-primary" /> The AI is reviewing your list (1–2 minutes)…</div>}
-          {review.text && (
-            <div className="relative rounded-lg border border-[hsl(160,70%,45%)]/30 bg-card p-4">
-              <button onClick={() => setReview({ busy: false, text: null })} aria-label="Close the review" className="absolute right-2 top-2 rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"><X size={13} /></button>
-              <div className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-[hsl(160,70%,55%)]"><Bot size={12} /> AI review <span className="font-normal normal-case tracking-normal text-muted-foreground">· {review.model}</span></div>
-              <AiMarkdown text={review.text} />
-            </div>
-          )}
 
           <div className="flex items-center gap-2 text-[12px]">
             <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Market</span>

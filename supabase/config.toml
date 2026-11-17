@@ -128,3 +128,9 @@ verify_jwt = false
 
 [functions.ai-analyst]
 verify_jwt = false
+
+[functions.daily-bars]
+verify_jwt = false
+
+[functions.daily-lists]
+verify_jwt = false

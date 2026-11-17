@@ -120,3 +120,49 @@ CREATE OR REPLACE FUNCTION public.local_cleanup() RETURNS void LANGUAGE sql SECU
   DELETE FROM cron.job_run_details WHERE end_time < now() - interval '7 days';
 $$;
 SELECT cron.schedule('local-cleanup', '17 3 * * *', $$SELECT public.local_cleanup()$$);
+
+-- Price history and Today's lists (every 2 minutes, one thing at a time):
+--   1. download missing daily prices (the first time: ~5 years per stock, in the background)
+--   2. once the last session is in for the market, build Today's lists
+--   3. then the AI writes one line per listed stock (English, then Hebrew)
+CREATE OR REPLACE FUNCTION public.local_lists_tick()
+RETURNS text LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, extensions AS $$
+DECLARE
+  sess date := public.last_closed_session();
+  busy timestamptz;
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM public.local_settings WHERE key = 'anon_key') THEN RETURN 'not configured'; END IF;
+  IF NOT EXISTS (SELECT 1 FROM public.qualified_rs_universe LIMIT 1) THEN RETURN 'waiting for the universe'; END IF;
+  -- something started in the last 4 minutes is still running
+  SELECT max(last_done) INTO busy FROM public.local_runs WHERE step IN ('lists', 'lines-en', 'lines-he');
+  IF busy > now() - interval '4 minutes' THEN RETURN 'busy'; END IF;
+  IF (SELECT last_done FROM public.local_runs WHERE step = 'bars') > now() - interval '115 seconds' THEN RETURN 'busy'; END IF;
+
+  IF EXISTS (SELECT 1 FROM public.daily_bars_due(1)) THEN
+    PERFORM public.local_call('daily-bars', '{}'::jsonb);
+    INSERT INTO public.local_runs(step, last_done) VALUES ('bars', now()) ON CONFLICT (step) DO UPDATE SET last_done = excluded.last_done;
+    RETURN 'bars';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM public.today_list WHERE day = sess)
+     AND EXISTS (SELECT 1 FROM public.daily_bars WHERE symbol = 'SPY' AND d = sess)
+     AND coalesce((SELECT last_done FROM public.local_runs WHERE step = 'lists'), '-infinity') < now() - interval '30 minutes' THEN
+    PERFORM public.local_call('daily-lists', '{}'::jsonb);
+    INSERT INTO public.local_runs(step, last_done) VALUES ('lists', now()) ON CONFLICT (step) DO UPDATE SET last_done = excluded.last_done;
+    RETURN 'lists';
+  END IF;
+  IF EXISTS (SELECT 1 FROM public.today_list WHERE day = sess AND rank <= 15 AND ai_line IS NULL)
+     AND coalesce((SELECT last_done FROM public.local_runs WHERE step = 'lines-en'), '-infinity') < now() - interval '30 minutes' THEN
+    PERFORM public.local_call('ai-analyst', '{"action":"lines","lang":"en"}'::jsonb);
+    INSERT INTO public.local_runs(step, last_done) VALUES ('lines-en', now()) ON CONFLICT (step) DO UPDATE SET last_done = excluded.last_done;
+    RETURN 'lines-en';
+  END IF;
+  IF EXISTS (SELECT 1 FROM public.today_list WHERE day = sess AND rank <= 15 AND ai_line_he IS NULL)
+     AND coalesce((SELECT last_done FROM public.local_runs WHERE step = 'lines-he'), '-infinity') < now() - interval '30 minutes' THEN
+    PERFORM public.local_call('ai-analyst', '{"action":"lines","lang":"he"}'::jsonb);
+    INSERT INTO public.local_runs(step, last_done) VALUES ('lines-he', now()) ON CONFLICT (step) DO UPDATE SET last_done = excluded.last_done;
+    RETURN 'lines-he';
+  END IF;
+  RETURN 'nothing due';
+END $$;
+REVOKE ALL ON FUNCTION public.local_lists_tick() FROM anon, authenticated, PUBLIC;
+SELECT cron.schedule('local-lists-tick', '*/2 * * * *', 'SELECT public.local_lists_tick()');

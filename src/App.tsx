@@ -26,6 +26,7 @@ import AppErrorBoundary from "@/components/AppErrorBoundary";
 import { scheduleStorageCleanup } from "@/lib/storageHygiene";
 import { autoRunClassificationOncePerDay } from "@/lib/classification";
 import SleepOverlay from "@/components/SleepOverlay";
+import { useTodayListNotifier } from "@/hooks/useTodayListNotifier";
 
 const queryClient = new QueryClient();
 
@@ -35,6 +36,7 @@ function PageLoading() {
 
 /** Once a day, quietly continue the industry-classification queue (see classify-tickers). */
 function ClassificationAutoRunner() {
+  useTodayListNotifier();
   useEffect(() => { scheduleStorageCleanup(); }, []);
   useEffect(() => {
     const t = window.setTimeout(() => { autoRunClassificationOncePerDay().catch(() => undefined); }, 15_000);

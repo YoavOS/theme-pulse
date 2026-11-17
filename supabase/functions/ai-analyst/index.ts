@@ -13,7 +13,7 @@
 // deno-lint-ignore-file no-explicit-any
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/cors.ts";
-import { hasAnyLlm, llmFetch } from "../_shared/llm.ts";
+import { extractJson, hasAnyLlm, llmFetch } from "../_shared/llm.ts";
 import { DATA_GUIDE, headlines, langLine, liveColumns, marketDigest, sql, stockProfile } from "../_shared/aiData.ts";
 
 const SB_URL = Deno.env.get("SUPABASE_URL")!;
@@ -178,6 +178,34 @@ Keep it under ~600 words. Data (JSON):\n${clip(digest, 24000)}` },
   return json({ ok: true, lang, provider: r.provider, model: r.model, chars: content.length });
 }
 
+// ---------------------------------------------------------------- one line per stock in Today's list
+async function lines(sb: any, body: any) {
+  const lang = body.lang === "he" ? "he" : "en";
+  const col = lang === "he" ? "ai_line_he" : "ai_line";
+  const { data: last } = await sb.from("today_list").select("day").order("day", { ascending: false }).limit(1).maybeSingle();
+  if (!last) return json({ ok: true, note: "no lists yet" });
+  const { data: rows } = await sb.from("today_list").select("list, symbol, rank, grp, evidence").eq("day", last.day).lte("rank", 15).order("rank");
+  const todo = (rows ?? []).filter((r: any) => r.list !== "redday_group" || r.rank <= 8);
+  if (!todo.length) return json({ ok: true, day: last.day, written: 0 });
+  const r = await chat([
+    { role: "system", content: `${STYLE}\n${langLine(lang)}\nReply with JSON only.` },
+    { role: "user", content: `For each item below write ONE short line (max ~25 words) for a momentum trader: why it is on this list, using its numbers, and the one thing that would cancel the idea.
+Lists: ema21 = pullback to the daily 21 EMA after a big run (run % from the EMA at its last touch to the peak; distAdr = distance from the EMA in average daily ranges; volDryUp < 1 means volume is lighter than during the run).
+redday = stock bought on red market days (bought of redDays; avgExcessOnRedDays = points better than SPY on those days). redday_group = an industry/theme bought on red days.
+Return {"items":[{"list":"...","symbol":"...","line":"..."}]}.
+Items:\n${clip(todo.map((t: any) => ({ list: t.list, symbol: t.symbol, group: t.grp, ...t.evidence })), 20000)}` },
+  ], { task: "fast", label: "ai-lines", maxTokens: 4000 });
+  let items: any[] = [];
+  try { items = JSON.parse(extractJson(r.msg.content ?? "")).items ?? []; } catch { return json({ error: "the AI didn't return the lines as JSON" }, 502); }
+  let written = 0;
+  for (const it of items) {
+    if (!it?.symbol || !it?.line) continue;
+    const { error } = await sb.from("today_list").update({ [col]: String(it.line).slice(0, 400) }).eq("day", last.day).eq("list", it.list).eq("symbol", it.symbol);
+    if (!error) written++;
+  }
+  return json({ ok: true, day: last.day, lang, written, provider: r.provider, model: r.model });
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   try {
@@ -209,6 +237,7 @@ Deno.serve(async (req) => {
     if (action === "stock") return await stock(sb, body);
     if (action === "focus") return await focus(sb, body);
     if (action === "report") return await report(sb, body);
+    if (action === "lines") return await lines(sb, body);
     return json({ error: `unknown action ${action}` }, 400);
   } catch (e) {
     console.error("[ai-analyst]", e);
