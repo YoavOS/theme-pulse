@@ -18,6 +18,7 @@ const MinerviniChecker = lazyPage(() => import("./pages/MinerviniChecker"));
 const StageAnalysis = lazyPage(() => import("./pages/StageAnalysis"));
 const BaseScanner = lazyPage(() => import("./pages/BaseScanner"));
 const FundamentalsLens = lazyPage(() => import("./pages/FundamentalsLens"));
+const AiAnalyst = lazyPage(() => import("./pages/AiAnalyst"));
 const NotFound = lazyPage(() => import("./pages/NotFound"));
 import { Suspense, useEffect } from "react";
 import { lazyPage } from "@/lib/lazyPage";
@@ -69,6 +70,7 @@ const App = () => (
             <Route path="/minervini" element={<MinerviniChecker />} />
             <Route path="/stages" element={<StageAnalysis />} />
             <Route path="/bases" element={<BaseScanner />} />
+            <Route path="/ai" element={<AiAnalyst />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
           </Suspense>

@@ -19,12 +19,15 @@
 //   GEMINI_API_KEY, GROQ_API_KEY, CEREBRAS_API_KEY, OPENROUTER_API_KEY
 // Optional overrides: GEMINI_MODELS (comma list, tried in order), GROQ_MODEL,
 //   CEREBRAS_MODEL, OPENROUTER_MODEL.
+// Running on your own PC: LOCAL_LLM_URL (an Ollama server, e.g. http://host.docker.internal:11434)
+//   and LOCAL_LLM_MODEL put the local model first in every chain — free, private, no rate limits.
+//   LOCAL_LLM_CTX (context tokens, default 32768) and LOCAL_LLM_THINK ("true" lets reasoning models think).
 
 export type LlmTask = "long" | "fast" | "grounded";
 
 // deno-lint-ignore no-explicit-any
 type Body = Record<string, any>;
-type Provider = "gemini" | "groq" | "cerebras" | "openrouter";
+type Provider = "local" | "gemini" | "groq" | "cerebras" | "openrouter";
 
 const env = (k: string) => (Deno.env.get(k) ?? "").trim();
 
@@ -38,7 +41,13 @@ const OPENROUTER_MODEL = env("OPENROUTER_MODEL") || "openai/gpt-oss-120b:free";
 // providers can't run past the edge function's wall-clock limit.
 const GEMINI_TIMEOUT_MS = 30_000;
 const OTHER_TIMEOUT_MS = 40_000;
-const TOTAL_BUDGET_MS = 110_000;
+const LOCAL_URL = env("LOCAL_LLM_URL").replace(/\/+$/, "");
+const LOCAL_MODEL = env("LOCAL_LLM_MODEL") || "qwen3.8:27b";
+const LOCAL_CTX = Number(env("LOCAL_LLM_CTX")) || 32768;
+const LOCAL_THINK = env("LOCAL_LLM_THINK") === "true";
+// a local model has no wall-clock limit to respect, but a big prompt takes a while to read
+const LOCAL_TIMEOUT_MS = Number(env("LOCAL_LLM_TIMEOUT_MS")) || 240_000;
+const TOTAL_BUDGET_MS = LOCAL_URL ? LOCAL_TIMEOUT_MS + 60_000 : 110_000;
 
 // Gemini models that answered "not found" in this worker — skipped afterwards.
 const deadGemini = new Set<string>();
@@ -52,13 +61,13 @@ const isTimeout = (e: ProviderError) => e.status === 0 && /abort|timed? ?out/i.t
 // Providers that rate-limited us recently: provider → retry-after timestamp.
 const cooling = new Map<Provider, number>();
 
-const KEY_OF: Record<Provider, string> = { gemini: "GEMINI_API_KEY", groq: "GROQ_API_KEY", cerebras: "CEREBRAS_API_KEY", openrouter: "OPENROUTER_API_KEY" };
+const KEY_OF: Record<Provider, string> = { local: "LOCAL_LLM_URL", gemini: "GEMINI_API_KEY", groq: "GROQ_API_KEY", cerebras: "CEREBRAS_API_KEY", openrouter: "OPENROUTER_API_KEY" };
 
 /** Test hook: forget rate-limit cool-downs and missing Gemini models. */
 export function _resetLlmState() { cooling.clear(); deadGemini.clear(); slowGemini.clear(); groundingBlockedUntil = 0; }
 
 export function hasAnyLlm(): boolean {
-  return !!(env("GEMINI_API_KEY") || env("GROQ_API_KEY") || env("CEREBRAS_API_KEY") || env("OPENROUTER_API_KEY"));
+  return !!(LOCAL_URL || env("GEMINI_API_KEY") || env("GROQ_API_KEY") || env("CEREBRAS_API_KEY") || env("OPENROUTER_API_KEY"));
 }
 
 class ProviderError extends Error {
@@ -182,9 +191,38 @@ export function extractJson(text: string): string {
   return a >= 0 && b > a ? s.slice(a, b + 1) : s.trim();
 }
 
+/** Ollama's own chat API (it lets us set the context size per request), answered in OpenAI shape. */
+async function callLocal(body: Body, deadline: number): Promise<{ json: Body; model: string }> {
+  // deno-lint-ignore no-explicit-any
+  const messages = (body.messages ?? []).map((m: any) => {
+    const out: Body = { role: m.role, content: typeof m.content === "string" ? m.content : JSON.stringify(m.content ?? "") };
+    if (m.tool_calls) out.tool_calls = m.tool_calls.map((t: Body) => ({ function: { name: t.function?.name, arguments: typeof t.function?.arguments === "string" ? safeJson(t.function.arguments) : t.function?.arguments ?? {} } }));
+    if (m.role === "tool" && m.name) out.tool_name = m.name;
+    return out;
+  });
+  const req: Body = {
+    model: LOCAL_MODEL, messages, stream: false, think: LOCAL_THINK,
+    options: { num_ctx: LOCAL_CTX, temperature: typeof body.temperature === "number" ? body.temperature : 0.3, ...(typeof body.max_tokens === "number" ? { num_predict: body.max_tokens + (LOCAL_THINK ? 4096 : 0) } : {}) },
+  };
+  if (body.tools) req.tools = body.tools;
+  if (body.response_format?.type === "json_object") req.format = "json";
+  const res = await withTimeout(`${LOCAL_URL}/api/chat`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(req) }, left(deadline, LOCAL_TIMEOUT_MS));
+  if (!res.ok) throw new ProviderError(res.status === 404 ? 404 : res.status, (await res.text().catch(() => "")).slice(0, 400));
+  const j = await res.json();
+  const content = String(j?.message?.content ?? "").replace(/<think>[\s\S]*?<\/think>\s*/g, "").trim();
+  // deno-lint-ignore no-explicit-any
+  const calls = (j?.message?.tool_calls ?? []).map((t: any, i: number) => ({ id: `call_${Date.now()}_${i}`, type: "function", function: { name: t.function?.name, arguments: JSON.stringify(t.function?.arguments ?? {}) } }));
+  if (!content && !calls.length) throw new ProviderError(502, "empty completion");
+  const message: Body = { role: "assistant", content };
+  if (calls.length) message.tool_calls = calls;
+  return { json: { choices: [{ index: 0, message, finish_reason: calls.length ? "tool_calls" : "stop" }], usage: { prompt_tokens: j?.prompt_eval_count, completion_tokens: j?.eval_count } }, model: LOCAL_MODEL };
+}
+function safeJson(s: string): Body { try { return JSON.parse(s); } catch { return {}; } }
+
 async function callProvider(p: Provider, body: Body, deadline: number): Promise<{ json: Body; model: string }> {
   const ms = left(deadline, OTHER_TIMEOUT_MS);
   switch (p) {
+    case "local": return callLocal(body, deadline);
     case "gemini": return callGemini(body, deadline);
     case "groq": {
       const key = env("GROQ_API_KEY");
@@ -205,8 +243,8 @@ async function callProvider(p: Provider, body: Body, deadline: number): Promise<
 }
 
 const CHAINS: Record<Exclude<LlmTask, "grounded">, Provider[]> = {
-  long: ["gemini", "groq", "cerebras", "openrouter"],
-  fast: ["groq", "cerebras", "gemini", "openrouter"],
+  long: ["local", "gemini", "groq", "cerebras", "openrouter"],
+  fast: ["local", "groq", "cerebras", "gemini", "openrouter"],
 };
 
 /**

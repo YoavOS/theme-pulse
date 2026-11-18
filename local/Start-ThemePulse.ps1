@@ -82,6 +82,65 @@ if ($missing.Count -gt 0) {
 }
 Copy-Item $Keys (Join-Path $Root "supabase\functions\.env") -Force
 
+# -- 4b. The AI on your PC (Ollama) ---------------------------------------------------------
+# Settings live in local\ai.env (which model, or LOCAL_AI=off). Without it the app falls back
+# to the free cloud keys (Gemini / Groq) in keys.env.
+$AiEnv = Join-Path $Root "local\ai.env"
+if (-not (Test-Path $AiEnv)) { Copy-Item (Join-Path $Root "local\ai.example.env") $AiEnv }
+$aiModel = "qwen3.8:27b"; $aiOn = $true; $aiCtx = "32768"
+foreach ($line in (Get-Content $AiEnv)) {
+  if ($line -match '^\s*LOCAL_LLM_MODEL\s*=\s*(\S+)') { $aiModel = $matches[1] }
+  if ($line -match '^\s*LOCAL_LLM_CTX\s*=\s*(\d+)') { $aiCtx = $matches[1] }
+  if ($line -match '^\s*LOCAL_AI\s*=\s*off') { $aiOn = $false }
+}
+function Test-Ollama { try { Invoke-RestMethod -Uri "http://127.0.0.1:11434/api/tags" -TimeoutSec 3 } catch { $null } }
+function Find-Ollama {
+  $c = Get-Command ollama -ErrorAction SilentlyContinue
+  if ($c) { return $c.Source }
+  $p = Join-Path $env:LOCALAPPDATA "Programs\Ollama\ollama.exe"
+  if (Test-Path $p) { return $p }
+  return $null
+}
+$aiReady = $false
+if ($aiOn) {
+  Say "Checking the AI on your PC (Ollama, model $aiModel)"
+  $ollamaExe = Find-Ollama
+  if (-not $ollamaExe) {
+    $ans = Read-Host "Ollama (runs the AI on your PC, free) isn't installed. Install it now? (Y/n)"
+    if ($ans -notmatch '^[nN]') {
+      winget install -e --id Ollama.Ollama --accept-package-agreements --accept-source-agreements
+      Refresh-Path
+      $ollamaExe = Find-Ollama
+    }
+  }
+  if ($ollamaExe) {
+    $tags = Test-Ollama
+    if (-not $tags) {
+      Write-Host "Starting Ollama..."
+      $env:OLLAMA_FLASH_ATTENTION = "1"; $env:OLLAMA_KV_CACHE_TYPE = "q8_0"; $env:OLLAMA_KEEP_ALIVE = "30m"
+      Start-Process $ollamaExe -ArgumentList "serve" -WindowStyle Hidden
+      for ($i = 0; $i -lt 15 -and -not $tags; $i++) { Start-Sleep -Seconds 2; $tags = Test-Ollama }
+    }
+    if ($tags) {
+      $names = @($tags.models | ForEach-Object { $_.name })
+      Write-Host ("Models on this PC: " + ($(if ($names.Count) { $names -join ", " } else { "none yet" })))
+      $want = if ($aiModel -match ':') { $aiModel } else { "${aiModel}:latest" }
+      if ($names -notcontains $want) {
+        $ans = Read-Host "Download the AI model $aiModel now? It is about 18 GB, once. (Y/n)"
+        if ($ans -notmatch '^[nN]') {
+          & $ollamaExe pull $aiModel
+          $tags = Test-Ollama; $names = @($tags.models | ForEach-Object { $_.name })
+        }
+      }
+      if ($names -contains $want) { $aiReady = $true; Write-Host "The AI is ready: $aiModel" }
+      else { Write-Host "The model isn't downloaded - the app uses the cloud keys for AI until it is." -ForegroundColor Yellow }
+    } else { Write-Host "Ollama didn't answer - the app uses the cloud keys for AI this time." -ForegroundColor Yellow }
+  } else { Write-Host "No Ollama - the app uses the cloud keys for AI." -ForegroundColor Yellow }
+}
+if ($aiReady) {
+  Add-Content -Path (Join-Path $Root "supabase\functions\.env") -Value @("", "LOCAL_LLM_URL=http://host.docker.internal:11434", "LOCAL_LLM_MODEL=$aiModel", "LOCAL_LLM_CTX=$aiCtx")
+}
+
 # -- 5. App packages ------------------------------------------------------------------------
 $stamp = Join-Path $Root "node_modules\.installed-from"
 $lockHash = (Get-FileHash (Join-Path $Root "package.json")).Hash
@@ -96,6 +155,9 @@ if (-not (Test-Path $stamp) -or (Get-Content $stamp -ErrorAction SilentlyContinu
 Say "Starting the database and backend (the first time downloads about 2 GB - be patient)"
 npx --yes supabase@latest start
 if ($LASTEXITCODE -ne 0) { Fail "The database didn't start (see the messages above)." }
+# app updates may bring new database changes: apply any that this database hasn't had yet
+npx --yes supabase@latest migration up --local
+if ($LASTEXITCODE -ne 0) { Write-Host "Some database updates didn't apply - see the messages above." -ForegroundColor Yellow }
 
 $status = npx --yes supabase@latest status -o env 2> $null
 $vals = @{}

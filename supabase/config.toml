@@ -125,3 +125,6 @@ verify_jwt = false
 
 [functions.market-pulse]
 verify_jwt = false
+
+[functions.ai-analyst]
+verify_jwt = false
