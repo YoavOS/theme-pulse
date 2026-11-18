@@ -51,7 +51,9 @@ export default function SessionView({ groupMode, baseThemes, industryBySymbol, o
   /** Movers only: hide groups whose move since the open is inside ±minMove% (0 = show all). */
   minMove?: number;
 }) {
-  const { live, loading, error, refresh } = useLiveSession(true);
+  // every stock in the groups on screen (not only theme tickers) gets a session quote
+  const symbols = useMemo(() => [...new Set(baseThemes.flatMap((t) => t.tickers.filter((tk) => !tk.skipped).map((tk) => tk.symbol.toUpperCase())))], [baseThemes]);
+  const { live, loading, error, refresh } = useLiveSession(true, symbols);
   const [expanded, setExpanded] = useState<Set<Outcome>>(new Set());
   const [display, setDisplay] = useState<SessionDisplay>(() => {
     try { const v = localStorage.getItem(DISPLAY_KEY) as SessionDisplay | null; return v && DISPLAYS.some((d) => d.value === v) ? v : "quad"; } catch { return "quad"; }
@@ -208,7 +210,7 @@ export default function SessionView({ groupMode, baseThemes, industryBySymbol, o
       <p className="mt-3 text-[11.5px] leading-relaxed text-muted-foreground">
         <b className="text-foreground/90">Gap</b> = yesterday's close to today's open (news and pre-market). <b className="text-foreground/90">Since open</b> = what buyers and sellers did during trading hours.
         Gaps that kept going show follow-through; a gap that faded, or a gap down that got bought, is where the session changed the story. Click a group for its stocks.
-        {groupMode !== "theme" && " Live quotes exist for your theme tickers only, so these groups contain those stocks."}
+        {groupMode !== "theme" && " Every stock in these groups is included; outside market hours this shows the last full session."}
       </p>
     </div>
   );

@@ -12,7 +12,7 @@ import { corsHeaders } from "../_shared/cors.ts";
 const UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36";
 
-async function fetchOne(symbol: string): Promise<{ open: number; close: number } | null> {
+async function fetchOne(symbol: string): Promise<{ open: number; close: number; prevClose: number | null } | null> {
   try {
     const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(
       symbol,
@@ -29,7 +29,10 @@ async function fetchOne(symbol: string): Promise<{ open: number; close: number }
       const o = opens[i];
       const c = closes[i];
       if (typeof o === "number" && typeof c === "number" && Number.isFinite(o) && Number.isFinite(c)) {
-        return { open: o, close: c };
+        // the previous session's close (for the overnight gap); null if not in the 5-day window
+        let prevClose: number | null = null;
+        for (let k = i - 1; k >= 0; k--) { const p = closes[k]; if (typeof p === "number" && Number.isFinite(p)) { prevClose = p; break; } }
+        return { open: o, close: c, prevClose };
       }
     }
     // Fall back to meta regularMarketPrice / chartPreviousClose if needed (not green/red signal).
@@ -102,7 +105,7 @@ Deno.serve(async (req) => {
       );
     }
     const fetched = await runPool(symbols, 12, fetchOne);
-    const results: Record<string, { open: number; close: number } | null> = {};
+    const results: Record<string, { open: number; close: number; prevClose: number | null } | null> = {};
     symbols.forEach((s, idx) => { results[s] = fetched[idx]; });
     return new Response(
       JSON.stringify({ results }),

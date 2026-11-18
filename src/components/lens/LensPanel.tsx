@@ -11,6 +11,7 @@ import TrackRecordCard from "@/components/proven/TrackRecordCard";
 import PriceStoryCard from "./PriceStoryCard";
 import LimitsCard from "./LimitsCard";
 import ReadTogether from "./ReadTogether";
+import { IndustryBars } from "./LensVisuals";
 import LookalikesCard from "./LookalikesCard";
 import ProvenBadge from "@/components/proven/ProvenBadge";
 import { useProvenOne } from "@/hooks/useProvenStrength";
@@ -592,6 +593,7 @@ export default function LensPanel({ symbol: symbolProp, onSymbolChange, onClose,
             )}
 
             <ReadTogether p={data} proven={proven.row} />
+            <IndustryBars p={data} />
             {data.lifeCycle && <StageCard p={data} />}
             <TrackRecordCard row={proven.row} loading={proven.loading} />
             <LookalikesCard symbol={data.symbol} onOpen={(s) => { setInput(s); setOwn(s); onSymbolChange?.(s); }} />

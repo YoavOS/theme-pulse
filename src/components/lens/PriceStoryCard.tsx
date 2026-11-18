@@ -6,6 +6,7 @@ import { buildScenarios, demandVsHistory, impliedGrowth, returnOnNewCapital, siz
 import { AutoTerms, Term } from "./Term";
 import { ltr, useLensLang } from "@/lib/lens/i18n";
 import { HE_SCENARIO_NAME, heScenarioPlain } from "@/lib/lens/he/price";
+import { GrowthAsk } from "./LensVisuals";
 
 // "What the price is betting on" — written for someone new to fundamentals. The app builds the stories
 // (from the company's own numbers and its industry's averages) and explains them; experimenting with the
@@ -241,6 +242,7 @@ export default function PriceStoryCard({ p, proven, wide = false }: { p: LensPay
       {open && (
         <div className="space-y-3.5 px-3 pb-3">
           <p className={`leading-snug ${wide ? "max-w-5xl text-[14.5px]" : "text-[13.5px]"}`}>{headline}</p>
+          <GrowthAsk p={p} />
           {im.kind === "ok" && growthAsk !== null && growthAsk >= 20 && (
             <p className="text-[11.5px] leading-snug text-muted-foreground">{he
               ? <>לפרופורציה: מתוך החברות שצמחו ביותר מ-{ltr("20%")} בשנה ב-{ltr("1994")}, רק {ltr("13%")} עדיין צמחו בקצב כזה עשר שנים אחר כך (<a href={MCKINSEY} target="_blank" rel="noopener noreferrer" className="underline">McKinsey</a>). קשה לשמור על צמיחה מהירה.</>

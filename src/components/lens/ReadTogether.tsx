@@ -10,6 +10,7 @@ import { buildScenarios } from "@/lib/lens/valuation";
 import { useLensLang } from "@/lib/lens/i18n";
 import { touchLab } from "@/lib/labs";
 import AiMarkdown from "@/components/ai/AiMarkdown";
+import { ReturnMap } from "./LensVisuals";
 
 /**
  * "Read together": the metrics that only make sense as a set (margin × capital use = return on capital,
@@ -49,6 +50,7 @@ export default function ReadTogether({ p, proven }: { p: LensPayload; proven: Pr
         </button>
       </div>
       <p className="px-3 pb-1 pt-1 text-[11.5px] text-muted-foreground">{he ? "מדדים שמשמעותם מתבררת רק כשקוראים אותם יחד." : "Metrics that only mean something when read as a set."}</p>
+      <ReturnMap p={p} />
       <div className="divide-y divide-border/60">
         {reads.map((r) => <ReadRow key={r.id} r={r} open={open === r.id} onToggle={() => setOpen(open === r.id ? null : r.id)} />)}
       </div>

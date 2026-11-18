@@ -80,7 +80,8 @@ export default function ThemeTracker({
   const { bySymbol: stageBy, loading: stagesLoading } = useStockStages(tf === "YTD");
 
   // ── Live since-open ──
-  const { live, loading: liveLoading, error: liveError, refresh: fetchOpen } = useLiveSession(tf === "open");
+  const liveSymbols = useMemo(() => (groupMode === "theme" ? [] : [...new Set(baseThemes.flatMap((t) => t.tickers.filter((tk) => !tk.skipped).map((tk) => tk.symbol.toUpperCase())))]), [groupMode, baseThemes]);
+  const { live, loading: liveLoading, error: liveError, refresh: fetchOpen } = useLiveSession(tf === "open", liveSymbols);
 
   // ── Groups ──
   const groups = useMemo(() => {
