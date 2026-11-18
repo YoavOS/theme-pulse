@@ -21,7 +21,7 @@
 //   CEREBRAS_MODEL, OPENROUTER_MODEL.
 // Running on your own PC: LOCAL_LLM_URL (an Ollama server, e.g. http://host.docker.internal:11434)
 //   and LOCAL_LLM_MODEL put the local model first in every chain — free, private, no rate limits.
-//   LOCAL_LLM_CTX (context tokens, default 32768) and LOCAL_LLM_THINK ("true" lets reasoning models think).
+//   LOCAL_LLM_CTX (context tokens, default 16384) and LOCAL_LLM_THINK ("true" lets reasoning models think).
 
 export type LlmTask = "long" | "fast" | "grounded";
 
@@ -43,7 +43,7 @@ const GEMINI_TIMEOUT_MS = 30_000;
 const OTHER_TIMEOUT_MS = 40_000;
 const LOCAL_URL = env("LOCAL_LLM_URL").replace(/\/+$/, "");
 const LOCAL_MODEL = env("LOCAL_LLM_MODEL") || "qwen3.8:27b";
-const LOCAL_CTX = Number(env("LOCAL_LLM_CTX")) || 32768;
+const LOCAL_CTX = Number(env("LOCAL_LLM_CTX")) || 16384;
 const LOCAL_THINK = env("LOCAL_LLM_THINK") === "true";
 // a local model has no wall-clock limit to respect, but a big prompt takes a while to read
 const LOCAL_TIMEOUT_MS = Number(env("LOCAL_LLM_TIMEOUT_MS")) || 45_000;
@@ -204,7 +204,7 @@ export function toOllamaRequest(body: Body): Body {
     return out;
   });
   const req: Body = {
-    model: LOCAL_MODEL, messages, stream: false, think: LOCAL_THINK, keep_alive: "30m",
+    model: LOCAL_MODEL, messages, stream: false, think: LOCAL_THINK, keep_alive: "5m",
     options: { num_ctx: LOCAL_CTX, temperature: typeof body.temperature === "number" ? body.temperature : 0.3, ...(typeof body.max_tokens === "number" ? { num_predict: body.max_tokens + (LOCAL_THINK ? 4096 : 0) } : {}) },
   };
   if (body.tools) req.tools = body.tools;
