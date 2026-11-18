@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Loader2, Play, Search } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import type { AiLang } from "@/lib/ai";
+import { invokeAi, waitJob, type AiLang } from "@/lib/ai";
 import { touchLab } from "@/lib/labs";
 import { rulePart, type Rule } from "@/lib/patterns";
 import AiMarkdown from "./AiMarkdown";
@@ -18,9 +18,7 @@ interface Run { id: number; created_at: string; split_date: string; thresholds: 
 interface Match { rule_a: number; rule_abin: number; rule_b: number | null; rule_bbin: number | null; symbol: string }
 
 async function call(body: Record<string, unknown>) {
-  const { data, error } = await supabase.functions.invoke("pattern-finder", { body });
-  if (error || data?.error) throw new Error(data?.error ?? error?.message);
-  return data;
+  return invokeAi("pattern-finder", body);
 }
 
 export default function PatternsView({ lang }: { lang: AiLang }) {
@@ -52,8 +50,13 @@ export default function PatternsView({ lang }: { lang: AiLang }) {
         if (r.done) break;
       }
       setBusy(he ? "מחפש דפוסים ובודק אותם על תקופה חדשה (עד כמה דקות)…" : "Finding patterns and checking them on a newer period (up to a few minutes)…");
-      await call({ action: "mine" });
+      const m = await call({ action: "mine" });
       await load();
+      if (m?.jobs?.length) {
+        setBusy(he ? "ה-AI כותב הסבר לדפוסים…" : "The AI is writing the explanation…");
+        await Promise.all(m.jobs.map((id: number) => waitJob("pattern-finder", id).catch(() => undefined)));
+        await load();
+      }
     } catch (e) { toast.error(e instanceof Error ? e.message : String(e)); } finally { setBusy(null); }
   };
 

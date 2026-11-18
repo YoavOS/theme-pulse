@@ -9,7 +9,8 @@
 // deno-lint-ignore-file no-explicit-any
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/cors.ts";
-import { extractJson, hasAnyLlm, llmFetch } from "../_shared/llm.ts";
+import { extractJson, hasAnyLlm } from "../_shared/llm.ts";
+import { jobState, runAi, type Finisher } from "../_shared/aiJobs.ts";
 import { SEC_UA, secCik } from "../_shared/secFundamentals.ts";
 import { clipText, diffRisks, htmlToText, riskHeadings, tenKSections } from "../_shared/filingText.ts";
 
@@ -88,12 +89,11 @@ function verifyQuotes(x: any, texts: Record<string, string>) {
   return x;
 }
 
-async function ai(messages: any[], label: string) {
-  const res = await llmFetch({ model: "openai/gpt-oss-120b", reasoning_effort: "low", temperature: 0.2, max_tokens: 5000, response_format: { type: "json_object" }, messages }, { task: "long", label });
-  const j = await res.json();
-  if (!res.ok) throw new Error(j?.error?.message ?? `AI error ${res.status}`);
-  return { data: JSON.parse(extractJson(j.choices?.[0]?.message?.content ?? "{}")), model: `${j.provider}/${j.model}` };
-}
+const FIN: Record<string, Finisher> = {};
+/** One model call: queued on the PC model (→ { job }) or answered now on the cloud keys (→ the finisher's output). */
+const ai = (sb: any, kind: string, params: any, messages: any[], label: string) =>
+  runAi(sb, "company-file", kind, params, { model: "openai/gpt-oss-120b", reasoning_effort: "low", temperature: 0.2, max_tokens: 5000, response_format: { type: "json_object" }, messages }, FIN[kind], { label });
+const parsed = (msg: any) => JSON.parse(extractJson(msg?.content ?? "{}"));
 const LANG = (lang: string) => (lang === "he" ? "Write every text value in natural Hebrew (gender-neutral), but keep each \"quote\" exactly as it appears in the English filing." : "Write in plain English for a beginner in fundamentals.");
 
 async function story(sb: any, symbol: string, lang: string) {
@@ -101,7 +101,7 @@ async function story(sb: any, symbol: string, lang: string) {
   if (!t) return json({ error: "prepare first" }, 409);
   const { data: years } = await sb.from("company_year_metrics").select("fy_end, revenue, rev_growth, op_margin, margin, spread, reinvest, rnd_rev, sbc_rev").eq("symbol", symbol).order("fy_end", { ascending: false }).limit(6);
   const numbers = { annual: (years ?? []).reverse(), backlog_rpo: t.rpo };
-  const r = await ai([
+  return json(await ai(sb, "story", { symbol, lang }, [
     { role: "system", content: `You read SEC filings for a private momentum trader who is learning fundamentals the way Aswath Damodaran teaches them. Use only the texts given. Never invent facts or numbers. ${LANG(lang)} Reply with one JSON object.` },
     { role: "user", content: `Company: ${symbol}. 10-K filed ${t.tenk_filed}; earnings release filed ${t.release_filed ?? "n/a"}.
 Return JSON with:
@@ -124,37 +124,44 @@ ${clipText(t.business ?? "", 16_000)}
 ${clipText(t.mdna ?? "", 16_000)}
 --- EARNINGS RELEASE ---
 ${clipText(t.release ?? "", 9_000)}` },
-  ], "company-file:story");
-  const data = verifyQuotes(r.data, { business: t.business ?? "", mdna: t.mdna ?? "", release: t.release ?? "", risks: t.risks ?? "" });
+  ], "company-file:story"));
+}
+FIN.story = async (sb, { symbol, lang }, msg, model) => {
+  const { data: t } = await sb.from("filing_texts").select("*").eq("symbol", symbol).maybeSingle();
+  const data = verifyQuotes(parsed(msg), { business: t.business ?? "", mdna: t.mdna ?? "", release: t.release ?? "", risks: t.risks ?? "" });
   const { data: prev } = await sb.from("company_files").select("data").eq("symbol", symbol).eq("lang", lang).maybeSingle();
   const merged = { ...(prev?.data ?? {}), ...data, sources: { tenK: { url: t.tenk_url, filed: t.tenk_filed }, release: t.release_url ? { url: t.release_url, filed: t.release_filed } : null }, rpo: t.rpo };
-  await sb.from("company_files").upsert({ symbol, lang, tenk_acc: t.tenk_acc, release_acc: t.release_acc, data: merged, model: r.model, created_at: new Date().toISOString() }, { onConflict: "symbol,lang" });
-  return json({ ok: true, model: r.model });
-}
+  await sb.from("company_files").upsert({ symbol, lang, tenk_acc: t.tenk_acc, release_acc: t.release_acc, data: merged, model, created_at: new Date().toISOString() }, { onConflict: "symbol,lang" });
+  return { ok: true, model };
+};
 
 async function risks(sb: any, symbol: string, lang: string) {
   const { data: t } = await sb.from("filing_texts").select("risks_added, risks_removed, tenk_filed, prev_filed, risks").eq("symbol", symbol).maybeSingle();
   if (!t) return json({ error: "prepare first" }, 409);
   const added: string[] = t.risks_added ?? [], removed: string[] = t.risks_removed ?? [];
-  let result: any = { added: added.length, removed: removed.length, summary: null, notable: [] };
-  if (added.length || removed.length) {
-    const r = await ai([
+  const base = { added: added.length, removed: removed.length, summary: null, notable: [], allAdded: added, allRemoved: removed, since: t.prev_filed };
+  if (!added.length && !removed.length) return json(await saveRisks(sb, symbol, lang, base));
+  {
+    return json(await ai(sb, "risks", { symbol, lang, base }, [
       { role: "system", content: `You compare a company's risk factors between two annual reports. ${LANG(lang)} Reply with one JSON object.` },
       { role: "user", content: `${symbol}: risk-factor headings NEW in the 10-K filed ${t.tenk_filed} (not in the one filed ${t.prev_filed}), and headings DROPPED.
 Return {"summary": 2-3 sentences on what changed and what it suggests, "notable": [{"heading": the exact heading, "kind": "new|dropped", "why": why it matters, one sentence}] (max 6, most important first)}.
 NEW:\n${added.slice(0, 40).map((h) => "- " + h).join("\n")}\nDROPPED:\n${removed.slice(0, 40).map((h) => "- " + h).join("\n")}` },
-    ], "company-file:risks");
-    result = { ...result, ...r.data, model: r.model };
+    ], "company-file:risks"));
   }
+}
+FIN.risks = async (sb, { symbol, lang, base }, msg, model) => saveRisks(sb, symbol, lang, { ...base, ...parsed(msg), model });
+async function saveRisks(sb: any, symbol: string, lang: string, riskChanges: any) {
   const { data: prev } = await sb.from("company_files").select("data").eq("symbol", symbol).eq("lang", lang).maybeSingle();
-  await sb.from("company_files").upsert({ symbol, lang, data: { ...(prev?.data ?? {}), riskChanges: { ...result, allAdded: added, allRemoved: removed, since: t.prev_filed } } }, { onConflict: "symbol,lang" });
-  return json({ ok: true, ...result });
+  await sb.from("company_files").upsert({ symbol, lang, data: { ...(prev?.data ?? {}), riskChanges } }, { onConflict: "symbol,lang" });
+  return { ok: true, added: riskChanges.added, removed: riskChanges.removed };
 }
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   try {
     const body = await req.json().catch(() => ({}));
+    if (body.action === "job" || body.action === "finish") return json(await jobState(createClient(SB_URL, SB_KEY), Number(body.id ?? body.job), FIN));
     const symbol = String(body.symbol ?? "").toUpperCase().replace(/[^A-Z0-9.\-]/g, "");
     if (!symbol) return json({ error: "symbol required" }, 400);
     const lang = body.lang === "he" ? "he" : "en";

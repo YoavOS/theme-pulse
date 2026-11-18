@@ -16,7 +16,7 @@ export const HE_TRACK_TEXT: Record<ProvenTrack, string> = {
   capital_light: "דלת הון (רווחים ומזומנים)", young: "חברה צעירה — נשפטת לפי הכיוון",
 };
 export const HE_ARCHETYPE: Record<string, string> = {
-  capital_light_compounder: "קומפאונדר דל הון", high_margin: "מסלול הרווחיות הגבוהה", high_turnover: "מסלול המחזור הגבוה",
+  capital_light_compounder: "צומחת בהון מועט", high_margin: "מסלול הרווחיות הגבוהה", high_turnover: "מסלול המחזור הגבוה",
   asset_heavy: "עתירת נכסים", rd_innovator: "מונעת מחקר ופיתוח", reinvesting_compounder: "משקיעה מחדש בתשואה גבוהה",
   cyclical: "מחזורית", capital_negative: "רצה על הכסף של אחרים", serial_acquirer: "צומחת ברכישות",
 };

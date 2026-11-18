@@ -204,7 +204,7 @@ function AskView({ lang }: { lang: AiLang }) {
     setInput(""); setBusy(true); setLive([]);
     try {
       const r = await askAi(q, history, setLive);
-      setMsgs((m) => [...m, { role: "assistant", content: r.answer, steps: r.steps, model: `${r.provider}/${r.model}` }]);
+      setMsgs((m) => [...m, { role: "assistant", content: r.answer, steps: r.steps, model: r.model }]);
     } catch (e) {
       setMsgs((m) => [...m, { role: "assistant", content: `⚠️ ${e instanceof Error ? e.message : String(e)}` }]);
     } finally { setBusy(false); }
@@ -284,7 +284,7 @@ function StockView({ lang, initial, onSymbol }: { lang: AiLang; initial: string 
     setBusy(true);
     try {
       const r = await aiStock(s, lang);
-      setSaved({ id: 0, kind: "stock", day: "", lang, subject: s, title: `${s} analysis`, content: r.content, model: `${r.provider}/${r.model}`, created_at: new Date().toISOString() });
+      setSaved({ id: 0, kind: "stock", day: "", lang, subject: s, title: `${s} analysis`, content: r.content, model: r.model, created_at: new Date().toISOString() });
     } catch (e) { toast.error(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); }
   };
   const submit = () => { const s = input.trim().toUpperCase(); if (!s) return; setSymbol(s); onSymbol(s); };

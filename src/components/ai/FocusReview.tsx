@@ -34,7 +34,7 @@ export default function FocusReview({ lang }: { lang: AiLang }) {
   const run = async () => {
     touchLab("ai-focus");
     setBusy(true);
-    try { const r = await aiFocus(groups, lang); setRes({ text: r.content, model: `${r.provider}/${r.model}` }); }
+    try { const r = await aiFocus(groups, lang); setRes({ text: r.content, model: r.model }); }
     catch (e) { toast.error(e instanceof Error ? e.message : String(e)); }
     finally { setBusy(false); }
   };

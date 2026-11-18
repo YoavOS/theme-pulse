@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Bot, Download, Loader2, Plus, Trash2, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import type { AiLang } from "@/lib/ai";
+import { invokeAi, type AiLang } from "@/lib/ai";
 import { touchLab } from "@/lib/labs";
 import AiMarkdown from "./AiMarkdown";
 
@@ -63,9 +63,8 @@ export default function JournalView({ lang }: { lang: AiLang }) {
   const runReview = async () => {
     setBusy(true);
     try {
-      const { data, error } = await supabase.functions.invoke("ai-analyst", { body: { action: "journal", lang } });
-      if (error || data?.error) throw new Error(data?.error ?? error?.message);
-      setReview({ content: data.content, model: `${data.provider}/${data.model}` });
+      const data = await invokeAi("ai-analyst", { action: "journal", lang });
+      setReview({ content: data.content, model: data.model });
     } catch (e) { toast.error(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); }
   };
   const F = (k: keyof Entry, label: string, type = "text", wide = false) => (

@@ -137,7 +137,7 @@ BEGIN
   -- something started in the last 4 minutes is still running
   SELECT max(last_done) INTO busy FROM public.local_runs WHERE step IN ('lists', 'lines-en', 'lines-he');
   IF busy > now() - interval '4 minutes' THEN RETURN 'busy'; END IF;
-  IF (SELECT last_done FROM public.local_runs WHERE step = 'bars') > now() - interval '115 seconds' THEN RETURN 'busy'; END IF;
+  IF (SELECT last_done FROM public.local_runs WHERE step = 'bars') > now() - interval '70 seconds' THEN RETURN 'busy'; END IF;
 
   IF EXISTS (SELECT 1 FROM public.daily_bars_due(1)) THEN
     PERFORM public.local_call('daily-bars', '{}'::jsonb);
@@ -167,3 +167,22 @@ BEGIN
 END $$;
 REVOKE ALL ON FUNCTION public.local_lists_tick() FROM anon, authenticated, PUBLIC;
 SELECT cron.schedule('local-lists-tick', '*/2 * * * *', 'SELECT public.local_lists_tick()');
+
+-- PC-model jobs (see migration 20261118160000_ai_jobs): once a minute, hand every answered job back to the
+-- function that submitted it so it can store the result (the page also does this when it asks for the result).
+CREATE OR REPLACE FUNCTION public.local_ai_jobs_tick() RETURNS int
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, extensions AS $$
+DECLARE j record; n int := 0;
+BEGIN
+  IF to_regclass('public.ai_jobs') IS NULL THEN RETURN 0; END IF;
+  FOR j IN SELECT a.id, a.fn FROM public.ai_jobs a
+           WHERE a.status = 'running' AND (EXISTS (SELECT 1 FROM net._http_response r WHERE r.id = a.request_id) OR a.created_at < now() - interval '16 minutes')
+           LIMIT 10 LOOP
+    PERFORM public.local_call(j.fn, jsonb_build_object('action', 'finish', 'job', j.id));
+    n := n + 1;
+  END LOOP;
+  DELETE FROM public.ai_jobs WHERE created_at < now() - interval '7 days';
+  RETURN n;
+END $$;
+REVOKE ALL ON FUNCTION public.local_ai_jobs_tick() FROM anon, authenticated, PUBLIC;
+SELECT cron.schedule('local-ai-jobs', '* * * * *', 'SELECT public.local_ai_jobs_tick()');

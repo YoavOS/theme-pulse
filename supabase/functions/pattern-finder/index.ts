@@ -7,7 +7,15 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/cors.ts";
 import { samplesFor } from "../_shared/patternFeatures.ts";
 import type { Bars } from "../_shared/lists.ts";
-import { hasAnyLlm, llmFetch } from "../_shared/llm.ts";
+import { hasAnyLlm } from "../_shared/llm.ts";
+import { jobState, runAi, type Finisher } from "../_shared/aiJobs.ts";
+
+const FIN: Record<string, Finisher> = {
+  patterns: async (sb, { rid, lang }, msg, model) => {
+    await sb.from("pattern_runs").update({ [lang === "he" ? "ai_text_he" : "ai_text"]: msg.content ?? "", ai_model: model }).eq("id", rid);
+    return { ok: true };
+  },
+};
 
 const SB_URL = Deno.env.get("SUPABASE_URL")!;
 const SB_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -37,7 +45,7 @@ async function samples(sb: any) {
   }
   const todo = uni.filter((u) => (prog.get(u.symbol) ?? "") < lastBar);
   let done = 0, rows = 0;
-  for (let i = 0; i < todo.length && Date.now() - t0 < 100_000; i += 40) {
+  for (let i = 0; i < todo.length && Date.now() - t0 < 45_000; i += 40) {
     const chunk = todo.slice(i, i + 40);
     const { data, error } = await sb.rpc("bars_arrays", { syms: chunk.map((u) => u.symbol), n: 1400 });
     if (error) return json({ error: error.message }, 500);
@@ -76,19 +84,16 @@ async function mine(sb: any) {
   const facts = { big_winner: "rose 30%+ (best close) within the next 60 sessions", split_date: run.split_date,
     base_rate_older: +(100 * run.base_train).toFixed(1), base_rate_newer: +(100 * run.base_test).toFixed(1), samples_older: run.n_train, samples_newer: run.n_test,
     held_up: (held ?? []).map(fmt), looked_good_then_failed: (failed ?? []).map(fmt) };
-  const texts: Record<string, string> = {};
-  let model = "";
+  const jobs: number[] = [];
   for (const lang of ["en", "he"]) {
-    const res = await llmFetch({ model: "openai/gpt-oss-120b", reasoning_effort: "low", temperature: 0.3, max_tokens: 3000, messages: [
+    const out: any = await runAi(sb, "pattern-finder", "patterns", { rid, lang }, { model: "openai/gpt-oss-120b", reasoning_effort: "low", temperature: 0.3, max_tokens: 3000, messages: [
       { role: "system", content: `You explain statistical findings to a momentum trader (21 EMA pullbacks and breakouts). Use only the facts. ${lang === "he" ? "Write in natural Hebrew, gender-neutral toward the reader; keep EMA, RS, SPY as is." : "Write in plain English."} No buy/sell advice.` },
       { role: "user", content: `The app scanned years of daily prices and asked: what did stocks look like before they became big winners? Patterns were found on the older period and then checked on a newer period they never saw.
 Write markdown: ## What held up (the 4–6 strongest held-up patterns in plain trading words — what the setup looks like on a chart, how much more often it led to big winners than average in the newer period, with case counts) ## What looked good but didn't hold up (and why that matters) ## How to use this (as a filter for what to study, not a signal) ## Limits (only today's listed stocks — delisted losers are missing, so results lean optimistic; markets change; a lift of 2 means twice the base rate, which is still a minority of cases).
-FACTS: ${JSON.stringify(facts)}` }] }, { task: "long", label: "patterns" });
-    const j = await res.json();
-    if (res.ok) { texts[lang] = j.choices?.[0]?.message?.content ?? ""; model = `${j.provider}/${j.model}`; }
+FACTS: ${JSON.stringify(facts)}` }] }, FIN.patterns, { label: "patterns" }).catch((e: unknown) => ({ error: String(e) }));
+    if (out?.job) jobs.push(out.job);
   }
-  await sb.from("pattern_runs").update({ ai_text: texts.en ?? null, ai_text_he: texts.he ?? null, ai_model: model }).eq("id", rid);
-  return json({ ok: true, runId: rid, held: held?.length ?? 0 });
+  return json({ ok: true, runId: rid, held: held?.length ?? 0, jobs });
 }
 
 Deno.serve(async (req) => {
@@ -96,6 +101,7 @@ Deno.serve(async (req) => {
   try {
     const body = await req.json().catch(() => ({}));
     const sb = createClient(SB_URL, SB_KEY);
+    if (body.action === "job" || body.action === "finish") return json(await jobState(sb, Number(body.id ?? body.job), FIN));
     if (body.action === "samples") return await samples(sb);
     if (body.action === "mine") return await mine(sb);
     const [{ count: done }, { count: total }, { count: n }] = await Promise.all([

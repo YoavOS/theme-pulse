@@ -156,5 +156,6 @@ export function heServer(s: string | null | undefined): string {
   const hit = HE_EXACT[s];
   if (hit !== undefined) return hit;
   for (const [re, f] of PATTERNS) { const m = s.match(re); if (m) return f(...m); }
-  return s;
+  // percentage points: "+7.1 pp" → "+7.1 נק'"
+  return s.replace(/(\d)\s?pp\b/g, "$1 נק'");
 }

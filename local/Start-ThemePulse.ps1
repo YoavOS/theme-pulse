@@ -183,6 +183,10 @@ if ($LASTEXITCODE -ne 0) { Fail "Setting up the scheduled jobs failed." }
 $settings = "INSERT INTO public.local_settings(key, value) VALUES ('functions_url', 'http://${kong}:8000/functions/v1'), ('anon_key', '$anon') ON CONFLICT (key) DO UPDATE SET value = excluded.value;"
 $settings | docker exec -i $db psql -U postgres -d postgres -v ON_ERROR_STOP=1 -q
 if ($LASTEXITCODE -ne 0) { Fail "Saving the job settings failed." }
+# long AI jobs go from the database straight to the AI on this PC (no time limit per request)
+if ($aiReady) { $aiSql = "INSERT INTO public.local_settings(key, value) VALUES ('ollama_url', 'http://host.docker.internal:11434') ON CONFLICT (key) DO UPDATE SET value = excluded.value;" }
+else { $aiSql = "DELETE FROM public.local_settings WHERE key = 'ollama_url';" }
+$aiSql | docker exec -i $db psql -U postgres -d postgres -q
 
 # -- 7. Daily backup of your data (kept for 14 days) ----------------------------------------
 $BackupDir = Join-Path $Root "local\backups"

@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { BookOpenText, ChevronDown, Link2, Loader2, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
-import { supabase } from "@/integrations/supabase/client";
+import { invokeAi } from "@/lib/ai";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import type { LensPayload } from "@/lib/lens/types";
 import type { ProvenRow } from "@/lib/proven/types";
@@ -34,8 +34,7 @@ export default function ReadTogether({ p, proven }: { p: LensPayload; proven: Pr
     setBusy(true);
     try {
       const facts = buildFacts(p, proven, linkedReads(p, false));
-      const { data, error } = await supabase.functions.invoke("ai-analyst", { body: { action: "longstory", symbol: p.symbol, lang: he ? "he" : "en", facts, factsAt: p.computedAt, refresh } });
-      if (error || data?.error) throw new Error(data?.error ?? error?.message);
+      const data = await invokeAi("ai-analyst", { action: "longstory", symbol: p.symbol, lang: he ? "he" : "en", facts, factsAt: p.computedAt, refresh });
       setStory(data);
     } catch (e) { toast.error(e instanceof Error ? e.message : String(e)); setShow(false); } finally { setBusy(false); }
   };

@@ -3,17 +3,21 @@
 //
 //   POST { action: "ask", question, history?, state?, lang? }
 //        Ask-your-data chat. The model may look things up (read-only SQL, stock profiles, the market
-//        digest) over several rounds. Each call works for at most ~100 s; if it isn't finished it
-//        returns { done:false, state } and the page calls again with that state.
+//        digest) over several rounds (one model call per round).
 //   POST { action: "stock", symbol, lang? }          one-stock analysis from everything the app knows
 //   POST { action: "focus", blocks, lang? }          review of the focus list (blocks = the organizer's groups)
 //   POST { action: "report", lang? }                 write tonight's market report and save it (ai_reports)
 //   POST { action: "latest", kind?, lang? }          the newest saved report
 //   POST { action: "status" }                        which model is answering
+//   POST { action: "job", id }                       state of a queued PC-model job: { status, output } (finishes it if answered)
+//   POST { action: "finish", job }                   the database's collector: finish an answered job
+// On the PC model every AI action returns { job } at once and the answer arrives through "job"; on the cloud keys
+// it answers directly. See _shared/aiJobs.ts.
 // deno-lint-ignore-file no-explicit-any
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/cors.ts";
-import { extractJson, hasAnyLlm, llmFetch } from "../_shared/llm.ts";
+import { extractJson, hasAnyLlm } from "../_shared/llm.ts";
+import { jobState, runAi, type Finisher } from "../_shared/aiJobs.ts";
 import { DATA_GUIDE, headlines, langLine, liveColumns, marketDigest, sql, stockProfile } from "../_shared/aiData.ts";
 import { tradeContext } from "../_shared/journal.ts";
 
@@ -28,14 +32,14 @@ Use only the data you are given or look up; say plainly when something is missin
 Describe what the data shows (strength, stage, setup, risk) — do not tell the reader to buy or sell, and no price targets.
 Markdown: short headed sections and bullets, tickers in **bold**. Be concrete and brief.`;
 
-async function chat(messages: any[], opts: { task?: "long" | "fast"; label: string; tools?: any[]; maxTokens?: number }) {
-  const res = await llmFetch({
+const FIN: Record<string, Finisher> = {};
+/** Send one model call: queued on the PC model (returns { job }) or answered now on the cloud keys (returns the finisher's output). */
+function go(sb: any, kind: string, params: any, messages: any[], opts: { task?: "long" | "fast"; label: string; tools?: any[]; maxTokens?: number; json?: boolean }) {
+  const body = {
     model: "openai/gpt-oss-120b", reasoning_effort: "low", temperature: 0.3, max_tokens: opts.maxTokens ?? 2500,
-    messages, ...(opts.tools ? { tools: opts.tools, tool_choice: "auto" } : {}),
-  }, { task: opts.task ?? "long", label: opts.label });
-  const j = await res.json();
-  if (!res.ok) throw new Error(j?.error?.message ?? `AI error ${res.status}`);
-  return { msg: j.choices?.[0]?.message ?? {}, provider: j.provider as string, model: j.model as string };
+    messages, ...(opts.tools ? { tools: opts.tools, tool_choice: "auto" } : {}), ...(opts.json ? { response_format: { type: "json_object" } } : {}),
+  };
+  return runAi(sb, "ai-analyst", kind, params, body, FIN[kind], { task: opts.task, label: opts.label });
 }
 
 // ---------------------------------------------------------------- ask your data
@@ -82,27 +86,26 @@ When you have enough, answer the question directly. Reply in the language the qu
       ...history, { role: "user", content: q },
     ];
   }
-  let provider = "", model = "";
-  for (let round = 0; round < 8; round++) {
-    const last = round === 7;
-    const r = await chat(state, { label: "ai-ask", tools: last ? undefined : TOOLS, maxTokens: 3000 });
-    provider = r.provider; model = r.model;
-    const calls = r.msg.tool_calls ?? [];
-    if (!calls.length) return json({ done: true, answer: r.msg.content ?? "", steps, provider, model });
-    state.push({ role: "assistant", content: r.msg.content ?? "", tool_calls: calls });
-    for (const c of calls) {
-      let args: any = {};
-      try { args = typeof c.function?.arguments === "string" ? JSON.parse(c.function.arguments || "{}") : (c.function?.arguments ?? {}); } catch { /* bad args */ }
-      const t = await runTool(sb, c.function?.name, args);
-      steps.push(t.step);
-      state.push({ role: "tool", tool_call_id: c.id, name: c.function?.name, content: t.result });
-    }
-    if (Date.now() - started > BUDGET) return json({ done: false, state, steps, provider, model });
-  }
-  state.push({ role: "user", content: "Answer now with what you have." });
-  const r = await chat(state, { label: "ai-ask" });
-  return json({ done: true, answer: r.msg.content ?? "", steps, provider: r.provider, model: r.model });
+  return json(await go(sb, "ask", { state, steps, round: 0 }, state, { label: "ai-ask", tools: TOOLS, maxTokens: 3000 }));
 }
+FIN.ask = async (sb, params, msg, model) => {
+  const state: any[] = params.state ?? [], steps: any[] = params.steps ?? [];
+  const round = Number(params.round ?? 0);
+  const calls = msg.tool_calls ?? [];
+  if (!calls.length) return { done: true, answer: msg.content ?? "", steps, model };
+  state.push({ role: "assistant", content: msg.content ?? "", tool_calls: calls });
+  for (const c of calls) {
+    let args: any = {};
+    try { args = typeof c.function?.arguments === "string" ? JSON.parse(c.function.arguments || "{}") : (c.function?.arguments ?? {}); } catch { /* bad args */ }
+    const t = await runTool(sb, c.function?.name, args);
+    steps.push(t.step);
+    state.push({ role: "tool", tool_call_id: c.id, name: c.function?.name, content: t.result });
+  }
+  const last = round >= 6;
+  if (last) state.push({ role: "user", content: "Answer now with what you have." });
+  const next: any = await go(sb, "ask", { state, steps, round: round + 1 }, state, { label: "ai-ask", tools: last ? undefined : TOOLS, maxTokens: 3000 });
+  return next?.job ? { next: next.job, steps } : next;
+};
 
 // ---------------------------------------------------------------- one stock
 async function stock(sb: any, body: any) {
@@ -110,7 +113,7 @@ async function stock(sb: any, body: any) {
   if (!symbol) return json({ error: "symbol required" }, 400);
   const lang = body.lang === "he" ? "he" : "en";
   const [profile, news] = await Promise.all([stockProfile(sb, symbol), headlines(symbol)]);
-  const r = await chat([
+  return json(await go(sb, "stock", { symbol, lang, profile }, [
     { role: "system", content: `${STYLE}\n${langLine(lang)}` },
     { role: "user", content: `Analyse ${symbol} for me from the app's data below. Sections:
 1. The picture in two sentences.
@@ -120,11 +123,13 @@ async function stock(sb: any, body: any) {
 5. News — what the headlines suggest, if anything.
 6. What to watch — the 3 facts that would change the picture, and the main risks.
 Data (JSON):\n${clip(profile, 14000)}\nHeadlines:\n${clip(news, 3000)}` },
-  ], { label: "ai-stock", maxTokens: 2500 });
-  const content = r.msg.content ?? "";
-  await sb.from("ai_reports").insert({ kind: "stock", day: today(), lang, subject: symbol, title: `${symbol} analysis`, content, data: profile, model: `${r.provider}/${r.model}` });
-  return json({ content, data: profile, provider: r.provider, model: r.model });
+  ], { label: "ai-stock", maxTokens: 2500 }));
 }
+FIN.stock = async (sb, { symbol, lang, profile }, msg, model) => {
+  const content = msg.content ?? "";
+  await sb.from("ai_reports").insert({ kind: "stock", day: today(), lang, subject: symbol, title: `${symbol} analysis`, content, data: profile, model });
+  return { content, model };
+};
 
 // ---------------------------------------------------------------- focus list
 async function focus(sb: any, body: any) {
@@ -142,18 +147,20 @@ async function focus(sb: any, body: any) {
     from qualified_rs_universe u left join stock_stages s using (symbol) where u.sector in (select sector from qualified_rs_universe where symbol in (${list}))
     group by 1`, 60).catch(() => []);
   const missing = symbols.filter((s) => !rows.some((r: any) => r.symbol === s));
-  const r = await chat([
+  return json(await go(sb, "focus", { lang, symbols, rows }, [
     { role: "system", content: `${STYLE}\n${langLine(lang)}` },
     { role: "user", content: `Review my focus list. Groups as I organised them:\n${clip(blocks.map((b) => ({ group: b.title ?? b.name, symbols: b.symbols, notes: Array.isArray(b.notes) ? b.notes.slice(0, 20) : undefined })), 6000)}
 Each stock's data:\n${clip(rows, 14000)}\nTheir industries:\n${clip(industries, 4000)}\nNot in the universe (no data): ${missing.join(", ") || "none"}
 Sections: 1) The list in a sentence (how strong, how concentrated). 2) Strongest setups now — closest to a pivot with a tight stop and a strong stage/RS.
 3) Weak spots — stocks whose stage, RS or base has broken down, or earnings within ~2 weeks. 4) Concentration — industries/themes over-represented, and strong industries missing.
 5) Housekeeping — names to consider moving between groups or dropping from focus, with the one-line reason from the data. No buy/sell instructions.` },
-  ], { label: "ai-focus", maxTokens: 2500 });
-  const content = r.msg.content ?? "";
-  await sb.from("ai_reports").insert({ kind: "focus", day: today(), lang, subject: "focus", title: "Focus list review", content, data: { symbols, rows }, model: `${r.provider}/${r.model}` });
-  return json({ content, provider: r.provider, model: r.model });
+  ], { label: "ai-focus", maxTokens: 2500 }));
 }
+FIN.focus = async (sb, { lang, symbols, rows }, msg, model) => {
+  const content = msg.content ?? "";
+  await sb.from("ai_reports").insert({ kind: "focus", day: today(), lang, subject: "focus", title: "Focus list review", content, data: { symbols, rows }, model });
+  return { content, model };
+};
 
 // ---------------------------------------------------------------- nightly report
 async function report(sb: any, body: any) {
@@ -161,7 +168,7 @@ async function report(sb: any, body: any) {
   // reuse today's digest if the other language already gathered it
   const { data: prev } = await sb.from("ai_reports").select("data").eq("kind", "market").eq("day", today()).limit(1).maybeSingle();
   const digest = prev?.data && !body.fresh ? prev.data : await marketDigest(sb);
-  const r = await chat([
+  return json(await go(sb, "report", { lang, digest, day: today() }, [
     { role: "system", content: `${STYLE}\n${langLine(lang)}` },
     { role: "user", content: `Write tonight's market report for ${today()} from the app's data below.
 Sections: 1) The market in three sentences (index stages, breadth: how much of the universe is in stage 2 vs 4).
@@ -171,13 +178,15 @@ Sections: 1) The market in three sentences (index stages, breadth: how much of t
 5) Warnings — new stage 4s, weak industries, failed breakouts.
 6) One thing to watch tomorrow.
 Keep it under ~600 words. Data (JSON):\n${clip(digest, 24000)}` },
-  ], { label: "ai-report", maxTokens: 3000 });
-  const content = r.msg.content ?? "";
-  if (!content.trim()) return json({ error: "empty report" }, 502);
-  await sb.from("ai_reports").delete().eq("kind", "market").eq("day", today()).eq("lang", lang);
-  await sb.from("ai_reports").insert({ kind: "market", day: today(), lang, subject: "market", title: lang === "he" ? `דוח שוק ${today()}` : `Market report ${today()}`, content, data: digest, model: `${r.provider}/${r.model}` });
-  return json({ ok: true, lang, provider: r.provider, model: r.model, chars: content.length });
+  ], { label: "ai-report", maxTokens: 3000 }));
 }
+FIN.report = async (sb, { lang, digest, day }, msg, model) => {
+  const content = msg.content ?? "";
+  if (!content.trim()) throw new Error("empty report");
+  await sb.from("ai_reports").delete().eq("kind", "market").eq("day", day).eq("lang", lang);
+  await sb.from("ai_reports").insert({ kind: "market", day, lang, subject: "market", title: lang === "he" ? `דוח שוק ${day}` : `Market report ${day}`, content, data: digest, model });
+  return { ok: true, lang, model, chars: content.length };
+};
 
 // ---------------------------------------------------------------- one line per stock in Today's list
 async function lines(sb: any, body: any) {
@@ -188,24 +197,26 @@ async function lines(sb: any, body: any) {
   const { data: rows } = await sb.from("today_list").select("list, symbol, rank, grp, evidence").eq("day", last.day).lte("rank", 15).order("rank");
   const todo = (rows ?? []).filter((r: any) => r.list !== "redday_group" || r.rank <= 8);
   if (!todo.length) return json({ ok: true, day: last.day, written: 0 });
-  const r = await chat([
+  return json(await go(sb, "lines", { day: last.day, lang, col }, [
     { role: "system", content: `${STYLE}\n${langLine(lang)}\nReply with JSON only.` },
     { role: "user", content: `For each item below write ONE short line (max ~25 words) for a momentum trader: why it is on this list, using its numbers, and the one thing that would cancel the idea.
 Lists: ema21 = pullback to the daily 21 EMA after a big run (run % from the EMA at its last touch to the peak; distAdr = distance from the EMA in average daily ranges; volDryUp < 1 means volume is lighter than during the run).
 redday = stock bought on red market days (bought of redDays; avgExcessOnRedDays = points better than SPY on those days). redday_group = an industry/theme bought on red days.
 Return {"items":[{"list":"...","symbol":"...","line":"..."}]}.
 Items:\n${clip(todo.map((t: any) => ({ list: t.list, symbol: t.symbol, group: t.grp, ...t.evidence })), 20000)}` },
-  ], { task: "fast", label: "ai-lines", maxTokens: 4000 });
+  ], { task: "fast", label: "ai-lines", maxTokens: 4000, json: true }));
+}
+FIN.lines = async (sb, { day, lang, col }, msg, model) => {
   let items: any[] = [];
-  try { items = JSON.parse(extractJson(r.msg.content ?? "")).items ?? []; } catch { return json({ error: "the AI didn't return the lines as JSON" }, 502); }
+  try { items = JSON.parse(extractJson(msg.content ?? "")).items ?? []; } catch { throw new Error("the AI didn't return the lines as JSON"); }
   let written = 0;
   for (const it of items) {
     if (!it?.symbol || !it?.line) continue;
-    const { error } = await sb.from("today_list").update({ [col]: String(it.line).slice(0, 400) }).eq("day", last.day).eq("list", it.list).eq("symbol", it.symbol);
+    const { error } = await sb.from("today_list").update({ [col]: String(it.line).slice(0, 400) }).eq("day", day).eq("list", it.list).eq("symbol", it.symbol);
     if (!error) written++;
   }
-  return json({ ok: true, day: last.day, lang, written, provider: r.provider, model: r.model });
-}
+  return { ok: true, day, lang, written, model };
+};
 
 // ---------------------------------------------------------------- the long story (Fundamentals Lens)
 async function longStory(sb: any, body: any) {
@@ -218,7 +229,7 @@ async function longStory(sb: any, body: any) {
     const { data } = await sb.from("long_stories").select("content, model, created_at, facts_at").eq("symbol", symbol).eq("lang", lang).maybeSingle();
     if (data?.content && data.facts_at === factsAt) return json({ ...data, cached: true });
   }
-  const r = await chat([
+  return json(await go(sb, "longstory", { symbol, lang, factsAt }, [
     { role: "system", content: `You are a patient teacher of company analysis in the spirit of Aswath Damodaran, writing for a momentum trader who is a beginner in fundamentals.
 ${lang === "he" ? "Write in natural, fluent Hebrew (not translated-sounding), gender-neutral when addressing the reader (use plural or impersonal forms). Keep tickers and standard abbreviations (ROIC, EBITDA) as they are." : "Write in warm, clear English."}
 Use ONLY the facts given; never invent a number. Every number you mention must appear in the facts. No buy/sell advice and no price targets.` },
@@ -234,13 +245,15 @@ Not a list of metrics — connect them. Use markdown with these sections:
 ## What to watch next — 3 to 5 concrete things in the next reports.
 Explain every idea in plain words the first time it appears. Compare with the industry wherever the facts give an industry figure.
 FACTS (JSON):\n${clip(facts, 26000)}` },
-  ], { label: "ai-longstory", maxTokens: 5000 });
-  const content = r.msg.content ?? "";
-  if (!content.trim()) return json({ error: "empty answer" }, 502);
-  const row = { symbol, lang, facts_at: factsAt, content, model: `${r.provider}/${r.model}`, created_at: new Date().toISOString() };
-  await sb.from("long_stories").upsert(row, { onConflict: "symbol,lang" });
-  return json(row);
+  ], { label: "ai-longstory", maxTokens: 5000 }));
 }
+FIN.longstory = async (sb, { symbol, lang, factsAt }, msg, model) => {
+  const content = msg.content ?? "";
+  if (!content.trim()) throw new Error("empty answer");
+  const row = { symbol, lang, facts_at: factsAt, content, model, created_at: new Date().toISOString() };
+  await sb.from("long_stories").upsert(row, { onConflict: "symbol,lang" });
+  return row;
+};
 
 // ---------------------------------------------------------------- journal review (thinking and entries, not execution)
 async function journal(sb: any, body: any) {
@@ -272,7 +285,7 @@ async function journal(sb: any, body: any) {
   const summary = { trades: rows.length, closed: closed.length, winners: closed.filter((r) => r.outcome.returnPct > 0).length,
     avgReturn: closed.length ? +(closed.reduce((s, r) => s + r.outcome.returnPct, 0) / closed.length).toFixed(1) : null,
     withThesis: rows.filter((r) => r.thesis).length, withInvalidation: rows.filter((r) => r.invalidation).length };
-  const r = await chat([
+  return json(await go(sb, "journal", { lang, summary, rows }, [
     { role: "system", content: `You review a momentum trader's journal (21 EMA pullbacks and breakouts). Focus on THINKING and STOCK SELECTION / ENTRY — not on execution, stops or exits. ${langLine(lang)} ${lang === "he" ? "Address the reader in gender-neutral Hebrew (plural or impersonal forms)." : ""} Use only the data; be specific, kind and direct. No buy/sell advice on tickers.` },
     { role: "user", content: `Review my journal. Sections:
 ## What my good trades had in common at entry (compare the entry context of winners vs losers: run size, distance from the 21 EMA, pullback depth, RS, industry strength, the market's trend, volume).
@@ -282,11 +295,13 @@ async function journal(sb: any, body: any) {
 If there are few trades, say how little can be concluded.
 Summary: ${JSON.stringify(summary)}
 Trades (newest first; atEntry = the session before entry):\n${clip(rows, 22000)}` },
-  ], { label: "ai-journal", maxTokens: 3500 });
-  const content = r.msg.content ?? "";
-  await sb.from("ai_reports").insert({ kind: "journal", day: today(), lang, subject: "journal", title: "Journal review", content, data: { summary, rows }, model: `${r.provider}/${r.model}` });
-  return json({ content, summary, rows, provider: r.provider, model: r.model });
+  ], { label: "ai-journal", maxTokens: 3500 }));
 }
+FIN.journal = async (sb, { lang, summary, rows }, msg, model) => {
+  const content = msg.content ?? "";
+  await sb.from("ai_reports").insert({ kind: "journal", day: today(), lang, subject: "journal", title: "Journal review", content, data: { summary, rows }, model });
+  return { content, summary, model };
+};
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
@@ -314,6 +329,8 @@ Deno.serve(async (req) => {
       }
       return json({ local, cloudFallback: !!(Deno.env.get("GEMINI_API_KEY") || Deno.env.get("GROQ_API_KEY")) });
     }
+    if (action === "job") return json(await jobState(sb, Number(body.id), FIN));
+    if (action === "finish") return json(await jobState(sb, Number(body.job), FIN));
     if (!hasAnyLlm()) return json({ error: "No AI is set up: start Ollama on the PC or add a GEMINI/GROQ key." }, 503);
     if (action === "ask") return await ask(sb, body);
     if (action === "stock") return await stock(sb, body);
