@@ -38,3 +38,10 @@ The map is rebuilt with `graphify update .` (local, no LLM). Output: `graphify-o
 - Hebrew polish of the Lens texts; calmer Lens design.
 - PRs: #94 (Lens Hebrew), #95 (run locally), #96 (local AI); later work is on `claude/ai-everywhere`.
 - Known limits: survivorship bias (only today's listed stocks) in all history-based odds.
+
+## Working cheaply (token budget)
+- One topic per chat; start a new chat with "read docs/PROJECT-NOTES.md" instead of continuing a long one.
+- Find code with `graphify query`/`grep -n`, read only the needed lines; edit with small replacements, never rewrite big files.
+- Check UI with one cropped, scaled-down screenshot; cap command output (`head`, `| cut -c1-200`).
+- Sync to the PC only the files changed in the last commit (`git diff --name-only HEAD~1..HEAD`).
+- Short progress notes; no recaps.
