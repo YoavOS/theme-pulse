@@ -1,4 +1,5 @@
 import type { ConceptCard, LensPayload, Metric } from "@/lib/lens/types";
+import { heComparison, hePlainReading } from "@/lib/lens/he/companyMeaning";
 
 /**
  * "What it means for this company": the glossary explains a term in general; this turns the
@@ -7,7 +8,7 @@ import type { ConceptCard, LensPayload, Metric } from "@/lib/lens/types";
  */
 
 /** Glossary entry → the metric(s) that show it in the Lens (first one with a value wins). */
-const ENTRY_METRICS: Record<string, string[]> = {
+export const ENTRY_METRICS: Record<string, string[]> = {
   rev_growth: ["rev_growth_ttm", "rev_cagr_3y", "rev_growth_q"],
   earnings_growth: ["opinc_growth_ttm", "ni_growth_ttm"],
   gross_margin: ["gross_margin"], operating_margin: ["op_margin"], net_margin: ["net_margin"],
@@ -116,13 +117,17 @@ function comparison(S: string, m: Metric, higherIsBetter: boolean | null): strin
 }
 
 /** The "For SYMBOL" paragraph for a glossary entry, or null when the Lens has no number for it. */
-export function companyNote(entryId: string, p: LensPayload | null | undefined, byId: Map<string, { m: Metric; c: ConceptCard }>): { symbol: string; lines: string[] } | null {
+export function companyNote(entryId: string, p: LensPayload | null | undefined, byId: Map<string, { m: Metric; c: ConceptCard }>, lang: "en" | "he" = "en"): { symbol: string; lines: string[] } | null {
   if (!p) return null;
   const ids = ENTRY_METRICS[entryId];
   if (!ids) return null;
   const hit = ids.map((id) => byId.get(id)).find((h) => h && (h.m.value !== null || (h.m.display && h.m.display !== "n/a" && h.m.display !== "n/m")));
   if (!hit) return null;
   const S = p.symbol;
+  if (lang === "he") {
+    const first = hePlainReading(S, hit.m);
+    return first ? { symbol: S, lines: [first, ...heComparison(S, hit.m, hit.c.higherIsBetter)] } : null;
+  }
   const first = plainReading(S, hit.m);
   if (!first) return null;
   return { symbol: S, lines: [first, ...comparison(S, hit.m, hit.c.higherIsBetter)] };

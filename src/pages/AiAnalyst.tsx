@@ -1,6 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { ArrowLeft, Bot, ChevronDown, Cpu, Cloud, FileText, Loader2, MessageSquare, RefreshCw, Search, Send, LineChart } from "lucide-react";
+import { ArrowLeft, BarChart3, Bot, ChevronDown, Cpu, Cloud, FileText, FileSearch, ListChecks, Loader2, NotebookPen, Sparkles, MessageSquare, RefreshCw, Search, Send, LineChart, Sunrise } from "lucide-react";
+import TodayList from "@/components/ai/TodayList";
+import FocusReview from "@/components/ai/FocusReview";
+import FilingsView from "@/components/ai/FilingsView";
+import PatternsView from "@/components/ai/PatternsView";
+import JournalView from "@/components/ai/JournalView";
+import { touchLab, useLabUsage } from "@/lib/labs";
 import { toast } from "sonner";
 import AiMarkdown from "@/components/ai/AiMarkdown";
 import {
@@ -12,21 +18,26 @@ import {
  * AI Analyst (/ai). The AI on your PC (Ollama) reads the app's own data: tonight's market report,
  * ask-your-data chat, and a one-stock analysis. Falls back to the free cloud keys when the PC model is off.
  */
-type Tab = "report" | "ask" | "stock";
+type Tab = "today" | "report" | "ask" | "stock" | "filings" | "focus" | "patterns" | "journal";
 const TABS: { id: Tab; label: string; he: string; icon: JSX.Element }[] = [
+  { id: "today", label: "Today's list", he: "הרשימה של היום", icon: <Sunrise size={14} /> },
   { id: "report", label: "Market report", he: "דוח שוק", icon: <FileText size={14} /> },
   { id: "ask", label: "Ask your data", he: "שאלו את הנתונים", icon: <MessageSquare size={14} /> },
   { id: "stock", label: "One stock", he: "מניה אחת", icon: <LineChart size={14} /> },
+  { id: "filings", label: "From the filings", he: "מתוך הדוחות", icon: <FileSearch size={14} /> },
+  { id: "patterns", label: "Pattern finder", he: "מוצא הדפוסים", icon: <Sparkles size={14} /> },
+  { id: "journal", label: "Journal review", he: "סקירת היומן", icon: <NotebookPen size={14} /> },
+  { id: "focus", label: "Focus-list review", he: "סקירת רשימת המעקב", icon: <ListChecks size={14} /> },
 ];
 
 export default function AiAnalyst() {
   const [params, setParams] = useSearchParams();
-  const [tab, setTab] = useState<Tab>(() => (["report", "ask", "stock"].includes(params.get("tab") ?? "") ? params.get("tab") as Tab : "report"));
+  const [tab, setTab] = useState<Tab>(() => (TABS.some((t) => t.id === params.get("tab")) ? params.get("tab") as Tab : "today"));
   const [lang, setLangState] = useState<AiLang>(readAiLang);
   const setLang = (l: AiLang) => { setLangState(l); saveAiLang(l); };
   const [status, setStatus] = useState<AiStatus | null>(null);
   useEffect(() => { aiStatus().then(setStatus).catch(() => setStatus(null)); }, []);
-  useEffect(() => { document.title = "AI Analyst"; }, []);
+  useEffect(() => { document.title = "AI Analyst"; touchLab("ai-analyst"); }, []);
   const go = (t: Tab) => { setTab(t); const p = new URLSearchParams(params); p.set("tab", t); if (t !== "stock") p.delete("symbol"); setParams(p, { replace: true }); };
 
   return (
@@ -37,6 +48,7 @@ export default function AiAnalyst() {
           <Bot size={20} className="text-[hsl(160,70%,50%)]" />
           <h1 className="mr-3 font-['Syne',sans-serif] text-2xl font-bold tracking-tight">AI Analyst</h1>
           <StatusChip status={status} />
+          <UsageButton />
           <div className="ml-auto flex overflow-hidden rounded-md border border-border text-[12px]" role="group" aria-label="Language">
             {(["en", "he"] as AiLang[]).map((l) => (
               <button key={l} onClick={() => setLang(l)} className={`px-2.5 py-1 ${lang === l ? "bg-primary/15 font-semibold text-primary" : "text-muted-foreground hover:text-foreground"}`}>
@@ -55,11 +67,41 @@ export default function AiAnalyst() {
         </nav>
       </header>
       <main className="mx-auto max-w-[1100px] px-4 py-5 lg:px-6">
+        {tab === "today" && <TodayList lang={lang} />}
+        {tab === "focus" && <FocusReview lang={lang} />}
+        {tab === "filings" && <FilingsView lang={lang} />}
+        {tab === "patterns" && <PatternsView lang={lang} />}
+        {tab === "journal" && <JournalView lang={lang} />}
         {tab === "report" && <ReportView lang={lang} />}
         {tab === "ask" && <AskView lang={lang} />}
         {tab === "stock" && <StockView lang={lang} initial={params.get("symbol")} onSymbol={(s) => { const p = new URLSearchParams(params); p.set("tab", "stock"); p.set("symbol", s); setParams(p, { replace: true }); }} />}
       </main>
     </div>
+  );
+}
+
+const USAGE_NAMES: Record<string, string> = {
+  "today-list": "Today's list", "ai-analyst": "AI tab opened", "ai-report": "Market report", "ai-ask": "Ask your data",
+  "ai-stock": "One stock", "ai-focus": "Focus-list review", filings: "From the filings", patterns: "Pattern finder", journal: "Journal review",
+};
+/** How often each section has been used — for deciding later what to keep, move or delete. */
+function UsageButton() {
+  const [open, setOpen] = useState(false);
+  const u = useLabUsage();
+  return (
+    <span className="relative">
+      <button onClick={() => setOpen(!open)} title="How often you've used each section" className="inline-flex items-center gap-1 rounded-full border border-border px-2 py-0.5 text-[11.5px] text-muted-foreground hover:text-foreground"><BarChart3 size={12} /> Usage</button>
+      {open && (
+        <div className="absolute left-0 top-7 z-20 w-72 rounded-lg border border-border bg-popover p-3 text-[12px] shadow-lg">
+          <div className="mb-1.5 font-semibold">Trial usage</div>
+          {Object.entries(USAGE_NAMES).map(([id, name]) => {
+            const r = u.data?.get(id);
+            return <div key={id} className="flex justify-between py-0.5"><span>{name}</span><span className="text-muted-foreground">{r?.uses ?? 0}{r?.last_used ? ` · last ${new Date(r.last_used).toLocaleDateString([], { month: "short", day: "numeric" })}` : ""}</span></div>;
+          })}
+          <p className="mt-2 text-[11px] text-muted-foreground">After a few weeks we decide what to keep, move elsewhere in the app, or delete.</p>
+        </div>
+      )}
+    </span>
   );
 }
 
@@ -89,7 +131,9 @@ function ReportView({ lang }: { lang: AiLang }) {
   const [writing, setWriting] = useState(false);
   const load = useCallback(() => { aiLatest("market", lang, undefined, 10).then((r) => { setReports(r); setPick(0); }).catch((e) => { toast.error(e.message); setReports([]); }); }, [lang]);
   useEffect(() => { setReports(null); load(); }, [load]);
+  useEffect(() => { touchLab("ai-report"); }, []);
   const write = async () => {
+    touchLab("ai-report");
     setWriting(true);
     try { await aiWriteReport(lang); load(); } catch (e) { toast.error(e instanceof Error ? e.message : String(e)); } finally { setWriting(false); }
   };
@@ -152,6 +196,7 @@ function AskView({ lang }: { lang: AiLang }) {
   const end = useRef<HTMLDivElement>(null);
   useEffect(() => { try { sessionStorage.setItem("ai_chat_v1", JSON.stringify(msgs.slice(-30))); } catch { /* ignore */ } end.current?.scrollIntoView({ behavior: "smooth" }); }, [msgs, busy]);
   const send = async (q: string) => {
+    touchLab("ai-ask");
     q = q.trim();
     if (!q || busy) return;
     const history = msgs.map(({ role, content }) => ({ role, content }));
@@ -159,7 +204,7 @@ function AskView({ lang }: { lang: AiLang }) {
     setInput(""); setBusy(true); setLive([]);
     try {
       const r = await askAi(q, history, setLive);
-      setMsgs((m) => [...m, { role: "assistant", content: r.answer, steps: r.steps, model: `${r.provider}/${r.model}` }]);
+      setMsgs((m) => [...m, { role: "assistant", content: r.answer, steps: r.steps, model: r.model }]);
     } catch (e) {
       setMsgs((m) => [...m, { role: "assistant", content: `⚠️ ${e instanceof Error ? e.message : String(e)}` }]);
     } finally { setBusy(false); }
@@ -234,11 +279,12 @@ function StockView({ lang, initial, onSymbol }: { lang: AiLang; initial: string 
     aiLatest("stock", lang, symbol).then((r) => setSaved(r[0] ?? null)).catch(() => setSaved(null));
   }, [symbol, lang]);
   const run = async (s = symbol) => {
+    touchLab("ai-stock");
     if (!s) return;
     setBusy(true);
     try {
       const r = await aiStock(s, lang);
-      setSaved({ id: 0, kind: "stock", day: "", lang, subject: s, title: `${s} analysis`, content: r.content, model: `${r.provider}/${r.model}`, created_at: new Date().toISOString() });
+      setSaved({ id: 0, kind: "stock", day: "", lang, subject: s, title: `${s} analysis`, content: r.content, model: r.model, created_at: new Date().toISOString() });
     } catch (e) { toast.error(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); }
   };
   const submit = () => { const s = input.trim().toUpperCase(); if (!s) return; setSymbol(s); onSymbol(s); };

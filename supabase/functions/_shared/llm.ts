@@ -21,7 +21,7 @@
 //   CEREBRAS_MODEL, OPENROUTER_MODEL.
 // Running on your own PC: LOCAL_LLM_URL (an Ollama server, e.g. http://host.docker.internal:11434)
 //   and LOCAL_LLM_MODEL put the local model first in every chain — free, private, no rate limits.
-//   LOCAL_LLM_CTX (context tokens, default 32768) and LOCAL_LLM_THINK ("true" lets reasoning models think).
+//   LOCAL_LLM_CTX (context tokens, default 16384) and LOCAL_LLM_THINK ("true" lets reasoning models think).
 
 export type LlmTask = "long" | "fast" | "grounded";
 
@@ -43,11 +43,13 @@ const GEMINI_TIMEOUT_MS = 30_000;
 const OTHER_TIMEOUT_MS = 40_000;
 const LOCAL_URL = env("LOCAL_LLM_URL").replace(/\/+$/, "");
 const LOCAL_MODEL = env("LOCAL_LLM_MODEL") || "qwen3.8:27b";
-const LOCAL_CTX = Number(env("LOCAL_LLM_CTX")) || 32768;
+const LOCAL_CTX = Number(env("LOCAL_LLM_CTX")) || 16384;
 const LOCAL_THINK = env("LOCAL_LLM_THINK") === "true";
 // a local model has no wall-clock limit to respect, but a big prompt takes a while to read
-const LOCAL_TIMEOUT_MS = Number(env("LOCAL_LLM_TIMEOUT_MS")) || 240_000;
-const TOTAL_BUDGET_MS = LOCAL_URL ? LOCAL_TIMEOUT_MS + 60_000 : 110_000;
+const LOCAL_TIMEOUT_MS = Number(env("LOCAL_LLM_TIMEOUT_MS")) || 45_000;
+// The local backend stops a request after about a minute, so a direct call stays inside that; long jobs on the
+// PC model go through the database instead (see _shared/aiJobs.ts).
+const TOTAL_BUDGET_MS = 55_000;
 
 // Gemini models that answered "not found" in this worker — skipped afterwards.
 const deadGemini = new Set<string>();
@@ -192,7 +194,8 @@ export function extractJson(text: string): string {
 }
 
 /** Ollama's own chat API (it lets us set the context size per request), answered in OpenAI shape. */
-async function callLocal(body: Body, deadline: number): Promise<{ json: Body; model: string }> {
+/** An OpenAI-style chat body → Ollama's native /api/chat body (used directly, and by the database job runner). */
+export function toOllamaRequest(body: Body): Body {
   // deno-lint-ignore no-explicit-any
   const messages = (body.messages ?? []).map((m: any) => {
     const out: Body = { role: m.role, content: typeof m.content === "string" ? m.content : JSON.stringify(m.content ?? "") };
@@ -201,21 +204,33 @@ async function callLocal(body: Body, deadline: number): Promise<{ json: Body; mo
     return out;
   });
   const req: Body = {
-    model: LOCAL_MODEL, messages, stream: false, think: LOCAL_THINK,
+    model: LOCAL_MODEL, messages, stream: false, think: LOCAL_THINK, keep_alive: "5m",
     options: { num_ctx: LOCAL_CTX, temperature: typeof body.temperature === "number" ? body.temperature : 0.3, ...(typeof body.max_tokens === "number" ? { num_predict: body.max_tokens + (LOCAL_THINK ? 4096 : 0) } : {}) },
   };
   if (body.tools) req.tools = body.tools;
   if (body.response_format?.type === "json_object") req.format = "json";
-  const res = await withTimeout(`${LOCAL_URL}/api/chat`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(req) }, left(deadline, LOCAL_TIMEOUT_MS));
-  if (!res.ok) throw new ProviderError(res.status === 404 ? 404 : res.status, (await res.text().catch(() => "")).slice(0, 400));
-  const j = await res.json();
+  return req;
+}
+/** Ollama's reply → an OpenAI-style assistant message (thinking removed; tool-call arguments as JSON strings). */
+export function fromOllama(j: Body): Body {
   const content = String(j?.message?.content ?? "").replace(/<think>[\s\S]*?<\/think>\s*/g, "").trim();
   // deno-lint-ignore no-explicit-any
   const calls = (j?.message?.tool_calls ?? []).map((t: any, i: number) => ({ id: `call_${Date.now()}_${i}`, type: "function", function: { name: t.function?.name, arguments: JSON.stringify(t.function?.arguments ?? {}) } }));
-  if (!content && !calls.length) throw new ProviderError(502, "empty completion");
   const message: Body = { role: "assistant", content };
   if (calls.length) message.tool_calls = calls;
-  return { json: { choices: [{ index: 0, message, finish_reason: calls.length ? "tool_calls" : "stop" }], usage: { prompt_tokens: j?.prompt_eval_count, completion_tokens: j?.eval_count } }, model: LOCAL_MODEL };
+  return message;
+}
+export const localModelName = () => LOCAL_MODEL;
+export const localConfigured = () => !!LOCAL_URL;
+
+async function callLocal(body: Body, deadline: number): Promise<{ json: Body; model: string }> {
+  const req = toOllamaRequest(body);
+  const res = await withTimeout(`${LOCAL_URL}/api/chat`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(req) }, left(deadline, LOCAL_TIMEOUT_MS));
+  if (!res.ok) throw new ProviderError(res.status === 404 ? 404 : res.status, (await res.text().catch(() => "")).slice(0, 400));
+  const j = await res.json();
+  const message = fromOllama(j);
+  if (!message.content && !message.tool_calls?.length) throw new ProviderError(502, "empty completion");
+  return { json: { choices: [{ index: 0, message, finish_reason: message.tool_calls?.length ? "tool_calls" : "stop" }], usage: { prompt_tokens: j?.prompt_eval_count, completion_tokens: j?.eval_count } }, model: LOCAL_MODEL };
 }
 function safeJson(s: string): Body { try { return JSON.parse(s); } catch { return {}; } }
 
@@ -252,7 +267,7 @@ const CHAINS: Record<Exclude<LlmTask, "grounded">, Provider[]> = {
  * Resolves to a Response with an OpenAI-shaped JSON body; when every provider
  * fails it resolves to a non-OK Response (429 if they were all rate-limited).
  */
-export async function llmFetch(body: Body, opts: { task: LlmTask; label?: string } = { task: "long" }): Promise<Response> {
+export async function llmFetch(body: Body, opts: { task: LlmTask; label?: string; skipLocal?: boolean } = { task: "long" }): Promise<Response> {
   const attempts: string[] = [];
   const deadline = Date.now() + TOTAL_BUDGET_MS;
   let limited = 0, failed = 0;
@@ -280,6 +295,7 @@ export async function llmFetch(body: Body, opts: { task: LlmTask; label?: string
   const chain = CHAINS[opts.task === "fast" ? "fast" : "long"];
   for (const p of chain) {
     if (!env(KEY_OF[p])) continue;
+    if (p === "local" && opts.skipLocal) continue;
     const until = cooling.get(p);
     if (until && until > Date.now()) { attempts.push(`${p} cooling`); continue; }
     try {

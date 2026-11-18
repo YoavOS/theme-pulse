@@ -87,10 +87,12 @@ Copy-Item $Keys (Join-Path $Root "supabase\functions\.env") -Force
 # to the free cloud keys (Gemini / Groq) in keys.env.
 $AiEnv = Join-Path $Root "local\ai.env"
 if (-not (Test-Path $AiEnv)) { Copy-Item (Join-Path $Root "local\ai.example.env") $AiEnv }
-$aiModel = "qwen3.8:27b"; $aiOn = $true; $aiCtx = "32768"
+$light = $true
+$aiModel = "qwen3.8:27b"; $aiOn = $true; $aiCtx = "16384"
 foreach ($line in (Get-Content $AiEnv)) {
   if ($line -match '^\s*LOCAL_LLM_MODEL\s*=\s*(\S+)') { $aiModel = $matches[1] }
   if ($line -match '^\s*LOCAL_LLM_CTX\s*=\s*(\d+)') { $aiCtx = $matches[1] }
+  if ($line -match '^\s*LIGHT\s*=\s*off') { $light = $false }
   if ($line -match '^\s*LOCAL_AI\s*=\s*off') { $aiOn = $false }
 }
 function Test-Ollama { try { Invoke-RestMethod -Uri "http://127.0.0.1:11434/api/tags" -TimeoutSec 3 } catch { $null } }
@@ -117,7 +119,7 @@ if ($aiOn) {
     $tags = Test-Ollama
     if (-not $tags) {
       Write-Host "Starting Ollama..."
-      $env:OLLAMA_FLASH_ATTENTION = "1"; $env:OLLAMA_KV_CACHE_TYPE = "q8_0"; $env:OLLAMA_KEEP_ALIVE = "30m"
+      $env:OLLAMA_FLASH_ATTENTION = "1"; $env:OLLAMA_KV_CACHE_TYPE = "q8_0"; $env:OLLAMA_KEEP_ALIVE = "5m"; $env:OLLAMA_MAX_LOADED_MODELS = "1"; $env:OLLAMA_NUM_PARALLEL = "1"
       Start-Process $ollamaExe -ArgumentList "serve" -WindowStyle Hidden
       for ($i = 0; $i -lt 15 -and -not $tags; $i++) { Start-Sleep -Seconds 2; $tags = Test-Ollama }
     }
@@ -137,6 +139,8 @@ if ($aiOn) {
     } else { Write-Host "Ollama didn't answer - the app uses the cloud keys for AI this time." -ForegroundColor Yellow }
   } else { Write-Host "No Ollama - the app uses the cloud keys for AI." -ForegroundColor Yellow }
 }
+# a big context window takes a lot of graphics memory; 16k is plenty for the app
+if ($light -and [int]$aiCtx -gt 16384) { $aiCtx = "16384" }
 if ($aiReady) {
   Add-Content -Path (Join-Path $Root "supabase\functions\.env") -Value @("", "LOCAL_LLM_URL=http://host.docker.internal:11434", "LOCAL_LLM_MODEL=$aiModel", "LOCAL_LLM_CTX=$aiCtx")
 }
@@ -153,7 +157,12 @@ if (-not (Test-Path $stamp) -or (Get-Content $stamp -ErrorAction SilentlyContinu
 
 # -- 6. Database and backend ----------------------------------------------------------------
 Say "Starting the database and backend (the first time downloads about 2 GB - be patient)"
-npx --yes supabase@latest start
+# Light start: skip the parts of the local stack the app doesn't use (log pipeline, file storage, image
+# resizing, realtime, the test mailbox, the connection pooler, and the Studio admin site).
+# For Studio, add STUDIO=on to local\ai.env.
+$skip = "vector,logflare,imgproxy,mailpit,realtime,storage-api,supavisor"
+if (-not (Select-String -Path (Join-Path $Root "local\ai.env") -Pattern '^\s*STUDIO\s*=\s*on' -Quiet -ErrorAction SilentlyContinue)) { $skip += ",studio,postgres-meta" }
+npx --yes supabase@latest start -x $skip
 if ($LASTEXITCODE -ne 0) { Fail "The database didn't start (see the messages above)." }
 # app updates may bring new database changes: apply any that this database hasn't had yet
 npx --yes supabase@latest migration up --local
@@ -183,6 +192,10 @@ if ($LASTEXITCODE -ne 0) { Fail "Setting up the scheduled jobs failed." }
 $settings = "INSERT INTO public.local_settings(key, value) VALUES ('functions_url', 'http://${kong}:8000/functions/v1'), ('anon_key', '$anon') ON CONFLICT (key) DO UPDATE SET value = excluded.value;"
 $settings | docker exec -i $db psql -U postgres -d postgres -v ON_ERROR_STOP=1 -q
 if ($LASTEXITCODE -ne 0) { Fail "Saving the job settings failed." }
+# long AI jobs go from the database straight to the AI on this PC (no time limit per request)
+if ($aiReady) { $aiSql = "INSERT INTO public.local_settings(key, value) VALUES ('ollama_url', 'http://host.docker.internal:11434') ON CONFLICT (key) DO UPDATE SET value = excluded.value;" }
+else { $aiSql = "DELETE FROM public.local_settings WHERE key = 'ollama_url';" }
+$aiSql | docker exec -i $db psql -U postgres -d postgres -q
 
 # -- 7. Daily backup of your data (kept for 14 days) ----------------------------------------
 $BackupDir = Join-Path $Root "local\backups"
@@ -200,7 +213,20 @@ Say "Starting the backend functions"
 Start-Process powershell -ArgumentList "-NoExit", "-Command", "`$host.ui.RawUI.WindowTitle = 'Theme Pulse - backend (keep open)'; Set-Location '$Root'; npx --yes supabase@latest functions serve --env-file supabase\functions\.env 2>&1 | Tee-Object -FilePath (Join-Path '$LogDir' ('backend-' + (Get-Date -Format 'yyyy-MM-dd_HH-mm') + '.log'))" -WindowStyle Minimized
 
 Say "Starting the app"
-Start-Process powershell -ArgumentList "-NoExit", "-Command", "`$host.ui.RawUI.WindowTitle = 'Theme Pulse - app (keep open)'; Set-Location '$Root'; npm run dev -- --port 8080 --strictPort" -WindowStyle Minimized
+# A built copy of the website is much lighter than the development server. It is rebuilt only when the code changed.
+$srcStamp = ((Get-ChildItem (Join-Path $Root "src") -Recurse -File | Measure-Object -Property LastWriteTime -Maximum).Maximum).Ticks
+$srcStamp = "$srcStamp-" + (Get-FileHash (Join-Path $Root ".env.local")).Hash   # the backend address is baked into the build
+$builtFile = Join-Path $Root "dist\.built-from"
+if (-not (Test-Path $builtFile) -or (Get-Content $builtFile -ErrorAction SilentlyContinue) -ne "$srcStamp") {
+  Say "Building the website (only after updates; about a minute)"
+  npx vite build
+  if ($LASTEXITCODE -eq 0) { Set-Content -Path $builtFile -Value "$srcStamp" } else { Write-Host "Build failed - starting the development server instead." -ForegroundColor Yellow }
+}
+if (Test-Path $builtFile) {
+  Start-Process powershell -ArgumentList "-NoExit", "-Command", "`$host.ui.RawUI.WindowTitle = 'Theme Pulse - app (keep open)'; Set-Location '$Root'; npx vite preview --port 8080 --strictPort" -WindowStyle Minimized
+} else {
+  Start-Process powershell -ArgumentList "-NoExit", "-Command", "`$host.ui.RawUI.WindowTitle = 'Theme Pulse - app (keep open)'; Set-Location '$Root'; npm run dev -- --port 8080 --strictPort" -WindowStyle Minimized
+}
 Start-Sleep -Seconds 8
 Start-Process "http://localhost:8080"
 

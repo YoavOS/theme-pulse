@@ -118,6 +118,8 @@ function verdictClasses(verdict: string) {
   return "bg-[hsl(40,90%,55%)]/15 text-[hsl(40,90%,55%)] border-[hsl(40,90%,55%)]/40";
 }
 
+import { ProfileRadar, QuarterTrends, ScoreStack, SurpriseBars } from "@/components/minervini/MinerviniVisuals";
+
 function VerdictBadge({ verdict, score, label, tone }: { verdict: string; score: number; label?: string; tone?: string }) {
   return (
     <div className={`inline-flex flex-col items-center justify-center rounded-xl border-2 px-6 py-4 ${verdictClasses(tone ?? verdict)}`}>
@@ -451,12 +453,15 @@ export default function MinerviniChecker() {
               </TabsList>
 
               <TabsContent value="overview" className="mt-4 space-y-6">
+                {multi.series?.profiles && <ProfileRadar profiles={Object.values(multi.series.profiles).filter((x): x is HProfile => !!x && typeof x === "object" && "score" in x)} />}
                 {multi.series?.profiles?.momentum && <ProfileCards p={multi.series.profiles} extra={priceCards(sepaProps.stage, sepaProps.rs)} />}
                 <SepaCard {...sepaProps} />
               </TabsContent>
 
               <TabsContent value="earnings" className="mt-4 space-y-6">
+                {multi.series && multi.series.quarters.length > 0 && <QuarterTrends quarters={multi.series.quarters} />}
                 {multi.series && multi.series.quarters.length > 0 && <QuarterTable s={multi.series} />}
+                {multi.series && <SurpriseBars eps={multi.series.surprises} rev={multi.series.revSurprises} />}
                 {multi.series && <ExtrasCard s={multi.series} />}
               </TabsContent>
 
@@ -468,6 +473,7 @@ export default function MinerviniChecker() {
                 {multi.reports.minervini ? (
                   <Card className="p-5">
                     <div className="space-y-4">
+                  {multi.series?.scoreParts && <ScoreStack parts={multi.series.scoreParts} />}
                   {multi.series && <ScoreBuild s={multi.series} />}
                   <ProfileReportCard report={multi.reports.minervini} />
                 </div>

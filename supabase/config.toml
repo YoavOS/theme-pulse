@@ -1,5 +1,16 @@
 project_id = "hhdvcqidyntxvwhyygxx"
 
+# Running on a personal PC: keep the stack light.
+# per_worker keeps backend functions warm instead of recompiling one for every request (big CPU saving);
+# after a code update the backend needs a restart (Stop / Start Theme Pulse) to pick it up.
+[edge_runtime]
+enabled = true
+policy = "per_worker"
+
+# The log pipeline (Logflare + Vector) is the heaviest part of the local stack and the app doesn't use it.
+[analytics]
+enabled = false
+
 [functions.fetch-themes]
 verify_jwt = false
 
@@ -127,4 +138,19 @@ verify_jwt = false
 verify_jwt = false
 
 [functions.ai-analyst]
+verify_jwt = false
+
+[functions.daily-bars]
+verify_jwt = false
+
+[functions.daily-lists]
+verify_jwt = false
+
+[functions.proven-lookalikes]
+verify_jwt = false
+
+[functions.company-file]
+verify_jwt = false
+
+[functions.pattern-finder]
 verify_jwt = false

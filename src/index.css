@@ -2,7 +2,7 @@
 @tailwind components;
 @tailwind utilities;
 
-@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@400;500;600;700;800;900&family=DM+Mono:wght@400;500&family=Syne:wght@400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@400;500;600;700;800;900&family=DM+Mono:wght@400;500&family=Syne:wght@400;500;600;700;800&family=Heebo:wght@400;500;600;700;800&display=swap');
 
 @layer base {
   html {
@@ -181,3 +181,9 @@
 .vol-leaders-scroll::-webkit-scrollbar-thumb:hover {
   background: hsl(var(--up) / 0.5);
 }
+
+/* Fundamentals tab in Hebrew: a Hebrew face for Hebrew letters (Latin keeps the app font), and numbers,
+   tickers and formulas in monospace stay left-to-right inside right-to-left text. */
+[dir="rtl"] { font-family: 'Inter', 'Heebo', system-ui, sans-serif; }
+[dir="rtl"] .font-mono { unicode-bidi: isolate; direction: ltr; }
+:where([dir="rtl"] div.font-mono, [dir="rtl"] p.font-mono) { text-align: right; }
