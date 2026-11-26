@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { Bell, Copy, Loader2 } from "lucide-react";
+import { Bell, Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { TvExportButton } from "./TvExportButton";
 import { supabase } from "@/integrations/supabase/client";
 import type { AiLang } from "@/lib/ai";
 import { touchLab } from "@/lib/labs";
@@ -79,12 +80,12 @@ export default function TodayList({ lang }: { lang: AiLang }) {
   const info = LISTS.find((l) => l.id === tab)!;
   const g = grade.get(tab);
 
-  const copyTv = () => {
-    const by = (id: ListId) => (q.data?.rows ?? []).filter((r) => r.list === id).map((r) => r.symbol);
-    const text = [`###21 EMA pullbacks`, ...by("ema21"), `###Bought on red days`, ...by("redday")].join("\n");
-    navigator.clipboard.writeText(text);
-    toast.success("Copied — paste into a TradingView watchlist (Import list).");
-  };
+  const section = (l: (typeof LISTS)[number]) => ({ name: he ? l.he : l.en,
+    symbols: (q.data?.rows ?? []).filter((r) => r.list === l.id).sort((a, b) => a.rank - b.rank).map((r) => r.symbol) });
+  const tvOptions = [
+    { label: he ? `הרשימה הזו: ${info.he}` : `This list: ${info.en}`, sections: [section(info)] },
+    { label: he ? "כל שלוש הרשימות" : "All three lists", sections: LISTS.map(section) },
+  ];
   const askNotify = async () => {
     if (!("Notification" in window)) { toast.error("This browser can't show notifications."); return; }
     const p = await Notification.requestPermission();
@@ -119,7 +120,7 @@ export default function TodayList({ lang }: { lang: AiLang }) {
         <span className={`text-muted-foreground ${old ? "text-[hsl(40,90%,60%)]" : ""}`}>{he ? "נכון ל-" : "As of "}{q.data.day}</span>
         <span className="ml-auto inline-flex gap-1.5">
           <button onClick={askNotify} title="Desktop notification when a new list is ready" className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-muted-foreground hover:text-foreground"><Bell size={11} /> {he ? "התראות" : "Notify me"}</button>
-          <button onClick={copyTv} className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-muted-foreground hover:text-foreground"><Copy size={11} /> TradingView</button>
+          <TvExportButton options={tvOptions} fileName={`today-${tab}`} he={he} />
         </span>
       </div>
       <p className="text-[12px] text-muted-foreground">{info.about}</p>

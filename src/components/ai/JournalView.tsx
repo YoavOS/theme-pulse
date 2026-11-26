@@ -5,6 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { invokeAi, type AiLang } from "@/lib/ai";
 import { touchLab } from "@/lib/labs";
 import AiMarkdown from "./AiMarkdown";
+import { TvExportButton } from "./TvExportButton";
 
 /**
  * Journal review: trades with WHY they were taken, rebuilt with what the stock and market looked like on the
@@ -83,6 +84,12 @@ export default function JournalView({ lang }: { lang: AiLang }) {
           <button onClick={() => setForm({ ...EMPTY })} className="inline-flex items-center gap-1 rounded-md border border-border px-2.5 py-1.5 hover:border-primary/50"><Plus size={13} /> {t("Add a trade", "להוסיף עסקה")}</button>
           <button onClick={importPositions} className="inline-flex items-center gap-1 rounded-md border border-border px-2.5 py-1.5 hover:border-primary/50"><Download size={13} /> {t("From my positions", "מהפוזיציות שלי")}</button>
           <button onClick={() => setCsv(csv === null ? "" : null)} className="inline-flex items-center gap-1 rounded-md border border-border px-2.5 py-1.5 hover:border-primary/50"><Upload size={13} /> {t("Paste a list", "להדביק רשימה")}</button>
+          <TvExportButton className="!px-2.5 !py-1.5 !text-[13px]" he={he} fileName="journal" options={[
+            { label: t("Open trades", "עסקאות פתוחות"), sections: [{ name: t("Journal - open", "Journal - open"), symbols: rows.filter((r) => !r.exit_date).map((r) => r.symbol) }] },
+            { label: t("All trades (open, then closed)", "כל העסקאות (פתוחות ואז סגורות)"), sections: [
+              { name: "Journal - open", symbols: rows.filter((r) => !r.exit_date).map((r) => r.symbol) },
+              { name: "Journal - closed", symbols: rows.filter((r) => r.exit_date).map((r) => r.symbol) }] },
+          ]} />
           <button onClick={runReview} disabled={busy || !rows.length} className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 font-semibold text-primary-foreground disabled:opacity-50">{busy ? <Loader2 size={13} className="animate-spin" /> : <Bot size={13} />} {t("Review my journal", "לסקור את היומן")}</button>
         </span>
       </div>

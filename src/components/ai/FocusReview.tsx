@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { aiFocus, type AiLang } from "@/lib/ai";
 import { touchLab } from "@/lib/labs";
 import AiMarkdown from "./AiMarkdown";
+import { TvExportButton, TvFromText } from "./TvExportButton";
 
 /** The AI reviews your focus list (the one pasted or uploaded in RS Alpha → Organize focus list). */
 function readFocus(): { title: string; symbols: string[] }[] {
@@ -42,12 +43,13 @@ export default function FocusReview({ lang }: { lang: AiLang }) {
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2 text-[13px]">
         <span className="text-muted-foreground">{n ? `${n} stocks in ${groups.length} section${groups.length === 1 ? "" : "s"} — your latest focus list from RS Alpha → Organize focus list.` : "No focus list yet: paste or upload it in RS Alpha → Organize focus list first."}</span>
-        <button onClick={run} disabled={busy || !n} className="ml-auto inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 font-semibold text-primary-foreground disabled:opacity-50">
+        <TvExportButton className="ml-auto" fileName="focus-list" options={[{ label: "Focus list (your sections)", sections: groups.map((g) => ({ name: g.title, symbols: g.symbols })) }]} />
+        <button onClick={run} disabled={busy || !n} className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 font-semibold text-primary-foreground disabled:opacity-50">
           {busy ? <Loader2 size={13} className="animate-spin" /> : <Bot size={13} />} Review it
         </button>
       </div>
       {busy && <div className="flex items-center gap-2 rounded-lg border border-border bg-card p-4 text-[13px] text-muted-foreground"><Loader2 size={14} className="animate-spin text-primary" /> The AI is reviewing your list (1–2 minutes)…</div>}
-      {res && <div className="rounded-lg border border-border bg-card p-5"><div className="mb-2 text-[11.5px] text-muted-foreground">{res.model}</div><AiMarkdown text={res.text} /></div>}
+      {res && <div className="rounded-lg border border-border bg-card p-5"><div className="mb-2 flex items-center gap-2 text-[11.5px] text-muted-foreground">{res.model}<TvFromText className="ms-auto" text={res.text} name="Focus review - mentioned" fileName="focus-review" /></div><AiMarkdown text={res.text} /></div>}
     </div>
   );
 }

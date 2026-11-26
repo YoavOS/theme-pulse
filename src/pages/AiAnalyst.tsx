@@ -9,6 +9,7 @@ import JournalView from "@/components/ai/JournalView";
 import { touchLab, useLabUsage } from "@/lib/labs";
 import { toast } from "sonner";
 import AiMarkdown from "@/components/ai/AiMarkdown";
+import { TvFromText } from "@/components/ai/TvExportButton";
 import {
   aiLatest, aiStatus, aiStock, aiWriteReport, askAi, readAiLang, saveAiLang,
   type AiLang, type AiReport, type AiStatus, type AiStep,
@@ -161,6 +162,7 @@ function ReportView({ lang }: { lang: AiLang }) {
           <div className="mb-3 flex flex-wrap items-baseline gap-2 border-b border-border pb-2">
             <h2 className="text-lg font-semibold">{r.title}</h2>
             <span className="text-[11.5px] text-muted-foreground">{ago(r.created_at)} · {r.model}</span>
+            <TvFromText className="ms-auto" he={lang === "he"} text={r.content} name={`Market report ${r.day}`} fileName={`market-report-${r.day}`} />
           </div>
           <AiMarkdown text={r.content} />
         </div>
@@ -225,6 +227,7 @@ function AskView({ lang }: { lang: AiLang }) {
       ) : (
         <div key={i} className="rounded-lg border border-border bg-card p-4">
           <AiMarkdown text={m.content} />
+          {m.role === "assistant" && <div className="mt-2 flex"><TvFromText he={lang === "he"} text={m.content} name="Ask your data" fileName="ask-your-data" /></div>}
           {(m.steps?.length || m.model) && <Steps steps={m.steps ?? []} model={m.model} />}
         </div>
       ))}
