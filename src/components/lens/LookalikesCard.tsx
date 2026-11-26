@@ -5,6 +5,7 @@ import { LABEL_SHORT, type ProvenLabel } from "@/lib/proven/types";
 import { useLensLang } from "@/lib/lens/i18n";
 import { TRAIT_HE } from "@/lib/lens/he/traits";
 import { HE_LABEL_SHORT } from "@/lib/lens/he/proven";
+import { AutoTerms } from "./Term";
 
 /**
  * Look-alikes: proven companies whose 10-K fingerprint (returns vs cost of capital, how they earn them,
@@ -33,7 +34,7 @@ export default function LookalikesCard({ symbol, onOpen }: { symbol: string; onO
       <button onClick={() => onOpen(r.peer)} className="font-mono font-semibold hover:text-primary">{r.peer}</button>
       {r.mode === "before" && r.peer_year && <span className="text-muted-foreground">{he ? " ב-" : " in "}{r.peer_year.slice(0, 4)}</span>}
       {r.peer_label && <span className="text-muted-foreground"> · {he ? `${HE_LABEL_SHORT[r.peer_label] ?? r.peer_label} היום` : `${LABEL_SHORT[r.peer_label] ?? r.peer_label} now`}</span>}
-      <div className="text-[11.5px] text-muted-foreground">{he ? "דומות ב: " : "alike in: "}{r.shared.map((s) => (he && s.trait ? TRAIT_HE[s.trait] ?? s.text : s.text)).join("; ")}</div>
+      <div className="text-[11.5px] text-muted-foreground">{he ? "דומות ב: " : "alike in: "}<AutoTerms text={r.shared.map((s) => (he && s.trait ? TRAIT_HE[s.trait] ?? s.text : s.text)).join("; ")} /></div>
     </li>
   );
   return (
@@ -43,7 +44,7 @@ export default function LookalikesCard({ symbol, onOpen }: { symbol: string; onO
         <div><div className="mb-1 text-[11.5px] font-semibold">{he ? "דומות לה היום" : "Look like it today"}</div><ul className="space-y-1.5">{list("now").map((r) => <Item key={`n${r.rank}`} r={r} />)}</ul></div>
         <div><div className="mb-1 text-[11.5px] font-semibold">{he ? "נראו כמוה לפני שנים" : "Looked like it years ago"}</div><ul className="space-y-1.5">{list("before").map((r) => <Item key={`b${r.rank}`} r={r} />)}</ul></div>
       </div>
-      <p className="mt-2 text-[11px] text-muted-foreground">{he ? "מספרים דומים, לא עתיד דומה: רוב החברות שנראו כמו חברות מצוינות לא הפכו למצוינות. הסיכויים מופיעים ב\"מה המספרים לא יכולים לספר\"." : "Similar numbers, not a similar future: most look-alikes of great companies did not become great. The odds are in \"What the numbers can't tell you\"."}</p>
+      <p className="mt-2 text-[11px] text-muted-foreground">{<AutoTerms text={he ? "מספרים דומים, לא עתיד דומה: רוב החברות שנראו כמו חברות מצוינות לא הפכו למצוינות. הסיכויים מופיעים ב\"מה המספרים לא יכולים לספר\"." : "Similar numbers, not a similar future: most look-alikes of great companies did not become great. The odds are in \"What the numbers can't tell you\"."}/>}</p>
     </section>
   );
 }

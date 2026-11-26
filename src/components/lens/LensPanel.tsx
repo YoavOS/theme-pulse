@@ -19,6 +19,7 @@ import ProvenBadge from "@/components/proven/ProvenBadge";
 import { useProvenOne } from "@/hooks/useProvenStrength";
 import { toneBox, type Tone } from "@/lib/moveTint";
 import { AutoTerms, Term, PlainTerms } from "./Term";
+import { GlossaryButton, GlossaryProvider } from "./GlossaryBrowser";
 import { TermCompanyContext } from "@/lib/lens/termContext";
 import { companyNote } from "@/lib/lens/companyMeaning";
 import { LensScope, dirOf, ltr, setLensLang, useLensLang, useLensLangSetting, useTx } from "@/lib/lens/i18n";
@@ -501,6 +502,7 @@ export default function LensPanel({ symbol: symbolProp, onSymbolChange, onClose,
   return (
     <LensScope.Provider value={true}>
     <TermCompanyContext.Provider value={data ? forCompany : null}>
+    <GlossaryProvider>
     <div ref={rootRef} dir={dirOf(lang)} lang={lang} className="flex h-full min-h-0 flex-col bg-background text-foreground">
       {/* Header */}
       <div className={`sticky top-0 z-10 border-b border-border bg-background/95 backdrop-blur ${wide ? "px-6 py-3" : "px-3 py-2"}`}>
@@ -517,6 +519,7 @@ export default function LensPanel({ symbol: symbolProp, onSymbolChange, onClose,
                 className="h-7 w-full rounded-md border border-border bg-muted/30 ps-6 pe-2 font-mono text-[13px] uppercase rtl:text-right" />
             </span>
           </form>
+          <GlossaryButton />
           <button onClick={() => setLensLang(he ? "en" : "he")} title={he ? "Switch to English" : "מעבר לעברית"} aria-label={he ? "Switch to English" : "מעבר לעברית"}
             className="rounded border border-border px-1.5 py-0.5 text-[11px] font-semibold text-muted-foreground hover:bg-muted hover:text-foreground">{he ? "EN" : "עב"}</button>
           <button onClick={() => refresh()} disabled={!symbol || loading} title={tx("Recompute from the latest filings", "חשב מחדש מהדוחות האחרונים")} className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-40">
@@ -567,7 +570,7 @@ export default function LensPanel({ symbol: symbolProp, onSymbolChange, onClose,
         {data && (
           <>
            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-lg bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
-             <span>{tx("Filings through","דוחות עד")} <bdi>{data.sec.asOf??'—'}</bdi></span>
+             <span><Term id="tenk">{tx("Filings through","דוחות עד")}</Term> <bdi>{data.sec.asOf??'—'}</bdi></span>
              <span className={marketAge>7?'text-amber-400':''}>{tx("Market snapshot","נתוני שוק")}: {data.market.asOf ? new Date(data.market.asOf).toLocaleDateString(he?'he-IL':'en-US') : tx("date unavailable — valuation is illustrative","תאריך חסר — הערכת השווי להמחשה בלבד")}</span>
              {data.sec.sourceUrl ? <a href={data.sec.sourceUrl} target="_blank" rel="noreferrer" className="underline">{tx("SEC Form 6-K earnings release","פרסום התוצאות בטופס 6-K")}</a>
                : <span>{tx("Reported accounting; adjusted returns in Evidence","חשבונאות מדווחת; תשואות מתואמות בלשונית ראיות")}</span>}
@@ -588,20 +591,20 @@ export default function LensPanel({ symbol: symbolProp, onSymbolChange, onClose,
                    <p className="text-xs text-muted-foreground">{tx("Quarter ended", "רבעון שהסתיים ב־")} <bdi>{end}</bdi></p>
                    <dl className={`grid grid-cols-2 gap-3 text-sm ${dilutedEPS == null ? "sm:grid-cols-3" : "sm:grid-cols-4"}`}>
                      <div>
-                       <dt className="text-xs text-muted-foreground">{tx("Revenue", "הכנסות")}</dt>
-                       <dd><bdi>{fmtMoney(revenue)}</bdi>{growth != null && <span className="ms-2 text-xs text-muted-foreground"><bdi>{growth >= 0 ? "+" : ""}{growth.toFixed(1)}%</bdi> {tx("YoY", "לעומת אשתקד")}</span>}</dd>
+                       <dt className="text-xs text-muted-foreground"><AutoTerms text={tx("Revenue", "הכנסות")}/></dt>
+                       <dd><bdi>{fmtMoney(revenue)}</bdi>{growth != null && <span className="ms-2 text-xs text-muted-foreground"><bdi>{growth >= 0 ? "+" : ""}{growth.toFixed(1)}%</bdi> <Term id="yoy">{tx("YoY", "לעומת אשתקד")}</Term></span>}</dd>
                      </div>
-                     {operatingIncome != null && <div><dt className="text-xs text-muted-foreground">{tx("Operating profit", "רווח תפעולי")}</dt><dd><bdi>{fmtMoney(operatingIncome)}</bdi></dd></div>}
-                     <div><dt className="text-xs text-muted-foreground">{tx("Net income", "רווח נקי")}</dt><dd><bdi>{fmtMoney(netIncome)}</bdi></dd></div>
-                     {dilutedEPS != null && <div><dt className="text-xs text-muted-foreground">{tx("Reported diluted EPS", "רווח מדולל מדווח למניה")}</dt><dd><bdi>{new Intl.NumberFormat("en-US", {style:"currency", currency:"USD"}).format(dilutedEPS)}</bdi></dd></div>}
+                     {operatingIncome != null && <div><dt className="text-xs text-muted-foreground"><AutoTerms text={tx("Operating profit", "רווח תפעולי")}/></dt><dd><bdi>{fmtMoney(operatingIncome)}</bdi></dd></div>}
+                     <div><dt className="text-xs text-muted-foreground"><AutoTerms text={tx("Net income", "רווח נקי")}/></dt><dd><bdi>{fmtMoney(netIncome)}</bdi></dd></div>
+                     {dilutedEPS != null && <div><dt className="text-xs text-muted-foreground"><AutoTerms text={tx("Reported diluted EPS", "רווח מדולל מדווח למניה")}/></dt><dd><bdi>{new Intl.NumberFormat("en-US", {style:"currency", currency:"USD"}).format(dilutedEPS)}</bdi></dd></div>}
                    </dl>
                  </>;
                })()}
                <p className="text-xs text-muted-foreground">{data.sec.sourceUrl
-                 ? tx("The Lens uses verified figures from quarterly SEC releases.", "הנתונים בלשונית מבוססים על פרסומים רבעוניים מאומתים ב־SEC.")
+                 ? <AutoTerms text={tx("The Lens uses verified figures from quarterly SEC releases.", "הנתונים בלשונית מבוססים על פרסומים רבעוניים מאומתים ב־SEC.")}/>
                  : data.sec.asOf
                  ? <>{tx("Charts and valuation use structured SEC financials through", "הגרפים והערכת השווי מבוססים על נתוני SEC מובנים עד")} <bdi>{data.sec.asOf}</bdi>.</>
-                 : tx("Income charts use available quarterly releases. Cash flow and valuation require additional filing data.", "תרשימי ההכנסות מבוססים על פרסומים רבעוניים זמינים. תזרים מזומנים והערכת שווי דורשים נתונים נוספים.")}</p>
+                 : <AutoTerms text={tx("Income charts use available quarterly releases. Cash flow and valuation require additional filing data.", "תרשימי ההכנסות מבוססים על פרסומים רבעוניים זמינים. תזרים מזומנים והערכת שווי דורשים נתונים נוספים.")}/>}</p>
              </section>
            )}
            {section === 'statements' && <Suspense fallback={<p>{tx("Loading statements…","טעינת דוחות…")}</p>}><FinancialStatements key={data.symbol} p={data}/></Suspense>}
@@ -679,6 +682,7 @@ export default function LensPanel({ symbol: symbolProp, onSymbolChange, onClose,
        </div>
       </div>
     </div>
+    </GlossaryProvider>
     </TermCompanyContext.Provider>
     </LensScope.Provider>
   );

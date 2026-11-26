@@ -3,6 +3,7 @@ import type { LensPayload } from "@/lib/lens/types";
 import { metricMap } from "@/lib/lens/linked";
 import { useLensLang } from "@/lib/lens/i18n";
 import { buildScenarios } from "@/lib/lens/valuation";
+import { AutoTerms, Term } from "./Term";
 
 /**
  * Pictures for the Fundamentals Lens:
@@ -41,7 +42,7 @@ export function ReturnMap({ p }: { p: LensPayload }) {
   ].map((d) => ({ ...d, x: Math.min(xMax, Math.max(0, d.x)), y: Math.min(yMax, Math.max(0, d.y)) }));
   return (
     <div className="px-3 pb-2">
-      <div className="text-[11.5px] text-muted-foreground">{he ? "שתי הדרכים לתשואה גבוהה: שיעור רווח (לרוחב) × מכירות לכל דולר הון (לגובה). הקווים: תשואה שווה על ההון — הנמוך הוא עלות ההון." : "The two routes to a high return: margin (across) × sales per $ of capital (up). Lines = equal return on capital; the lowest is the cost of capital."}</div>
+      <div className="text-[11.5px] text-muted-foreground">{<AutoTerms text={he ? "שתי הדרכים לתשואה גבוהה: שיעור רווח (לרוחב) × מכירות לכל דולר הון (לגובה). הקווים: תשואה שווה על ההון — הנמוך הוא עלות ההון." : "The two routes to a high return: margin (across) × sales per $ of capital (up). Lines = equal return on capital; the lowest is the cost of capital."}/>}</div>
       <div className="h-56" dir="ltr">
         <ResponsiveContainer>
           <ComposedChart data={curve} margin={{ top: 8, right: 12, left: 0, bottom: 4 }}>
@@ -58,7 +59,7 @@ export function ReturnMap({ p }: { p: LensPayload }) {
         </ResponsiveContainer>
       </div>
       <div className="flex flex-wrap gap-3 text-[10.5px] text-muted-foreground" dir="ltr">
-        <span><span className="me-1 inline-block w-4 border-t-2 border-dashed" style={{ borderColor: PINK }} />{levels[0].toFixed(1)}% {he ? "(עלות ההון)" : "(cost of capital)"}</span>
+        <span><span className="me-1 inline-block w-4 border-t-2 border-dashed" style={{ borderColor: PINK }} />{levels[0].toFixed(1)}% <Term id="cost_of_capital">{he ? "(עלות ההון)" : "(cost of capital)"}</Term></span>
         {levels.slice(1).map((r) => <span key={r}><span className="me-1 inline-block w-4 border-t-2" style={{ borderColor: TEAL }} />{r}%</span>)}
       </div>
     </div>
@@ -91,7 +92,7 @@ export function IndustryBars({ p }: { p: LensPayload }) {
           );
           return (
             <div key={r.label}>
-              <div className="mb-0.5 text-[12px]">{r.label}</div>
+              <div className="mb-0.5 text-[12px]"><AutoTerms text={r.label} /></div>
               {bar(r.company, BLUE, p.symbol)}
               {bar(r.industry, AMBER, he ? "ענף" : "Industry")}
               {r.market != null && bar(r.market, MUTED, he ? "שוק" : "Market")}

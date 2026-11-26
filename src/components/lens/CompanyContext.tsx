@@ -3,6 +3,7 @@ import type { LensPayload } from "@/lib/lens/types";
 import { useLensLang } from "@/lib/lens/i18n";
 import { comparablePeriods, isNumber, percentageChange, latestQuarterSummary } from "@/lib/lens/quarterly";
 import { CHART } from "./QuarterlyChart";
+import { AutoTerms } from "./Term";
 import { extraComparison, type ExtraPair } from "@/lib/lens/extraComparisons";
 
 type MetricPair = "cash" | "profit" | "margin" | ExtraPair;
@@ -117,34 +118,34 @@ export function MetricConnections({ p }: { p: LensPayload }) {
     </div>
     {pair === "cash" && <div className="mt-4 grid grid-cols-2 gap-3">
       {[[t("Quarterly revenue", "הכנסות רבעוניות"), money(facts ? facts.revenue : q.latest?.revenue), percent(revenueGrowth)], [t("Ending cash balance", "יתרת מזומנים בסוף הרבעון"), money(facts?.cash), cashDelta(x)]].map(([label, value, change]) =>
-        <div key={label} className="rounded-xl bg-muted/35 px-3 py-2"><p className="text-xs text-muted-foreground">{label}</p>
+        <div key={label} className="rounded-xl bg-muted/35 px-3 py-2"><p className="text-xs text-muted-foreground"><AutoTerms text={label}/></p>
           <bdi className="font-mono text-lg" style={{ color: CHART.positive }}>{value}</bdi>
           <p className="text-xs text-muted-foreground"><bdi>{change}</bdi> {t("vs previous quarter", "מול הרבעון הקודם")}</p></div>)}
     </div>}
-    <p className="mt-3 max-w-4xl text-sm">{summary}</p>
+    <p className="mt-3 max-w-4xl text-sm"><AutoTerms text={summary}/></p>
     <dl className="mt-3 grid gap-2 sm:grid-cols-3">
       {rows.map(([label, value]) => <div key={label} className="flex items-baseline justify-between gap-2 rounded-lg border border-border/60 px-2.5 py-2 text-xs">
-        <dt className="text-muted-foreground">{label}</dt><dd className="font-mono"><bdi>{value}</bdi></dd>
+        <dt className="text-muted-foreground"><AutoTerms text={label}/></dt><dd className="font-mono"><bdi>{value}</bdi></dd>
       </div>)}
     </dl>
     {pair === "cash" && <details className="mt-3 text-xs text-muted-foreground" open={advances !== null && advances > 0 || borrowing !== null && borrowing > 0 ? true : undefined}>
       <summary className="cursor-pointer font-medium text-foreground">{t("Could timing or borrowing explain it?", "האם עיתוי או הלוואות מסבירים את השינוי?")}</summary>
       <ul className="mt-2 space-y-2">
-        <li>{t("Customer prepayments.", "מקדמות מלקוחות.")} {advances === null
+        <li><AutoTerms text={t("Customer prepayments.", "מקדמות מלקוחות.")}/> {<AutoTerms text={advances === null
           ? t("The filing data has no comparable deferred revenue balances, so upfront payments can’t be checked here.", "אין יתרות הכנסות נדחות בנות השוואה, ולכן אי אפשר לבדוק כאן מקדמות.")
           : advances > 0 ? t("The deferred revenue balance rose. That is consistent with more advance billing or receipts, but it does not measure cash collected.", "יתרת ההכנסות הנדחות עלתה. זה מתאים ליותר חיובים או מקדמות, אבל אינו מודד את הסכום שנגבה.")
-          : t("Deferred revenue did not rise. There’s no net build in that line, although it can hide receipts and revenue recognized during the quarter.", "ההכנסות הנדחות לא עלו. אין עלייה נטו בסעיף, אך התקבלו אולי מקדמות והוכרו הכנסות במהלך הרבעון.")}</li>
-        <li>{t("Loans.", "הלוואות.")} {borrowing === null
+          : t("Deferred revenue did not rise. There’s no net build in that line, although it can hide receipts and revenue recognized during the quarter.", "ההכנסות הנדחות לא עלו. אין עלייה נטו בסעיף, אך התקבלו אולי מקדמות והוכרו הכנסות במהלך הרבעון.")}/>}</li>
+        <li><AutoTerms text={t("Loans.", "הלוואות.")}/> {<AutoTerms text={borrowing === null
           ? t("New long-term borrowing is unavailable as a separate figure. Net financing may include borrowing, repayments and shareholder payments.", "הלוואות חדשות לטווח ארוך אינן זמינות בנפרד. תזרים המימון נטו עשוי לכלול הלוואות, החזרים ותשלומים לבעלי מניות.")
           : borrowing > 0 ? t("The filing shows proceeds from new long-term debt. Loans bring in cash without creating sales. Compare repayments and net financing to see what remained.", "הדוח מציג תקבולים מחוב חדש לטווח ארוך. הלוואות מגדילות מזומנים בלי ליצור מכירות. השוו החזרי חוב ותזרים מימון נטו.")
-          : t("This long-term borrowing line reports zero proceeds. Short-term borrowing and other financing may still affect cash.", "בסעיף הלוואות לטווח ארוך לא דווחו תקבולים. הלוואות קצרות ומימון אחר עדיין עשויים להשפיע.")}</li>
+          : t("This long-term borrowing line reports zero proceeds. Short-term borrowing and other financing may still affect cash.", "בסעיף הלוואות לטווח ארוך לא דווחו תקבולים. הלוואות קצרות ומימון אחר עדיין עשויים להשפיע.")}/>}</li>
       </ul>
     </details>}
     {extra && <div className="mt-3 rounded-lg border border-border/60 bg-muted/20 px-3 py-2 text-xs leading-relaxed text-muted-foreground">
-      <strong className="me-1 text-foreground">{t("What can change the picture?", "מה יכול לשנות את התמונה?")}</strong> {extra.check}
+      <strong className="me-1 text-foreground">{t("What can change the picture?", "מה יכול לשנות את התמונה?")}</strong> <AutoTerms text={extra.check}/>
     </div>}
     <p className="mt-3 text-xs text-muted-foreground">{t("Sources: reported statements. — means unavailable.", "מקור: דוחות מדווחים. — מציין מידע חסר.")}{" "}
-      {pair === "cash" && t("The cash-flow categories can differ from the cash-balance change because of currency effects or restricted cash.", "סעיפי התזרים עשויים להיות שונים מהשינוי ביתרת המזומנים בגלל מטבע או מזומנים מוגבלים.")}</p>
+      {pair === "cash" && <AutoTerms text={t("The cash-flow categories can differ from the cash-balance change because of currency effects or restricted cash.", "סעיפי התזרים עשויים להיות שונים מהשינוי ביתרת המזומנים בגלל מטבע או מזומנים מוגבלים.")}/>}</p>
   </section>;
 }
 
@@ -181,20 +182,20 @@ export function MarketValuation({ p }: { p: LensPayload }) {
   const hasMultiple = rows.some(([, value]) => value !== null);
   return <section className="space-y-4 rounded-2xl border border-border bg-card/45 p-4 sm:p-6">
     <div><h2 className="text-xl font-semibold">{t("How the market values the company", "איך השוק מתמחר את החברה")}</h2>
-      <p className="mt-1 max-w-3xl text-sm text-muted-foreground">{t("The latest market snapshot available to Theme Pulse. These figures describe the market price and what investors are paying per dollar of business results.", "תמונת השוק האחרונה הזמינה באפליקציה. הנתונים מתארים את מחיר השוק ומה המשקיעים משלמים לכל דולר של תוצאות עסקיות.")}</p></div>
+      <p className="mt-1 max-w-3xl text-sm text-muted-foreground">{<AutoTerms text={t("The latest market snapshot available to Theme Pulse. These figures describe the market price and what investors are paying per dollar of business results.", "תמונת השוק האחרונה הזמינה באפליקציה. הנתונים מתארים את מחיר השוק ומה המשקיעים משלמים לכל דולר של תוצאות עסקיות.")}/>}</p></div>
     <div className="grid gap-3 sm:grid-cols-2">
-      <div className="rounded-xl border border-border p-3"><p className="text-sm text-muted-foreground">{t("Market cap", "שווי שוק")}</p><bdi className="font-mono text-2xl">{money(cap)}</bdi>
+      <div className="rounded-xl border border-border p-3"><p className="text-sm text-muted-foreground"><AutoTerms text={t("Market cap", "שווי שוק")}/></p><bdi className="font-mono text-2xl">{money(cap)}</bdi>
         <p className="text-xs text-muted-foreground">{t("Market value of all shares", "שווי השוק של כל המניות")} · <bdi>{date(market?.capDate ?? p.market.asOf)}</bdi></p></div>
-      <div className="rounded-xl border border-border p-3"><p className="text-sm text-muted-foreground">{t("Share price", "מחיר למניה")}</p><bdi className="font-mono text-2xl">{isNumber(p.market.price) ? "$" + p.market.price.toFixed(2) : "—"}</bdi>
+      <div className="rounded-xl border border-border p-3"><p className="text-sm text-muted-foreground"><AutoTerms text={t("Share price", "מחיר למניה")}/></p><bdi className="font-mono text-2xl">{isNumber(p.market.price) ? "$" + p.market.price.toFixed(2) : "—"}</bdi>
         <p className="text-xs text-muted-foreground">{t("Cached market data", "נתוני שוק שמורים")} · <bdi>{date(market?.priceDate)}</bdi></p></div>
     </div>
     <div className="grid gap-3 md:grid-cols-3">{rows.map(([key, value, explanation]) =>
-      <div key={key} className="rounded-xl border border-border p-3"><h3 className="font-semibold">{key}</h3>
-        <bdi className="font-mono text-xl text-primary">{ratio(value)}</bdi><p className="mt-1 text-sm text-muted-foreground">{explanation}</p></div>)}</div>
+      <div key={key} className="rounded-xl border border-border p-3"><h3 className="font-semibold"><AutoTerms text={key}/></h3>
+        <bdi className="font-mono text-xl text-primary">{ratio(value)}</bdi><p className="mt-1 text-sm text-muted-foreground"><AutoTerms text={explanation}/></p></div>)}</div>
     {computedPe !== null || computedPs !== null ? <p className="text-xs text-muted-foreground">
       {computedPe !== null && "P/E"}{computedPe !== null && computedPs !== null && " · "}{computedPs !== null && "P/S"} — {t("Calculated using cached market cap and twelve months of reported results through", "חושב לפי שווי שוק שמור ותוצאות מדווחות ל־12 חודשים עד")} <bdi>{ttm?.end ?? quarters[quarters.length - 1]?.end}</bdi>.
     </p> : null}
-    {pe !== null && computedPe === null && peer && <p className="rounded-lg bg-muted/40 px-3 py-2 text-sm">{t("Profitable peer median P/E", "חציון מכפיל הרווח של חברות רווחיות להשוואה")} <bdi>{peer.median}</bdi> · <bdi>{peer.group}</bdi> · {peer.n} {t("companies", "חברות")}. {t("A difference can reflect growth, risk or earnings quality.", "פער יכול לשקף צמיחה, סיכון או איכות רווחים.")}</p>}
+    {pe !== null && computedPe === null && peer && <p className="rounded-lg bg-muted/40 px-3 py-2 text-sm"><AutoTerms text={t("Profitable peer median P/E", "חציון מכפיל הרווח של חברות רווחיות להשוואה")}/> <bdi>{peer.median}</bdi> · <bdi>{peer.group}</bdi> · {peer.n} {t("companies", "חברות")}. {t("A difference can reflect growth, risk or earnings quality.", "פער יכול לשקף צמיחה, סיכון או איכות רווחים.")}</p>}
     <p className="text-xs text-muted-foreground">{hasMultiple
       ? <>{(profitable && market?.pe != null || market?.ps != null || pb !== null) && <>{t("Provider multiples cached on", "מכפילי הספק נשמרו ב־")} <bdi>{date(market?.multiplesDate)}</bdi>. </>}{t("Snapshot dates can differ and quotes may lag.", "מועדי הנתונים עשויים להיות שונים והמחירים עשויים להתעדכן באיחור.")}</>
       : t("No usable multiples in the current market snapshot. A blank figure means the data is unavailable or the ratio is unsuitable.", "אין מכפילים שמישים בתמונת השוק. נתון ריק מציין מידע חסר או מכפיל שאינו מתאים.")}</p>

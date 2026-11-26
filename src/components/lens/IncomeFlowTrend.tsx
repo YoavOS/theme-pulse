@@ -3,6 +3,7 @@ import { useLensLang } from "@/lib/lens/i18n";
 import { comparablePeriods, isNumber, percentageChange } from "@/lib/lens/quarterly";
 import type { StatementPeriod } from "../../../supabase/functions/_shared/financialStatements";
 import { CHART } from "./QuarterlyChart";
+import { AutoTerms, Term } from "./Term";
 
 export const flowSteps = ["revenue", "gross", "operating", "net", "directCost", "operatingExpense", "nonOperating"] as const;
 export type FlowStep = typeof flowSteps[number];
@@ -75,7 +76,7 @@ export function IncomeFlowTrend({ periods, period, step, label, onSelect }: {
   return <div className="mt-4 rounded-xl border border-border bg-background/35 p-3 sm:p-4">
     <div className="flex flex-wrap items-start justify-between gap-2">
       <div>
-        <h3 className="text-sm font-semibold">{label} · {t("Quarterly trend", "מגמה רבעונית")}</h3>
+        <h3 className="text-sm font-semibold"><AutoTerms text={label}/> · {t("Quarterly trend", "מגמה רבעונית")}</h3>
         <p className="mt-1 text-xs text-muted-foreground">{t("Select a quarter in the trend to update the flow above.", "בחירת רבעון במגמה מעדכנת את תרשים הזרימה למעלה.")}</p>
       </div>
       {step !== "revenue" && <div role="group" aria-label={t("Trend units", "יחידות לתצוגת המגמה")} className="flex rounded-lg border border-border p-0.5">
@@ -87,9 +88,9 @@ export function IncomeFlowTrend({ periods, period, step, label, onSelect }: {
     </div>
     {selected && <div className="mt-3 flex flex-wrap items-baseline gap-x-4 gap-y-1 text-xs text-muted-foreground">
       <bdi>{selected.end}</bdi>
-      <span><bdi className="font-mono font-semibold text-foreground">{asMoney(selected.amount)}</bdi>{" · "}{t("YoY", "שינוי שנתי")} <bdi>{signed(amountChange, "%")}</bdi></span>
-      {step !== "revenue" && <span><bdi className="font-mono font-semibold text-foreground">{asPercent(selected.share)}</bdi>{" "}{t("of revenue", "מההכנסות")}
-        {" · "}{t("YoY", "שינוי שנתי")} <bdi>{signed(shareChange, " pp")}</bdi></span>}
+      <span><bdi className="font-mono font-semibold text-foreground">{asMoney(selected.amount)}</bdi>{" · "}<Term id="yoy">{t("YoY", "שינוי שנתי")}</Term> <bdi>{signed(amountChange, "%")}</bdi></span>
+      {step !== "revenue" && <span><bdi className="font-mono font-semibold text-foreground">{asPercent(selected.share)}</bdi>{" "}<Term id="per100">{t("of revenue", "מההכנסות")}</Term>
+        {" · "}<Term id="yoy">{t("YoY", "שינוי שנתי")}</Term> <bdi>{signed(shareChange, " pp")}</bdi></span>}
     </div>}
     {points.length ? <div className="mt-3 overflow-x-auto">
       <svg className="mx-auto block w-full min-w-[480px] max-w-4xl" viewBox="0 0 570 134" direction="ltr" role="group"

@@ -7,15 +7,29 @@
  * capitals (so "roe" inside a word never matches ROE).
  */
 
+import { ALSO_EN, MORE_EN, NEW_EN } from "./glossaryMore";
+
 export interface GlossaryEntry {
   id: string;
   term: string;
   also?: string[];
   def: string;
   why?: string;
+  /** How to read the number: what's high or low, what to compare it with, common traps. */
+  read?: string;
+  /** How it's calculated, in words. */
+  formula?: string;
 }
 
-export const GLOSSARY: GlossaryEntry[] = [
+/** Merge the additions (new entries, extra notes, extra spellings) into a base list; base order first. */
+export function enrichGlossary(base: GlossaryEntry[], added: GlossaryEntry[], more: Record<string, { read?: string; formula?: string }>, also: Record<string, string[]>): GlossaryEntry[] {
+  return [...base, ...added].map((e) => {
+    const m = more[e.id], extra = also[e.id];
+    return m || extra ? { ...e, ...m, ...(extra ? { also: [...(e.also ?? []), ...extra] } : {}) } : e;
+  });
+}
+
+const GLOSSARY_BASE: GlossaryEntry[] = [
   // ── The income statement ─────────────────────────────────────────────
   { id: "revenue", term: "Revenue", also: ["sales", "revenues", "Revenue TTM"],
     def: "All the money customers paid the company for its products or services in a period, before any costs are taken out.",
@@ -338,17 +352,23 @@ export function buildMatcher(entries: GlossaryEntry[], hebrew = false): Glossary
   const spellings = entries
     .flatMap((g) => [g.term, ...(g.also ?? [])].map((t) => ({ text: t, entry: g, caps: /^[A-Z0-9&/\-·]+$/.test(t.replace(/\s/g, "")) && /[A-Z]/.test(t) && t.length <= 6 })))
     .sort((a, b) => b.text.length - a.text.length);
+  // Hebrew marks "the" on every word of a phrase ("רווח תפעולי" → "הרווח התפעולי", "שווי שוק" → "שווי השוק"):
+  // the first word's article is a prefix (group 1); later words may carry it too, and lookups ignore it.
+  const later = (w: string, i: number) => hebrew && i > 0 && /^[\u05D0-\u05EA]/.test(w) && w.replace(/^ה+/, "") !== "";
+  const keyOf = (t: string) => t.split(" ").map((w, i) => (later(w, i) ? w.replace(/^ה+/, "") : w)).join(" ").toLowerCase();
+  const patternOf = (t: string) => t.split(" ").map((w, i) => (later(w, i) ? "ה*" + esc(w.replace(/^ה+/, "")) : esc(w))).join(" ").toLowerCase();
   const byLower = new Map<string, { entry: GlossaryEntry; caps: boolean; text: string }[]>();
-  for (const s of spellings) { const k = s.text.toLowerCase(); byLower.set(k, [...(byLower.get(k) ?? []), s]); }
-  const alts = [...new Set(spellings.map((s) => s.text.toLowerCase()))].map(esc).join("|");
+  for (const s of spellings) { const k = keyOf(s.text); byLower.set(k, [...(byLower.get(k) ?? []), s]); }
+  const alts = [...new Set(spellings.map((s) => patternOf(s.text)))].join("|");
   const re = hebrew
     ? new RegExp(`(?<![\u0590-\u05FFA-Za-z0-9])([והבכלמש]{0,3})(${alts})(?![\u0590-\u05FFA-Za-z0-9])`, "gi")
     : new RegExp(`(?<![A-Za-z0-9])()(${alts})(?![A-Za-z0-9])`, "gi");
   return {
     byId: new Map(entries.map((g) => [g.id, g])), re, prefixed: hebrew,
-    entryFor: (match: string) => { for (const c of byLower.get(match.toLowerCase()) ?? []) if (!c.caps || c.text === match) return c.entry; return null; },
+    entryFor: (match: string) => { for (const c of byLower.get(keyOf(match)) ?? []) if (!c.caps || c.text === match) return c.entry; return null; },
   };
 }
+export const GLOSSARY: GlossaryEntry[] = enrichGlossary(GLOSSARY_BASE, NEW_EN, MORE_EN, ALSO_EN);
 export const GLOSSARY_EN = buildMatcher(GLOSSARY);
 /** Back-compat names (English). */
 export const GLOSSARY_BY_ID = GLOSSARY_EN.byId;

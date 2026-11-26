@@ -1,9 +1,10 @@
 // Hebrew glossary for the Fundamentals tab — same ids as ../glossary.ts. `also` lists the Hebrew (and a
 // few English) spellings that open the entry in Hebrew text; Hebrew prefixes (ה, ו, ב, ל, מ, ש, כ) are
 // handled by the matcher, so list the bare word.
-import type { GlossaryEntry } from "../glossary";
+import { enrichGlossary, type GlossaryEntry } from "../glossary";
+import { ALSO_HE, MORE_HE, NEW_HE } from "./glossaryMore";
 
-export const GLOSSARY_HE: GlossaryEntry[] = [
+const GLOSSARY_HE_BASE: GlossaryEntry[] = [
   // ── דוח רווח והפסד
   { id: "revenue", term: "הכנסות", also: ["מכירות", "הכנסות, 12 חודשים אחרונים"],
     def: "כל הכסף שלקוחות שילמו לחברה על המוצרים או השירותים שלה בתקופה, לפני שמנכים עלויות כלשהן.",
@@ -316,3 +317,5 @@ export const GLOSSARY_HE: GlossaryEntry[] = [
     def: "אסוואת' דמודרן, פרופסור למימון ב-NYU Stern, שמכונה 'דיקן הערכות השווי'. הוא משתף את הנתונים, השיעורים והבלוג שלו בחינם; העדשה בנויה על המסגרת שלו.",
     why: "הרעיון המרכזי שלו: ערך נובע מתזרימי מזומנים, צמיחה וסיכון — וכל מספר צריך לספר סיפור." },
 ];
+
+export const GLOSSARY_HE: GlossaryEntry[] = enrichGlossary(GLOSSARY_HE_BASE, NEW_HE, MORE_HE, ALSO_HE);

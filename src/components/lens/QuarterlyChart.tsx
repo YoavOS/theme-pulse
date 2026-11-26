@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { StatementPeriod } from '../../../supabase/functions/_shared/financialStatements';
 import { comparisonQuarter, growthAcceleration, isNumber, lossChange, quarterGrowth, signCrossover } from '@/lib/lens/quarterly';
 import { useLensLang } from '@/lib/lens/i18n';
+import { AutoTerms, Term } from './Term';
 
 export const CHART = { positive: 'hsl(var(--up))', negative: 'hsl(var(--down))', growth: 'hsl(var(--warn))', neutral: '#94a3b8' };
 const money = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', notation: 'compact', maximumFractionDigits: 1 });
@@ -46,6 +47,7 @@ export function QuarterlyChart({ periods, field, label }: {
   const formatAmount = (value: number | null) => amount(value, shares);
   const baseLabel = lag === 1 ? t('Previous quarter', 'הרבעון הקודם') : t('Same quarter last year', 'אותו רבעון אשתקד');
   const mode = lag === 1 ? 'QoQ' : 'YoY';
+  const modeTerm = <Term id={lag === 1 ? 'qoq' : 'yoy'}>{mode}</Term>;
   const hasCrossovers = rows.some(row => row.crossover !== null);
   const hasLoss = rows.some(row => row.lossRate !== null);
   const hasGrowth = rows.some(row => row.rate !== null);
@@ -88,7 +90,7 @@ export function QuarterlyChart({ periods, field, label }: {
 
   return <section className="min-w-0 rounded-2xl border border-border bg-card/50 p-4">
     <div className="flex min-h-11 items-start justify-between gap-2">
-      <h3 className="min-w-0 font-semibold leading-5">{label}</h3>
+      <h3 className="min-w-0 font-semibold leading-5"><AutoTerms text={label}/></h3>
       <div role="group" aria-label={t(label + ' growth comparison', label + ' השוואת צמיחה')} className="flex shrink-0 rounded-lg border border-border p-0.5">
         {([1, 4] as const).map(n => <button key={n} aria-pressed={lag === n} onClick={() => setLag(n)}
           className={'rounded-md px-2 py-1 text-xs ' + (lag === n ? 'bg-primary/20 text-primary' : 'text-muted-foreground')}>
@@ -104,12 +106,12 @@ export function QuarterlyChart({ periods, field, label }: {
               {detail.crossover === 'up' ? '↑' : '↓'} {crossoverLabel(detail.crossover)}
             </span>
           : detail.lossRate !== null
-            ? <span className="text-sm font-medium" style={{ color: lossColor }}>{lossDetail(detail.lossRate)} <bdi>{mode}</bdi></span>
-            : <bdi className="font-mono text-sm" style={{ color: CHART.growth }}>{pct(detail.rate)} {mode}</bdi>}
+            ? <span className="text-sm font-medium" style={{ color: lossColor }}><Term id="loss_change">{lossDetail(detail.lossRate)}</Term> <bdi>{modeTerm}</bdi></span>
+            : <bdi className="font-mono text-sm" style={{ color: CHART.growth }}>{pct(detail.rate)} {modeTerm}</bdi>}
         <bdi className="text-xs text-muted-foreground">{detail.end}</bdi>
       </div>
       <p className="mt-1 text-xs text-muted-foreground">
-        {baseLabel}{' · '}<bdi>{detail.priorEnd ?? '—'}</bdi>{' · '}<bdi>{formatAmount(detail.priorValue)}</bdi>
+        <Term id={lag === 1 ? 'qoq' : 'yoy'}>{baseLabel}</Term>{' · '}<bdi>{detail.priorEnd ?? '—'}</bdi>{' · '}<bdi>{formatAmount(detail.priorValue)}</bdi>
       </p>
       <p className="mt-1 text-xs text-muted-foreground">
         {showingLoss
@@ -176,7 +178,7 @@ export function QuarterlyChart({ periods, field, label }: {
       </div>
       {hasLoss && <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
         {hasGrowth && <span><span style={{ color: CHART.growth }}>━</span> {t('Growth', 'צמיחה')}</span>}
-        <span><span style={{ color: lossColor }}>┄</span> {t('Loss change: above zero means a smaller loss', 'שינוי בהפסד: מעל האפס ההפסד הצטמצם')}</span>
+        <span><span style={{ color: lossColor }}>┄</span> <AutoTerms text={t('Loss change: above zero means a smaller loss', 'שינוי בהפסד: מעל האפס ההפסד הצטמצם')}/></span>
       </div>}
       {hasCrossovers && <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
         <span><span style={{ color: CHART.positive }}>↑</span> {upLabel}</span>
@@ -191,17 +193,17 @@ export function QuarterlyChart({ periods, field, label }: {
       </div>
       <details className="mt-3 text-xs text-muted-foreground">
         <summary className="cursor-pointer">{t('How to read this + exact figures', 'איך לקרוא את התרשים + נתונים מדויקים')}</summary>
-        <p className="mt-2 leading-relaxed">{t(
+        <p className="mt-2 leading-relaxed">{<AutoTerms text={t(
           'Each bar pair compares the two amounts used for the growth point below. Growth below 0% means the amount fell. A positive growth rate can still slow down: going from 20% to 10% is a slowdown of 10 percentage points. Growth is unavailable across losses, a zero base or missing periods.',
           'כל זוג עמודות מציג את שני הסכומים ששימשו לחישוב נקודת הצמיחה שמתחתיו. צמיחה מתחת ל־0% פירושה ירידה בסכום. גם צמיחה חיובית יכולה להאט: מעבר מ־20% ל־10% הוא האטה של 10 נקודות אחוז. אין שיעור צמיחה כשיש הפסד, בסיס אפס או תקופה חסרה.'
-        )}</p>
-        {hasLoss && <p className="mt-2 leading-relaxed">{t(
+        )}/>}</p>
+        {hasLoss && <p className="mt-2 leading-relaxed">{<AutoTerms text={t(
           'When both periods report a loss, the dashed line measures the dollar change as a share of the earlier loss. A move from −$100M to −$80M gives +20%. Changes in the rate are shown in percentage points when both rates measure loss change.',
           'כשבשתי התקופות יש הפסד, הקו המקווקו מודד את השינוי בסכום ביחס לגודל ההפסד הקודם. מעבר מ־100 מיליון דולר הפסד ל־80 מיליון נותן 20%+. ההפרש בין הקצבים מוצג בנקודות אחוז כששניהם מודדים שינוי בהפסד.'
-        )}</p>}
+        )}/>}</p>}
         <div className="overflow-x-auto">
           <table className="mt-2 w-full text-start">
-            <thead><tr><th>{t('Period', 'תקופה')}</th><th>{t('Amount', 'סכום')}</th><th>{t('Compared with', 'בהשוואה ל־')}</th><th>{mode}</th></tr></thead>
+            <thead><tr><th>{t('Period', 'תקופה')}</th><th>{t('Amount', 'סכום')}</th><th>{t('Compared with', 'בהשוואה ל־')}</th><th>{modeTerm}</th></tr></thead>
             <tbody>{rows.map(row => <tr key={row.id}>
               <td><bdi>{row.end}</bdi></td><td><bdi>{formatAmount(row.value)}</bdi></td>
               <td><bdi>{row.priorEnd ? row.priorEnd + ' · ' + formatAmount(row.priorValue) : '—'}</bdi></td>

@@ -1,5 +1,6 @@
 import type { ConceptCard, LensPayload, Metric } from "@/lib/lens/types";
 import { heComparison, hePlainReading } from "@/lib/lens/he/companyMeaning";
+import { quarterNote } from "@/lib/lens/companyQuarterNote";
 
 /**
  * "What it means for this company": the glossary explains a term in general; this turns the
@@ -120,9 +121,12 @@ function comparison(S: string, m: Metric, higherIsBetter: boolean | null): strin
 export function companyNote(entryId: string, p: LensPayload | null | undefined, byId: Map<string, { m: Metric; c: ConceptCard }>, lang: "en" | "he" = "en"): { symbol: string; lines: string[] } | null {
   if (!p) return null;
   const ids = ENTRY_METRICS[entryId];
-  if (!ids) return null;
-  const hit = ids.map((id) => byId.get(id)).find((h) => h && (h.m.value !== null || (h.m.display && h.m.display !== "n/a" && h.m.display !== "n/m")));
-  if (!hit) return null;
+  const hit = ids?.map((id) => byId.get(id)).find((h) => h && (h.m.value !== null || (h.m.display && h.m.display !== "n/a" && h.m.display !== "n/m")));
+  if (!hit) {
+    // no ready-made metric: use the latest reported quarter or the market snapshot, when the term has one
+    const lines = quarterNote(entryId, p, lang);
+    return lines?.length ? { symbol: p.symbol, lines } : null;
+  }
   const S = p.symbol;
   if (lang === "he") {
     const first = hePlainReading(S, hit.m);

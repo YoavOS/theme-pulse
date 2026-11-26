@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import LensPanel from "@/components/lens/LensPanel";
+import { GlossaryButton, GlossaryProvider } from "@/components/lens/GlossaryBrowser";
 const IdeasView = lazy(() => import("@/components/proven/IdeasView"));
 import { onLensSymbol } from "@/lib/lens/channel";
 import { LensScope, dirOf, setLensLang, useLensLangSetting } from "@/lib/lens/i18n";
@@ -32,6 +33,7 @@ export default function FundamentalsLens() {
 
   return (
     <LensScope.Provider value={true}>
+    <GlossaryProvider>
     <div className="flex h-screen flex-col bg-background" dir={dirOf(lang)} lang={lang}>
       {/* both stay mounted so switching back keeps your place (and any prediction you wrote) */}
       <div className={`min-h-0 flex-1 ${view === "company" ? "" : "hidden"}`}>
@@ -50,13 +52,15 @@ export default function FundamentalsLens() {
           <input type="checkbox" checked={follow} onChange={(e) => setFollow(e.target.checked)} className="accent-[hsl(var(--primary))]" />
           {he ? "מעקב אחרי הסימול שנבדק ב-Live Execution" : "Follow the ticker checked in Live Execution"}
         </label>
-        <div className="ms-auto flex overflow-hidden rounded-md border border-border" role="group" aria-label={he ? "שפה" : "Language"}>
+        {view === "ideas" && <GlossaryButton className="ms-auto" />}
+        <div className={`${view === "ideas" ? "" : "ms-auto "}flex overflow-hidden rounded-md border border-border`} role="group" aria-label={he ? "שפה" : "Language"}>
           {([["en", "English"], ["he", "עברית"]] as const).map(([k, t]) => (
             <button key={k} onClick={() => setLensLang(k)} aria-pressed={lang === k} className={`px-2 py-0.5 ${lang === k ? "bg-primary/20 font-semibold text-primary" : "hover:text-foreground"}`}>{t}</button>
           ))}
         </div>
       </div>
     </div>
+    </GlossaryProvider>
     </LensScope.Provider>
   );
 }
