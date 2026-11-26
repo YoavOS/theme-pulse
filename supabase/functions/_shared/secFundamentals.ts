@@ -52,7 +52,7 @@ export function factsFor(gaap: Facts, names: readonly string[], unitPref: string
   for (const n of names) {
     const u = gaap[n]?.units;
     if (!u) continue;
-    const key = unitPref.find((k) => u[k]?.length) ?? Object.keys(u)[0];
+    const key = unitPref.find((k) => u[k]?.length);
     if (!key || !u[key]?.length) continue;
     // point-in-time: only facts already filed on `asOf`
     const list = asOf ? u[key].filter((f) => (f.filed ?? "") <= asOf) : u[key];

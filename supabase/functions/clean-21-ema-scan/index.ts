@@ -9,6 +9,7 @@ const DEADLINE_MS = 125_000;
 const EMA_LENGTHS = new Set([9, 21, 50, 200]);
 
 type EmaTimeframe = "daily" | "weekly";
+type GainStart = "firstAbove" | "previousClose";
 
 interface OHLCBar {
   ts: number;
@@ -147,6 +148,7 @@ function computeRow(
   emaLength: number,
   timeframe: EmaTimeframe,
   source: ResultRow["source"],
+  gainStart: GainStart = "firstAbove",
 ): ResultRow {
   const dailyBars = rawBars
     .filter((bar) => bar.ts && bar.close !== null && Number.isFinite(bar.close) && (bar.close as number) > 0)
@@ -167,13 +169,31 @@ function computeRow(
     periodsWithoutBelow++;
   }
 
-  // Performance is measured strictly from the first close above the EMA after
-  // the last close below it (i.e. the start of the current clean run) up to the
-  // latest close. No "prior advance" shortcut — that let unqualified names in.
   const latestClose = closes[closes.length - 1];
-  const cleanRunStartIdx = Math.max(0, closes.length - periodsWithoutBelow);
-  const startClose = periodsWithoutBelow > 0 ? closes[cleanRunStartIdx] : latestClose;
-  const gainPct = periodsWithoutBelow > 0 ? pctGain(startClose, latestClose) : null;
+  const cleanRunStartIdx = closes.length - periodsWithoutBelow;
+  let peakStartIdx = cleanRunStartIdx;
+  let startClose: number | null = periodsWithoutBelow > 0 ? closes[cleanRunStartIdx] : latestClose;
+  if (gainStart === "previousClose") {
+    // Equality keeps the run alive, but the crossover must close strictly above.
+    startClose = null;
+    for (let i = cleanRunStartIdx; i < closes.length; i++) {
+      const average = ema[i];
+      if (average === null || closes[i] <= average) continue;
+      // A streak that begins at the EMA seed has no confirmed preceding close at or below the EMA.
+      if (i > 0 && ema[i - 1] !== null) {
+        startClose = closes[i - 1];
+        peakStartIdx = i;
+      }
+      break;
+    }
+  }
+  let peakHigh = 0;
+  for (let i = peakStartIdx; startClose !== null && i < bars.length; i++) {
+    const high = bars[i].high;
+    // A missing or invalid high falls back to the observed close.
+    peakHigh = Math.max(peakHigh, closes[i], high !== null && Number.isFinite(high) ? high : closes[i]);
+  }
+  const gainPct = periodsWithoutBelow > 0 ? pctGain(startClose, peakHigh) : null;
   const emaValue = ema[ema.length - 1];
   const qualifies = periodsWithoutBelow >= minPeriod && gainPct !== null && gainPct >= minGainPct;
   const periodMultiplier = timeframe === "weekly" ? 5 : 1;
@@ -182,7 +202,7 @@ function computeRow(
     qualifies,
     gainPct,
     latestClose: Math.round(latestClose * 100) / 100,
-    startClose: Math.round(startClose * 100) / 100,
+    startClose: startClose === null ? null : Math.round(startClose * 100) / 100,
     ema21: emaValue !== null ? Math.round(emaValue * 100) / 100 : null,
     emaValue: emaValue !== null ? Math.round(emaValue * 100) / 100 : null,
     emaLength,
@@ -242,6 +262,7 @@ Deno.serve(async (req) => {
     const minGainPct = normalizeNumber(body?.minGainPct, 70, 0, 500);
     const emaLength = normalizeEmaLength(body?.emaLength);
     const timeframe = normalizeTimeframe(body?.timeframe);
+    const gainStart: GainStart = body?.gainStart === "previousClose" ? "previousClose" : "firstAbove";
     const minDefault = timeframe === "weekly" ? 12 : 60;
     const minPeriod = normalizeNumber(body?.minPeriod ?? body?.minDays, minDefault, timeframe === "weekly" ? 1 : 5, timeframe === "weekly" ? 260 : 504);
     if (symbols.length === 0) return json({ error: "symbols[] required", rows: [] }, 400);
@@ -286,7 +307,7 @@ Deno.serve(async (req) => {
 
     for (const symbol of symbols) {
       const cached = cacheHits.get(symbol);
-      if (cached?.length) rows.set(symbol, computeRow(symbol, cached, minGainPct, minPeriod, emaLength, timeframe, "cache"));
+      if (cached?.length) rows.set(symbol, computeRow(symbol, cached, minGainPct, minPeriod, emaLength, timeframe, "cache", gainStart));
     }
 
     const missing = symbols.filter((symbol) => !rows.has(symbol));
@@ -302,7 +323,7 @@ Deno.serve(async (req) => {
           continue;
         }
         fetched++;
-        rows.set(symbol, computeRow(symbol, ohlc, minGainPct, minPeriod, emaLength, timeframe, "yahoo"));
+        rows.set(symbol, computeRow(symbol, ohlc, minGainPct, minPeriod, emaLength, timeframe, "yahoo", gainStart));
         const closes = ohlc.map((bar) => bar.close).filter((v): v is number => v !== null);
         const start = closes[0] ?? null;
         const end = closes[closes.length - 1] ?? null;
@@ -347,6 +368,7 @@ Deno.serve(async (req) => {
       minPeriod,
       emaLength,
       timeframe,
+      gainStart,
       cacheHits: cacheHits.size,
       fetched,
       partial: allRows.some((row) => row.error === "not_processed"),

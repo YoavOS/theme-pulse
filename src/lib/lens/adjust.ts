@@ -47,7 +47,7 @@ export function computeAdjusted(a: AdjustInputs, opts: { life: number; rnd: bool
   const N = Math.max(1, Math.min(15, Math.round(opts.life)));
   if (opts.rnd) {
     const ys = a.rndAnnual.filter((r) => fin(r.val) && r.val >= 0);
-    if (ys.length >= 2) {
+    if (ys.length >= 2 && fin(a.rndTtm)) {
       // years 0..N (N+1 values); missing older years repeat the oldest known value (flagged)
       const vals: { fy: string; v: number; filled: boolean }[] = [];
       for (let j = 0; j <= N; j++) {
@@ -63,7 +63,8 @@ export function computeAdjusted(a: AdjustInputs, opts: { life: number; rnd: bool
       // a year earlier: the same weights applied to the series shifted by one year
       const assetPrior = vals.slice(1).reduce((s, x, j) => s + (j < N ? x.v * ((N - j) / N) : 0), 0);
       const amortization = rows.reduce((s, r) => s + r.amortization, 0);
-      const current = vals[0].v;
+      const current = a.rndTtm;
+      notes.push("R&D expense uses the same TTM period as operating income; amortization and the prior research asset use annual filing cohorts (an approximation between fiscal year ends).");
       const ebitChange = current - amortization;
       const filledYears = vals.filter((x) => x.filled).length;
       ebit += ebitChange;
@@ -72,7 +73,7 @@ export function computeAdjusted(a: AdjustInputs, opts: { life: number; rnd: bool
       if (filledYears) notes.push(`Only ${ys.length} years of R&D are in the filings; the ${filledYears} older year${filledYears > 1 ? "s" : ""} repeat the oldest known figure.`);
       if (rnd.shareOfRevenue < 1) notes.push("R&D is under 1% of revenue, so capitalising it changes little.");
     } else {
-      notes.push(ys.length ? "Only one year of R&D in the filings — not enough to capitalise." : "No R&D reported — nothing to capitalise.");
+      notes.push(!fin(a.rndTtm) ? "TTM R&D is unavailable — annual expense is not substituted into TTM operating income." : ys.length ? "Only one year of R&D in the filings — not enough to capitalise." : "No R&D reported — nothing to capitalise.");
     }
   }
   let lease: Adjusted["lease"] = null;

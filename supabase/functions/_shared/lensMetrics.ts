@@ -51,6 +51,10 @@ export const LENS_FLOW = {
   tax: ["IncomeTaxExpenseBenefit"],
   dna: ["DepreciationDepletionAndAmortization", "DepreciationAmortizationAndAccretionNet", "DepreciationAndAmortization", "Depreciation"],
   ocf: CONCEPTS.operatingCashFlow,
+  investingCash: ["NetCashProvidedByUsedInInvestingActivities"],
+  financingCash: ["NetCashProvidedByUsedInFinancingActivities"],
+  borrowingProceeds: ["ProceedsFromIssuanceOfLongTermDebt"],
+  borrowingRepayments: ["RepaymentsOfLongTermDebt"],
   capex: CONCEPTS.capex,
   acquisitions: ["PaymentsToAcquireBusinessesNetOfCashAcquired", "PaymentsToAcquireBusinessesGross"],
   buybacks: ["PaymentsForRepurchaseOfCommonStock"],
@@ -60,6 +64,9 @@ export const LENS_FLOW = {
 } as const;
 export const LENS_INSTANT = {
   cash: ["CashAndCashEquivalentsAtCarryingValue", "CashCashEquivalentsRestrictedCashAndRestrictedCashEquivalents", "Cash"],
+  cashOnly: ["CashAndCashEquivalentsAtCarryingValue"],
+  contractLiability: ["ContractWithCustomerLiabilityCurrent", "DeferredRevenueCurrent"],
+  receivables: ["AccountsReceivableNetCurrent"],
   stInvest: ["ShortTermInvestments", "MarketableSecuritiesCurrent", "AvailableForSaleSecuritiesDebtSecuritiesCurrent"],
   equity: CONCEPTS.equity,
   ltdNoncurrent: ["LongTermDebtNoncurrent", "LongTermDebtAndCapitalLeaseObligations"],
@@ -83,8 +90,11 @@ export interface QuarterRow {
   flow: Partial<Record<FlowKey, number | null>>;
   inst: Partial<Record<InstKey, number | null>>;
   shares: number | null;
+  dilutedEPS?: number | null;
+  dilutedShares?: number | null;
   fallback: string[];        // fields answered by a later concept in the list
   filed: string | null;
+  sourceUrl?: string;
 }
 export interface AnnualRow { end: string; revenue: number | null; operatingIncome: number | null; netIncome: number | null; operatingCashFlow: number | null; capex: number | null }
 
@@ -106,6 +116,12 @@ export function parseLensHistory(json: { facts?: Record<string, Facts> }, maxQua
   const flowL = Object.fromEntries(Object.entries(LENS_FLOW).map(([k, v]) => [k, lists(v)])) as Record<FlowKey, SecFact[][]>;
   const instL = Object.fromEntries(Object.entries(LENS_INSTANT).map(([k, v]) => [k, lists(v)])) as Record<InstKey, SecFact[][]>;
   const shareL = lists(SHARES, ["shares"]);
+  const [dilutedShares] = lists(["WeightedAverageNumberOfDilutedSharesOutstanding"], ["shares"]);
+  const [dilutedEPS] = lists(["EarningsPerShareDiluted"], ["USD/shares"]);
+  // Per-share and weighted-average figures cannot be derived by subtracting
+  // year-to-date values. Use a reported quarter or leave the field unavailable.
+  const exactQuarter = (facts: SecFact[] | undefined, end: string) =>
+    facts?.find(f => f.end === end && f.start && dur(f) >= 75 && dur(f) <= 105)?.val ?? null;
   const ends = quarterEnds([...flowL.revenue, ...flowL.netIncome, ...flowL.operatingIncome]).slice(0, maxQuarters);
 
   let firstFiled: string | null = null;
@@ -139,7 +155,7 @@ export function parseLensHistory(json: { facts?: Record<string, Facts> }, maxQua
     }
     let filed: string | null = null;
     for (const l of flowL.revenue.concat(flowL.netIncome)) for (const x of l) if (x.end === end && x.filed && (!filed || x.filed < filed)) filed = x.filed;
-    return { end, flow, inst, shares, fallback, filed };
+    return { end, flow, inst, shares, fallback, filed, dilutedEPS: exactQuarter(dilutedEPS, end), dilutedShares: exactQuarter(dilutedShares, end) };
   });
 
   const annual = parseCompanyFactsAnnual(json, 7).map((a) => ({
@@ -195,13 +211,18 @@ export function syntheticRating(coverage: number): { rating: string; spread: num
 // ── Metrics ──────────────────────────────────────────────────────────────────────────
 export interface MarketData { price: number | null; marketCap: number | null }
 
+export function consecutiveQuarters(qs: QuarterRow[]): boolean {
+  return qs.slice(1).every((q, i) => {
+    const days = (Date.parse(qs[i].end) - Date.parse(q.end)) / 86_400_000;
+    return days >= 75 && days <= 105;
+  });
+}
+
 /** Sum of four consecutive quarters (needs all four). */
 function ttm(qs: QuarterRow[], k: FlowKey, from = 0): number | null {
   const xs = qs.slice(from, from + 4).map((q) => q.flow[k]);
   if (xs.length < 4 || xs.some((x) => !fin(x))) return null;
-  // the four quarters must be consecutive (~1 year span)
-  const span = (Date.parse(qs[from].end) - Date.parse(qs[from + 3].end)) / 86_400_000;
-  if (span < 250 || span > 300) return null;
+  if (!consecutiveQuarters(qs.slice(from, from + 4))) return null;
   return (xs as number[]).reduce((a, b) => a + b, 0);
 }
 const pctChange = (now: number | null, prior: number | null) => (fin(now) && fin(prior) && prior > 0 ? ((now - prior) / prior) * 100 : null);
@@ -231,7 +252,14 @@ export interface LensMetrics {
 export function computeMetrics(h: CompanyHistory, mkt: MarketData, opts: { financial: boolean }): LensMetrics {
   const q = h.quarters;
   const m: Metric[] = [];
-  const q0 = q[0], q4 = q[4];
+  const q0 = q[0];
+  const releaseHistory = !!q0?.sourceUrl;
+  const yearAgo = q0 && q.find(row => {
+    const days = (Date.parse(q0.end) - Date.parse(row.end)) / 86_400_000;
+    return days >= 350 && days <= 380;
+  });
+  const priorTtm = yearAgo && consecutiveQuarters(q.slice(0, 5)) && q[4] === yearAgo ? 4 : null;
+  const q4 = yearAgo;
   const ttmLabel = q0 ? `TTM to ${q0.end}` : "TTM";
   const add = (x: Omit<Metric, "display"> & { display?: string }) => {
     const display = x.display ?? (x.value === null ? "n/m"
@@ -239,11 +267,11 @@ export function computeMetrics(h: CompanyHistory, mkt: MarketData, opts: { finan
       : x.unit === "x" ? fmtX(x.value) : `${x.value.toFixed(1)} yrs`);
     m.push({ ...x, display });
   };
-  const T = (k: FlowKey, from = 0) => ttm(q, k, from);
-  const rev = T("revenue"), revPrev = T("revenue", 4);
-  const ebit = T("operatingIncome"), ebitPrev = T("operatingIncome", 4);
-  const ni = T("netIncome"), niPrev = T("netIncome", 4);
-  const gp = T("grossProfit"), gpPrev = T("grossProfit", 4);
+  const T = (k: FlowKey, from: number | null = 0) => from === null ? null : ttm(q, k, from);
+  const rev = T("revenue"), revPrev = T("revenue", priorTtm);
+  const ebit = T("operatingIncome"), ebitPrev = T("operatingIncome", priorTtm);
+  const ni = T("netIncome"), niPrev = T("netIncome", priorTtm);
+  const gp = T("grossProfit"), gpPrev = T("grossProfit", priorTtm);
   const ocf = T("ocf"), capex = T("capex"), dna = T("dna"), sbc = T("sbc"), acq = T("acquisitions");
   const interest = T("interest"), pretax = T("pretax"), tax = T("tax");
   const rnd = T("rnd"), sga = T("sga"), buy = T("buybacks"), div = T("dividends"), issued = T("stockIssued");
@@ -302,7 +330,7 @@ export function computeMetrics(h: CompanyHistory, mkt: MarketData, opts: { finan
 
   const d0 = debtAt(q0), d4 = debtAt(q4);
   const c0 = cashAt(q0), c4 = cashAt(q4);
-  const ic = (d: number | null, e: number | null, c: number | null) => (fin(e) ? (d ?? 0) + e - (c ?? 0) : null);
+  const ic = (d: number | null, e: number | null, c: number | null) => (fin(e) && (!releaseHistory || (fin(d) && fin(c))) ? (d ?? 0) + e - (c ?? 0) : null);
   const ic0 = ic(d0.debt, eq0, c0), ic4 = ic(d4.debt, eq4, c4);
   const icBase = fin(ic4) ? ic4 : ic0;
   const nopat = fin(ebit) ? (ebit > 0 ? ebit * (1 - (taxRate ?? 0.25)) : ebit) : null;
@@ -370,12 +398,12 @@ export function computeMetrics(h: CompanyHistory, mkt: MarketData, opts: { finan
   const ebitda = fin(ebit) && fin(dna) ? ebit + dna : null;
   if (!opts.financial) {
     const cov = fin(ebit) && fin(interest) && interest > 0 ? ebit / interest : null;
-    const negligible = !fin(interest) || interest <= 0 || (fin(ebit) && ebit > 0 && interest < ebit * 0.01);
+    const negligible = fin(interest) && interest === 0;
     const rating = fin(cov) ? syntheticRating(cov) : null;
     add({ id: "interest_coverage", pillar: "risk", label: "Interest coverage", unit: "x", value: negligible && !fin(cov) ? null : cov, period: ttmLabel,
       display: fin(cov) ? fmtX(cov) : negligible ? "no real interest" : "n/m",
       formula: "Operating income ÷ interest expense", inputs: [{ label: "Operating income TTM", display: fmtUsd(ebit) }, { label: "Interest expense TTM", display: fmtUsd(interest) }],
-      note: !fin(cov) && negligible ? "Interest expense is zero or negligible — little or no debt to service." : undefined });
+      note: !fin(cov) && negligible ? "Reported interest expense is zero." : !fin(interest) ? "Interest expense is unavailable for this period." : undefined });
     add({ id: "synthetic_rating", pillar: "risk", label: "Implied credit rating (from coverage)", unit: "x", value: fin(cov) ? cov : null, period: ttmLabel,
       display: rating ? rating.rating : negligible ? "AAA-like (no debt burden)" : "n/m",
       formula: "Damodaran's coverage → rating table (January 2026, large non-financial firms)",
@@ -389,7 +417,7 @@ export function computeMetrics(h: CompanyHistory, mkt: MarketData, opts: { finan
   const dToEbitda = fin(debt) && fin(ebitda) && ebitda > 0 ? debt / ebitda : null;
   add({ id: "debt_to_ebitda", pillar: "risk", label: "Debt to EBITDA", unit: "x", value: dToEbitda, period: ttmLabel, formula: "Debt ÷ (operating income + depreciation & amortization)",
     inputs: [{ label: "Debt", display: fmtUsd(debt) }, { label: "EBITDA TTM", display: fmtUsd(ebitda) }], note: fin(ebitda) && ebitda <= 0 ? "Not meaningful: EBITDA is negative." : undefined });
-  add({ id: "net_debt", pillar: "risk", label: "Net debt (debt − cash)", unit: "usd", value: fin(debt) || fin(cash) ? (debt ?? 0) - (cash ?? 0) : null, period: q0 ? `at ${q0.end}` : "",
+  add({ id: "net_debt", pillar: "risk", label: "Net debt (debt − cash)", unit: "usd", value: (releaseHistory ? fin(debt) && fin(cash) : fin(debt) || fin(cash)) ? (debt ?? 0) - (cash ?? 0) : null, period: q0 ? `at ${q0.end}` : "",
     formula: "Debt − cash and short-term investments", inputs: [{ label: "Debt", display: fmtUsd(debt ?? 0) }, { label: "Cash + short-term investments", display: fmtUsd(cash) }] });
   const cr = q0 && fin(q0.inst.currentAssets) && fin(q0.inst.currentLiabilities) && q0.inst.currentLiabilities! > 0 ? q0.inst.currentAssets! / q0.inst.currentLiabilities! : null;
   add({ id: "current_ratio", pillar: "risk", label: "Current ratio", unit: "x", value: cr, period: q0 ? `at ${q0.end}` : "", display: fin(cr) ? fmtX(cr, 2) : "n/a",
@@ -400,7 +428,7 @@ export function computeMetrics(h: CompanyHistory, mkt: MarketData, opts: { finan
     note: lease === null ? "No operating lease liability reported." : undefined });
 
   // ── Cash return & dilution
-  const sh0 = q0?.shares ?? null, sh4 = q4?.shares ?? null;
+  const sh0 = q0?.dilutedShares ?? q0?.shares ?? null, sh4 = q4?.dilutedShares ?? q4?.shares ?? null;
   const dil = pctChange(sh0, sh4);
   add({ id: "share_change", pillar: "cash_return", label: "Change in diluted share count (1 year)", unit: "pct", value: dil, display: growthStr(dil), period: q0 && q4 ? `${q4.end} → ${q0.end}` : "",
     formula: "Diluted shares now ÷ diluted shares a year ago − 1", inputs: [{ label: "Diluted shares now", display: fin(sh0) ? `${(sh0 / 1e6).toFixed(1)}M` : "n/a" }, { label: "A year ago", display: fin(sh4) ? `${(sh4 / 1e6).toFixed(1)}M` : "n/a" }] });
@@ -414,7 +442,7 @@ export function computeMetrics(h: CompanyHistory, mkt: MarketData, opts: { finan
 
   // ── Pricing (what the market pays)
   const mc = mkt.marketCap;
-  const ev = fin(mc) ? mc + (debt ?? 0) - (cash ?? 0) : null;
+  const ev = fin(mc) && (!releaseHistory || (fin(debt) && fin(cash))) ? mc + (debt ?? 0) - (cash ?? 0) : null;
   add({ id: "ps", pillar: "pricing", label: "Price to sales", unit: "x", value: fin(mc) && fin(rev) && rev > 0 ? mc / rev : null, period: ttmLabel, formula: "Market cap ÷ revenue TTM",
     inputs: [{ label: "Market cap", display: fmtUsd(mc) }, { label: "Revenue TTM", display: fmtUsd(rev) }] });
   add({ id: "pe", pillar: "pricing", label: "Price to earnings", unit: "x", value: fin(mc) && fin(ni) && ni > 0 ? mc / ni : null, period: ttmLabel, formula: "Market cap ÷ net income TTM",

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { ArrowLeft, BookOpen, Brain, ChevronDown, ExternalLink, GraduationCap, Info, Loader2, RefreshCw, Search, Sparkles, X } from "lucide-react";
 import { useFundamentalsLens, useLensExplanation } from "@/hooks/useFundamentalsLens";
@@ -8,7 +8,9 @@ import AdjustCard from "./AdjustCard";
 import ReviewView from "./ReviewView";
 import { dueQuestions } from "@/lib/lens/review";
 import TrackRecordCard from "@/components/proven/TrackRecordCard";
-import PriceStoryCard from "./PriceStoryCard";
+const MarketValuation = lazy(() => import("./CompanyContext").then(module => ({ default: module.MarketValuation })));
+const FinancialStatements = lazy(() => import("./FinancialStatements"));
+const CompanyOverview = lazy(() => import("./CompanyOverview"));
 import LimitsCard from "./LimitsCard";
 import ReadTogether from "./ReadTogether";
 import { IndustryBars } from "./LensVisuals";
@@ -16,7 +18,7 @@ import LookalikesCard from "./LookalikesCard";
 import ProvenBadge from "@/components/proven/ProvenBadge";
 import { useProvenOne } from "@/hooks/useProvenStrength";
 import { toneBox, type Tone } from "@/lib/moveTint";
-import { AutoTerms, Term } from "./Term";
+import { AutoTerms, Term, PlainTerms } from "./Term";
 import { TermCompanyContext } from "@/lib/lens/termContext";
 import { companyNote } from "@/lib/lens/companyMeaning";
 import { LensScope, dirOf, ltr, setLensLang, useLensLang, useLensLangSetting, useTx } from "@/lib/lens/i18n";
@@ -166,10 +168,10 @@ function HeExplain({ p, conceptId, label }: { p: LensPayload; conceptId: string;
 function Explain({ symbol, conceptId, label, p }: { symbol: string; conceptId: string; label: string; p?: LensPayload }) {
   const he = useLensLang() === "he";
   if (he && p) return <HeExplain p={p} conceptId={conceptId} label={label} />;
-  return <ExplainEn symbol={symbol} conceptId={conceptId} label={label} />;
+  return <ExplainEn key={symbol+":"+p?.computedAt} symbol={symbol} conceptId={conceptId} label={label} version={p?.computedAt} />;
 }
-function ExplainEn({ symbol, conceptId, label }: { symbol: string; conceptId: string; label: string }) {
-  const { exp, loading, run } = useLensExplanation(symbol, conceptId);
+function ExplainEn({ symbol, conceptId, label, version }: { symbol: string; conceptId: string; label: string; version?: string }) {
+  const { exp, loading, run } = useLensExplanation(symbol, conceptId, version);
   if (!exp) {
     return (
       <button onClick={run} disabled={loading} className="inline-flex items-center gap-1.5 rounded-md border border-primary/40 bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary hover:bg-primary/20 disabled:opacity-50">
@@ -177,13 +179,13 @@ function ExplainEn({ symbol, conceptId, label }: { symbol: string; conceptId: st
       </button>
     );
   }
-  if (exp.error) return <p className="text-xs text-loss-medium">{exp.error}</p>;
+  if (exp.error) return <div role="alert" className="text-sm">{exp.error} <button onClick={run} className="underline">Retry</button></div>;
   return (
     <div className="space-y-1.5 rounded-md border border-primary/25 bg-primary/[0.05] p-2.5">
       {exp.sentences.map((s, i) => <p key={i} className="text-[13px] leading-snug"><AutoTerms text={s.text} /></p>)}
       {exp.missing.length > 0 && <p className="text-[11px] text-muted-foreground">Missing for a full picture: <AutoTerms text={exp.missing.join("; ")} /></p>}
       <p className="text-[10.5px] text-muted-foreground">
-        {exp.source === "model" ? "AI-written from the numbers on this card — every figure was checked against them." : "Plain summary (the AI explanation wasn't available or didn't pass the number check)."}
+        {exp.source === "model" ? "Explanation of this snapshot. Check the displayed sources and assumptions." : "Summary assembled directly from this snapshot’s facts. No AI call required."}
       </p>
     </div>
   );
@@ -282,7 +284,8 @@ function ConceptView({ c, symbol, stageLabel, seen, asOf = null, p }: { c: Conce
   const [open, setOpen] = useState(false);
   const [level, setLevel] = useState<1 | 2 | 3>(1);
   const [revealed, setRevealed] = useState(false);
-  const prim = c.metrics.find((m) => m.id === c.primary) ?? c.metrics[0];
+  const primary = c.metrics.find((m) => m.id === c.primary) ?? c.metrics[0];
+  const prim = p?.sec.sourceUrl && primary?.value == null ? c.metrics.find(m => m.value !== null) ?? primary : primary;
   const toggle = () => { const o = !open; setOpen(o); if (o) markConcept(c.id, symbol, 1); };
   const pick = (l: 1 | 2 | 3) => { setLevel(l); markConcept(c.id, symbol, l); };
   const tone = prim?.peer ? { ...peerTone(prim.peer, c.higherIsBetter, he), words: he ? `${peerTone(prim.peer, c.higherIsBetter, he).words} ב-${prim.peer.group}` : `${peerTone(prim.peer, c.higherIsBetter).words} of ${prim.peer.group}` }
@@ -292,7 +295,7 @@ function ConceptView({ c, symbol, stageLabel, seen, asOf = null, p }: { c: Conce
       <button onClick={toggle} aria-expanded={open} className="flex w-full items-center gap-2 px-3 py-2.5 text-start hover:bg-muted/30">
         {!seen && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-primary" title={tx("Not opened yet", "עוד לא נפתח")} />}
         <span className="min-w-0 flex-1">
-          <span className="block truncate text-[13px] font-medium"><AutoTerms text={c.title} /></span>
+          <span className="block truncate text-[13px] font-medium">{c.title}</span>
           {tone && <span className={`block truncate text-[10.5px] ${tone.cls}`}>{tone.words}</span>}
         </span>
         {prim && <span className="shrink-0 font-mono text-sm tabular-nums">{prim.display}</span>}
@@ -380,7 +383,7 @@ function StageCard({ p }: { p: LensPayload }) {
   const idx = STAGE_ORDER.indexOf(lc.stage), lean = lc.leaning ? STAGE_ORDER.indexOf(lc.leaning) : -1;
   return (
     <section className="rounded-lg border border-[hsl(40,90%,55%)]/35 bg-[hsl(40,90%,55%)]/[0.05]">
-      <button onClick={() => { setOpen(!open); if (!open) markConcept("life_cycle", p.symbol, 1); }} className="w-full px-3 py-2.5 text-start">
+      <PlainTerms><button onClick={() => { setOpen(!open); if (!open) markConcept("life_cycle", p.symbol, 1); }} className="w-full px-3 py-2.5 text-start">
         <div className="flex items-center justify-between gap-2">
           <span className="text-[11px] font-semibold uppercase tracking-wide text-[hsl(40,90%,66%)]"><Term id="life_cycle">{tx("Life-cycle stage", "השלב במחזור החיים")}</Term></span>
           <span className="text-[10.5px] text-muted-foreground">{he ? `כלל אצבע של האפליקציה · ביטחון ${{ high: "גבוה", medium: "בינוני", low: "נמוך" }[lc.confidence]}` : `app rule of thumb · ${lc.confidence} confidence`}</span>
@@ -395,7 +398,7 @@ function StageCard({ p }: { p: LensPayload }) {
         </div>
         <p className="mt-2 text-[13px] leading-snug"><span className="font-semibold"><AutoTerms text={lc.label} />{lc.leaningLabel ? <>{tx(", leaning ", ", עם נטייה ל")}<AutoTerms text={lc.leaningLabel} /></> : ""}.</span> {tx("The question that matters most: ", "השאלה הכי חשובה: ")}<span className="italic"><AutoTerms text={lc.question} /></span></p>
         <span className="mt-1 inline-flex items-center gap-1 text-[11px] text-primary">{open ? tx("Less", "פחות") : tx("How it was placed, and what's normal here", "איך היא מוקמה, ומה נורמלי כאן")} <ChevronDown size={12} className={open ? "rotate-180" : ""} /></span>
-      </button>
+      </button></PlainTerms>
       {open && (
         <div className="space-y-2.5 border-t border-[hsl(40,90%,55%)]/20 px-3 py-2.5 text-[12.5px] leading-snug">
           <p><span className="font-semibold">{tx("Typical numbers: ", "מספרים אופייניים: ")}</span><AutoTerms text={lc.signature} /></p>
@@ -456,7 +459,7 @@ export default function LensPanel({ symbol: symbolProp, onSymbolChange, onClose,
   const he = lang === "he";
   const tx = <T,>(en: T, h: T): T => (he ? h : en);
   const data = useMemo(() => (raw && he ? hePayload(raw) : raw), [raw, he]);
-  const provenRaw = useProvenOne(data?.symbol ?? null);
+  const provenRaw = useProvenOne(data?.symbol ?? null, data?.computedAt ?? "");
   const proven = useMemo(() => ({ ...provenRaw, row: he && provenRaw.row ? heProvenRow(provenRaw.row) : provenRaw.row }), [provenRaw, he]);
   const inputRef = useRef<HTMLInputElement>(null);
   const [progress, setProgress] = useState(readProgress);
@@ -483,6 +486,10 @@ export default function LensPanel({ symbol: symbolProp, onSymbolChange, onClose,
   const pillarInfo = he ? HE_PILLAR : PILLAR_INFO;
   const stageLabel = data?.lifeCycle?.label ?? null;
   const [reviewing, setReviewing] = useState(false);
+  const [section, setSection] = useState<"overview"|"statements"|"valuation"|"evidence"|"learn">("overview");
+  const bodyRef = useRef<HTMLDivElement>(null);
+  useEffect(() => { bodyRef.current?.scrollTo({top:0}); }, [data?.symbol,section]);
+  const marketAge = data?.market.asOf ? (Date.now()-Date.parse(data.market.asOf))/86400000 : Infinity;
   const [reviewTick, setReviewTick] = useState(0);
   const opened = useMemo(() => new Set(Object.keys(progress)), [progress]);
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -497,8 +504,8 @@ export default function LensPanel({ symbol: symbolProp, onSymbolChange, onClose,
     <div ref={rootRef} dir={dirOf(lang)} lang={lang} className="flex h-full min-h-0 flex-col bg-background text-foreground">
       {/* Header */}
       <div className={`sticky top-0 z-10 border-b border-border bg-background/95 backdrop-blur ${wide ? "px-6 py-3" : "px-3 py-2"}`}>
-        <div className={`flex items-center gap-1.5 ${wide ? "mx-auto max-w-[1680px]" : ""}`}>
-          {homeLink && wide && (
+        <div className={`flex items-center gap-1.5 ${wide ? "w-full" : ""}`}>
+          {homeLink && (
             <Link to="/" title={tx("Back to Dashboard", "חזרה ללוח הראשי")} className="me-1 rounded-md border border-border p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"><ArrowLeft size={15} className="rtl:-scale-x-100" /></Link>
           )}
           <GraduationCap size={wide ? 20 : 15} className="shrink-0 text-[hsl(40,90%,60%)]" />
@@ -523,7 +530,7 @@ export default function LensPanel({ symbol: symbolProp, onSymbolChange, onClose,
           {onClose && <button onClick={onClose} aria-label={tx("Close", "סגירה")} className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"><X size={14} /></button>}
         </div>
         {data && (
-          <div className={`mt-1.5 space-y-1 ${wide ? "mx-auto max-w-[1680px]" : ""}`}>
+          <div className={`mt-1.5 space-y-1 ${wide ? "w-full" : ""}`}>
             <div className="flex items-baseline gap-2">
               <span className={`font-mono font-bold ${wide ? "text-xl" : "text-base"}`}>{data.symbol}</span>
               <span className={`min-w-0 truncate text-muted-foreground ${wide ? "text-sm" : "text-xs"}`}>{data.company}</span>
@@ -540,9 +547,12 @@ export default function LensPanel({ symbol: symbolProp, onSymbolChange, onClose,
         )}
       </div>
 
+      {data && <nav aria-label={tx("Company sections","חלקי הניתוח")} className="flex shrink-0 gap-1 overflow-x-auto border-b border-border px-3 py-2 sm:px-6">
+        {([['overview','Company story','סיפור החברה'],['statements','Statements','דוחות'],['valuation','Valuation','הערכת שווי'],['evidence','Evidence','ראיות'],['learn','Learn','למידה']] as const).map(([id,en,h])=><button key={id} aria-current={section===id?'page':undefined} onClick={()=>{setSection(id);setReviewing(false);}} className={`min-h-10 whitespace-nowrap rounded-lg px-4 text-sm font-medium transition-colors ${section===id?'bg-primary/15 text-primary':'text-muted-foreground hover:bg-muted/40'}`}>{tx(en,h)}</button>)}
+      </nav>}
       {/* Body */}
-      <div className={`min-h-0 flex-1 overflow-y-auto ${wide ? "px-6 py-5" : "px-3 py-3"}`}>
-       <div className={`space-y-3 ${wide ? "mx-auto max-w-[1680px]" : ""}`}>
+      <div ref={bodyRef} className={`min-h-0 flex-1 overflow-y-auto ${wide ? "px-6 py-5" : "px-3 py-3"}`}>
+       <div className={`space-y-3 ${wide ? "w-full" : ""}`}>
         {reviewing && <div className={wide ? "mx-auto max-w-2xl" : ""}><ReviewView opened={opened} payload={raw} onExit={() => { setReviewing(false); setReviewTick((t) => t + 1); }} /></div>}
         {!reviewing && <>
         {!symbol && (
@@ -552,73 +562,88 @@ export default function LensPanel({ symbol: symbolProp, onSymbolChange, onClose,
           </div>
         )}
         {loading && !data && <div className="flex items-center justify-center gap-2 py-10 text-sm text-muted-foreground"><Loader2 size={16} className="animate-spin" /> {he ? <>קורא את הדוחות של {ltr(symbol)}…</> : <>Reading {symbol}'s filings…</>}</div>}
-        {error && <p className="rounded-md border border-loss-medium/40 bg-loss-medium/10 p-2 text-sm text-loss-medium">{symbol}: {error}</p>}
+        {error && <div role="alert" className="rounded-xl border border-loss-medium/40 p-4 text-sm">{symbol}: {error} <button onClick={()=>refresh()} className="ms-3 underline">{tx("Retry","ניסיון נוסף")}</button></div>}
 
         {data && (
           <>
-           <div className={wide ? "grid items-start gap-5" : "space-y-3"} style={wide ? { gridTemplateColumns: "minmax(380px, 460px) minmax(0, 1fr)" } : undefined}>
+           <div className="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-lg bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
+             <span>{tx("Filings through","דוחות עד")} <bdi>{data.sec.asOf??'—'}</bdi></span>
+             <span className={marketAge>7?'text-amber-400':''}>{tx("Market snapshot","נתוני שוק")}: {data.market.asOf ? new Date(data.market.asOf).toLocaleDateString(he?'he-IL':'en-US') : tx("date unavailable — valuation is illustrative","תאריך חסר — הערכת השווי להמחשה בלבד")}</span>
+             {data.sec.sourceUrl ? <a href={data.sec.sourceUrl} target="_blank" rel="noreferrer" className="underline">{tx("SEC Form 6-K earnings release","פרסום התוצאות בטופס 6-K")}</a>
+               : <span>{tx("Reported accounting; adjusted returns in Evidence","חשבונאות מדווחת; תשואות מתואמות בלשונית ראיות")}</span>}
+             <a href={`https://www.sec.gov/edgar/search/#/q=${encodeURIComponent(data.symbol)}`} target="_blank" rel="noreferrer" className="underline">{tx("Open source filings","פתיחת דוחות המקור")}</a>
+           </div>
+           {data.earningsRelease && (section === "overview" || section === "statements") && (
+             <section className="space-y-2 rounded-xl border border-primary/30 bg-primary/5 px-4 py-3">
+               <div className="flex flex-wrap items-baseline justify-between gap-2">
+                 <h2 className="text-sm font-semibold">{data.sec.asOf && !data.sec.sourceUrl ? tx("Newer earnings release", "תוצאות כספיות חדשות יותר") : tx("Latest earnings release", "פרסום התוצאות האחרון")}</h2>
+                 <a href={data.earningsRelease.url} target="_blank" rel="noreferrer" className="text-xs text-primary underline">
+                   {tx("SEC release", "דיווח ב-SEC")} <bdi>{data.earningsRelease.filed}</bdi>
+                 </a>
+               </div>
+               {data.earningsRelease.quarter && (() => {
+                 const { end, revenue, operatingIncome, netIncome, priorRevenue, dilutedEPS } = data.earningsRelease.quarter;
+                 const growth = priorRevenue != null && priorRevenue > 0 ? (revenue / priorRevenue - 1) * 100 : null;
+                 return <>
+                   <p className="text-xs text-muted-foreground">{tx("Quarter ended", "רבעון שהסתיים ב־")} <bdi>{end}</bdi></p>
+                   <dl className={`grid grid-cols-2 gap-3 text-sm ${dilutedEPS == null ? "sm:grid-cols-3" : "sm:grid-cols-4"}`}>
+                     <div>
+                       <dt className="text-xs text-muted-foreground">{tx("Revenue", "הכנסות")}</dt>
+                       <dd><bdi>{fmtMoney(revenue)}</bdi>{growth != null && <span className="ms-2 text-xs text-muted-foreground"><bdi>{growth >= 0 ? "+" : ""}{growth.toFixed(1)}%</bdi> {tx("YoY", "לעומת אשתקד")}</span>}</dd>
+                     </div>
+                     {operatingIncome != null && <div><dt className="text-xs text-muted-foreground">{tx("Operating profit", "רווח תפעולי")}</dt><dd><bdi>{fmtMoney(operatingIncome)}</bdi></dd></div>}
+                     <div><dt className="text-xs text-muted-foreground">{tx("Net income", "רווח נקי")}</dt><dd><bdi>{fmtMoney(netIncome)}</bdi></dd></div>
+                     {dilutedEPS != null && <div><dt className="text-xs text-muted-foreground">{tx("Reported diluted EPS", "רווח מדולל מדווח למניה")}</dt><dd><bdi>{new Intl.NumberFormat("en-US", {style:"currency", currency:"USD"}).format(dilutedEPS)}</bdi></dd></div>}
+                   </dl>
+                 </>;
+               })()}
+               <p className="text-xs text-muted-foreground">{data.sec.sourceUrl
+                 ? tx("The Lens uses verified figures from quarterly SEC releases.", "הנתונים בלשונית מבוססים על פרסומים רבעוניים מאומתים ב־SEC.")
+                 : data.sec.asOf
+                 ? <>{tx("Charts and valuation use structured SEC financials through", "הגרפים והערכת השווי מבוססים על נתוני SEC מובנים עד")} <bdi>{data.sec.asOf}</bdi>.</>
+                 : tx("Income charts use available quarterly releases. Cash flow and valuation require additional filing data.", "תרשימי ההכנסות מבוססים על פרסומים רבעוניים זמינים. תזרים מזומנים והערכת שווי דורשים נתונים נוספים.")}</p>
+             </section>
+           )}
+           {section === 'statements' && <Suspense fallback={<p>{tx("Loading statements…","טעינת דוחות…")}</p>}><FinancialStatements key={data.symbol} p={data}/></Suspense>}
+           {section === 'valuation' && <Suspense fallback={<p>{tx("Loading valuation…","טעינת תמחור…")}</p>}><MarketValuation key={data.symbol} p={data} /></Suspense>}
+           {section === 'overview' && <Suspense fallback={<p>{tx("Loading company story…","טעינת סיפור החברה…")}</p>}><CompanyOverview key={data.symbol} p={data} proven={proven.row} onExplore={setSection}/></Suspense>}
+           {(section==='evidence'||section==='learn') && <div className={wide ? "grid items-start gap-5" : "space-y-3"} style={wide ? { gridTemplateColumns: "minmax(300px, 1fr) minmax(0, 2fr)" } : undefined}>
             {/* Overview: who the company is and where it stands */}
             <div className="space-y-3">
-            {data.sec.status !== "ok" && <p className="flex gap-1.5 rounded-md border border-border bg-muted/30 p-2 text-xs text-muted-foreground"><Info size={13} className="mt-px shrink-0" />{data.sec.status}</p>}
+            {data.sec.status !== "ok" && <p className="flex gap-1.5 rounded-md border border-border bg-muted/30 p-2 text-xs text-muted-foreground"><Info size={13} className="mt-px shrink-0" />
+              {data.sec.sourceUrl ? tx("Evidence uses figures verified in quarterly SEC Form 6-K releases. Cash flow, capital and debt metrics, and the multi-year track record need additional filing data.", "הנתונים מבוססים על פרסומים רבעוניים מאומתים בטופס 6-K. לחישובי תזרים, הון, חוב ורקורד רב־שנתי דרושים נתונים נוספים.") : data.sec.status}
+            </p>}
             {data.financial && <p className="flex gap-1.5 rounded-md border border-border bg-muted/30 p-2 text-xs text-muted-foreground"><Info size={13} className="mt-px shrink-0" /><span><AutoTerms text={tx("A financial company: debt is part of how it makes money, so ROIC, free cash flow and coverage are left out — ROE is the main return measure here.", "חברה פיננסית: החוב הוא חלק מהדרך שבה היא מרוויחה, ולכן ROIC, תזרים מזומנים חופשי וכיסוי ריבית לא מוצגים — ROE הוא מדד התשואה המרכזי כאן.")} /></span></p>}
 
-            {/* Story */}
-            {data.story.length > 0 && (
-              <section className="space-y-2">
-                <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{tx("The story in numbers", "הסיפור במספרים")}</div>
-                <div className="space-y-1 text-[13px] leading-snug">{data.story.map((s) => <p key={s}><AutoTerms text={s} /></p>)}</div>
-                <Explain symbol={data.symbol} conceptId="story" p={data} label={tx("Explain it in plain words", "הסבר את זה במילים פשוטות")} />
-              </section>
-            )}
-
-            {/* Snapshot: the numbers that matter most at this stage */}
-            {data.snapshot.length > 0 && (
-              <section>
-                <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{tx("What matters most", "מה הכי חשוב")}{stageLabel ? (he ? <> לחברה בשלב <AutoTerms text={stageLabel} /></> : <> for a <AutoTerms text={stageLabel} /> company</>) : ""}</div>
-                <div className="grid grid-cols-2 gap-1.5">
-                  {data.snapshot.map((id) => {
-                    const hit = byId.get(id);
-                    if (!hit) return null;
-                    return (
-                      <div key={id} className="rounded-md border border-border/60 bg-muted/20 p-2" style={hit.m.peer ? toneBox(peerTone(hit.m.peer, hit.c.higherIsBetter).tone, 0.35) : undefined}>
-                        <div className="truncate text-[10.5px] text-muted-foreground" title={hit.m.label}><AutoTerms text={shortOf(id, he) ?? hit.m.label} /></div>
-                        <div className="font-mono text-[15px] font-semibold tabular-nums">{hit.m.display}</div>
-                        {hit.m.peer && <div className={`truncate text-[10px] ${peerTone(hit.m.peer, hit.c.higherIsBetter).cls}`}>{peerTone(hit.m.peer, hit.c.higherIsBetter, he).words}</div>}
-                        {hit.m.bench && <div className="truncate text-[10px] text-muted-foreground" title={tx(`${hit.m.bench.industry} average (Damodaran)`, `ממוצע ${hit.m.bench.industry} (דמודרן)`)}><Term id="damodaran_industry">{tx("industry", "ענף")}</Term> <span className="font-mono">{hit.m.bench.display}</span></div>}
-                      </div>
-                    );
-                  })}
-                </div>
-              </section>
-            )}
-
-            <ReadTogether p={data} proven={proven.row} />
-            <IndustryBars p={data} />
-            {data.lifeCycle && <StageCard p={data} />}
-            <TrackRecordCard row={proven.row} loading={proven.loading} />
-            <LookalikesCard symbol={data.symbol} onOpen={(s) => { setInput(s); setOwn(s); onSymbolChange?.(s); }} />
-            <LimitsCard p={data} proven={proven.row} />
-            {data.valuation && !wide && <PriceStoryCard key={data.symbol} p={data} proven={proven.row} />}
-            <IndustryCard p={data} />
+            {section === "evidence" && <ReadTogether p={data} proven={proven.row} />}
+            {section === "evidence" && <IndustryBars p={data} />}
+            {section !== "learn" && data.lifeCycle && <StageCard p={data} />}
+            {proven.error && <p role="alert" className="text-sm">{tx("Track record unavailable.", "הרקורד אינו זמין.")} <button className="underline" onClick={proven.retry}>{tx("Retry", "ניסיון נוסף")}</button></p>}
+            {section !== "learn" && (!data.sec.sourceUrl || proven.row?.status === "ok") && <TrackRecordCard row={proven.row} loading={proven.loading} />}
+            {section === "evidence" && <LookalikesCard symbol={data.symbol} onOpen={(s) => { setInput(s); setOwn(s); onSymbolChange?.(s); }} />}
+            {section !== "learn" && <LimitsCard p={data} proven={proven.row} />}
+            
+            {section === "evidence" && <IndustryCard p={data} />}
 
             {/* Foundations */}
-            <section className="rounded-lg border border-border">
+            {section === "learn" && <section className="rounded-lg border border-border">
               <div className="flex items-center justify-between px-3 pt-2">
                 <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{tx("Start here", "מתחילים כאן")}</span>
                 <span className="text-[10.5px] text-muted-foreground">{he ? <>נחקרו {ltr(`${seenCount}/${totalConcepts}`)} מושגים</> : <>{seenCount}/{totalConcepts} concepts explored</>}</span>
               </div>
               {data.foundations.map((c) => <ConceptView key={c.id} c={c} p={data} symbol={data.symbol} stageLabel={stageLabel} seen={!!progress[c.id]} asOf={asOf} />)}
-            </section>
+            </section>}
             </div>
 
             {/* Concepts, by pillar — on wide screens the price card leads this column, laid out across it */}
             <div className="space-y-3">
-            {data.valuation && wide && <PriceStoryCard key={data.symbol} p={data} proven={proven.row} wide />}
+            
             <div className={veryWide ? "columns-2 gap-3" : "space-y-3"}>
 
             {/* Pillars */}
             {pillars.map((pk) => {
-              const cards = data.cards.filter((c) => c.pillar === pk);
+              const cards = data.cards.filter(c => c.pillar === pk &&
+                (section !== "evidence" || !data.sec.sourceUrl || c.metrics.some(m => m.value !== null)));
               if (!cards.length) return null;
               return (
                 <div key={pk} className={`space-y-3 ${veryWide ? "mb-3 break-inside-avoid" : ""}`}>
@@ -635,7 +660,7 @@ export default function LensPanel({ symbol: symbolProp, onSymbolChange, onClose,
             })}
             </div>
             </div>
-           </div>
+           </div>}
 
             <footer className={`space-y-1 pb-2 text-[10.5px] leading-snug text-muted-foreground ${wide ? "pt-2" : ""}`}>
               {he ? <>

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useCallback } from "react";
+import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { Link } from "react-router-dom";
 import {
   ArrowLeft, RefreshCw, Loader2, TrendingUp, Calendar, Copy, Download, Sparkles,
@@ -86,13 +86,16 @@ type Scope = "qualified" | "all";
 
 export default function Earnings() {
   // shared filters
-  const [scope, setScope] = useState<Scope>("qualified");
-  const [minMcap, setMinMcap] = useState<number>(1_000_000_000);
+  const [scope, setScope] = useState<Scope>("all");
+  const [minMcap, setMinMcap] = useState<number>(0);
   const [reportTimeFilter, setReportTimeFilter] = useState<"all" | "BMO" | "AMC" | "DMH">("all");
 
   // today
   const [today, setToday] = useState<TodayRow[]>([]);
   const [todayLoading, setTodayLoading] = useState(false);
+  const todayRequest = useRef(0);
+  const [todayError,setTodayError] = useState<string|null>(null);
+  const [coverage,setCoverage] = useState<{calendarTotal:number;excludedByUniverse:number;excludedByMarketCap:number;unknownMarketCap:number;source:string;fetchedAt:string;warnings:string[]}|null>(null);
   const [todayDate, setTodayDate] = useState<string | null>(null);
 
   // historical
@@ -108,29 +111,34 @@ export default function Earnings() {
   // Build the universe array when scope = qualified
   const fetchUniverse = useCallback(async (): Promise<string[] | null> => {
     if (scope !== "qualified") return null;
-    const { data, error } = await supabase
-      .from("qualified_rs_universe")
-      .select("symbol")
-      .limit(2000);
-    if (error || !data) return null;
-    return data.map((r: any) => String(r.symbol).toUpperCase());
+    const symbols:string[]=[];
+    for(let from=0;;from+=1000){
+      const {data,error}=await supabase.from("qualified_rs_universe").select("symbol").order("symbol").range(from,from+999);
+      if(error)throw new Error("Could not load the RS universe. Choose Full Market or retry.");
+      symbols.push(...(data??[]).map(r=>String(r.symbol).toUpperCase()));
+      if(!data || data.length<1000)break;
+    }
+    return symbols;
   }, [scope]);
 
-  const loadToday = useCallback(async () => {
-    setTodayLoading(true);
+  const loadToday = useCallback(async (enrich=false) => {
+    const requestId=++todayRequest.current;
+    setTodayLoading(true); setTodayError(null); setToday([]); setCoverage(null);
     try {
       const universe = await fetchUniverse();
       const { data, error } = await supabase.functions.invoke("earnings-calendar", {
-        body: { minMarketCap: minMcap, universe },
+        body: { minMarketCap: minMcap, universe, enrich },
       });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
+      if(requestId!==todayRequest.current)return;
+      setCoverage(data?.coverage??null);
       setToday(Array.isArray(data?.rows) ? data.rows : []);
       setTodayDate(data?.date ?? null);
     } catch (e: any) {
-      toast.error(e?.message ?? "Failed to load today's earnings");
+      if(requestId===todayRequest.current) { setTodayError(e?.message ?? "Failed to load today's earnings"); toast.error(e?.message ?? "Failed to load today's earnings"); }
     } finally {
-      setTodayLoading(false);
+      if(requestId===todayRequest.current)setTodayLoading(false);
     }
   }, [fetchUniverse, minMcap]);
 
@@ -160,7 +168,8 @@ export default function Earnings() {
 
   // Cost-saving: load once on mount; no 5-minute auto-refresh.
   useEffect(() => {
-    loadToday();
+    void loadToday();
+    return () => { ++todayRequest.current; };
   }, [loadToday]);
 
   // Filtered today rows by reportTime
@@ -222,7 +231,7 @@ export default function Earnings() {
               <button
                 onClick={() => setScope("all")}
                 className={`rounded px-2.5 py-1 text-[11px] font-medium transition-colors ${scope === "all" ? "bg-primary/15 text-primary" : "text-muted-foreground hover:text-foreground"}`}
-                title="All US stocks above min market cap"
+                title="All reporters returned by the calendar providers"
               >
                 Full Market
               </button>
@@ -237,6 +246,7 @@ export default function Earnings() {
                 onChange={(e) => setMinMcap(Number(e.target.value))}
                 className="bg-transparent font-mono font-semibold text-foreground focus:outline-none"
               >
+                <option value={0}>No minimum</option>
                 <option value={500_000_000}>$500M</option>
                 <option value={1_000_000_000}>$1B</option>
                 <option value={2_000_000_000}>$2B</option>
@@ -284,16 +294,22 @@ export default function Earnings() {
               </button>
 
               <button
-                onClick={loadToday}
+                onClick={() => loadToday()}
                 disabled={todayLoading}
                 className="inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1 text-[11px] font-medium text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-50"
               >
                 {todayLoading ? <Loader2 size={11} className="animate-spin" /> : <RefreshCw size={11} />}
                 Refresh
               </button>
+              <button onClick={()=>loadToday(true)} disabled={todayLoading} className="rounded border border-border px-2 py-1 text-[11px] text-muted-foreground disabled:opacity-50" title="Fetch quotes for up to 10 reporters; all calendar rows remain visible">Refresh quotes (up to 10)</button>
             </div>
           </div>
 
+          <div className="border-b border-border px-4 py-2 text-xs text-muted-foreground" aria-live="polite">
+            <p>{scope==="all"?"Full provider calendar":"RS universe only"} · {minMcap===0?"No market-cap minimum":`Minimum market cap $${fmtMcap(minMcap)}`} · Calendar dates use New York time.</p>
+            {coverage&&<><p className="mt-1">{coverage.source}: {coverage.calendarTotal} reporters · {coverage.excludedByUniverse} outside selected universe · {coverage.excludedByMarketCap} below cap filter · {filteredToday.length} shown{reportTimeFilter!=="all"?` (${reportTimeFilter} only)`:""}. Updated {new Date(coverage.fetchedAt).toLocaleTimeString()}.</p><p className="mt-1">{coverage.unknownMarketCap} reporters have unknown market cap and remain included. Cached company details may lag; missing quotes do not remove reporters. Provider calendars can be incomplete or revised.</p>{coverage.warnings.map(w=><p role="status" key={w} className="mt-1 text-amber-400">{w}</p>)}</>}
+            {todayError&&<p role="alert" className="mt-1 text-destructive">{todayError} — use Refresh to retry.</p>}
+          </div>
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
               <thead className="border-b border-border bg-muted/20 text-[10px] uppercase tracking-wide text-muted-foreground">
@@ -315,7 +331,7 @@ export default function Earnings() {
                   </td></tr>
                 ) : filteredToday.length === 0 ? (
                   <tr><td colSpan={7} className="px-3 py-8 text-center text-muted-foreground">
-                    No earnings found for today's filters.
+                    {todayError ? "Calendar unavailable. This does not mean no companies are reporting." : "No reporters returned for the selected filters. Try Full Market with no cap minimum."}
                   </td></tr>
                 ) : (
                   filteredToday.map((r) => (

@@ -42,7 +42,7 @@ const OPENROUTER_MODEL = env("OPENROUTER_MODEL") || "openai/gpt-oss-120b:free";
 const GEMINI_TIMEOUT_MS = 30_000;
 const OTHER_TIMEOUT_MS = 40_000;
 const LOCAL_URL = env("LOCAL_LLM_URL").replace(/\/+$/, "");
-const LOCAL_MODEL = env("LOCAL_LLM_MODEL") || "qwen3.8:27b";
+const LOCAL_MODEL = env("LOCAL_LLM_MODEL") || "qwen3:8b";
 const LOCAL_CTX = Number(env("LOCAL_LLM_CTX")) || 16384;
 const LOCAL_THINK = env("LOCAL_LLM_THINK") === "true";
 // a local model has no wall-clock limit to respect, but a big prompt takes a while to read
@@ -204,8 +204,8 @@ export function toOllamaRequest(body: Body): Body {
     return out;
   });
   const req: Body = {
-    model: LOCAL_MODEL, messages, stream: false, think: LOCAL_THINK, keep_alive: "5m",
-    options: { num_ctx: LOCAL_CTX, temperature: typeof body.temperature === "number" ? body.temperature : 0.3, ...(typeof body.max_tokens === "number" ? { num_predict: body.max_tokens + (LOCAL_THINK ? 4096 : 0) } : {}) },
+    model: LOCAL_MODEL, messages, stream: false, think: LOCAL_THINK, keep_alive: env("LOCAL_LLM_KEEP_ALIVE") || "60s",
+    options: { num_ctx: LOCAL_CTX, num_thread: Math.max(1, Math.min(8, Number(env("LOCAL_LLM_THREADS")) || 4)), temperature: typeof body.temperature === "number" ? body.temperature : 0.3, ...(typeof body.max_tokens === "number" ? { num_predict: body.max_tokens + (LOCAL_THINK ? 4096 : 0) } : {}) },
   };
   if (body.tools) req.tools = body.tools;
   if (body.response_format?.type === "json_object") req.format = "json";

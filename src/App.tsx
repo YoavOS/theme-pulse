@@ -39,6 +39,7 @@ function ClassificationAutoRunner() {
   useTodayListNotifier();
   useEffect(() => { scheduleStorageCleanup(); }, []);
   useEffect(() => {
+    if (import.meta.env.VITE_LIGHT_MODE === "true") return;
     const t = window.setTimeout(() => { autoRunClassificationOncePerDay().catch(() => undefined); }, 15_000);
     return () => window.clearTimeout(t);
   }, []);

@@ -270,7 +270,7 @@ export default function BriefPanel({ data, themes, timeframe, groupLabel, onOpen
             <p className="py-2 text-[11.5px] text-muted-foreground">
               {data.digestLoading ? "Summarizing today's news…"
                 : data.digestError ? <>Couldn't summarize the news. <button onClick={data.retryDigest} className="font-medium text-primary hover:underline">Try again</button></>
-                  : !data.marketNews?.length ? "Loading market news…" : "No summary yet."}
+                  : !data.marketNews?.length ? "Loading market news…" : <button onClick={data.retryDigest} className="font-medium text-primary hover:underline">Generate news summary</button>}
             </p>
           ) : (
             <div className="space-y-2">

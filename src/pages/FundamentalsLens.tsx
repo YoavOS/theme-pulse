@@ -1,7 +1,7 @@
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import LensPanel from "@/components/lens/LensPanel";
-import IdeasView from "@/components/proven/IdeasView";
+const IdeasView = lazy(() => import("@/components/proven/IdeasView"));
 import { onLensSymbol } from "@/lib/lens/channel";
 import { LensScope, dirOf, setLensLang, useLensLangSetting } from "@/lib/lens/i18n";
 
@@ -38,7 +38,7 @@ export default function FundamentalsLens() {
         <LensPanel symbol={symbol} onSymbolChange={setSymbol} homeLink />
       </div>
       <div className={`min-h-0 flex-1 overflow-y-auto ${view === "ideas" ? "" : "hidden"}`}>
-        <IdeasView active={view === "ideas"} onOpen={(s) => { setSymbol(s.toUpperCase()); setView("company"); }} />
+        {view === "ideas" && <Suspense fallback={<p className="p-6">{he ? "טעינה…" : "Loading…"}</p>}><IdeasView active onOpen={(s) => { setSymbol(s.toUpperCase()); setView("company"); }} /></Suspense>}
       </div>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-border px-3 py-1.5 text-[11px] text-muted-foreground">
         <div className="flex overflow-hidden rounded-md border border-border" role="tablist">

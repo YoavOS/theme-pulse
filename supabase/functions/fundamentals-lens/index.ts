@@ -12,6 +12,11 @@
 // GICS → Damodaran crosswalk (_shared/damodaranMap.ts).
 // Caches: lens_cache (12h per symbol), lens_explanations (per symbol + concept + facts hash).
 
+import { companyFinancials, companyClassification } from "../_shared/companyFinancials.ts";
+import { readEarningsRelease, reportingWindow } from "../_shared/earningsRelease.ts";
+import { foreignQuarterlyReports } from "../_shared/foreignEarnings.ts";
+import { lensConnection } from "../_shared/lensConnections.ts";
+import { lensMarketFallback, positive } from "../_shared/lensMarket.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
 import { corsHeaders } from "../_shared/cors.ts";
 import { SEC_UA, secCik } from "../_shared/secFundamentals.ts";
@@ -28,7 +33,7 @@ import { extractJson, hasAnyLlm, llmFetch } from "../_shared/llm.ts";
 const SB_URL = Deno.env.get("SUPABASE_URL")!;
 const SB_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const CACHE_MS = 12 * 3600_000;
-const PROMPT_VERSION = 2;
+const PROMPT_VERSION = 3;
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
@@ -83,24 +88,50 @@ async function loadBench(sb: Sb, symbol: string, subIndustry: string | null): Pr
   return { idx, profile: industryProfile(idx, res.name, res.match, res.confidence, res.from, latest.as_of ?? `January ${latest.source_year}`) };
 }
 
-async function buildLens(sb: Sb, symbol: string): Promise<LensPayload> {
-  const [{ data: uRow }, { data: fRow }] = await Promise.all([
-    sb.from("qualified_rs_universe").select("symbol, company_name, sector, market_cap, current_price").eq("symbol", symbol).maybeSingle(),
-    sb.from("stock_fundamentals").select("*").eq("symbol", symbol).maybeSingle(),
+let peerInput: { at: number; value: Promise<[any[], any[]]> } | null = null;
+function peerInputs(sb: Sb, cols: string) {
+  if (!peerInput || Date.now() - peerInput.at > 600000) {
+    const value = Promise.all([readAll<any>(sb, "qualified_rs_universe", "symbol, sector"), readAll<any>(sb, "stock_fundamentals", cols)]) as Promise<[any[], any[]]>;
+    peerInput = { at: Date.now(), value };
+    value.catch(() => { peerInput = null; });
+  }
+  return peerInput.value;
+}
+async function buildLens(sb: Sb, symbol: string, refresh = false): Promise<LensPayload> {
+  const [{ data: uRow }, { data: fRow }, { data: description }] = await Promise.all([
+    sb.from("qualified_rs_universe").select("symbol, company_name, sector, market_cap, current_price, qualified_at").eq("symbol", symbol).maybeSingle(),
+    sb.from("stock_fundamentals").select("company_name, sector, market_cap, price, fetched_at, pe_ratio, ps_ratio, pb_ratio").eq("symbol", symbol).maybeSingle(),
+    sb.from("ticker_classification").select("description").eq("symbol", symbol).maybeSingle(),
   ]);
   const sectorLabel: string | null = uRow?.sector ?? fRow?.sector ?? null;
-  const classification = classifyLabel(sectorLabel);
+  const hasFundCap = positive(fRow?.market_cap);
+  const hasUniversePrice = positive(uRow?.current_price);
+  const capDate = hasFundCap ? fRow?.fetched_at : uRow?.qualified_at;
+  const priceDate = hasUniversePrice ? uRow?.qualified_at : fRow?.fetched_at;
+  const old = (date: string | undefined) => !date || Date.now() - Date.parse(date) > 2 * 86400000;
+  const [shared, fresh] = await Promise.all([
+    companyFinancials(sb, symbol, refresh),
+    lensMarketFallback(symbol, {
+      cap: refresh || old(capDate) || (!hasFundCap && !positive(uRow?.market_cap)),
+      price: refresh || old(priceDate) || (!hasUniversePrice && !positive(fRow?.price)),
+      multiples: ![fRow?.pe_ratio, fRow?.ps_ratio, fRow?.pb_ratio].some(positive),
+    }),
+  ]);
+  const classification = companyClassification(sectorLabel, shared.sic);
   const financial = classification.sector === "Financials";
-  const marketCap = typeof fRow?.market_cap === "number" ? fRow.market_cap : typeof uRow?.market_cap === "number" ? uRow.market_cap * 1e6 : null;
-  const price = typeof uRow?.current_price === "number" ? uRow.current_price : typeof fRow?.price === "number" ? fRow.price : null;
+  const marketCap = fresh.cap ?? (hasFundCap ? fRow.market_cap : positive(uRow?.market_cap) ? uRow.market_cap * 1e6 : null);
+  const price = fresh.price ?? (hasUniversePrice ? uRow.current_price : positive(fRow?.price) ? fRow.price : null);
 
   // Peers: everyone in the universe with provider fundamentals, grouped by the same taxonomy.
   const cols = ["symbol", ...new Set(Object.values(PEER_FIELDS).map((f) => f.col))].join(", ");
-  const [uni, funds, hist, bench] = await Promise.all([
-    readAll<{ symbol: string; sector: string | null }>(sb, "qualified_rs_universe", "symbol, sector"),
-    readAll<Record<string, number | string | null>>(sb, "stock_fundamentals", cols),
-    fetchHistory(symbol),
+  const [uni, funds, bench, earningsRelease, foreign] = await Promise.all([
+    peerInputs(sb, cols).then(([u]) => u),
+    peerInputs(sb, cols).then(([,f]) => f),
     loadBench(sb, symbol, classification.subIndustry).catch((e) => { console.error("benchmarks", e); return null; }),
+    shared.earningsFiling && shared.history.quarters[0]
+      ? readEarningsRelease(shared.earningsFiling, shared.history.quarters[0].end)
+      : null,
+    !shared.history.quarters.length && shared.foreignFilings?.length ? foreignQuarterlyReports(shared.foreignFilings) : null,
   ]);
   const sectorOf = new Map(uni.map((u) => [u.symbol.toUpperCase(), u.sector]));
   if (!sectorOf.has(symbol)) sectorOf.set(symbol, sectorLabel);
@@ -114,18 +145,44 @@ async function buildLens(sb: Sb, symbol: string): Promise<LensPayload> {
   }
   const peers = computePeers(symbol, rows);
 
-  return buildPayload({
-    symbol, company: uRow?.company_name ?? fRow?.company_name ?? null, classification, financial,
-    history: hist.history, market: { price, marketCap, asOf: fRow?.fetched_at ?? null }, secStatus: hist.status, peers, bench,
+  const releaseQuarters = foreign?.quarters;
+  const history: CompanyHistory = releaseQuarters?.length ? { ...shared.history, quarters: releaseQuarters } : shared.history;
+  const secStatus = releaseQuarters?.length ? "Quarterly financial results from SEC Form 6-K."
+    : history.quarters.length >= 8 ? "ok" : "Limited supported US-GAAP quarterly history. Missing fields are not zero.";
+  const payload = buildPayload({
+    symbol, company: uRow?.company_name ?? fRow?.company_name ?? shared.company, classification, financial,
+    history, market: { price, marketCap, asOf: fresh.cap !== null ? fresh.capDate : capDate ?? null }, secStatus, peers, bench,
   });
+  payload.connection = lensConnection(history.quarters);
+  payload.businessContext = {
+    description: typeof description?.description === "string" ? description.description.trim().slice(0, 700) || null : null,
+    industry: shared.secBusiness?.industry ?? null,
+    annualUrl: shared.secBusiness?.annualUrl ?? null,
+    annualFiled: shared.secBusiness?.annualFiled ?? null,
+  };
+  payload.marketPricing = {
+    capDate: marketCap === null ? null : payload.market.asOf,
+    priceDate: price === null ? null : fresh.priceDate ?? priceDate ?? null,
+    multiplesDate: fresh.multiplesDate ?? fRow?.fetched_at ?? null,
+    pe: positive(fRow?.pe_ratio) ? fRow.pe_ratio : fresh.pe,
+    ps: positive(fRow?.ps_ratio) ? fRow.ps_ratio : fresh.ps,
+    pb: positive(fRow?.pb_ratio) ? fRow.pb_ratio : fresh.pb,
+    peerPe: positive(fRow?.pe_ratio) ? peers.pe ?? null : null,
+  };
+  return { ...payload, earningsRelease: foreign?.earningsRelease ?? earningsRelease };
 }
 
 async function getLens(sb: Sb, symbol: string, refresh: boolean): Promise<LensPayload> {
   if (!refresh) {
     const { data } = await sb.from("lens_cache").select("payload, computed_at").eq("symbol", symbol).maybeSingle();
-    if (data?.payload && data.payload.version === LENS_VERSION && Date.now() - Date.parse(data.computed_at) < CACHE_MS) return data.payload as LensPayload;
+    const maxAge = reportingWindow(data?.payload?.sec?.asOf ?? null) ? 3600_000 : CACHE_MS;
+    if (data?.payload && data.payload.version === LENS_VERSION && Date.now() - Date.parse(data.computed_at) < maxAge) {
+      const current = await loadBench(sb, symbol, data.payload.classification?.subIndustry ?? null);
+      const { source, ...saved } = data.payload.damodaran ?? {};
+      if (JSON.stringify(saved) === JSON.stringify(current?.profile ?? {})) return data.payload as LensPayload;
+    }
   }
-  const payload = await buildLens(sb, symbol);
+  const payload = await buildLens(sb, symbol, refresh);
   await sb.from("lens_cache").upsert({ symbol, payload, computed_at: payload.computedAt }, { onConflict: "symbol" });
   return payload;
 }
@@ -137,29 +194,6 @@ async function explain(sb: Sb, p: LensPayload, conceptId: string): Promise<Expla
   if (hit?.payload) return { ...(hit.payload as Explanation), facts: facts.length };
 
   let result: Explanation = templateExplanation(p, conceptId);
-  if (hasAnyLlm() && facts.length > 3) {
-    const { system, user } = explanationPrompt(p, conceptId, facts);
-    const messages = [{ role: "system", content: system }, { role: "user", content: user }];
-    for (let attempt = 0; attempt < 2; attempt++) {
-      try {
-        const res = await llmFetch({ messages, temperature: 0.2, max_tokens: 700, response_format: { type: "json_object" } }, { task: "fast", label: "fundamentals-lens" });
-        if (!res.ok) break;
-        const j = await res.json();
-        const content = j?.choices?.[0]?.message?.content ?? "";
-        const parsed = JSON.parse(extractJson(String(content)));
-        const v = validateExplanation(parsed, facts);
-        if (v.ok) { result = { sentences: v.sentences, missing: v.missing, source: "model", provider: j?.provider }; break; }
-        // one retry, telling the model exactly what failed
-        messages.push({ role: "assistant", content: String(content) }, { role: "user", content: `Your answer broke these rules: ${v.errors.join("; ")}. Fix them and reply with the JSON only.` });
-      } catch (e) {
-        console.error("explain attempt failed", e);
-        break;
-      }
-    }
-  }
-  if (result.source === "model") {
-    await sb.from("lens_explanations").upsert({ symbol: p.symbol, concept_id: conceptId, facts_hash: hash, prompt_version: PROMPT_VERSION, payload: result }, { onConflict: "symbol,concept_id,facts_hash,prompt_version" });
-  }
   return { ...result, facts: facts.length };
 }
 

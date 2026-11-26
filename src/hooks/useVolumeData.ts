@@ -1,4 +1,5 @@
-import { useState, useCallback, useRef } from "react";
+import { isAwake, onWake } from "@/lib/appSleep";
+import { useState, useCallback, useRef, useEffect } from "react";
 
 export interface TickerVolume {
   symbol: string;
@@ -61,62 +62,73 @@ export function useVolumeData() {
   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
   const anonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
-  // Debounced batch fetch — collects symbols from all cards, then fires one batch
+  const running = useRef(false);
+  const disposed = useRef(false);
+  const controller = useRef<AbortController | null>(null);
+  const activeSymbols = useRef(new Set<string>());
+  const retryAfter = useRef(new Map<string, number>());
+
+  // One queue, one request at a time. Re-renders cannot duplicate in-flight symbols.
+  // Small pauses let rendering and other backend requests make progress.
   const processBatch = useCallback(async () => {
-    const symbols = [...pendingQueue.current];
-    pendingQueue.current.clear();
-    if (symbols.length === 0) return;
-
-    setLoadingSymbols(prev => new Set([...prev, ...symbols]));
-
-    // Batches of 15, six at a time: the whole stock list (~1,500 symbols in
-    // Industry / Sector modes) loads in a few seconds instead of half a minute.
-    const batchSize = 15;
-    const batches: string[][] = [];
-    for (let i = 0; i < symbols.length; i += batchSize) batches.push(symbols.slice(i, i + batchSize));
-    let next = 0;
-    const worker = async () => {
-      while (next < batches.length) {
-        const batch = batches[next++];
+    if (running.current || disposed.current || !isAwake()) return;
+    running.current = true;
+    try {
+      while (pendingQueue.current.size && !disposed.current && isAwake()) {
+        const batch = [...pendingQueue.current].slice(0, 15);
+        batch.forEach(s => { pendingQueue.current.delete(s); activeSymbols.current.add(s); });
+        setLoadingSymbols(new Set([...pendingQueue.current, ...activeSymbols.current]));
+        controller.current = new AbortController();
         try {
           const res = await fetch(
             `${supabaseUrl}/functions/v1/fetch-volume?symbols=${batch.join(",")}`,
-            { headers: { apikey: anonKey, Authorization: `Bearer ${anonKey}` } }
+            { headers: { apikey: anonKey, Authorization: `Bearer ${anonKey}` }, signal: controller.current.signal }
           );
-          if (!res.ok) continue;
+          if (!res.ok) throw new Error(`Volume HTTP ${res.status}`);
           const data = await res.json();
-          if (!data.results) continue;
-          const updates: Record<string, TickerVolume> = {};
-          for (const r of data.results) {
-            updates[r.symbol] = r;
-            volumeMapRef.current[r.symbol] = r;
-          }
-          setVolumeMap(prev => ({ ...prev, ...updates }));
+          if (disposed.current) break;
+          for (const r of data.results ?? []) volumeMapRef.current![r.symbol] = r;
+          setVolumeMap({ ...volumeMapRef.current });
         } catch (e) {
-          console.error("Volume fetch error:", e);
+          if (!disposed.current) console.warn("Volume fetch failed:", e);
+        } finally {
+          batch.forEach(s => {
+            activeSymbols.current.delete(s);
+            if (!volumeMapRef.current![s]) retryAfter.current.set(s, Date.now() + 60_000);
+          });
         }
+        if (!disposed.current && pendingQueue.current.size) await new Promise(resolve => setTimeout(resolve, 300));
       }
-    };
-    await Promise.all(Array.from({ length: Math.min(6, batches.length) }, worker));
-    saveLocalCache({ ...volumeMapRef.current });
-
-    setLoadingSymbols(prev => {
-      const next = new Set(prev);
-      symbols.forEach(s => next.delete(s));
-      return next;
-    });
+    } finally {
+      running.current = false;
+      if (!disposed.current) {
+        saveLocalCache({ ...volumeMapRef.current });
+        setLoadingSymbols(new Set(pendingQueue.current));
+      }
+    }
   }, [supabaseUrl, anonKey]);
 
+  useEffect(() => {
+    disposed.current = false;
+    const resume = () => { if (isAwake()) void processBatch(); };
+    const offWake = onWake(resume);
+    document.addEventListener("visibilitychange", resume);
+    return () => {
+      disposed.current = true;
+      if (fetchTimerRef.current) clearTimeout(fetchTimerRef.current);
+      controller.current?.abort();
+      offWake();
+      document.removeEventListener("visibilitychange", resume);
+    };
+  }, [processBatch]);
+
   const fetchVolume = useCallback((symbols: string[]) => {
-    // Filter already cached
-    const needed = symbols.filter(s => !volumeMapRef.current[s]);
-    if (needed.length === 0) return;
-
+    const needed = symbols.map(s => s.toUpperCase()).filter(s => !volumeMapRef.current![s]
+      && !activeSymbols.current.has(s) && (retryAfter.current.get(s) ?? 0) <= Date.now());
     needed.forEach(s => pendingQueue.current.add(s));
-
-    // Debounce: wait 200ms for all cards to register their symbols, then fire one batch
+    if (!needed.length || running.current) return;
     if (fetchTimerRef.current) clearTimeout(fetchTimerRef.current);
-    fetchTimerRef.current = setTimeout(processBatch, 200);
+    fetchTimerRef.current = setTimeout(() => { void processBatch(); }, 300);
   }, [processBatch]);
 
   const getThemeSignals = useCallback((tickerSymbols: string[]): ThemeDemandSignals => {

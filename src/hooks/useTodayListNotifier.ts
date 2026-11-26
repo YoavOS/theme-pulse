@@ -1,3 +1,4 @@
+import { isAwake } from "@/lib/appSleep";
 import { useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -13,7 +14,7 @@ export function useTodayListNotifier() {
   useEffect(() => {
     if (typeof window === "undefined" || !("Notification" in window)) return;
     const check = async () => {
-      if (Notification.permission !== "granted") return;
+      if (!isAwake() || Notification.permission !== "granted") return;
       const { data: last } = await db.from("today_list").select("day").order("day", { ascending: false }).limit(1).maybeSingle();
       if (!last?.day) return;
       let seen = ""; try { seen = localStorage.getItem(KEY) ?? ""; } catch { /* ignore */ }

@@ -16,14 +16,16 @@ interface Row { mode: "now" | "before"; rank: number; peer: string; peer_year: s
 
 export default function LookalikesCard({ symbol, onOpen }: { symbol: string; onOpen: (s: string) => void }) {
   const [rows, setRows] = useState<Row[] | null>(null);
+  const [error,setError] = useState(false), [attempt,setAttempt] = useState(0);
   const he = useLensLang() === "he";
   useEffect(() => {
     let alive = true;
-    setRows(null);
+    setRows(null); setError(false);
     db.from("lookalikes").select("mode, rank, peer, peer_year, distance, peer_label, shared").eq("symbol", symbol).order("rank")
-      .then(({ data }: { data: Row[] | null }) => { if (alive) setRows(data ?? []); });
+      .then(({ data,error }: { data: Row[] | null; error: unknown }) => { if (alive) { setError(Boolean(error)); setRows(data ?? []); } });
     return () => { alive = false; };
-  }, [symbol]);
+  }, [symbol,attempt]);
+  if (error) return <p role="alert" className="text-sm">{he?"השוואות אינן זמינות.":"Look-alike comparisons unavailable."} <button className="underline" onClick={()=>setAttempt(x=>x+1)}>{he?"ניסיון נוסף":"Retry"}</button></p>;
   if (!rows?.length) return null;
   const list = (mode: "now" | "before") => rows.filter((r) => r.mode === mode).slice(0, 4);
   const Item = ({ r }: { r: Row }) => (

@@ -1,10 +1,12 @@
-import { Fragment, useContext, useMemo, type ReactNode } from "react";
+import { Fragment, createContext, useContext, useMemo, type ReactNode } from "react";
 import { TermCompanyContext } from "@/lib/lens/termContext";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { GLOSSARY_EN, buildMatcher, type GlossaryEntry, type GlossaryMatcher } from "@/lib/lens/glossary";
 import { GLOSSARY_HE } from "@/lib/lens/he/glossary";
 import { isoNums, useLensLang } from "@/lib/lens/i18n";
 
+const PlainTermsContext = createContext(false);
+export function PlainTerms({children}:{children:ReactNode}) { return <PlainTermsContext.Provider value={true}>{children}</PlainTermsContext.Provider>; }
 let heMatcher: GlossaryMatcher | null = null;
 const matcherFor = (lang: "en" | "he") => (lang === "he" ? (heMatcher ??= buildMatcher(GLOSSARY_HE, true)) : GLOSSARY_EN);
 
@@ -17,7 +19,8 @@ export function Term({ entry, id, children }: { entry?: GlossaryEntry; id?: stri
   const g = matcherFor(lang);
   const e = entry ?? (id ? g.byId.get(id) : undefined);
   const forCompany = useContext(TermCompanyContext);
-  if (!e) return <>{children}</>;
+  const plain = useContext(PlainTermsContext);
+  if (!e || plain) return <>{children ?? e?.term}</>;
   const he = lang === "he";
   const stop = (ev: React.SyntheticEvent) => { ev.stopPropagation(); };
   return (
@@ -26,7 +29,7 @@ export function Term({ entry, id, children }: { entry?: GlossaryEntry; id?: stri
         <span
           role="button" tabIndex={0}
           onClick={(ev) => { ev.stopPropagation(); }}
-          onKeyDown={(ev) => { if (ev.key === "Enter" || ev.key === " ") ev.stopPropagation(); }}
+          onKeyDown={(ev) => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); ev.stopPropagation(); ev.currentTarget.click(); } }}
           className="cursor-help underline decoration-dotted decoration-muted-foreground/40 underline-offset-[4px] hover:decoration-solid hover:decoration-primary hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary rounded-sm"
           aria-label={he ? `מה זה ${e.term}?` : `What is ${e.term}?`}
         >

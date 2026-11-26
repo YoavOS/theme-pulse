@@ -58,6 +58,7 @@ export const returnOnNewCapital = (s: Story) => s.targetMargin * (1 - s.taxRate)
 
 /** Solve for the 5-year revenue growth that makes value = enterprise value. */
 export function impliedGrowth(s: Story, ev: number): Implied {
+  if (!Number.isFinite(ev) || ev <= 0 || !Object.values(s).every(Number.isFinite) || s.revenue <= 0 || s.costOfCapital <= 0 || s.salesToCapital <= 0) throw new Error("Valuation requires positive enterprise value, revenue, capital efficiency and discount rate.");
   const roNew = returnOnNewCapital(s);
   const lo = -20, hi = 80;
   const vLo = valueOf(s, lo).value, vHi = valueOf(s, hi).value;
@@ -105,18 +106,17 @@ export function buildScenarios(v: StoryInputs, ev: number, riskFree = 4.2): Scen
   const todayS2C = clampS2C(v.salesToCapital, clampS2C(v.industrySalesToCapital, 1.5));
   const indS2C = clampS2C(v.industrySalesToCapital, todayS2C);
   const base = { revenue: v.revenue, opMargin: v.opMargin, taxRate: v.taxRate, costOfCapital: v.costOfCapital, riskFree, terminalEdge: 0 };
-  const typicalMargin = ind !== null ? Math.max(ind, v.opMargin) : Math.max(v.opMargin, 10);
+  const typicalMargin = ind !== null ? ind : v.opMargin;
+  const strongerMargin = Math.min(100, Math.max(v.opMargin, typicalMargin) + Math.max(2, Math.abs(Math.max(v.opMargin, typicalMargin)) * 0.1));
   const defs: [Scenario["id"], string, string, Story][] = [
-    ["cautious", "Cautious", `stays as profitable as today (${v.opMargin.toFixed(0)}% operating margin) and needs as much capital to grow as it does now`,
+    ["cautious", "Current economics", `stays as profitable as today (${v.opMargin.toFixed(0)}% operating margin) and needs as much capital to grow as it does now`,
       { ...base, targetMargin: v.opMargin, salesToCapital: todayS2C }],
-    ["typical", "Typical", ind !== null && typicalMargin > v.opMargin + 0.5
-      ? `becomes as profitable as the average company in its industry (${ind.toFixed(0)}% operating margin)`
-      : `keeps its ${typicalMargin.toFixed(0)}% operating margin${ind !== null ? ` (its industry averages ${ind.toFixed(0)}%)` : ""}`,
+    ["typical", "Industry economics", ind !== null ? `moves toward its industry operating margin (${ind.toFixed(0)}%)` : `keeps its current operating margin (${typicalMargin.toFixed(0)}%)`,
       { ...base, targetMargin: typicalMargin, salesToCapital: indS2C }],
-    ["optimistic", "Optimistic", `ends up clearly better than its industry: about a quarter more profitable and a quarter less capital-hungry`,
-      { ...base, targetMargin: Math.min(70, typicalMargin * 1.25), salesToCapital: Math.min(6, indS2C * 1.25), terminalEdge: 3 }],
+    ["optimistic", "Stronger economics", `improves its operating margin and generates more sales per dollar of new capital`,
+      { ...base, targetMargin: strongerMargin, salesToCapital: Math.min(6, Math.max(todayS2C, indS2C) * 1.25), terminalEdge: 0 }],
   ];
-  return defs.map(([id, name, plain, story]) => ({ id, name, plain, story, implied: impliedGrowth(story, Math.max(1, ev)) }));
+  return defs.map(([id, name, plain, story]) => ({ id, name, plain, story, implied: impliedGrowth(story, ev) }));
 }
 
 /** How big the company must become by year 10, as a multiple of today. */

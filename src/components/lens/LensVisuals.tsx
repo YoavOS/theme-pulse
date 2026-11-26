@@ -85,7 +85,7 @@ export function IndustryBars({ p }: { p: LensPayload }) {
           const bar = (x: number | null, color: string, label: string) => (
             <div className="grid grid-cols-[64px_1fr_56px] items-center gap-2 text-[11px]" dir="ltr">
               <span className="text-muted-foreground">{label}</span>
-              <span className="h-2 overflow-hidden rounded bg-muted/40"><span className="block h-full rounded" style={{ width: `${x == null ? 0 : Math.max(2, (Math.abs(x) / max) * 100)}%`, background: x != null && x < 0 ? PINK : color }} /></span>
+              <span className="relative h-3 overflow-hidden rounded bg-muted/40"><span className="absolute inset-y-0 left-1/2 border-l border-muted-foreground/60"/><span className="absolute h-full rounded" style={{ left: `${x != null && x < 0 ? 50 - Math.abs(x) / max * 50 : 50}%`, width: `${x == null ? 0 : (Math.abs(x) / max) * 50}%`, background: x != null && x < 0 ? PINK : color }} /></span>
               <span className="text-right font-mono">{fmt(x)}</span>
             </div>
           );
@@ -107,9 +107,9 @@ export function GrowthAsk({ p }: { p: LensPayload }) {
   const he = useLensLang() === "he";
   const v = p.valuation;
   if (!v) return null;
-  const ev = Math.max(1, v.marketCap + v.debt - v.cash);
+  const ev = (v.marketCap + v.debt - v.cash);
   const sc = buildScenarios(v, ev, 4.2);
-  const name: Record<string, string> = he ? { cautious: "זהיר", typical: "טיפוסי", optimistic: "אופטימי" } : { cautious: "Cautious", typical: "Typical", optimistic: "Optimistic" };
+  const name: Record<string, string> = he ? { cautious: "נוכחית", typical: "ענפית", optimistic: "משופרת" } : { cautious: "Current", typical: "Industry", optimistic: "Stronger" };
   const data = [
     ...(v.pastGrowth3y != null ? [{ k: he ? "בפועל, 3 שנים" : "Delivered (3y)", g: v.pastGrowth3y, kind: "past" }] : []),
     ...(v.industryGrowth5y != null ? [{ k: he ? "הענף, 5 שנים" : "Industry (5y)", g: v.industryGrowth5y, kind: "ind" }] : []),

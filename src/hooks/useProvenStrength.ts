@@ -32,17 +32,20 @@ export function useProvenMap(enabled = true) {
 }
 
 /** Full Proven-Strong record for one company — computed on demand if it isn't stored yet. */
-export function useProvenOne(symbol: string | null) {
+export function useProvenOne(symbol: string | null, version = "") {
   const [row, setRow] = useState<ProvenRow | null>(null);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
   useEffect(() => {
     if (!symbol) { setRow(null); return; }
     let alive = true;
-    setLoading(true); setRow(null);
+    setLoading(true); setRow(null); setError(null);
     supabase.functions.invoke("proven-strength", { body: { symbol } })
-      .then(({ data, error }) => { if (alive) setRow(!error && data && !data.error ? (data as ProvenRow) : null); })
+      .then(({ data, error }) => { if (!alive) return; if (error || data?.error) { setError("Track record could not be loaded."); return; } setRow(data as ProvenRow); })
+      .catch(() => { if (alive) setError("Track record could not be loaded."); })
       .finally(() => { if (alive) setLoading(false); });
     return () => { alive = false; };
-  }, [symbol]);
-  return { row, loading };
+  }, [symbol, version, attempt]);
+  return { row, loading, error, retry: () => setAttempt(x => x + 1) };
 }

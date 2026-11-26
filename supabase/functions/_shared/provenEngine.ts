@@ -17,7 +17,7 @@
 import { byPeriod, dur, factsFor, type Facts, type SecFact } from "./secFundamentals.ts";
 import { LENS_FLOW, LENS_INSTANT, debtAt, type QuarterRow, type Stage } from "./lensMetrics.ts";
 
-export const PROVEN_VERSION = 2;
+export const PROVEN_VERSION = 12;
 
 const EXTRA_FLOW = {
   goodwillImpairment: ["GoodwillImpairmentLoss"],
@@ -451,7 +451,7 @@ export function evaluate(ms: YearMetrics[], ctx: EngineCtx, now = new Date()): V
         sentence: `Short record but a clean one: earned more than its cost of capital in ${above} of ${n} years (median ${pp(wm)}). Needs more years to count as proven.` };
     }
     const label: Label = window.length < 2 ? "insufficient" : yc.onTrack ? "emerging" : "emerging_early";
-    const sentence = label === "insufficient" ? "Too new to judge — fewer than two annual reports." : label === "emerging"
+    const sentence = label === "insufficient" ? "Insufficient comparable data — fewer than two supported annual reports." : label === "emerging"
       ? `Not proven yet, but showing the signature: ${yc.passed.join(", ")}.`
       : `Too early to see the signature${yc.passed.length ? ` — so far: ${yc.passed.join(", ")}` : ""}; ${yc.missing.slice(0, 2).join(", ")} not there yet.`;
     return { ...base, ...common, track: "young", label, sentence, why: WHY.young, checks: age ? [...yc.checks, age] : yc.checks };
@@ -557,7 +557,7 @@ function youngChecks(window: YearMetrics[], ctx: EngineCtx, hurdle: number, incr
 
 export const LABEL_TEXT: Record<Label, string> = {
   elite: "Proven · elite", proven: "Proven", proven_caveat: "Proven, with a caveat", fading: "Proven but fading",
-  provisional: "Provisional", emerging: "Emerging", emerging_early: "Early", was_strong: "Was strong", not_proven: "Not proven", insufficient: "Too new",
+  provisional: "Provisional", emerging: "Emerging", emerging_early: "Early", was_strong: "Was strong", not_proven: "Not proven", insufficient: "Limited data",
 };
 export const ARCHETYPE_TEXT: Record<string, string> = {
   capital_light_compounder: "Capital-light compounder", high_margin: "High-margin route", high_turnover: "High-turnover route",

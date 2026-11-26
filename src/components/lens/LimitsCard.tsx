@@ -24,6 +24,7 @@ function useFade(symbol: string) {
   const [base, setBase] = useState<Base | null>(null);
   useEffect(() => {
     let alive = true;
+    setBase(null);
     if (!fadeCache) db.from("fade_rates").select("*").then(({ data }: { data: Fade[] | null }) => { fadeCache = data ?? []; if (alive) setFade(fadeCache); });
     db.from("lookalike_base").select("k, kept_pct, strong_pct, all_kept_pct").eq("symbol", symbol).maybeSingle().then(({ data }: { data: Base | null }) => { if (alive) setBase(data); });
     return () => { alive = false; };
@@ -75,7 +76,7 @@ export default function LimitsCard({ p, proven }: { p: LensPayload; proven: Prov
     { q: "How big can it get? Is the market it is priced for big enough for it and all its rivals?", where: "Industry reports, the company's own market-size claims (Investor Day), and the industry check in Ideas." },
     { q: "Is management investing at good returns, or growing for its own sake?", where: "10-K, Item 7 (Management's discussion) and the return on new capital in the Lens." },
     { q: "What could break the story?", where: "10-K, Item 1A (Risk factors) — especially new risks compared with last year." },
-    { q: "Is the price already counting on all of this?", where: "The price card above: what the price needs, and whether it is possible, plausible, probable." },
+    { q: "Is the price already counting on all of this?", where: "Open Valuation to test the growth, margin and capital assumptions required by the saved market value." },
   ];
 
 
