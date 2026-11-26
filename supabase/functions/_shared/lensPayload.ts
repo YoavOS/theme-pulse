@@ -1,3 +1,4 @@
+import { statements, type StatementPeriod } from "./financialStatements.ts";
 // ─────────────────────────────────────────────────────────────
 // Fundamentals Lens — payload assembly and grounded explanations. PURE module (no network).
 //
@@ -13,7 +14,7 @@ import { classifyLifeCycle, computeMetrics, fmtPct, fmtPp, fmtX, median, percent
 import { benchValue, benchmarkFor, defaultRndLife, DATA_PAGE, type BenchIndex, type Benchmark, type IndustryProfile } from "./damodaran.ts";
 
 export const MIN_PEERS = 5;
-export const LENS_VERSION = 4;
+export const LENS_VERSION = 13;   // 13: bank income lines in statements
 
 /** Peer-comparable metrics: lens metric id → data-provider column and its scale to the lens unit. */
 export const PEER_FIELDS: Record<string, { col: string; scale: number; unit: "pct" | "x" }> = {
@@ -85,6 +86,11 @@ export interface ConceptCard {
   higherIsBetter: boolean | null;
 }
 export interface LensPayload {
+  connection?: import("./lensConnections.ts").LensConnection | null;
+  businessContext?: import("./lensConnections.ts").BusinessContext;
+  marketPricing?: import("./lensConnections.ts").MarketPricing;
+  earningsRelease?: import("./earningsRelease.ts").EarningsRelease | null;
+  statements: StatementPeriod[];
   version: number;
   symbol: string;
   company: string | null;
@@ -93,7 +99,7 @@ export interface LensPayload {
   /** Damodaran's industry group and its January figures (null until his data is loaded). */
   damodaran: (IndustryProfile & { source: string }) | null;
   market: { price: number | null; marketCap: number | null; asOf: string | null };
-  sec: { status: string; asOf: string | null; filed: string | null; ttmLabel: string };
+  sec: { status: string; asOf: string | null; filed: string | null; ttmLabel: string; sourceUrl?: string };
   lifeCycle: (LifeCycle & { label: string; question: string; signature: string; pricing: string; leaningLabel: string | null; lectures: (Lecture & { url: string })[] }) | null;
   story: string[];
   /** Inputs for Damodaran's R&D and lease adjustments (computed in the panel so the R&D life can be changed). */
@@ -115,13 +121,14 @@ export function buildPayload(a: {
 }): LensPayload {
   const mx = computeMetrics(a.history, a.market, { financial: a.financial });
   if (a.bench) mx.metrics.push(...valueCreationMetrics(mx.metrics, a.bench.idx, a.bench.profile, a.financial, mx.ttmLabel));
+  const sourceUrl = a.history.quarters[0]?.sourceUrl;
   const lc = mx.metrics.length && a.history.quarters.length ? classifyLifeCycle(mx, a.history) : null;
   const byId = new Map(mx.metrics.map((m) => [m.id, m]));
   const stage = lc?.stage ?? null;
   const withComparisons = (m: Metric): Metric & { peer?: PeerStat; bench?: Benchmark } => {
     const out: Metric & { peer?: PeerStat; bench?: Benchmark } = { ...m };
-    if (a.peers[m.id]) out.peer = a.peers[m.id];
-    const b = a.bench && a.bench.profile.match !== "market" ? benchmarkFor(m.id, m.value, a.bench.idx, a.bench.profile.name, a.financial) : undefined;
+    if (m.value !== null && a.peers[m.id]) out.peer = a.peers[m.id];
+    const b = m.value !== null && a.bench && a.bench.profile.match !== "market" ? benchmarkFor(m.id, m.value, a.bench.idx, a.bench.profile.name, a.financial) : undefined;
     if (b) out.bench = b;
     return out;
   };
@@ -135,14 +142,14 @@ export function buildPayload(a: {
   const foundations = CONCEPTS.filter((c) => c.pillar === "foundations").map(card);
   const s = stage ? STAGES[stage] : null;
   return {
-    version: LENS_VERSION, symbol: a.symbol, company: a.company, classification: a.classification, financial: a.financial,
+    statements: statements(a.history), version: LENS_VERSION, symbol: a.symbol, company: a.company, classification: a.classification, financial: a.financial,
     damodaran: a.bench ? { ...a.bench.profile, source: DATA_PAGE } : null,
     market: { price: a.market.price, marketCap: a.market.marketCap, asOf: a.market.asOf },
-    sec: { status: a.secStatus, asOf: mx.asOf, filed: mx.filed, ttmLabel: mx.ttmLabel },
+    sec: { status: a.secStatus, asOf: mx.asOf, filed: mx.filed, ttmLabel: mx.ttmLabel, sourceUrl },
     lifeCycle: lc && s ? { ...lc, label: s.label, question: s.question, signature: s.signature, pricing: s.pricing, leaningLabel: lc.leaning ? STAGES[lc.leaning].label : null, lectures: withUrl(s.lectures) } : null,
     story: storyLines(a.symbol, lc, byId, a.financial),
-    adjust: a.financial || !mx.raw ? null : adjustInputs(mx.raw, mx.taxRate, a.history, a.bench ?? null, a.classification.sector),
-    valuation: a.financial || !mx.raw ? null : valuationInputs(mx.raw, mx.taxRate, a.market.marketCap, byId, a.bench ?? null),
+    adjust: a.financial || sourceUrl || !mx.raw ? null : adjustInputs(mx.raw, mx.taxRate, a.history, a.bench ?? null, a.classification.sector),
+    valuation: a.financial || sourceUrl || !mx.raw ? null : valuationInputs(mx.raw, mx.taxRate, a.market.marketCap, byId, a.bench ?? null),
     snapshot: (s?.focus ?? ["rev_growth_ttm", "op_margin", "fcf_margin", "roic"]).map((id) => (id === "roic" && byId.has("excess_return") ? "excess_return" : id)).filter((id) => byId.has(id)),
     foundations, cards, computedAt: new Date().toISOString(),
   };
@@ -189,7 +196,7 @@ export function adjustInputs(raw: NonNullable<ReturnType<typeof computeMetrics>[
 
 export function valuationInputs(raw: NonNullable<ReturnType<typeof computeMetrics>["raw"]>, taxRate: number | null, marketCap: number | null,
   byId: Map<string, Metric>, bench: { idx: BenchIndex; profile: IndustryProfile } | null): ValuationInputs | null {
-  if (!fin(marketCap) || marketCap <= 0 || !fin(raw.revenue) || raw.revenue <= 0 || !fin(raw.ebit)) return null;
+  if (!fin(raw.debt) || !fin(raw.cash) || !fin(marketCap) || marketCap + raw.debt - raw.cash <= 0 || marketCap <= 0 || !fin(raw.revenue) || raw.revenue <= 0 || !fin(raw.ebit)) return null;
   const ind = bench && bench.profile.match !== "market" ? bench.profile.name : null;
   const bv = (m: string) => (ind ? benchValue(bench!.idx, ind, m) : null);
   const wacc = bv("cost_of_capital");
@@ -258,12 +265,12 @@ export function factsFor(p: LensPayload, conceptId: string): Fact[] {
 export const BANNED = /\b(buy|sell|undervalued|overvalued|bargain|price target|will (rise|fall|go up|go down)|should (invest|buy|sell)|guarantee[ds]?)\b/i;
 const NUM_RE = /[−-]?\$?\d[\d,]*(?:\.\d+)?\s?(?:%|×|x\b|pp\b|[BMKT]\b|yrs?\b|th\b)?/g;
 /** Numeric value of a token like "−12.5%", "$1.2B", "3.4×" (sign kept, units dropped). */
-function numValue(tok: string): number | null {
+function numValue(tok: string): string | null {
   const t = tok.replace(/−/g, "-").replace(/,/g, "");
   const m = t.match(/(-?)\$?(\d+(?:\.\d+)?)/);
   if (!m) return null;
   const v = Number(m[2]) * (m[1] ? -1 : 1);
-  return Number.isFinite(v) ? v : null;
+  return Number.isFinite(v) ? String(v) + ":" + t.replace(/[-$\d.,\s]/g, "").toLowerCase() + (t.includes("$") ? ":usd" : "") : null;
 }
 
 export interface Sentence { text: string; fact_ids: string[]; kind: string }
@@ -289,14 +296,14 @@ export function validateExplanation(raw: unknown, facts: Fact[]): { ok: boolean;
     const unknown = ids.filter((k) => !byId.has(k));
     if (unknown.length) { errors.push(`sentence ${i + 1}: unknown fact ids ${unknown.join(", ")}`); return; }
     // numbers allowed = every number appearing in the cited facts (display and label)
-    const allowed = new Set<number>();
+    const allowed = new Set<string>();
     for (const k of ids) for (const n of (byId.get(k)!.display + " " + byId.get(k)!.label).match(NUM_RE) ?? []) {
       const v = numValue(n); if (v !== null) allowed.add(v);
     }
     for (const n of text.match(NUM_RE) ?? []) {
       const v = numValue(n);
       if (v === null) continue;
-      if (Number.isInteger(v) && v >= 0 && v <= 12 && !/[%$×]/.test(n)) continue;   // small counts: "3 years", "12 months"
+
       if (![...allowed].some((a) => a === v)) { errors.push(`sentence ${i + 1}: number "${n.trim()}" isn't in its cited facts`); return; }
     }
     sentences.push({ text, fact_ids: ids, kind: typeof x?.kind === "string" ? x.kind : "this_company" });

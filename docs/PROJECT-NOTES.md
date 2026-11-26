@@ -1,47 +1,23 @@
-# Theme Pulse — project notes for AI sessions
+# Theme Pulse — current handoff
+Updated 2026-11-26. Reuse with AGENTS.md in ongoing chats.
 
-Read this first; then query the code map (`graphify query "<question>"`, `graphify explain "<symbol>"`) instead of opening whole files.
-The map is rebuilt with `graphify update .` (local, no LLM). Output: `graphify-out/` (git-ignored).
+## App and performance
+Installed: `C:\Users\yoavp\theme-pulse-local`; React/TypeScript/Vite, local Supabase/Docker, Ollama. http://localhost:8080. No `.git`; synchronization unverified. Old Linux path obsolete.
+User chose qwen3:8b, 16K context, 60-second unload; automatic AI off. Background work has ten-minute startup grace. DB/edge limits 1.5/2 CPUs; reapply after container recreation (edge restored Nov 23). Launcher recovers partial sessions; avoid directly restarting edge. Details: `local/PERFORMANCE.md`.
 
-## Working rules (from the owner)
-- Personal app, runs on the owner's Windows PC (Docker Desktop + Supabase CLI). Not on the internet.
-- Never read `.env`, `local/keys.env` or any secret. API keys stay on the PC.
-- Never push or merge `main`. Work on a `claude/...` branch, open PRs via `gh api` (no GraphQL); the owner merges.
-  Check a PR isn't merged before pushing to its branch.
-- No buy/sell language about tickers. Hebrew text: natural, gender-neutral toward the reader.
-- The owner is a fundamentals beginner; teach Damodaran's ideas in the app's own words, with links.
-- Only free AI: Ollama on the PC (default `qwen3.8:27b`, 32 GB GPU), cloud free keys (Gemini/Groq) as fallback.
-- New AI features live in the **AI Analyst** tab first, with usage counts (`app_features`), and get moved/removed after a trial.
-- The owner prefers results that "come to them" (lists, notifications), not badges.
-- Trading style: 21 EMA pullbacks after a big run (~40–50% since last EMA touch, alert zone ~0.4 ADR) and breakouts.
+## Earnings coverage
+Fixed Nov 23: calendar membership no longer depends on first-40 quote enrichment or known market cap. Merge Finnhub/FMP, deduplicate, retain dotted symbols and unknown caps. Paginate RS universe; explicit empty universe stays empty. Default Full Market/no cap minimum. Show coverage/filter counts and provider failures; guard stale responses. Initial calendar uses cached metadata; optional quote refresh handles up to ten symbols without removing other reporters.
+Validated 133 unique reporters, including SMTC AMC, in live endpoint and browser; RS filter also retains SMTC. Initial endpoint under one second in check. TypeScript/build and `local/test-earnings-calendar.cjs` passed. Backup: `local/earnings-coverage-backup-20261123`. Provider coverage still not guaranteed; cached caps can lag. Refresh old tabs after builds.
 
-## Running locally
-- Owner's folder: `C:\Users\yoavp\theme-pulse-local` (synced from this repo file by file; the Lens Hebrew branch is included).
-- `Start Theme Pulse.bat` → `local/Start-ThemePulse.ps1`: Docker, `supabase start`, `migration up --local`, `local/setup-local.sql`
-  (local scheduler + settings), daily data dump, Ollama check/pull (`local/ai.env`), functions serve, Vite on :8080.
-- The local edge runtime stops a request after ~1 minute. Long PC-model calls go through the database:
-  `ai_job_submit` → pg_net → Ollama (15 min) → `ai_job_claim` → the function's finisher (`_shared/aiJobs.ts`).
-  The page polls `{action:"job", id}`; cron `local-ai-jobs` finishes jobs every minute.
-- Scheduler: `local_tick()` (nightly steps after 22:30 UTC weekdays), `local_lists_tick()` (price history → Today's lists → AI lines).
+## Fundamentals
+Company story now compares seven pairs using dated filing evidence: revenue/cash, profit/cash flow, sales/margin, operating/net profit, profit/diluted EPS, investment/free cash, and debt/interest. The last two use industrial-company conventions. EPS and diluted shares use exact quarterly tags. Logic: CompanyContext.tsx, extraComparisons.ts, lensConnections.ts. Deferred revenue is a clue, not cash receipts. Business context uses available profile descriptions and SEC annual filings. Valuation shows dated market pricing and descriptive multiples with Finnhub fallback; no fair-value calculator or automatic AI. NVDA/JPM browser and CAMT API verified. Checks: node local/test-fundamentals.cjs, TypeScript, npm run build.
+CAMT: SEC 6-K quarterly figures now feed the shared Lens history, including Evidence and statements. Eight quarters, income growth/margins, verified USD balance sheets, liquidity, ROE and diluted share count. Dated source links; cash-flow, total-debt/ROIC and annual Track Record inputs still unverified. ASML/TSM need different formats. See foreignEarnings.ts and node local/test-fundamentals.cjs. Live CAMT/NVDA endpoint verified.
+Nov 25 freshness fix: recent SEC 8-K earnings releases appear on Company story and Statements while structured facts lag. Strict dated USD table parsing or source link alone. Charts and valuation use structured data. One-hour cache once the latest quarter is 90 days old. Verified KSS Oct 31 ($3.638B revenue, $254M net) via live Lens. Checks: node local/test-fundamentals.cjs, TypeScript, npm run build.
 
-## What exists (Nov 2026)
-- AI Analyst tab (`src/pages/AiAnalyst.tsx`): Today's list, market report, ask-your-data (read-only SQL tool loop),
-  one stock, from the filings (10-K/8-K text, quote checking), pattern finder, journal review, focus-list review, usage counts.
-- Price history: `daily_bars` (~5y, `daily-bars`), lists: `daily-lists` + `_shared/lists.ts`, graded by `today_list_outcomes`.
-- Fundamentals Lens (Damodaran): track record (`proven-strength`), fade rates, rarity, industry priced-in growth,
-  look-alikes (`proven-lookalikes`), "What the numbers can't tell you", reading guide, "Read together" (`src/lib/lens/linked.ts`),
-  "The long story" (AI), price story with correct wording for shrinking companies.
-- Pattern finder: `pattern_samples` → `mine_patterns()` (fifths per trait, pairs, older 70% vs newer 30% of dates).
+Beginner education through companies; story leads with latest quarter, growth/acceleration, profitability, cash, industry peers and watchpoints. Full-width desktop, three charts across, flow/context row; deeper evidence expandable. Thesis UI removed, saved notes untouched. Quarterly charts pair each amount with the selected QoQ/YoY baseline. The growth plot has a signed 0% guide and the selected quarter shows acceleration in percentage points. Directional crossover markers flag sign changes without inventing growth percentages; verified on CAMT QoQ and YoY. See QuarterlyChart.tsx, quarterly.ts and node local/test-quarterly-story.cjs. Profit charts show a separate dashed loss-change line for two negative results, using the earlier loss magnitude. Acceleration compares rates of the same kind. Missing/zero bases stay blank. Income flow supports net additions and an interactive signed waterfall for losses or missing figures. Hover or keyboard focus shows definitions, amounts and shares of sales. Select revenue, profit, or expense branches for quarterly dollars and revenue share, YoY changes, and click-through to the quarter. PLTR verified in both Lens views. Code: FinancialStatements.tsx and IncomeFlowTrend.tsx. Banks use ROE context. Deterministic summaries, no AI calls; no invented segments/expectations.
+Terms (Nov 26): every Fundamentals view links its terms (dotted underline; not inside buttons, summaries or SVG; `PlainTerms` keeps controls plain). Card: meaning, formula, why, how to read, "For SYMBOL" line (metric, else latest quarter or market snapshot: companyQuarterNote.ts), related terms with Back, "All terms" browser (header "Terms" button; search, groups). Content: glossary.ts/he/glossary.ts plus glossaryMore.ts, he/glossaryMore.ts, glossaryMeta.ts (groups, related). Hebrew matching accepts the article on later words. Tests: glossary.test.ts, companyQuarterNote.test.ts (vitest); NVDA/JPM harness, Hebrew and 390px checked; the app rebuilds on next start. Backup: `local/lens-terms-backup-20261126`.
+Banks (Nov 26): JPM gaps were correct (banks report no cost of revenue/gross/operating profit; revenue, net, tax matched SEC). Statements now use a bank flow: revenue → non-interest expenses → pre-provision profit → credit-loss provisions → profit before tax → tax → net, with net interest income and fees in the table. New SEC lines in LENS_FLOW; cache versions bumped (companyFinancials 6, LENS 13) so banks are re-read. Test: bankStatements.test.ts (real JPM facts). Backup: `local/bank-flow-backup-20261126`.
+Integrity fixes and validation details: `docs/FUNDAMENTALS-CHANGES.md`. TypeScript/build, quarterly-story/fundamentals tests, NVDA/PLTR/JPM browser and mobile checks passed. Existing bundle/CSS warnings; whole-PC lag not benchmarked. Backups: `local/beginner-lens-backup-20261122`, `local/fundamentals-backup-20261122`.
 
-## Open items
-- Owner's own data (themes, positions, journal) is still in Lovable; export when its allowance refreshes.
-- Hebrew polish of the Lens texts; calmer Lens design.
-- PRs: #94 (Lens Hebrew), #95 (run locally), #96 (local AI); later work is on `claude/ai-everywhere`.
-- Known limits: survivorship bias (only today's listed stocks) in all history-based odds.
-
-## Working cheaply (token budget)
-- One topic per chat; start a new chat with "read docs/PROJECT-NOTES.md" instead of continuing a long one.
-- Find code with `graphify query`/`grep -n`, read only the needed lines; edit with small replacements, never rewrite big files.
-- Check UI with one cropped, scaled-down screenshot; cap command output (`head`, `| cut -c1-200`).
-- Sync to the PC only the files changed in the last commit (`git diff --name-only HEAD~1..HEAD`).
-- Short progress notes; no recaps.
+## Other work
+EMA gain: peak high within the uninterrupted on/above-EMA streak. The optional pre-crossover close uses a confirmed first strict close above EMA and excludes earlier highs. Closing below resets. Test: `local/test-ema-peak.cjs`. Theme recovery incomplete (1,558 stocks, zero themes at last check). `docs/CODE-MAP.md` and `docs/DECISIONS.md` provide pointers/preferences. Do not reopen old chats by default.

@@ -3,6 +3,7 @@ import type { LensPayload } from "@/lib/lens/types";
 import { metricMap } from "@/lib/lens/linked";
 import { useLensLang } from "@/lib/lens/i18n";
 import { buildScenarios } from "@/lib/lens/valuation";
+import { AutoTerms, Term } from "./Term";
 
 /**
  * Pictures for the Fundamentals Lens:
@@ -41,7 +42,7 @@ export function ReturnMap({ p }: { p: LensPayload }) {
   ].map((d) => ({ ...d, x: Math.min(xMax, Math.max(0, d.x)), y: Math.min(yMax, Math.max(0, d.y)) }));
   return (
     <div className="px-3 pb-2">
-      <div className="text-[11.5px] text-muted-foreground">{he ? "שתי הדרכים לתשואה גבוהה: שיעור רווח (לרוחב) × מכירות לכל דולר הון (לגובה). הקווים: תשואה שווה על ההון — הנמוך הוא עלות ההון." : "The two routes to a high return: margin (across) × sales per $ of capital (up). Lines = equal return on capital; the lowest is the cost of capital."}</div>
+      <div className="text-[11.5px] text-muted-foreground">{<AutoTerms text={he ? "שתי הדרכים לתשואה גבוהה: שיעור רווח (לרוחב) × מכירות לכל דולר הון (לגובה). הקווים: תשואה שווה על ההון — הנמוך הוא עלות ההון." : "The two routes to a high return: margin (across) × sales per $ of capital (up). Lines = equal return on capital; the lowest is the cost of capital."}/>}</div>
       <div className="h-56" dir="ltr">
         <ResponsiveContainer>
           <ComposedChart data={curve} margin={{ top: 8, right: 12, left: 0, bottom: 4 }}>
@@ -58,7 +59,7 @@ export function ReturnMap({ p }: { p: LensPayload }) {
         </ResponsiveContainer>
       </div>
       <div className="flex flex-wrap gap-3 text-[10.5px] text-muted-foreground" dir="ltr">
-        <span><span className="me-1 inline-block w-4 border-t-2 border-dashed" style={{ borderColor: PINK }} />{levels[0].toFixed(1)}% {he ? "(עלות ההון)" : "(cost of capital)"}</span>
+        <span><span className="me-1 inline-block w-4 border-t-2 border-dashed" style={{ borderColor: PINK }} />{levels[0].toFixed(1)}% <Term id="cost_of_capital">{he ? "(עלות ההון)" : "(cost of capital)"}</Term></span>
         {levels.slice(1).map((r) => <span key={r}><span className="me-1 inline-block w-4 border-t-2" style={{ borderColor: TEAL }} />{r}%</span>)}
       </div>
     </div>
@@ -85,13 +86,13 @@ export function IndustryBars({ p }: { p: LensPayload }) {
           const bar = (x: number | null, color: string, label: string) => (
             <div className="grid grid-cols-[64px_1fr_56px] items-center gap-2 text-[11px]" dir="ltr">
               <span className="text-muted-foreground">{label}</span>
-              <span className="h-2 overflow-hidden rounded bg-muted/40"><span className="block h-full rounded" style={{ width: `${x == null ? 0 : Math.max(2, (Math.abs(x) / max) * 100)}%`, background: x != null && x < 0 ? PINK : color }} /></span>
+              <span className="relative h-3 overflow-hidden rounded bg-muted/40"><span className="absolute inset-y-0 left-1/2 border-l border-muted-foreground/60"/><span className="absolute h-full rounded" style={{ left: `${x != null && x < 0 ? 50 - Math.abs(x) / max * 50 : 50}%`, width: `${x == null ? 0 : (Math.abs(x) / max) * 50}%`, background: x != null && x < 0 ? PINK : color }} /></span>
               <span className="text-right font-mono">{fmt(x)}</span>
             </div>
           );
           return (
             <div key={r.label}>
-              <div className="mb-0.5 text-[12px]">{r.label}</div>
+              <div className="mb-0.5 text-[12px]"><AutoTerms text={r.label} /></div>
               {bar(r.company, BLUE, p.symbol)}
               {bar(r.industry, AMBER, he ? "ענף" : "Industry")}
               {r.market != null && bar(r.market, MUTED, he ? "שוק" : "Market")}
@@ -107,9 +108,9 @@ export function GrowthAsk({ p }: { p: LensPayload }) {
   const he = useLensLang() === "he";
   const v = p.valuation;
   if (!v) return null;
-  const ev = Math.max(1, v.marketCap + v.debt - v.cash);
+  const ev = (v.marketCap + v.debt - v.cash);
   const sc = buildScenarios(v, ev, 4.2);
-  const name: Record<string, string> = he ? { cautious: "זהיר", typical: "טיפוסי", optimistic: "אופטימי" } : { cautious: "Cautious", typical: "Typical", optimistic: "Optimistic" };
+  const name: Record<string, string> = he ? { cautious: "נוכחית", typical: "ענפית", optimistic: "משופרת" } : { cautious: "Current", typical: "Industry", optimistic: "Stronger" };
   const data = [
     ...(v.pastGrowth3y != null ? [{ k: he ? "בפועל, 3 שנים" : "Delivered (3y)", g: v.pastGrowth3y, kind: "past" }] : []),
     ...(v.industryGrowth5y != null ? [{ k: he ? "הענף, 5 שנים" : "Industry (5y)", g: v.industryGrowth5y, kind: "ind" }] : []),

@@ -7,6 +7,7 @@ import type { ProvenRow } from "@/lib/proven/types";
 import { READING_GUIDE } from "@/lib/lens/readingGuide";
 import { READING_GUIDE_HE } from "@/lib/lens/he/readingGuide";
 import { ltr, useLensLang } from "@/lib/lens/i18n";
+import { AutoTerms } from "./Term";
 
 /**
  * "What the numbers can't tell you" — Damodaran's point that numbers need a story: for this company,
@@ -24,6 +25,7 @@ function useFade(symbol: string) {
   const [base, setBase] = useState<Base | null>(null);
   useEffect(() => {
     let alive = true;
+    setBase(null);
     if (!fadeCache) db.from("fade_rates").select("*").then(({ data }: { data: Fade[] | null }) => { fadeCache = data ?? []; if (alive) setFade(fadeCache); });
     db.from("lookalike_base").select("k, kept_pct, strong_pct, all_kept_pct").eq("symbol", symbol).maybeSingle().then(({ data }: { data: Base | null }) => { if (alive) setBase(data); });
     return () => { alive = false; };
@@ -75,7 +77,7 @@ export default function LimitsCard({ p, proven }: { p: LensPayload; proven: Prov
     { q: "How big can it get? Is the market it is priced for big enough for it and all its rivals?", where: "Industry reports, the company's own market-size claims (Investor Day), and the industry check in Ideas." },
     { q: "Is management investing at good returns, or growing for its own sake?", where: "10-K, Item 7 (Management's discussion) and the return on new capital in the Lens." },
     { q: "What could break the story?", where: "10-K, Item 1A (Risk factors) — especially new risks compared with last year." },
-    { q: "Is the price already counting on all of this?", where: "The price card above: what the price needs, and whether it is possible, plausible, probable." },
+    { q: "Is the price already counting on all of this?", where: "Open Valuation to test the growth, margin and capital assumptions required by the saved market value." },
   ];
 
 
@@ -86,12 +88,12 @@ export default function LimitsCard({ p, proven }: { p: LensPayload; proven: Prov
         <span className="text-[11px] font-semibold uppercase tracking-wide text-[hsl(40,90%,60%)]">{t("What the numbers can't tell you", "מה המספרים לא יכולים לספר")}</span>
         <ReadingGuideButton />
       </div>
-      <p className="mb-2 text-foreground/85">{t("Damodaran: numbers without a story become a spreadsheet fantasy; a story without numbers is a fairy tale. The numbers here describe the past — the value rests on the future.", "דמודרן: מספרים בלי סיפור הופכים לפנטזיה בגיליון אלקטרוני; סיפור בלי מספרים הוא אגדה. המספרים כאן מתארים את העבר — והערך תלוי בעתיד.")}</p>
+      <p className="mb-2 text-foreground/85">{<AutoTerms text={t("Damodaran: numbers without a story become a spreadsheet fantasy; a story without numbers is a fairy tale. The numbers here describe the past — the value rests on the future.", "דמודרן: מספרים בלי סיפור הופכים לפנטזיה בגיליון אלקטרוני; סיפור בלי מספרים הוא אגדה. המספרים כאן מתארים את העבר — והערך תלוי בעתיד.")}/>}</p>
 
       {warnings.length > 0 && (
         <div className="mb-2 space-y-1.5">
           <div className="text-[11px] font-semibold text-muted-foreground">{he ? <>איפה המספרים של {S} הכי פחות אמינים</> : <>Where {p.symbol}'s numbers are least reliable</>}</div>
-          {warnings.map((w) => <p key={w.title}><span className="font-semibold">{w.title}.</span> <span className="text-foreground/85">{w.text}</span></p>)}
+          {warnings.map((w) => <p key={w.title}><span className="font-semibold">{w.title}.</span> <span className="text-foreground/85"><AutoTerms text={w.text} /></span></p>)}
         </div>
       )}
 
@@ -108,13 +110,13 @@ export default function LimitsCard({ p, proven }: { p: LensPayload; proven: Prov
               ? <>מבין {ltr(base.k)} החברות מהעבר שנראו הכי דומה ל-{S} היום, <span className="font-semibold">{ltr(base.kept_pct + "%")}</span> המשיכו להרוויח מעל עלות ההון שלהן ב-{ltr(4)} מתוך {ltr(5)} השנים הבאות או יותר (בכלל החברות: {ltr(base.all_kept_pct + "%")}).</>
               : <>Of the {base.k} past companies that looked most like {p.symbol} does now, <span className="font-semibold">{base.kept_pct}%</span> kept earning above their cost of capital in 4+ of the next 5 years (for all companies: {base.all_kept_pct}%).</>}</p>
           )}
-          <p className="mt-1 text-[11px] text-muted-foreground">{t("Only companies still listed today are in this history — failed ones are missing — so these odds are somewhat too optimistic.", "בהיסטוריה הזו יש רק חברות שעדיין נסחרות היום — חברות שנכשלו חסרות — ולכן הסיכויים האלה אופטימיים מדי במידה מסוימת.")}</p>
+          <p className="mt-1 text-[11px] text-muted-foreground">{<AutoTerms text={t("Only companies still listed today are in this history — failed ones are missing — so these odds are somewhat too optimistic.", "בהיסטוריה הזו יש רק חברות שעדיין נסחרות היום — חברות שנכשלו חסרות — ולכן הסיכויים האלה אופטימיים מדי במידה מסוימת.")}/>}</p>
         </div>
       )}
 
       <div className="space-y-1">
         <div className="text-[11px] font-semibold text-muted-foreground">{t("Questions only the story can answer", "שאלות שרק הסיפור יכול לענות עליהן")}</div>
-        {story.map((s) => <p key={s.q}><span className="text-foreground">{s.q}</span> <span className="text-muted-foreground">— {s.where}</span></p>)}
+        {story.map((s) => <p key={s.q}><span className="text-foreground"><AutoTerms text={s.q} /></span> <span className="text-muted-foreground">— <AutoTerms text={s.where} /></span></p>)}
       </div>
     </section>
   );

@@ -11,6 +11,7 @@
 // Hurdle = Damodaran's cost of capital for the company's industry (January table; floor 6%).
 // Every company gets a verdict — young ones on their own track (see _shared/provenEngine.ts).
 
+import { companyFinancials, companyClassification } from "../_shared/companyFinancials.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
 import { corsHeaders } from "../_shared/cors.ts";
 import { SEC_UA, secCik } from "../_shared/secFundamentals.ts";
@@ -54,19 +55,16 @@ type Prev = { last_10k_filed: string | null; calc_version: number; hurdle_source
 const scoredWithoutBench = (p: Prev, bench: Bench) => !!bench.asOf && !!p?.hurdle_source && p.hurdle_source.startsWith(FALLBACK_PREFIX);
 
 async function scoreOne(sb: Sb, symbol: string, sector: string | null, bench: Bench, prev: Prev, force: boolean) {
-  const cik = await secCik(symbol);
+  const shared = await companyFinancials(sb, symbol, force);
+  const cik = shared.cik;
   const base = { symbol, cik, calc_version: PROVEN_VERSION, computed_at: new Date().toISOString() };
-  if (!cik) return { ...base, status: "not_sec_filer", sentence: "Not an SEC filer (foreign listing, ETF or unknown ticker) — no 10-K history to judge." };
-  const r = await fetch(`https://data.sec.gov/api/xbrl/companyfacts/CIK${String(cik).padStart(10, "0")}.json`, { headers: { "User-Agent": SEC_UA } });
-  if (!r.ok) { await r.body?.cancel(); throw new Error(`SEC HTTP ${r.status}`); }
-  const facts = await r.json();
-  const panel = parseAnnualPanel(facts);
+  const panel = shared.annual;
   if (!panel.length) return { ...base, status: "no_annual_filings", sentence: "No US-GAAP annual filings (IFRS / 20-F filer, or too new) — nothing to judge yet." };
   const lastFiled = panel[0].filed;
   // unchanged since the last scoring → just mark it checked
-  if (!force && prev && prev.calc_version === PROVEN_VERSION && prev.last_10k_filed === lastFiled && !scoredWithoutBench(prev, bench)) return { ...base, status: "unchanged" as const };
+  // Always recompute from the shared compact snapshot: industry and benchmarks can change without a new filing.
 
-  const classification = classifyLabel(sector);
+  const classification = companyClassification(sector, shared.sic);
   const financial = classification.sector === "Financials";
   const { data: own } = await sb.from("damodaran_tickers").select("industry").eq("symbol", symbol).maybeSingle();
   let ind = resolveDamodaranIndustry(own?.industry ?? null, classification.subIndustry !== "Other" ? classification.subIndustry : null);
@@ -77,7 +75,7 @@ async function scoreOne(sb: Sb, symbol: string, sector: string | null, bench: Be
   // the same life-cycle stage the Lens shows (Damodaran's six stages, from the latest quarters)
   let stage: EngineCtx["stage"] = null;
   try {
-    const h = parseLensHistory(facts);
+    const h = shared.history;
     stage = classifyLifeCycle(computeMetrics(h, { price: null, marketCap: null }, { financial }), h)?.stage ?? null;
   } catch { stage = null; }
   const ctx: EngineCtx = {
@@ -130,7 +128,7 @@ Deno.serve(async (req) => {
         sb.from("proven_strength").select("*").eq("symbol", symbol).maybeSingle(),
       ]);
       // fresh enough → serve what's stored
-      if (!body.force && prev && prev.calc_version === PROVEN_VERSION && Date.now() - Date.parse(prev.computed_at) < STALE_MS && !scoredWithoutBench(prev, bench)) return json(prev);
+      // Cheap re-evaluation ensures current classification and benchmark consistency.
       let sector: string | null = u?.sector ?? null;
       if (!sector) { const { data: f } = await sb.from("stock_fundamentals").select("sector").eq("symbol", symbol).maybeSingle(); sector = f?.sector ?? null; }
       const row = await scoreOne(sb, symbol, sector, bench, prev, body.force === true);

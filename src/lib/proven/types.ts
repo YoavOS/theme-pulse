@@ -17,12 +17,12 @@ export interface ProvenRow {
 
 export const LABEL_TEXT: Record<ProvenLabel, string> = {
   elite: "Proven · elite", proven: "Proven", proven_caveat: "Proven, with a caveat", fading: "Proven but fading",
-  provisional: "Provisional", emerging: "Emerging", emerging_early: "Early", was_strong: "Was strong", not_proven: "Not proven", insufficient: "Too new",
+  provisional: "Provisional", emerging: "Emerging", emerging_early: "Early", was_strong: "Was strong", not_proven: "Not proven", insufficient: "Limited data",
 };
 /** Short form for tight table cells. */
 export const LABEL_SHORT: Record<ProvenLabel, string> = {
   elite: "Elite", proven: "Proven", proven_caveat: "Proven*", fading: "Fading", provisional: "Provisional",
-  emerging: "Emerging", emerging_early: "Early", was_strong: "Was strong", not_proven: "Not proven", insufficient: "Too new",
+  emerging: "Emerging", emerging_early: "Early", was_strong: "Was strong", not_proven: "Not proven", insufficient: "Limited data",
 };
 // Red/green stay reserved for price action; these are calm, distinct hues.
 export const LABEL_CLS: Record<ProvenLabel, string> = {

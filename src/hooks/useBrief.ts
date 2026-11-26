@@ -177,7 +177,7 @@ export function useBriefData(enabled: boolean, opts: { news?: boolean } = {}) {
   }, [enabled, loadEvents, loadEarnings, fetchMarketNews]);
 
   useEffect(() => {
-    if (wantNews && marketNews && marketNews.length > 0) void loadDigest(marketNews, false);
+    if (import.meta.env.VITE_LIGHT_MODE !== "true" && wantNews && marketNews && marketNews.length > 0) void loadDigest(marketNews, false);
   }, [wantNews, marketNews, loadDigest]);
 
   const refreshAll = useCallback(() => {

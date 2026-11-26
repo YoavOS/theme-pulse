@@ -40,7 +40,15 @@ export function hePayload(p: LensPayload): LensPayload {
       signals: lc.signals.map((s) => ({ ...s, label: heServer(s.label), display: heServer(s.display) })),
       lectures: lc.lectures.map(lec),
     } : lc,
-    story: p.story.map(heServer),
+    story: (() => {
+      const m = new Map(p.cards.flatMap(c => c.metrics).map(x => [x.id,x]));
+      const lines: string[] = [];
+      if(lc) lines.push(`לפי כלל האצבע של האפליקציה, ${p.symbol} נמצאת בשלב ${HE_STAGE[lc.stage].label}. זהו סיווג משוער, לא תחזית.`);
+      for(const [id,label] of [["rev_growth_ttm","צמיחה בהכנסות ב־12 החודשים האחרונים"],["op_margin","שיעור רווח תפעולי"],["fcf_margin","תזרים חופשי כאחוז מההכנסות"],[p.financial?"roe":"roic",p.financial?"תשואה על ההון העצמי":"תשואה על ההון המושקע"]]) {
+        const value=m.get(id); if(value?.value!=null) lines.push(`${label}: ${value.display}.`);
+      }
+      return lines.length?lines:["אין מספיק נתונים נתמכים לסיכום. נתון חסר אינו אפס."];
+    })(),
     foundations: p.foundations.map(card),
     cards: p.cards.map(card),
     valuation: p.valuation ? { ...p.valuation, costOfCapitalSource: heServer(p.valuation.costOfCapitalSource) } : p.valuation,

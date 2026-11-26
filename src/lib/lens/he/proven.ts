@@ -5,11 +5,11 @@ import { heMonthYear } from "./metrics";
 
 export const HE_LABEL_TEXT: Record<ProvenLabel, string> = {
   elite: "מוכחת · עילית", proven: "מוכחת", proven_caveat: "מוכחת, עם הסתייגות", fading: "מוכחת אך דועכת",
-  provisional: "ראשונית", emerging: "מתהווה", emerging_early: "מוקדם", was_strong: "הייתה חזקה", not_proven: "לא מוכחת", insufficient: "חדשה מדי",
+  provisional: "ראשונית", emerging: "מתהווה", emerging_early: "מוקדם", was_strong: "הייתה חזקה", not_proven: "לא מוכחת", insufficient: "מידע חסר",
 };
 export const HE_LABEL_SHORT: Record<ProvenLabel, string> = {
   elite: "עילית", proven: "מוכחת", proven_caveat: "מוכחת*", fading: "דועכת", provisional: "ראשונית",
-  emerging: "מתהווה", emerging_early: "מוקדם", was_strong: "הייתה חזקה", not_proven: "לא מוכחת", insufficient: "חדשה מדי",
+  emerging: "מתהווה", emerging_early: "מוקדם", was_strong: "הייתה חזקה", not_proven: "לא מוכחת", insufficient: "מידע חסר",
 };
 export const HE_TRACK_TEXT: Record<ProvenTrack, string> = {
   standard: "תשואה על ההון מול עלות ההון", cyclical: "לאורך המחזור", financial: "תשואה על ההון העצמי מול עלות ההון העצמי",
@@ -119,7 +119,7 @@ export function heSentence(s: string | null | undefined): string {
   const exact: Record<string, string> = {
     "No annual filings to judge yet.": "עוד אין דוחות שנתיים לשפוט לפיהם.",
     "Not enough years of equity returns to judge.": "אין מספיק שנים של תשואה על ההון העצמי כדי לשפוט.",
-    "Too new to judge — fewer than two annual reports.": "חדשה מדי לשיפוט — פחות משני דוחות שנתיים.",
+    "Insufficient comparable data — fewer than two annual reports.": "אין מספיק מידע להשוואה — פחות משני דוחות שנתיים.",
   };
   if (exact[s]) return exact[s];
   let m: RegExpMatchArray | null;

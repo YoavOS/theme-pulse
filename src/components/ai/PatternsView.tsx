@@ -6,6 +6,7 @@ import { invokeAi, waitJob, type AiLang } from "@/lib/ai";
 import { touchLab } from "@/lib/labs";
 import { rulePart, type Rule } from "@/lib/patterns";
 import AiMarkdown from "./AiMarkdown";
+import { TvExportButton } from "./TvExportButton";
 
 /**
  * Pattern finder: what did stocks look like before they rose 30%+ within 60 sessions? Every single trait and
@@ -97,7 +98,8 @@ export default function PatternsView({ lang }: { lang: AiLang }) {
           </section>
           {matches.length > 0 && (
             <section className="rounded-lg border border-border bg-card p-3">
-              <h3 className="mb-2 text-[12px] font-semibold uppercase tracking-wide text-muted-foreground"><Search size={11} className="me-1 inline" />{he ? "מניות שמתאימות לדפוסים האלה עכשיו" : "Stocks that fit these patterns now"}</h3>
+              <div className="mb-2 flex items-center gap-2"><h3 className="text-[12px] font-semibold uppercase tracking-wide text-muted-foreground"><Search size={11} className="me-1 inline" />{he ? "מניות שמתאימות לדפוסים האלה עכשיו" : "Stocks that fit these patterns now"}</h3>
+                <TvExportButton className="ms-auto" he={he} fileName="pattern-matches" options={[{ label: he ? "מניות שמתאימות לדפוסים" : "Pattern matches", sections: [{ name: he ? "Pattern finder" : "Pattern finder matches", symbols: [...new Set(matches.map((m) => m.symbol))] }] }]} /></div>
               <div className="flex flex-wrap gap-1.5">{[...new Set(matches.map((m) => m.symbol))].slice(0, 80).map((s) => <a key={s} href={`/ai?tab=stock&symbol=${s}`} className="rounded bg-muted/40 px-1.5 py-0.5 font-mono text-[12px] hover:text-primary">{s}</a>)}</div>
               <p className="mt-1.5 text-[11.5px] text-muted-foreground">{he ? "רשימה ללימוד, לא איתות: רוב המקרים גם בדפוס חזק לא הופכים למנצחים גדולים." : "A list to study, not a signal: most cases, even in a strong pattern, don't become big winners."}</p>
             </section>

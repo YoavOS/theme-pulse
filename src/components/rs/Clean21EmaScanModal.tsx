@@ -15,6 +15,7 @@ import type { FundamentalsData } from "@/hooks/useFundamentals";
 
 type EmaLength = 9 | 21 | 50 | 200;
 type EmaTimeframe = "daily" | "weekly";
+type GainStart = "firstAbove" | "previousClose";
 type SortKey = "gain" | "rating" | "fundamentals" | "emaDistance";
 
 interface Clean21EmaRow {
@@ -37,6 +38,7 @@ interface SavedScan {
   timeframe: EmaTimeframe;
   minGainPct: number;
   minPeriod: number;
+  gainStart?: GainStart;
   rows: Clean21EmaRow[];
 }
 
@@ -47,7 +49,7 @@ interface Props {
   ratingMap?: Map<string, number | null>;
 }
 
-const LS_KEY = "rs-clean-ema-uptrend-v4";
+const LS_KEY = "rs-clean-ema-uptrend-v5-peak";
 
 const SLICE_COLORS = [
   "hsl(222, 82%, 68%)", "hsl(200, 80%, 55%)", "hsl(280, 65%, 60%)",
@@ -87,6 +89,8 @@ function fundamentalScoreColor(score: number | null): string {
 export default function Clean21EmaScanModal({ open, onOpenChange, universe, ratingMap }: Props) {
   const [emaLength, setEmaLength] = useState<EmaLength>(21);
   const [timeframe, setTimeframe] = useState<EmaTimeframe>("daily");
+  const [gainStart, setGainStart] = useState<GainStart>("firstAbove");
+  const [resultsGainStart, setResultsGainStart] = useState<GainStart>("firstAbove");
   const [minGainPct, setMinGainPct] = useState(70);
   const [minPeriod, setMinPeriod] = useState(60);
   const [rows, setRows] = useState<Clean21EmaRow[]>([]);
@@ -117,6 +121,9 @@ export default function Clean21EmaScanModal({ open, onOpenChange, universe, rati
     if (!saved) return;
     setEmaLength(saved.emaLength ?? 21);
     setTimeframe(saved.timeframe ?? "daily");
+    const savedGainStart = saved.gainStart === "previousClose" ? "previousClose" : "firstAbove";
+    setGainStart(savedGainStart);
+    setResultsGainStart(savedGainStart);
     setMinGainPct(saved.minGainPct);
     setMinPeriod(saved.minPeriod ?? 60);
     setRows(saved.rows ?? []);
@@ -144,6 +151,7 @@ export default function Clean21EmaScanModal({ open, onOpenChange, universe, rati
     const period = Math.max(minAllowedPeriod, Math.min(maxAllowedPeriod, Math.round(Number(minPeriod) || (timeframe === "weekly" ? 12 : 60))));
     setMinGainPct(gain);
     setMinPeriod(period);
+    setResultsGainStart(gainStart);
     setRows([]);
     setFundMap({});
     setExpandedSector(null);
@@ -156,7 +164,7 @@ export default function Clean21EmaScanModal({ open, onOpenChange, universe, rati
       for (let i = 0; i < symbols.length; i += CHUNK) {
         const slice = symbols.slice(i, i + CHUNK);
         const { data, error } = await supabase.functions.invoke("clean-21-ema-scan", {
-          body: { symbols: slice, minGainPct: gain, minPeriod: period, emaLength, timeframe },
+          body: { symbols: slice, minGainPct: gain, minPeriod: period, emaLength, timeframe, gainStart },
         });
         if (error) throw new Error(error.message);
         if ((data as { error?: string } | null)?.error) throw new Error((data as { error: string }).error);
@@ -170,7 +178,7 @@ export default function Clean21EmaScanModal({ open, onOpenChange, universe, rati
           toast.warning("A scan chunk timed out; saved all completed matches. Run again to warm the remaining symbols.");
         }
       }
-      const saved: SavedScan = { at: Date.now(), emaLength, timeframe, minGainPct: gain, minPeriod: period, rows: next };
+      const saved: SavedScan = { at: Date.now(), emaLength, timeframe, gainStart, minGainPct: gain, minPeriod: period, rows: next };
       writeSaved(saved);
       setSavedAt(saved.at);
       toast.success(`Saved Clean ${emaLength} EMA Uptrend Stocks: ${next.length} tickers.`);
@@ -344,7 +352,7 @@ export default function Clean21EmaScanModal({ open, onOpenChange, universe, rati
             <Save size={16} className="text-primary" /> Clean EMA Uptrend Scan
           </DialogTitle>
           <DialogDescription className="text-xs">
-            Finds qualified-universe stocks with large gains during the current uninterrupted run above the selected EMA.
+            Measures peak gain during the current EMA streak. A close below the selected EMA ends the streak.
           </DialogDescription>
         </DialogHeader>
 
@@ -378,7 +386,24 @@ export default function Clean21EmaScanModal({ open, onOpenChange, universe, rati
               </Select>
             </label>
             <label className="space-y-1 text-xs">
-              <span className="font-medium text-foreground">Minimum Gain %</span>
+              <span className="font-medium text-foreground">Measure gain from</span>
+              <Select value={gainStart} onValueChange={(value) => setGainStart(value as GainStart)} disabled={running}>
+                <SelectTrigger className="h-9" aria-label="Measure gain from">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="firstAbove">First close in EMA streak</SelectItem>
+                  <SelectItem value="previousClose">Close before EMA crossover</SelectItem>
+                </SelectContent>
+              </Select>
+              <span className="block text-[10px] text-muted-foreground">
+                {gainStart === "previousClose"
+                  ? "Uses the close immediately before the first candle that closes above the EMA."
+                  : "Uses the first candle that closes on or above the EMA."}
+              </span>
+            </label>
+            <label className="space-y-1 text-xs">
+              <span className="font-medium text-foreground">Minimum Peak Gain %</span>
               <Input
                 type="number"
                 min={0}
@@ -451,7 +476,11 @@ export default function Clean21EmaScanModal({ open, onOpenChange, universe, rati
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div>
                 <div className="font-semibold text-foreground">Clean {emaLength} EMA Uptrend Stocks</div>
-                <div className="text-[10px] text-muted-foreground">Sorted by {sortKey === "gain" ? "gain across the clean EMA run" : sortKey === "rating" ? "RS Rating" : sortKey === "fundamentals" ? "Fundamentals score" : "distance to EMA (closest first)"}.</div>
+                <div className="text-[10px] text-muted-foreground">
+                  {resultsGainStart === "previousClose" ? "Gain from close before crossover" : "Gain from first close in streak"}
+                  {gainStart !== resultsGainStart && " · Run scan to apply new starting point"}
+                </div>
+                <div className="text-[10px] text-muted-foreground">Sorted by {sortKey === "gain" ? "peak gain across the clean EMA run" : sortKey === "rating" ? "RS Rating" : sortKey === "fundamentals" ? "Fundamentals score" : "distance to EMA (closest first)"}.</div>
               </div>
               <div className="flex items-center gap-2">
                 <Select value={sortKey} onValueChange={(v) => setSortKey(v as SortKey)}>
@@ -459,7 +488,7 @@ export default function Clean21EmaScanModal({ open, onOpenChange, universe, rati
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="gain">Sort · Performance %</SelectItem>
+                    <SelectItem value="gain">Sort · Peak Gain %</SelectItem>
                     <SelectItem value="rating">Sort · RS Rating</SelectItem>
                     <SelectItem value="fundamentals" disabled={!hasFundamentals}>
                       Sort · Fundamentals {hasFundamentals ? "" : "(run check)"}
@@ -479,7 +508,7 @@ export default function Clean21EmaScanModal({ open, onOpenChange, universe, rati
                   <span className="text-right">Rating</span>
                   <span className="text-right">EMA Δ</span>
                   <span className="text-right">Fund.</span>
-                  <span className="text-right">Gain</span>
+                  <span className="text-right">Peak gain</span>
                 </div>
                 {sortedRows.map((row) => {
                   const dist = emaDistancePct(row);
@@ -498,7 +527,8 @@ export default function Clean21EmaScanModal({ open, onOpenChange, universe, rati
                       <span className={`text-right font-mono text-[11px] ${fundamentalScoreColor(fs)}`}>
                         {fs !== null ? fs : (hasFundamentals ? "—" : "·")}
                       </span>
-                      <span className="text-right font-mono text-[11px] text-[hsl(var(--gain-strong))]">+{row.gainPct.toFixed(1)}%</span>
+                      <span className="text-right font-mono text-[11px] text-[hsl(var(--gain-strong))]"
+                        title={row.startClose === null ? undefined : 'Starting close: $' + row.startClose.toFixed(2)}>+{row.gainPct.toFixed(1)}%</span>
                     </div>
                   );
                 })}

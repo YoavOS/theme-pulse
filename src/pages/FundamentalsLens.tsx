@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import LensPanel from "@/components/lens/LensPanel";
-import IdeasView from "@/components/proven/IdeasView";
+import { GlossaryButton, GlossaryProvider } from "@/components/lens/GlossaryBrowser";
+const IdeasView = lazy(() => import("@/components/proven/IdeasView"));
 import { onLensSymbol } from "@/lib/lens/channel";
 import { LensScope, dirOf, setLensLang, useLensLangSetting } from "@/lib/lens/i18n";
 
@@ -32,13 +33,14 @@ export default function FundamentalsLens() {
 
   return (
     <LensScope.Provider value={true}>
+    <GlossaryProvider>
     <div className="flex h-screen flex-col bg-background" dir={dirOf(lang)} lang={lang}>
       {/* both stay mounted so switching back keeps your place (and any prediction you wrote) */}
       <div className={`min-h-0 flex-1 ${view === "company" ? "" : "hidden"}`}>
         <LensPanel symbol={symbol} onSymbolChange={setSymbol} homeLink />
       </div>
       <div className={`min-h-0 flex-1 overflow-y-auto ${view === "ideas" ? "" : "hidden"}`}>
-        <IdeasView active={view === "ideas"} onOpen={(s) => { setSymbol(s.toUpperCase()); setView("company"); }} />
+        {view === "ideas" && <Suspense fallback={<p className="p-6">{he ? "טעינה…" : "Loading…"}</p>}><IdeasView active onOpen={(s) => { setSymbol(s.toUpperCase()); setView("company"); }} /></Suspense>}
       </div>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-border px-3 py-1.5 text-[11px] text-muted-foreground">
         <div className="flex overflow-hidden rounded-md border border-border" role="tablist">
@@ -50,13 +52,15 @@ export default function FundamentalsLens() {
           <input type="checkbox" checked={follow} onChange={(e) => setFollow(e.target.checked)} className="accent-[hsl(var(--primary))]" />
           {he ? "מעקב אחרי הסימול שנבדק ב-Live Execution" : "Follow the ticker checked in Live Execution"}
         </label>
-        <div className="ms-auto flex overflow-hidden rounded-md border border-border" role="group" aria-label={he ? "שפה" : "Language"}>
+        {view === "ideas" && <GlossaryButton className="ms-auto" />}
+        <div className={`${view === "ideas" ? "" : "ms-auto "}flex overflow-hidden rounded-md border border-border`} role="group" aria-label={he ? "שפה" : "Language"}>
           {([["en", "English"], ["he", "עברית"]] as const).map(([k, t]) => (
             <button key={k} onClick={() => setLensLang(k)} aria-pressed={lang === k} className={`px-2 py-0.5 ${lang === k ? "bg-primary/20 font-semibold text-primary" : "hover:text-foreground"}`}>{t}</button>
           ))}
         </div>
       </div>
     </div>
+    </GlossaryProvider>
     </LensScope.Provider>
   );
 }

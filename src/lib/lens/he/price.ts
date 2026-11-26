@@ -2,20 +2,22 @@
 import { ltr } from "../i18n";
 import type { Scenario, StoryInputs } from "../valuation";
 
-export const HE_SCENARIO_NAME: Record<Scenario["id"], string> = { cautious: "זהיר", typical: "טיפוסי", optimistic: "אופטימי" };
+export const HE_SCENARIO_NAME: Record<Scenario["id"], string> = { cautious: "הכלכלה הנוכחית", typical: "הכלכלה הענפית", optimistic: "כלכלה משופרת" };
 
 /** The scenario in one Hebrew clause (finishes "אם SYMBOL …"). */
 export function heScenarioPlain(id: Scenario["id"], v: Pick<StoryInputs, "opMargin" | "industryOpMargin">): string {
   const ind = v.industryOpMargin;
-  const typicalMargin = ind !== null ? Math.max(ind, v.opMargin) : Math.max(v.opMargin, 10);
+  const typicalMargin = ind !== null ? ind : v.opMargin;
   if (id === "cautious") return `נשארת רווחית כמו היום (שיעור רווח תפעולי של ${ltr(v.opMargin.toFixed(0) + "%")}) וצריכה הון לצמיחה באותה מידה כמו עכשיו`;
   if (id === "typical") return ind !== null && typicalMargin > v.opMargin + 0.5
     ? `הופכת לרווחית כמו החברה הממוצעת בענף שלה (שיעור רווח תפעולי של ${ltr(ind.toFixed(0) + "%")})`
     : `שומרת על שיעור רווח תפעולי של ${ltr(typicalMargin.toFixed(0) + "%")}${ind !== null ? ` (הממוצע בענף שלה הוא ${ltr(ind.toFixed(0) + "%")})` : ""}`;
-  return "מסיימת טובה בבירור מהענף שלה: רווחית בערך ברבע יותר, וצריכה בערך רבע פחות הון";
+  return "משפרת את שיעור הרווח ואת יעילות ההון; התשואה העודפת דועכת לאפס בתקופה הסופית";
 }
 
 const NOTE: Record<string, string> = {
+  "TTM R&D is unavailable — annual expense is not substituted into TTM operating income.": "מו״פ ל־12 חודשים אינו זמין — הוצאה שנתית אינה מחליפה נתון חסר בתקופה זו.",
+  "R&D expense uses the same TTM period as operating income; amortization and the prior research asset use annual filing cohorts (an approximation between fiscal year ends).": "הוצאות המו״פ והרווח התפעולי מתייחסים לאותם 12 חודשים. ההפחתה ונכס המחקר בתחילת התקופה מבוססים על דוחות שנתיים — קירוב בין סופי שנות כספים.",
   "R&D is under 1% of revenue, so capitalising it changes little.": `המו"פ הוא פחות מ-${ltr("1%")} מההכנסות, כך שהיוון שלו משנה מעט.`,
   "Only one year of R&D in the filings — not enough to capitalise.": "יש בדוחות רק שנה אחת של מו\"פ — לא מספיק כדי להוון.",
   "No R&D reported — nothing to capitalise.": "לא דווח מו\"פ — אין מה להוון.",

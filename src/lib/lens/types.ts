@@ -1,3 +1,4 @@
+import type { StatementPeriod } from "../../../supabase/functions/_shared/financialStatements";
 // Front-end mirror of the fundamentals-lens payload (supabase/functions/_shared/lensPayload.ts).
 // Keep in sync with that file.
 import type { AdjustInputs } from "./adjust";
@@ -36,12 +37,21 @@ export interface LifeCycle {
   label: string; question: string; signature: string; pricing: string; leaningLabel: string | null; lectures: Lecture[];
 }
 export interface LensPayload {
+  connection?: import("../../../supabase/functions/_shared/lensConnections").LensConnection | null;
+  businessContext?: import("../../../supabase/functions/_shared/lensConnections").BusinessContext;
+  marketPricing?: import("../../../supabase/functions/_shared/lensConnections").MarketPricing;
+  earningsRelease?: {
+    filed: string;
+    url: string;
+    quarter: { end: string; revenue: number; operatingIncome: number | null; netIncome: number; priorRevenue: number | null; dilutedEPS?: number | null } | null;
+  } | null;
+  statements?: StatementPeriod[];
   version: number; symbol: string; company: string | null;
   classification: { sector: string; industry: string; subIndustry: string };
   financial: boolean;
   damodaran?: DamodaranProfile | null;
   market: { price: number | null; marketCap: number | null; asOf: string | null };
-  sec: { status: string; asOf: string | null; filed: string | null; ttmLabel: string };
+  sec: { status: string; asOf: string | null; filed: string | null; ttmLabel: string; sourceUrl?: string };
   lifeCycle: LifeCycle | null;
   story: string[];
   adjust?: AdjustInputs | null;
