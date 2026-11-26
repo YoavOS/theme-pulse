@@ -49,6 +49,11 @@ export const LENS_FLOW = {
   interest: ["InterestExpense", "InterestExpenseNonoperating", "InterestExpenseDebt", "InterestAndDebtExpense"],
   pretax: ["IncomeLossFromContinuingOperationsBeforeIncomeTaxesExtraordinaryItemsNoncontrollingInterest", "IncomeLossFromContinuingOperationsBeforeIncomeTaxesMinorityInterestAndIncomeLossFromEquityMethodInvestments", "IncomeLossFromContinuingOperationsBeforeIncomeTaxesDomestic"],
   tax: ["IncomeTaxExpenseBenefit"],
+  // Banks report a different income statement: no cost of revenue, gross or operating profit.
+  netInterestIncome: ["InterestIncomeExpenseNet"],
+  noninterestIncome: ["NoninterestIncome"],
+  noninterestExpense: ["NoninterestExpense"],
+  provision: ["ProvisionForLoanLeaseAndOtherLosses", "ProvisionForLoanAndLeaseLosses", "ProvisionForLoanLossesExpensed"],
   dna: ["DepreciationDepletionAndAmortization", "DepreciationAmortizationAndAccretionNet", "DepreciationAndAmortization", "Depreciation"],
   ocf: CONCEPTS.operatingCashFlow,
   investingCash: ["NetCashProvidedByUsedInInvestingActivities"],

@@ -23,14 +23,32 @@ export default function FinancialStatements({p,compact=false}:{p:LensPayload;com
  const tooltipId = useId();
  const hasPeriod = periods.length > 0;
  const row=periods.find(x=>x.id===periodId)??periods[0]??emptyStatement;
- const vals=[row.revenue,row.gross,row.operating,row.net];
- const labels=he?["הכנסות","רווח גולמי","רווח תפעולי","רווח נקי"]:["Revenue","Gross profit","Operating profit","Net profit"];
- const losses=flowSteps.slice(4).map(key=>flowAmount(row,key));
- const lossLabels=he?["עלות ההכנסות","הוצאות תפעול","מס ואחרות, נטו"]:["Cost of revenue","Operating expenses","Tax & other, net"];
+ // Banks have no cost of revenue, gross or operating profit. Their flow has the same four levels:
+ // revenue → (non-interest expenses) → pre-provision profit → (credit-loss provisions) → profit before tax → (tax) → net profit.
+ const bank=p.financial&&periods.some(x=>finite(x.nonIntExp));
+ const bankFlow=(x:StatementPeriod):StatementPeriod=>{
+   if(!bank) return x;
+   const ppnr=finite(x.revenue)&&finite(x.nonIntExp)?x.revenue-x.nonIntExp:null;
+   const pre=finite(x.pretax)?x.pretax:finite(ppnr)&&finite(x.provision)?ppnr-x.provision:null;
+   return {...x,cost:null,gross:ppnr,operating:pre};
+ };
+ const fr=bankFlow(row), flowPeriods=bank?periods.map(bankFlow):periods;
+ const vals=[fr.revenue,fr.gross,fr.operating,fr.net];
+ const labels=bank?(he?["הכנסות","רווח לפני הפרשות","רווח לפני מס","רווח נקי"]:["Revenue","Pre-provision profit","Profit before tax","Net profit"])
+   :he?["הכנסות","רווח גולמי","רווח תפעולי","רווח נקי"]:["Revenue","Gross profit","Operating profit","Net profit"];
+ const losses=flowSteps.slice(4).map(key=>flowAmount(fr,key));
+ const lossLabels=bank?(he?["הוצאות שאינן ריבית","הפרשות להפסדי אשראי","מס ואחרות, נטו"]:["Non-interest expenses","Credit-loss provisions","Tax & other, net"])
+   :he?["עלות ההכנסות","הוצאות תפעול","מס ואחרות, נטו"]:["Cost of revenue","Operating expenses","Tax & other, net"];
  const ratio=(v:number|null)=>shareOfRevenue(v,row.revenue);
  const fmt=(v:number|null)=>per100?(ratio(v)===null?"—":"$"+ratio(v)!.toFixed(1)):money(v);
  const canFlow=vals.every(finite)&&row.revenue!>0&&vals.every(x=>x!>=0)&&losses.every(finite);
- const explanations=[
+ const revenueSplit=bank&&finite(row.nii)&&finite(row.nonii)?t(` Here: net interest income ${money(row.nii)} plus fees and other income ${money(row.nonii)}.`,` כאן: הכנסות ריבית נטו ${money(row.nii)} ועוד עמלות והכנסות אחרות ${money(row.nonii)}.`):"";
+ const explanations=bank?[
+ t("A bank's revenue is net interest income (what it earns on loans and securities minus what it pays depositors and lenders) plus fees and other income.","ההכנסות של בנק הן הכנסות ריבית נטו (מה שהוא מרוויח על הלוואות וניירות ערך פחות מה שהוא משלם למפקידים ולמלווים) ועוד עמלות והכנסות אחרות.")+revenueSplit,
+ t("Revenue minus non-interest expenses (staff, technology, offices). It shows what the bank earns before setting money aside for bad loans.","ההכנסות פחות הוצאות שאינן ריבית (עובדים, טכנולוגיה, משרדים). זה מה שהבנק מרוויח לפני שהוא מפריש כסף להלוואות רעות."),
+ t("Pre-provision profit minus the provision for credit losses. This is the bank's profit before income tax.","הרווח לפני הפרשות פחות ההפרשה להפסדי אשראי. זה הרווח של הבנק לפני מס הכנסה."),
+ t("Profit after credit losses and tax. For a bank, compare it with shareholders' equity: that is return on equity.","הרווח אחרי הפסדי אשראי ומס. בבנק כדאי להשוות אותו להון העצמי: זו התשואה על ההון העצמי."),
+ ]:[
  t("The starting point: sales recognized in this reporting period. Revenue is not the same as cash collected.","נקודת ההתחלה: מכירות שהוכרו בתקופת הדיווח. הכנסות אינן בהכרח כסף שכבר התקבל."),
  t("Revenue minus the direct cost of delivering products or services. This is what remains to fund research, selling and running the business.","הכנסות פחות העלות הישירה של המוצרים או השירותים. היתרה מממנת מחקר, מכירות וניהול."),
  t("Gross profit minus operating expenses. It describes the operating business before non-operating items and income tax.","הרווח הגולמי פחות ההוצאות התפעוליות. זהו הרווח מהפעילות לפני סעיפים שאינם תפעוליים ומס הכנסה."),
@@ -59,7 +77,11 @@ export default function FinancialStatements({p,compact=false}:{p:LensPayload;com
    },
    className:"group cursor-pointer focus-visible:outline-none",
  });
- const bridgeNotes=[
+ const bridgeNotes=bank?[
+   t("Non-interest expenses: salaries, technology, branches and other running costs. Banks compare them with revenue as the efficiency ratio; lower is leaner.","הוצאות שאינן ריבית: שכר, טכנולוגיה, סניפים ועלויות שוטפות אחרות. בנקים משווים אותן להכנסות ביחס היעילות; נמוך יותר פירושו רזה יותר."),
+   t("Money set aside for loans that may not be repaid. It rises when the bank expects more defaults, so it swings with the economy.","כסף שמופרש להלוואות שאולי לא יוחזרו. ההפרשה עולה כשהבנק צופה יותר חדלות פירעון, ולכן היא משתנה עם מצב הכלכלה."),
+   t("Profit before tax minus net profit: mostly income tax, plus small other items.","הרווח לפני מס פחות הרווח הנקי: בעיקר מס הכנסה, ועוד סעיפים קטנים."),
+ ]:[
    t("Direct costs consume part of sales. A smaller share of revenue means more is left as gross profit.","עלויות ישירות צורכות חלק מההכנסות. כשחלקן קטן, נשאר יותר כרווח גולמי."),
    t("This is the difference between gross and operating profit. Expenses can rise in dollars while using a smaller share of sales.","זהו ההפרש בין רווח גולמי לרווח תפעולי. הוצאות יכולות לעלות בדולרים ולצרוך חלק קטן יותר מההכנסות."),
    t("This is operating profit minus net profit. A positive value reduces profit; a negative value adds to it. It includes tax and other items.","זהו הרווח התפעולי פחות הרווח הנקי. ערך חיובי מפחית את הרווח וערך שלילי מגדיל אותו. הוא כולל מס וסעיפים נוספים.")
@@ -99,10 +121,10 @@ export default function FinancialStatements({p,compact=false}:{p:LensPayload;com
     <h3 className="font-semibold"><AutoTerms text={flowLabels[step]}/> · <bdi>{fmt(flowValues[step])}</bdi></h3>
     <p className="mt-1 text-sm leading-relaxed text-muted-foreground"><AutoTerms text={step<4?explanations[step]:bridgeNotes[step-4]}/></p>
    </div>
-   {hasPeriod&&<IncomeFlowTrend periods={periods} period={row} step={flowSteps[step]} label={flowLabels[step]} onSelect={setPeriodId} />}
+   {hasPeriod&&<IncomeFlowTrend periods={flowPeriods} period={fr} step={flowSteps[step]} label={flowLabels[step]} onSelect={setPeriodId} />}
    {row.sourceUrl && <a href={row.sourceUrl} target="_blank" rel="noreferrer" className="mt-3 block text-xs text-primary underline">{t("Open the SEC 6-K for this quarter","פתיחת דוח 6-K לרבעון זה")}</a>}
    {hasPeriod&&<p className="mt-3 text-xs leading-relaxed text-muted-foreground">{<AutoTerms text={p.sec.sourceUrl ? t("Source: SEC Form 6-K quarterly releases. A 12-month view sums four consecutive quarters. Figures without verified inputs are blank.","מקור: פרסומים רבעוניים בטופס 6-K של ה־SEC. תצוגת 12 חודשים מסכמת ארבעה רבעונים רצופים. נתונים שלא אומתו נשארים ריקים.") : t("SEC US-GAAP company facts. Gross and operating expense bridges are calculated by subtraction. Tax & other is the net difference between operating and net profit; it is not tax alone. Segment sales are unavailable in this source and are not estimated.","מקור: נתוני US-GAAP של SEC. ההפרשים מחושבים בחיסור. מס ואחרות הם ההפרש הכולל בין הרווח התפעולי לנקי, ולא מס בלבד. פילוח מכירות לפי מגזרים אינו זמין במקור זה ולא הושלם בהערכה.")}/>}</p>}
-   {!compact&&hasPeriod&&<><details className="mt-4 rounded-xl border border-border p-3"><summary className="cursor-pointer text-sm font-medium">{t("Statement details and reconciliation","פירוט הדוח והתאמת הסכומים")}</summary><table className="mt-3 w-full text-sm"><caption className="text-start text-xs text-muted-foreground">{t("Reported or derived from reported totals; — means unavailable.","נתונים מדווחים או מחושבים מסכומים מדווחים; — מציין מידע חסר.")}</caption><tbody>{[[t("Revenue","הכנסות"),row.revenue],[t("Cost of revenue","עלות ההכנסות"),row.cost],[t("Gross profit","רווח גולמי"),row.gross],[t("Operating expenses (derived)","הוצאות תפעול, מחושב"),losses[1]],[t("R&D (included in operating expenses)","מו״פ, נכלל בהוצאות התפעול"),row.rnd],[t("Selling, general & administrative (included above)","מכירות, הנהלה וכלליות, נכלל לעיל"),row.sga],[t("Operating profit","רווח תפעולי"),row.operating],[t("Income tax expense / benefit","הוצאת מס / הטבת מס"),row.tax],[t("Other contribution (net − operating + tax)","תרומה אחרת (נקי פחות תפעולי ועוד מס)"),finite(row.net)&&finite(row.operating)&&finite(row.tax)?row.net-row.operating+row.tax:null],[t("Net profit","רווח נקי"),row.net]].map(([label,v])=><tr key={String(label)} className="border-b border-border/40"><th scope="row" className="py-2 text-start font-normal"><AutoTerms text={String(label)}/></th><td className="text-end font-mono" dir="ltr">{fmt(v as number|null)}</td></tr>)}</tbody></table></details>
+   {!compact&&hasPeriod&&<><details className="mt-4 rounded-xl border border-border p-3"><summary className="cursor-pointer text-sm font-medium">{t("Statement details and reconciliation","פירוט הדוח והתאמת הסכומים")}</summary><table className="mt-3 w-full text-sm"><caption className="text-start text-xs text-muted-foreground">{t("Reported or derived from reported totals; — means unavailable.","נתונים מדווחים או מחושבים מסכומים מדווחים; — מציין מידע חסר.")}</caption><tbody>{(bank?[[t("Net interest income","הכנסות ריבית נטו"),row.nii],[t("Fees and other non-interest income","עמלות והכנסות אחרות שאינן ריבית"),row.nonii],[t("Revenue (net of interest expense)","הכנסות, נטו מהוצאות ריבית"),row.revenue],[t("Non-interest expenses","הוצאות שאינן ריבית"),row.nonIntExp??null],[t("Pre-provision profit","רווח לפני הפרשות"),fr.gross],[t("Credit-loss provisions","הפרשות להפסדי אשראי"),row.provision??null],[t("Profit before tax","רווח לפני מס"),fr.operating],[t("Income tax expense / benefit","הוצאת מס / הטבת מס"),row.tax],[t("Net profit","רווח נקי"),row.net]]:[[t("Revenue","הכנסות"),row.revenue],[t("Cost of revenue","עלות ההכנסות"),row.cost],[t("Gross profit","רווח גולמי"),row.gross],[t("Operating expenses (derived)","הוצאות תפעול, מחושב"),losses[1]],[t("R&D (included in operating expenses)","מו״פ, נכלל בהוצאות התפעול"),row.rnd],[t("Selling, general & administrative (included above)","מכירות, הנהלה וכלליות, נכלל לעיל"),row.sga],[t("Operating profit","רווח תפעולי"),row.operating],[t("Income tax expense / benefit","הוצאת מס / הטבת מס"),row.tax],[t("Other contribution (net − operating + tax)","תרומה אחרת (נקי פחות תפעולי ועוד מס)"),finite(row.net)&&finite(row.operating)&&finite(row.tax)?row.net-row.operating+row.tax:null],[t("Net profit","רווח נקי"),row.net]]).map(([label,v])=><tr key={String(label)} className="border-b border-border/40"><th scope="row" className="py-2 text-start font-normal"><AutoTerms text={String(label)}/></th><td className="text-end font-mono" dir="ltr">{fmt(v as number|null)}</td></tr>)}</tbody></table></details>
    {!p.financial && <CashBridge row={row} he={he}/>}
    <div className="mt-6"><h3 className="text-base font-semibold">{t("The direction matters","גם המגמה חשובה")}</h3><p className="mb-3 text-xs text-muted-foreground">{<AutoTerms text={t("Quarterly values, oldest to newest. Gaps are missing data; quarter labels are fiscal period ends.","נתונים רבעוניים מהישן לחדש. פערים מציינים מידע חסר; התאריכים הם סופי תקופות הדיווח.")}/>}</p><QuarterlyTrends periods={periods} financial={p.financial}/></div></>}
   </div>

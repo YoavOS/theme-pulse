@@ -14,7 +14,7 @@ import { classifyLifeCycle, computeMetrics, fmtPct, fmtPp, fmtX, median, percent
 import { benchValue, benchmarkFor, defaultRndLife, DATA_PAGE, type BenchIndex, type Benchmark, type IndustryProfile } from "./damodaran.ts";
 
 export const MIN_PEERS = 5;
-export const LENS_VERSION = 12;
+export const LENS_VERSION = 13;   // 13: bank income lines in statements
 
 /** Peer-comparable metrics: lens metric id → data-provider column and its scale to the lens unit. */
 export const PEER_FIELDS: Record<string, { col: string; scale: number; unit: "pct" | "x" }> = {

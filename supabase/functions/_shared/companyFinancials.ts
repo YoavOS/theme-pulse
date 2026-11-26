@@ -5,7 +5,7 @@ import { parseAnnualPanel } from "./provenEngine.ts";
 import { classifyLabel } from "./gicsTaxonomy.ts";
 import { findEarningsFiling, reportingWindow } from "./earningsRelease.ts";
 import { foreignReleaseCandidates } from "./foreignEarnings.ts";
-const VERSION = 5;
+const VERSION = 6;   // 6: bank income lines (net interest income, provisions, non-interest expense)
 export async function companyFinancials(sb: any, symbol: string, refresh = false) {
   const { data: hit } = await sb.from("company_financial_cache").select("payload, fetched_at").eq("symbol", symbol).maybeSingle();
   const cacheHours = reportingWindow(hit?.payload?.history?.quarters?.[0]?.end ?? null) ? 1 : 12;

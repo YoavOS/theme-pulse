@@ -55,7 +55,7 @@ describe("labels in the Fundamentals views open the right entry", () => {
     ["Operating cash flow", "ocf"], ["Equipment and property spending", "capex"], ["P/B", "pb"], ["P/E", "pe"],
     ["Market cap", "market_cap"], ["Share price", "share_price"], ["Per $100 of sales", "per100"],
     ["Operating profit", "operating_income"], ["Net profit / loss", "net_income"], ["Loss narrowed", "loss_change"],
-    ["Operating profit per $1 of interest", "interest_coverage"], ["Tax & other, net", "other_income"], ["Average diluted shares · YoY", "share_count"],
+    ["Operating profit per $1 of interest", "interest_coverage"], ["Tax & other, net", "other_income"], ["Non-interest expenses", "noninterest_expense"], ["Credit-loss provisions", "provision"], ["Pre-provision profit", "ppnr"], ["Fees and other non-interest income", "noninterest_income"], ["Net interest income", "net_interest_income"], ["Profit before tax", "pretax"], ["Average diluted shares · YoY", "share_count"],
   ])("EN %s → %s", (label, id) => {
     expect(linked(label)[0]).toBe(id);
   });
@@ -68,7 +68,7 @@ describe("labels in the Fundamentals views open the right entry", () => {
     ["יתרת מזומנים בסוף הרבעון", "cash_balance"], ["תזרים מהשקעה", "investing_cf"], ["תזרים ממימון", "financing_cf"],
     ["תזרים מפעילות", "ocf"], ["מכפיל הון", "pb"], ["מכפיל רווח", "pe"], ["שווי שוק", "market_cap"],
     ["מחיר למניה", "share_price"], ["לכל $100 מכירות", "per100"], ["רווח תפעולי", "operating_income"],
-    ["רווח / הפסד נקי", "net_income"], ["ההפסד הצטמצם", "loss_change"], ["מס ואחרות, נטו", "other_income"], ["והרווח התפעולי", "operating_income"],
+    ["רווח / הפסד נקי", "net_income"], ["ההפסד הצטמצם", "loss_change"], ["מס ואחרות, נטו", "other_income"], ["הוצאות שאינן ריבית", "noninterest_expense"], ["הפרשות להפסדי אשראי", "provision"], ["רווח לפני הפרשות", "ppnr"], ["הכנסות ריבית נטו", "net_interest_income"], ["רווח לפני מס", "pretax"], ["והרווח התפעולי", "operating_income"],
     ["ההון העצמי", "equity"], ["שיעור הרווח התפעולי", "operating_margin"], ["יתרת המזומנים", "cash_balance"],
     ["מול שווי השוק", "market_cap"], ["בהוצאות התפעול", "opex"], ["הרווח הנקי", "net_income"], ["התשואה על ההון העצמי", "roe"],
   ])("HE %s → %s", (label, id) => {

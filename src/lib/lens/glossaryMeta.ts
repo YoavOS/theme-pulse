@@ -11,6 +11,8 @@ export const GLOSSARY_GROUPS: GlossaryGroup[] = [
     ids: ["rev_growth", "earnings_growth", "qoq", "yoy", "acceleration", "seasonality", "loss_change", "cagr", "ttm", "percentage_points", "per100"] },
   { key: "income", en: "Income statement", he: "דוח רווח והפסד",
     ids: ["income_statement", "revenue", "cost_of_revenue", "gross_profit", "gross_margin", "opex", "sga", "rnd", "rnd_intensity", "operating_income", "operating_margin", "operating_leverage", "other_income", "interest_expense", "pretax", "income_tax", "tax_rate", "net_income", "net_margin", "eps", "ebitda", "dna", "sbc"] },
+  { key: "bank", en: "Banks", he: "בנקים",
+    ids: ["net_interest_income", "noninterest_income", "noninterest_expense", "ppnr", "provision", "efficiency_ratio"] },
   { key: "cash", en: "Cash flow", he: "תזרים מזומנים",
     ids: ["cash_flow_statement", "ocf", "investing_cf", "financing_cf", "capex", "net_capex", "fcf", "fcf_margin", "fcff", "fcfe", "working_capital", "receivables", "inventory", "deferred_revenue", "cash_balance", "cash_runway", "liquidity"] },
   { key: "balance", en: "Balance sheet, debt and risk", he: "מאזן, חוב וסיכון",
@@ -67,6 +69,13 @@ export const RELATED: Record<string, string[]> = {
   ebitda: ["dna", "debt_to_ebitda", "operating_income"],
   dna: ["ebitda", "capex", "net_capex"],
   sbc: ["dilution", "share_count", "fcf"],
+  // banks
+  net_interest_income: ["noninterest_income", "ppnr", "roe"],
+  noninterest_income: ["net_interest_income", "revenue"],
+  noninterest_expense: ["efficiency_ratio", "ppnr"],
+  provision: ["ppnr", "cyclical", "pretax"],
+  ppnr: ["noninterest_expense", "provision", "pretax"],
+  efficiency_ratio: ["noninterest_expense", "ppnr"],
   // cash flow
   cash_flow_statement: ["ocf", "investing_cf", "financing_cf", "income_statement"],
   ocf: ["net_income", "working_capital", "fcf", "cash_flow_statement"],

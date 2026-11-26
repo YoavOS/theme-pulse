@@ -4,8 +4,10 @@ export interface StatementPeriod {
   id: string; end: string; kind: "ttm" | "quarter"; revenue: number | null; cost: number | null; gross: number | null;
   operating: number | null; net: number | null; tax: number | null; rnd: number | null; sga: number | null;
   ocf: number | null; capex: number | null; sbc: number | null; shares: number | null;
+  /** Bank income statement lines (null for other companies). */
+  nii?: number | null; nonii?: number | null; nonIntExp?: number | null; provision?: number | null; pretax?: number | null;
 }
-const fields = { revenue:"revenue", cost:"costOfRevenue", gross:"grossProfit", operating:"operatingIncome", net:"netIncome", tax:"tax", rnd:"rnd", sga:"sga", ocf:"ocf", capex:"capex", sbc:"sbc" } as const;
+const fields = { revenue:"revenue", cost:"costOfRevenue", gross:"grossProfit", operating:"operatingIncome", net:"netIncome", tax:"tax", rnd:"rnd", sga:"sga", ocf:"ocf", capex:"capex", sbc:"sbc", nii:"netInterestIncome", nonii:"noninterestIncome", nonIntExp:"noninterestExpense", provision:"provision", pretax:"pretax" } as const;
 export function statements(h: CompanyHistory): StatementPeriod[] {
   const build = (qs: QuarterRow[], kind: "ttm" | "quarter"): StatementPeriod => {
     const row: any = { id: kind + ":" + qs[0].end, end: qs[0].end, kind, shares: qs[0].shares };
