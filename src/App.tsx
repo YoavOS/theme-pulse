@@ -3,17 +3,14 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-import { AuthProvider } from "@/hooks/useAuth";
 import Index from "./pages/Index";
 // Every other page loads only when it is opened: the dashboard no longer downloads and keeps in
 // memory the code for RS Alpha, Stages, Bases, Earnings, Live Execution, Minervini, etc.
-const Login = lazyPage(() => import("./pages/Login"));
 const Admin = lazyPage(() => import("./pages/Admin"));
 const RsAlpha = lazyPage(() => import("./pages/RsAlpha"));
 const LiveExecution = lazyPage(() => import("./pages/LiveExecution"));
 const Earnings = lazyPage(() => import("./pages/Earnings"));
 const MarketFlag = lazyPage(() => import("./pages/MarketFlag"));
-const StorageManager = lazyPage(() => import("./pages/StorageManager"));
 const MinerviniChecker = lazyPage(() => import("./pages/MinerviniChecker"));
 const StageAnalysis = lazyPage(() => import("./pages/StageAnalysis"));
 const BaseScanner = lazyPage(() => import("./pages/BaseScanner"));
@@ -48,7 +45,6 @@ function ClassificationAutoRunner() {
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
-    <AuthProvider>
       <TooltipProvider>
         <Toaster />
         <Sonner />
@@ -59,7 +55,7 @@ const App = () => (
           <Suspense fallback={<PageLoading />}>
           <Routes>
             <Route path="/" element={<Index />} />
-            <Route path="/login" element={<Login />} />
+            <Route path="/login" element={<Navigate to="/" replace />} />
             <Route path="/admin" element={<Admin />} />
             <Route path="/intelligence" element={<Navigate to="/" replace />} />
             <Route path="/rs-alpha" element={<RsAlpha />} />
@@ -69,7 +65,7 @@ const App = () => (
             <Route path="/market-drivers" element={<Navigate to="/" replace />} />
             <Route path="/morning-brief" element={<Navigate to="/?brief=1" replace />} />
             <Route path="/market-flag" element={<MarketFlag />} />
-            <Route path="/storage" element={<StorageManager />} />
+            <Route path="/storage" element={<Navigate to="/" replace />} />
             <Route path="/minervini" element={<MinerviniChecker />} />
             <Route path="/stages" element={<StageAnalysis />} />
             <Route path="/bases" element={<BaseScanner />} />
@@ -80,7 +76,6 @@ const App = () => (
           </AppErrorBoundary>
         </BrowserRouter>
       </TooltipProvider>
-    </AuthProvider>
   </QueryClientProvider>
 );
 

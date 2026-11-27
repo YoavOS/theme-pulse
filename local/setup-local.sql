@@ -205,3 +205,32 @@ BEGIN
 END $$;
 REVOKE ALL ON FUNCTION public.local_ai_jobs_tick() FROM anon, authenticated, PUBLIC;
 SELECT cron.schedule('local-ai-jobs', '* * * * *', 'SELECT public.local_ai_jobs_tick()');
+
+-- Personal app, no sign-in (Nov 27): the app uses the public key, so give it what a signed-in admin had —
+-- for every table that has a sign-in-only policy, add the same permission for the app. Local only; the
+-- cloud database is not changed. Safe to run on every start.
+DO $$
+DECLARE p record; pol text;
+BEGIN
+  FOR p IN SELECT DISTINCT tablename, cmd FROM pg_policies
+           WHERE schemaname = 'public' AND 'authenticated' = ANY(roles) AND NOT ('anon' = ANY(roles)) AND NOT ('public' = ANY(roles))
+  LOOP
+    pol := 'local no sign-in: ' || lower(p.cmd);
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname = 'public' AND tablename = p.tablename AND policyname = pol) THEN
+      IF p.cmd = 'INSERT' THEN
+        EXECUTE format('CREATE POLICY %I ON public.%I FOR INSERT TO anon WITH CHECK (true)', pol, p.tablename);
+      ELSIF p.cmd IN ('SELECT', 'DELETE') THEN
+        EXECUTE format('CREATE POLICY %I ON public.%I FOR %s TO anon USING (true)', pol, p.tablename, p.cmd);
+      ELSE
+        EXECUTE format('CREATE POLICY %I ON public.%I FOR %s TO anon USING (true) WITH CHECK (true)', pol, p.tablename, p.cmd);
+      END IF;
+    END IF;
+    EXECUTE format('GRANT %s ON public.%I TO anon', CASE WHEN p.cmd = 'ALL' THEN 'ALL' ELSE p.cmd END, p.tablename);
+  END LOOP;
+END $$;
+GRANT USAGE ON ALL SEQUENCES IN SCHEMA public TO anon;
+DO $$ BEGIN
+  IF to_regclass('public.trade_positions') IS NOT NULL THEN
+    ALTER TABLE public.trade_positions ALTER COLUMN user_id DROP NOT NULL;
+  END IF;
+END $$;

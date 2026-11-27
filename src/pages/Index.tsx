@@ -7,7 +7,7 @@ import ValidateTickersDialog from "@/components/ValidateTickersDialog";
 import {
   RefreshCw, Download, Wifi, WifiOff, Loader2, Settings, ScanLine, X,
   ShieldCheck, ChevronDown, LayoutDashboard, AlertTriangle,
-  Zap, Activity, DollarSign, Sun, Database, Trophy,
+  Zap, Activity, DollarSign, Sun, Trophy,
   Share2, Flag, Layers, Boxes, GraduationCap,
   Bot,
 } from "lucide-react";
@@ -389,7 +389,6 @@ export default function Index() {
     { to: "/lens", label: "Fundamentals", icon: <GraduationCap size={14} />, active: false, color: "text-[hsl(40,90%,60%)]" },
     { to: "/earnings", label: "Earnings", icon: <DollarSign size={14} />, active: false, color: "text-[hsl(40,90%,55%)]" },
     { to: "/minervini", label: "Minervini", icon: <Trophy size={14} />, active: false, color: "text-[hsl(40,90%,55%)]" },
-    { to: "/storage", label: "Storage", icon: <Database size={14} />, active: false, color: "text-muted-foreground" },
   ];
 
   return (
