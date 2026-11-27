@@ -1,7 +1,7 @@
 import type { LensPayload } from "@/lib/lens/types";
 import { comparablePeriods, isNumber, latestQuarterSummary, percentageChange } from "@/lib/lens/quarterly";
 
-export type ExtraPair = "investment" | "perShare" | "debt" | "netProfit";
+export type ExtraPair = "investment" | "perShare" | "debt" | "netProfit" | "bankCredit" | "bankEfficiency";
 type Translate = (english: string, hebrew: string) => string;
 
 const usd = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", notation: "compact", maximumFractionDigits: 2 });
@@ -17,6 +17,44 @@ export function extraComparison(pair: ExtraPair, p: LensPayload, t: Translate) {
   const yearAgo = q && rows.find(row => comparablePeriods(q.end, row.end, 4));
   const f = facts?.end === q?.end ? facts : null;
   const end = q?.end ?? facts?.end ?? null;
+  if (pair === "bankCredit" || pair === "bankEfficiency") {
+    // Banks, same quarter a year earlier: seasonal swings in trading and fees make the previous quarter a weak yardstick.
+    const ya = yearAgo ?? null;
+    const growth = (a: number | null | undefined, b: number | null | undefined) => isNumber(a) && isNumber(b) && b > 0 ? percentageChange(a, b) : null;
+    const share = (a: number | null | undefined, b: number | null | undefined) => isNumber(a) && isNumber(b) && b > 0 ? (100 * a) / b : null;
+    const pp = (n: number | null) => n === null ? "—" : (n > 0 ? "+" : "") + n.toFixed(1) + " pp";
+    if (pair === "bankCredit") {
+      const now = share(q?.provision, q?.nii), before = share(ya?.provision, ya?.nii);
+      const d = now !== null && before !== null ? now - before : null;
+      const summary = now === null ? t("Net interest income and provisions are both needed to compare lending income with expected losses.", "דרושות הכנסות ריבית נטו והפרשות כדי להשוות את ההכנסה מהלוואות להפסדים הצפויים.")
+        : d === null ? t(`Provisions took ${now.toFixed(1)}% of net interest income this quarter.`, `ההפרשות לקחו ${now.toFixed(1)}% מהכנסות הריבית נטו ברבעון.`)
+        : d > 1 ? t(`Provisions took ${now.toFixed(1)}% of net interest income, up from ${before!.toFixed(1)}% a year earlier: the bank expects more loans to go bad.`, `ההפרשות לקחו ${now.toFixed(1)}% מהכנסות הריבית נטו, לעומת ${before!.toFixed(1)}% לפני שנה: הבנק צופה שיותר הלוואות לא יוחזרו.`)
+        : d < -1 ? t(`Provisions took ${now.toFixed(1)}% of net interest income, down from ${before!.toFixed(1)}% a year earlier: the bank expects fewer losses.`, `ההפרשות לקחו ${now.toFixed(1)}% מהכנסות הריבית נטו, לעומת ${before!.toFixed(1)}% לפני שנה: הבנק צופה פחות הפסדים.`)
+        : t(`Provisions took ${now.toFixed(1)}% of net interest income, about the same as a year earlier.`, `ההפרשות לקחו ${now.toFixed(1)}% מהכנסות הריבית נטו, בערך כמו לפני שנה.`);
+      return { end, summary, rows: [
+        [t("Net interest income", "הכנסות ריבית נטו"), cash(q?.nii)],
+        [t("Net interest income · YoY", "הכנסות ריבית נטו · שינוי שנתי"), pct(growth(q?.nii, ya?.nii))],
+        [t("Credit-loss provisions", "הפרשות להפסדי אשראי"), cash(q?.provision)],
+        [t("Credit-loss provisions · YoY", "הפרשות להפסדי אשראי · שינוי שנתי"), pct(growth(q?.provision, ya?.provision))],
+        [t("Provisions as % of net interest income", "הפרשות כאחוז מהכנסות הריבית נטו"), now === null ? "—" : now.toFixed(1) + "%"],
+        [t("Change vs a year earlier", "שינוי מול לפני שנה"), pp(d)],
+      ], check: t("Provisions are the bank's own estimate. Releasing reserves can lift profit without better lending, and one large loan can swing a quarter.", "ההפרשות הן הערכה של הבנק עצמו. שחרור עתודות יכול להעלות את הרווח בלי שההלוואות השתפרו, והלוואה גדולה אחת יכולה להזיז רבעון.") };
+    }
+    const gr = growth(q?.revenue, ya?.revenue), ge = growth(q?.nonIntExp, ya?.nonIntExp);
+    const eff = share(q?.nonIntExp, q?.revenue), effYa = share(ya?.nonIntExp, ya?.revenue);
+    const summary = gr === null || ge === null ? t("Revenue and non-interest expenses for the same quarter a year earlier are needed to compare their growth.", "דרושים הכנסות והוצאות שאינן ריבית לאותו רבעון אשתקד כדי להשוות את הצמיחה שלהם.")
+      : gr > ge + 1 ? t(`Revenue grew ${pct(gr)} and expenses ${pct(ge)} against a year earlier: the bank got leaner.`, `ההכנסות השתנו ב־${pct(gr)} וההוצאות ב־${pct(ge)} מול לפני שנה: הבנק נעשה רזה יותר.`)
+      : ge > gr + 1 ? t(`Expenses grew ${pct(ge)} and revenue ${pct(gr)} against a year earlier: more of each dollar went to running the bank.`, `ההוצאות השתנו ב־${pct(ge)} וההכנסות ב־${pct(gr)} מול לפני שנה: חלק גדול יותר מכל דולר הלך להפעלת הבנק.`)
+      : t(`Revenue (${pct(gr)}) and expenses (${pct(ge)}) moved together against a year earlier.`, `ההכנסות (${pct(gr)}) וההוצאות (${pct(ge)}) זזו יחד מול לפני שנה.`);
+    return { end, summary, rows: [
+      [t("Revenue", "הכנסות"), cash(q?.revenue)],
+      [t("Revenue · YoY", "הכנסות · שינוי שנתי"), pct(gr)],
+      [t("Non-interest expenses", "הוצאות שאינן ריבית"), cash(q?.nonIntExp)],
+      [t("Non-interest expenses · YoY", "הוצאות שאינן ריבית · שינוי שנתי"), pct(ge)],
+      [t("Efficiency ratio", "יחס יעילות"), eff === null ? "—" : eff.toFixed(1) + "%"],
+      [t("Efficiency ratio · change", "יחס יעילות · שינוי"), pp(eff !== null && effYa !== null ? eff - effYa : null)],
+    ], check: t("A one-off gain in fee income or a large legal cost can swing a single quarter. Look at several quarters before calling it a trend.", "רווח חד־פעמי בעמלות או הוצאה משפטית גדולה יכולים להזיז רבעון בודד. כדאי להסתכל על כמה רבעונים לפני שקוראים לזה מגמה.") };
+  }
   if (pair === "investment") {
     const capex = q?.capex ?? f?.capex ?? null;
     const opCash = q?.ocf ?? f?.operatingCash ?? null;

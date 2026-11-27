@@ -20,6 +20,7 @@ export function QuarterlyChart({ periods, field, label }: {
   const t = (en: string, hebrew: string) => he ? hebrew : en;
   const [lag, setLag] = useState<1 | 4>(1);
   const [selected, setSelected] = useState<string | null>(null);
+  const [hover, setHover] = useState<number | null>(null);
   const all = periods.filter(row => row.kind === 'quarter').sort((a, b) => a.end.localeCompare(b.end));
   const offset = Math.max(0, all.length - 8);
   const read = (row: StatementPeriod | null) => {
@@ -121,7 +122,8 @@ export function QuarterlyChart({ periods, field, label }: {
           {acceleration === null ? '—' : signed(acceleration) + ' pp'}
         </bdi>
       </p>
-      <svg viewBox={hasCrossovers ? "0 0 540 300" : "0 0 540 278"} role="img" direction="ltr" className="mt-2 w-full"
+      <div className="relative mt-2" dir="ltr" onPointerLeave={() => setHover(null)}>
+      <svg viewBox={hasCrossovers ? "0 0 540 300" : "0 0 540 278"} role="img" direction="ltr" className="w-full"
         aria-label={t('Paired quarterly amounts and ' + mode + ' percentage changes with a zero baseline. Exact data below.',
           'סכומי רבעון מול תקופת ההשוואה ושינויים באחוזים עם קו אפס. נתונים מדויקים בהמשך.')}>
         <text x={plotLeft} y="15" {...textStyle}>{t('Quarterly amounts', 'סכומים רבעוניים')}</text>
@@ -129,6 +131,7 @@ export function QuarterlyChart({ periods, field, label }: {
           {hasLoss ? (hasGrowth ? t('Growth and loss change', 'צמיחה ושינוי בהפסד') : t('Loss change', 'שינוי בהפסד')) : t('Growth', 'צמיחה')} · {mode}
         </text>
         <rect x={x(chosen) - 23} y="23" width="46" height="215" rx="4" fill={CHART.positive} opacity=".08" />
+        {hover !== null && hover !== chosen && <rect x={x(hover) - 23} y="23" width="46" height="215" rx="4" fill="currentColor" opacity=".05" />}
         {amountTicks.map(n => <g key={n}>
           <line x1={plotLeft} x2={plotRight} y1={y(n)} y2={y(n)} stroke="currentColor" opacity={n === 0 ? '.35' : '.14'} />
           {(n === 0 || Math.abs(y(n) - y(0)) >= 22) &&
@@ -143,7 +146,6 @@ export function QuarterlyChart({ periods, field, label }: {
           {bar(row.priorValue, x(i) - 15, chosen === i, true)}
           {bar(row.value, x(i) + 2, chosen === i, false)}
           <text x={x(i)} y={hasCrossovers ? "281" : "258"} textAnchor="middle" {...textStyle}>{row.end.slice(2, 7)}</text>
-          <title>{row.end}: {formatAmount(row.value)} · {baseLabel}: {formatAmount(row.priorValue)} · {mode}: {row.crossover ? crossoverLabel(row.crossover) : row.lossRate === null ? pct(row.rate) : lossDetail(row.lossRate)}</title>
         </g>)}
         {rows.map((row, i) => {
           if (!row.crossover) return null;
@@ -162,15 +164,33 @@ export function QuarterlyChart({ periods, field, label }: {
           {rows.map((row, i) => {
             const value = row[key];
             if (value === null) return null;
-            return <circle key={row.id} cx={x(i)} cy={ry(value)} r={i === chosen ? 5 : 3.5} fill={color}>
-              <title>{row.end} · {key === 'lossRate' ? lossDetail(value) : pct(value)} {mode}</title>
-            </circle>;
+            return <circle key={row.id} cx={x(i)} cy={ry(value)} r={i === chosen || i === hover ? 5 : 3.5} fill={color}
+              stroke={i === hover ? 'hsl(var(--background))' : undefined} strokeWidth={i === hover ? 1.5 : undefined} />;
           })}
         </g>)}
         {!hasGrowth && !hasLoss && <text x="269" y="184" textAnchor="middle" {...textStyle}>
           {t('Growth unavailable', 'אין נתוני צמיחה')}
         </text>}
+        {/* one hover/click area per quarter: covers both bars and the growth dot */}
+        {rows.map((row, i) => <rect key={row.id} x={x(i) - (plotRight - plotLeft) / rows.length / 2} y="20" width={(plotRight - plotLeft) / rows.length} height="222"
+          fill="transparent" style={{ cursor: 'pointer' }} onPointerEnter={() => setHover(i)} onClick={() => setSelected(row.id)} />)}
       </svg>
+      {hover !== null && rows[hover] && (() => {
+        const row = rows[hover], h = hasCrossovers ? 300 : 278;
+        const dotY = row.lossRate ?? row.rate;
+        const top = (isNumber(dotY) ? ry(dotY) : y(Math.max(row.value ?? 0, row.priorValue ?? 0, 0))) / h * 100;
+        const left = x(hover) / 540 * 100;
+        const g = row.crossover ? crossoverLabel(row.crossover) : row.lossRate !== null ? lossDetail(row.lossRate) : pct(row.rate);
+        const gColor = row.crossover ? crossoverColor(row.crossover) : row.lossRate !== null ? lossColor : row.rate === null ? undefined : row.rate < 0 ? CHART.negative : CHART.growth;
+        return <div role="tooltip" className="pointer-events-none absolute z-10 w-max min-w-[150px] rounded-md border border-border bg-popover px-2.5 py-1.5 text-[11.5px] leading-snug text-popover-foreground shadow-lg"
+          style={{ left: `${Math.min(Math.max(left, 18), 82)}%`, top: `${top}%`, transform: 'translate(-50%, calc(-100% - 10px))' }} dir={he ? 'rtl' : 'ltr'}>
+          <div className="font-semibold"><bdi>{row.end}</bdi></div>
+          <div className="mt-0.5 flex justify-between gap-3"><span className="text-muted-foreground">{t('This quarter', 'הרבעון הזה')}</span><bdi className="font-mono" style={{ color: row.value !== null && row.value < 0 ? CHART.negative : CHART.positive }}>{formatAmount(row.value)}</bdi></div>
+          <div className="flex justify-between gap-3"><span className="text-muted-foreground">{baseLabel}</span><bdi className="font-mono">{formatAmount(row.priorValue)}</bdi></div>
+          <div className="mt-0.5 flex justify-between gap-3 border-t border-border/60 pt-0.5"><span className="text-muted-foreground">{row.lossRate !== null ? t('Loss change', 'שינוי בהפסד') : t('Growth', 'צמיחה')} · {mode}</span><bdi className="font-mono font-semibold" style={{ color: gColor }}>{g}</bdi></div>
+        </div>;
+      })()}
+      </div>
       <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
         <span><span style={{ color: CHART.positive }}>■</span> {t('Each quarter', 'כל רבעון')}</span>
         <span><span style={{ color: CHART.neutral }}>□</span> {baseLabel}</span>

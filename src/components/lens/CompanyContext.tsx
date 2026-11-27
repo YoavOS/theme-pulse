@@ -4,6 +4,7 @@ import { useLensLang } from "@/lib/lens/i18n";
 import { comparablePeriods, isNumber, percentageChange, latestQuarterSummary } from "@/lib/lens/quarterly";
 import { CHART } from "./QuarterlyChart";
 import { AutoTerms } from "./Term";
+import { valuationFacts } from "@/lib/lens/tabStories";
 import { extraComparison, type ExtraPair } from "@/lib/lens/extraComparisons";
 
 type MetricPair = "cash" | "profit" | "margin" | ExtraPair;
@@ -33,16 +34,22 @@ export function BusinessContextCard({ p }: { p: LensPayload }) {
 export function MetricConnections({ p }: { p: LensPayload }) {
   const he = useLensLang() === "he";
   const t = (en: string, h: string) => he ? h : en;
-  const [pair, setPair] = useState<MetricPair>("cash");
+  // Banks report no cost of revenue, operating profit or meaningful operating cash flow: give them bank pairs instead.
+  const bank = p.financial && (p.statements ?? []).some((r) => isNumber(r.nonIntExp));
+  const [pair, setPair] = useState<MetricPair>(bank ? "bankEfficiency" : "cash");
   const extra = pair === "cash" || pair === "profit" || pair === "margin" ? null : extraComparison(pair, p, t);
-  const options: { key: MetricPair; label: string }[] = [
+  const options: { key: MetricPair; label: string }[] = bank ? [
+    { key: "bankEfficiency", label: t("Revenue & expenses", "הכנסות והוצאות") },
+    { key: "bankCredit", label: t("Interest income & provisions", "הכנסות ריבית והפרשות") },
+    { key: "perShare", label: t("Profit & earnings per share", "רווח ורווח למניה") },
+  ] : [
     { key: "cash", label: t("Revenue & cash", "הכנסות ומזומנים") },
     { key: "profit", label: t("Profit & cash flow", "רווח ותזרים") },
     { key: "margin", label: t("Sales & margin", "מכירות ושיעור רווח") },
     { key: "netProfit", label: t("Operating profit & net profit", "רווח תפעולי ורווח נקי") },
     { key: "perShare", label: t("Profit & earnings per share", "רווח ורווח למניה") },
   ];
-  if (!p.financial) {
+  if (!p.financial && !bank) {
     options.push({ key: "investment", label: t("Investment & cash left", "השקעה ומזומן שנותר") });
     options.push({ key: "debt", label: t("Debt & interest", "חוב וריבית") });
   }
@@ -149,7 +156,7 @@ export function MetricConnections({ p }: { p: LensPayload }) {
   </section>;
 }
 
-export function MarketValuation({ p }: { p: LensPayload }) {
+export function MarketValuation({ p, bare = false }: { p: LensPayload; bare?: boolean }) {
   const he = useLensLang() === "he";
   const t = (en: string, h: string) => he ? h : en;
   const market = p.marketPricing;
@@ -170,7 +177,8 @@ export function MarketValuation({ p }: { p: LensPayload }) {
   const computedPs = market?.ps == null ? fromCap(revenue) : null;
   const pe = profitable ? market?.pe ?? computedPe : null;
   const ps = market?.ps ?? computedPs;
-  const pb = market?.pb ?? null;
+  const derivedPb = market?.pb == null ? valuationFacts(p).pb : null;   // banks: market cap ÷ (net profit ÷ return on equity)
+  const pb = market?.pb ?? derivedPb;
   const rows = [
     [t("P/E", "מכפיל רווח"), pe, !profitable
       ? t("The latest twelve-month reported result is a loss or zero, so a positive P/E would be misleading.", "הרווח המדווח ל־12 חודשים שלילי או אפס, ולכן מכפיל רווח חיובי מטעה.")
@@ -181,8 +189,8 @@ export function MarketValuation({ p }: { p: LensPayload }) {
   const peer = market?.peerPe;
   const hasMultiple = rows.some(([, value]) => value !== null);
   return <section className="space-y-4 rounded-2xl border border-border bg-card/45 p-4 sm:p-6">
-    <div><h2 className="text-xl font-semibold">{t("How the market values the company", "איך השוק מתמחר את החברה")}</h2>
-      <p className="mt-1 max-w-3xl text-sm text-muted-foreground">{<AutoTerms text={t("The latest market snapshot available to Theme Pulse. These figures describe the market price and what investors are paying per dollar of business results.", "תמונת השוק האחרונה הזמינה באפליקציה. הנתונים מתארים את מחיר השוק ומה המשקיעים משלמים לכל דולר של תוצאות עסקיות.")}/>}</p></div>
+    {!bare && <div><h2 className="text-xl font-semibold">{t("How the market values the company", "איך השוק מתמחר את החברה")}</h2>
+      <p className="mt-1 max-w-3xl text-sm text-muted-foreground">{<AutoTerms text={t("The latest market snapshot available to Theme Pulse. These figures describe the market price and what investors are paying per dollar of business results.", "תמונת השוק האחרונה הזמינה באפליקציה. הנתונים מתארים את מחיר השוק ומה המשקיעים משלמים לכל דולר של תוצאות עסקיות.")}/>}</p></div>}
     <div className="grid gap-3 sm:grid-cols-2">
       <div className="rounded-xl border border-border p-3"><p className="text-sm text-muted-foreground"><AutoTerms text={t("Market cap", "שווי שוק")}/></p><bdi className="font-mono text-2xl">{money(cap)}</bdi>
         <p className="text-xs text-muted-foreground">{t("Market value of all shares", "שווי השוק של כל המניות")} · <bdi>{date(market?.capDate ?? p.market.asOf)}</bdi></p></div>
@@ -192,6 +200,7 @@ export function MarketValuation({ p }: { p: LensPayload }) {
     <div className="grid gap-3 md:grid-cols-3">{rows.map(([key, value, explanation]) =>
       <div key={key} className="rounded-xl border border-border p-3"><h3 className="font-semibold"><AutoTerms text={key}/></h3>
         <bdi className="font-mono text-xl text-primary">{ratio(value)}</bdi><p className="mt-1 text-sm text-muted-foreground"><AutoTerms text={explanation}/></p></div>)}</div>
+    {derivedPb !== null && <p className="text-xs text-muted-foreground"><AutoTerms text={t("P/B — calculated from market cap, twelve months of net profit and return on equity (book equity = net profit ÷ return on equity).", "מכפיל הון — חושב משווי השוק, הרווח הנקי ל־12 חודשים והתשואה על ההון העצמי (הון בספרים = רווח נקי ÷ תשואה על ההון העצמי).")}/></p>}
     {computedPe !== null || computedPs !== null ? <p className="text-xs text-muted-foreground">
       {computedPe !== null && "P/E"}{computedPe !== null && computedPs !== null && " · "}{computedPs !== null && "P/S"} — {t("Calculated using cached market cap and twelve months of reported results through", "חושב לפי שווי שוק שמור ותוצאות מדווחות ל־12 חודשים עד")} <bdi>{ttm?.end ?? quarters[quarters.length - 1]?.end}</bdi>.
     </p> : null}

@@ -62,12 +62,12 @@ export function BalancedColumns({ cols, blocks, className = "" }: { cols: number
   }, [sig]);
   const freeze = () => { frozen.current = sig; };
 
-  if (cols < 2) return <div className={`space-y-3 ${className}`}>{blocks.map((b) => <div key={b.key}>{b.node}</div>)}</div>;
+  if (cols < 2) return <div className={`space-y-3 ${className}`}>{blocks.map((b) => <div key={b.key} id={`blk-${b.key}`} className="scroll-mt-4">{b.node}</div>)}</div>;
   return (
     <div className={`grid ${className}`} onPointerDownCapture={freeze} onKeyDownCapture={freeze}
       style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`, gridAutoRows: `${ROW}px`, gridAutoFlow: "dense", columnGap: GAP }}>
       {blocks.map((b) => (
-        <div key={b.key} style={{ gridColumn: (assignment[b.key] ?? 0) + 1, gridRowEnd: `span ${Math.max(1, Math.ceil(((heights[b.key] ?? 200) + GAP) / ROW))}` }}>
+        <div key={b.key} id={`blk-${b.key}`} className="scroll-mt-4" style={{ gridColumn: (assignment[b.key] ?? 0) + 1, gridRowEnd: `span ${Math.max(1, Math.ceil(((heights[b.key] ?? 200) + GAP) / ROW))}` }}>
           <div data-block={b.key} ref={(el) => { if (el) inner.current.set(b.key, el); else inner.current.delete(b.key); }}>{b.node}</div>
         </div>
       ))}

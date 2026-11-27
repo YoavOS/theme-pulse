@@ -40,6 +40,7 @@ export function IncomeFlowTrend({ periods, period, step, label, onSelect }: {
   const he = useLensLang() === "he";
   const t = (en: string, translated: string) => he ? translated : en;
   const [view, setView] = useState<"amount" | "share">("amount");
+  const [hover, setHover] = useState<number | null>(null);
   const byShare = step !== "revenue" && view === "share";
   const quarters = periods.filter(p => p.kind === "quarter").sort((a, b) => a.end.localeCompare(b.end));
   const current = period.kind === "quarter" ? period : quarters[quarters.length - 1];
@@ -93,7 +94,8 @@ export function IncomeFlowTrend({ periods, period, step, label, onSelect }: {
         {" · "}<Term id="yoy">{t("YoY", "שינוי שנתי")}</Term> <bdi>{signed(shareChange, " pp")}</bdi></span>}
     </div>}
     {points.length ? <div className="mt-3 overflow-x-auto">
-      <svg className="mx-auto block w-full min-w-[480px] max-w-4xl" viewBox="0 0 570 134" direction="ltr" role="group"
+      <div className="relative mx-auto min-w-[480px] max-w-4xl" dir="ltr" onPointerLeave={() => setHover(null)}>
+      <svg className="block w-full" viewBox="0 0 570 134" direction="ltr" role="group"
         aria-label={label + " · " + (byShare ? t("Share of revenue", "חלק מההכנסות") : t("Dollars", "דולרים"))}>
         {ticks.map(v => <g key={v}>
           <line x1="56" x2="544" y1={y(v)} y2={y(v)} stroke="currentColor" opacity={v === 0 ? ".4" : ".15"} />
@@ -101,25 +103,39 @@ export function IncomeFlowTrend({ periods, period, step, label, onSelect }: {
         </g>)}
         <path d={path} stroke={byShare ? CHART.growth : CHART.positive} fill="none" strokeWidth="2" />
         {points.map((p, i) => {
+          const slot = points.length > 1 ? Math.min(60, x(1) - x(0)) : 60;   // hover area fills the space between points
           const value = get(p);
           const active = p.id === period.id;
           const description = p.end + " · " + format(value);
           return <g key={p.id} role="button" tabIndex={0} aria-label={description} aria-pressed={active}
-            onClick={() => onSelect(p.id)}
+            onClick={() => onSelect(p.id)} onPointerEnter={() => setHover(i)}
             onKeyDown={event => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onSelect(p.id); } }}
             className="group cursor-pointer focus-visible:outline-none">
-            <rect x={x(i) - 15} y="5" width="30" height="126" rx="4" fill="currentColor"
+            <rect x={x(i) - slot / 2} y="5" width={slot} height="126" rx="4" fill="currentColor"
               className={active ? "opacity-15" : "opacity-0 group-hover:opacity-10 group-focus-visible:opacity-20"} />
             {value !== null && <circle cx={x(i)} cy={y(value)} r={active ? 5 : 3.5}
               fill={value < 0 ? CHART.negative : byShare ? CHART.growth : CHART.positive} />}
             <text x={x(i)} y="124" textAnchor="middle" fill="currentColor" opacity={active ? 1 : .75} fontSize="11">{p.end.slice(2, 7)}</text>
-            <title>{description}</title>
           </g>;
         })}
         {!values.length && <text x="300" y="52" textAnchor="middle" fill="currentColor" opacity=".7" fontSize="11">
           {t("No reported figures for this view", "אין נתונים מדווחים לתצוגה הזו")}
         </text>}
       </svg>
+      {hover !== null && points[hover] && (() => {
+        const pt = points[hover], v = get(pt);
+        const ya = quarters.find(q => comparablePeriods(pt.end, q.end, 4));
+        const yaPt = ya ? toPoint(ya) : null;
+        const yoy = yaPt ? (byShare ? difference(pt.share, yaPt.share) : percentageChange(pt.amount, yaPt.amount)) : null;
+        return <div role="tooltip" className="pointer-events-none absolute z-10 w-max min-w-[140px] rounded-md border border-border bg-popover px-2.5 py-1.5 text-[11.5px] leading-snug text-popover-foreground shadow-lg"
+          style={{ left: `${Math.min(Math.max(x(hover) / 570 * 100, 14), 86)}%`, top: `${(v === null ? 60 : y(v)) / 134 * 100}%`, transform: "translate(-50%, calc(-100% - 10px))" }} dir={he ? "rtl" : "ltr"}>
+          <div className="font-semibold"><bdi>{pt.end}</bdi></div>
+          <div className="mt-0.5 flex justify-between gap-3"><span className="text-muted-foreground">{t("Amount", "סכום")}</span><bdi className="font-mono">{asMoney(pt.amount)}</bdi></div>
+          <div className="flex justify-between gap-3"><span className="text-muted-foreground">{t("Share of revenue", "חלק מההכנסות")}</span><bdi className="font-mono">{isNumber(pt.share) ? pt.share.toFixed(1) + "%" : "—"}</bdi></div>
+          <div className="mt-0.5 flex justify-between gap-3 border-t border-border/60 pt-0.5"><span className="text-muted-foreground">YoY</span><bdi className="font-mono font-semibold" style={{ color: yoy === null ? undefined : yoy < 0 ? CHART.negative : CHART.growth }}>{yoy === null ? "—" : signed(yoy, byShare ? " pp" : "%")}</bdi></div>
+        </div>;
+      })()}
+      </div>
     </div> : <p className="mt-3 text-xs text-muted-foreground">{t("No quarterly history available.", "אין היסטוריה רבעונית זמינה.")}</p>}
   </div>;
 }
