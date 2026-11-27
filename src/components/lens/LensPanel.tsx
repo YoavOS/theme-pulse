@@ -20,6 +20,7 @@ import { useProvenOne } from "@/hooks/useProvenStrength";
 import { toneBox, type Tone } from "@/lib/moveTint";
 import { AutoTerms, Term, PlainTerms } from "./Term";
 import { GlossaryButton, GlossaryProvider } from "./GlossaryBrowser";
+import { BalancedColumns } from "./BalancedColumns";
 import { TermCompanyContext } from "@/lib/lens/termContext";
 import { companyNote } from "@/lib/lens/companyMeaning";
 import { LensScope, dirOf, ltr, setLensLang, useLensLang, useLensLangSetting, useTx } from "@/lib/lens/i18n";
@@ -198,7 +199,7 @@ function MetricLine({ m, higherIsBetter, asOf }: { m: Metric; higherIsBetter: bo
     <div className="space-y-1 py-1.5">
       <div className="flex items-baseline justify-between gap-3">
         <span className="text-xs text-muted-foreground"><AutoTerms text={m.label} />{m.approx && <span title={tx("Uses a fallback figure or assumption — see the worked example", "משתמש בנתון חלופי או בהנחה — פירוט בדוגמה המחושבת")}> *</span>}</span>
-        <span className="shrink-0 font-mono text-sm font-semibold tabular-nums">{m.display}</span>
+        <span className={`shrink-0 text-sm font-semibold tabular-nums ${/\d/.test(m.display) ? "font-mono" : ""}`}>{m.display}</span>
       </div>
       {m.peer && <PeerBar p={m.peer} higherIsBetter={higherIsBetter} />}
       {m.peer && peerUsesOther(m) && (
@@ -299,7 +300,7 @@ function ConceptView({ c, symbol, stageLabel, seen, asOf = null, p }: { c: Conce
           <span className="block truncate text-[13px] font-medium">{c.title}</span>
           {tone && <span className={`block truncate text-[10.5px] ${tone.cls}`}>{tone.words}</span>}
         </span>
-        {prim && <span className="shrink-0 font-mono text-sm tabular-nums">{prim.display}</span>}
+        {prim && <span className={`shrink-0 text-sm tabular-nums ${/\d/.test(prim.display) ? "font-mono" : ""}`}>{prim.display}</span>}
         <ChevronDown size={14} className={`shrink-0 text-muted-foreground transition-transform ${open ? "rotate-180" : ""}`} />
       </button>
       {open && (
@@ -610,60 +611,47 @@ export default function LensPanel({ symbol: symbolProp, onSymbolChange, onClose,
            {section === 'statements' && <Suspense fallback={<p>{tx("Loading statements…","טעינת דוחות…")}</p>}><FinancialStatements key={data.symbol} p={data}/></Suspense>}
            {section === 'valuation' && <Suspense fallback={<p>{tx("Loading valuation…","טעינת תמחור…")}</p>}><MarketValuation key={data.symbol} p={data} /></Suspense>}
            {section === 'overview' && <Suspense fallback={<p>{tx("Loading company story…","טעינת סיפור החברה…")}</p>}><CompanyOverview key={data.symbol} p={data} proven={proven.row} onExplore={setSection}/></Suspense>}
-           {(section==='evidence'||section==='learn') && <div className={wide ? "grid items-start gap-5" : "space-y-3"} style={wide ? { gridTemplateColumns: "minmax(300px, 1fr) minmax(0, 2fr)" } : undefined}>
-            {/* Overview: who the company is and where it stands */}
-            <div className="space-y-3">
+           {(section==='evidence'||section==='learn') && <>
             {data.sec.status !== "ok" && <p className="flex gap-1.5 rounded-md border border-border bg-muted/30 p-2 text-xs text-muted-foreground"><Info size={13} className="mt-px shrink-0" />
               {data.sec.sourceUrl ? tx("Evidence uses figures verified in quarterly SEC Form 6-K releases. Cash flow, capital and debt metrics, and the multi-year track record need additional filing data.", "הנתונים מבוססים על פרסומים רבעוניים מאומתים בטופס 6-K. לחישובי תזרים, הון, חוב ורקורד רב־שנתי דרושים נתונים נוספים.") : data.sec.status}
             </p>}
             {data.financial && <p className="flex gap-1.5 rounded-md border border-border bg-muted/30 p-2 text-xs text-muted-foreground"><Info size={13} className="mt-px shrink-0" /><span><AutoTerms text={tx("A financial company: debt is part of how it makes money, so ROIC, free cash flow and coverage are left out — ROE is the main return measure here.", "חברה פיננסית: החוב הוא חלק מהדרך שבה היא מרוויחה, ולכן ROIC, תזרים מזומנים חופשי וכיסוי ריבית לא מוצגים — ROE הוא מדד התשואה המרכזי כאן.")} /></span></p>}
-
-            {section === "evidence" && <ReadTogether p={data} proven={proven.row} />}
-            {section === "evidence" && <IndustryBars p={data} />}
-            {section !== "learn" && data.lifeCycle && <StageCard p={data} />}
-            {proven.error && <p role="alert" className="text-sm">{tx("Track record unavailable.", "הרקורד אינו זמין.")} <button className="underline" onClick={proven.retry}>{tx("Retry", "ניסיון נוסף")}</button></p>}
-            {section !== "learn" && (!data.sec.sourceUrl || proven.row?.status === "ok") && <TrackRecordCard row={proven.row} loading={proven.loading} />}
-            {section === "evidence" && <LookalikesCard symbol={data.symbol} onOpen={(s) => { setInput(s); setOwn(s); onSymbolChange?.(s); }} />}
-            {section !== "learn" && <LimitsCard p={data} proven={proven.row} />}
-            
-            {section === "evidence" && <IndustryCard p={data} />}
-
-            {/* Foundations */}
-            {section === "learn" && <section className="rounded-lg border border-border">
+            <BalancedColumns cols={width >= 1800 ? 4 : width >= 1200 ? 3 : wide ? 2 : 1} blocks={[
+              ...(section === "learn" ? [{ key: "foundations", node: <section className="rounded-lg border border-border">
               <div className="flex items-center justify-between px-3 pt-2">
                 <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{tx("Start here", "מתחילים כאן")}</span>
                 <span className="text-[10.5px] text-muted-foreground">{he ? <>נחקרו {ltr(`${seenCount}/${totalConcepts}`)} מושגים</> : <>{seenCount}/{totalConcepts} concepts explored</>}</span>
               </div>
               {data.foundations.map((c) => <ConceptView key={c.id} c={c} p={data} symbol={data.symbol} stageLabel={stageLabel} seen={!!progress[c.id]} asOf={asOf} />)}
-            </section>}
-            </div>
-
-            {/* Concepts, by pillar — on wide screens the price card leads this column, laid out across it */}
-            <div className="space-y-3">
-            
-            <div className={veryWide ? "columns-2 gap-3" : "space-y-3"}>
-
-            {/* Pillars */}
-            {pillars.map((pk) => {
-              const cards = data.cards.filter(c => c.pillar === pk &&
-                (section !== "evidence" || !data.sec.sourceUrl || c.metrics.some(m => m.value !== null)));
-              if (!cards.length) return null;
-              return (
-                <div key={pk} className={`space-y-3 ${veryWide ? "mb-3 break-inside-avoid" : ""}`}>
-                <section className="rounded-lg border border-border">
-                  <div className="px-3 pt-2">
-                    <div className="text-[13px] font-semibold"><AutoTerms text={pillarInfo[pk].label} /></div>
-                    <div className="text-[11px] text-muted-foreground"><AutoTerms text={pillarInfo[pk].question} /></div>
-                  </div>
-                  <div className="mt-1">{cards.map((c) => <ConceptView key={c.id} c={c} p={data} symbol={data.symbol} stageLabel={stageLabel} seen={!!progress[c.id]} asOf={asOf} />)}</div>
-                </section>
-                {pk === "profitability" && data.adjust && <AdjustCard a={data.adjust} symbol={data.symbol} />}
-                </div>
-              );
-            })}
-            </div>
-            </div>
-           </div>}
+            </section> }] : []),
+              ...(section === "evidence" ? [{ key: "read", node: <ReadTogether p={data} proven={proven.row} /> }] : []),
+              ...pillars.flatMap((pk) => {
+                const cards = data.cards.filter(c => c.pillar === pk &&
+                  (section !== "evidence" || !data.sec.sourceUrl || c.metrics.some(m => m.value !== null)));
+                if (!cards.length) return [];
+                return [{ key: `pillar-${pk}`, node: (
+                  <div className="space-y-3">
+                  <section className="rounded-lg border border-border">
+                    <div className="px-3 pt-2">
+                      <div className="text-[13px] font-semibold"><AutoTerms text={pillarInfo[pk].label} /></div>
+                      <div className="text-[11px] text-muted-foreground"><AutoTerms text={pillarInfo[pk].question} /></div>
+                    </div>
+                    <div className="mt-1">{cards.map((c) => <ConceptView key={c.id} c={c} p={data} symbol={data.symbol} stageLabel={stageLabel} seen={!!progress[c.id]} asOf={asOf} />)}</div>
+                  </section>
+                  {pk === "profitability" && data.adjust && <AdjustCard a={data.adjust} symbol={data.symbol} />}
+                  </div>) }];
+              }),
+              ...(section === "evidence" ? [
+                { key: "industry-bars", node: <IndustryBars p={data} /> },
+                ...(data.lifeCycle ? [{ key: "stage", node: <StageCard p={data} /> }] : []),
+                ...(proven.error ? [{ key: "proven-error", node: <p role="alert" className="text-sm">{tx("Track record unavailable.", "הרקורד אינו זמין.")} <button className="underline" onClick={proven.retry}>{tx("Retry", "ניסיון נוסף")}</button></p> }] : []),
+                ...((!data.sec.sourceUrl || proven.row?.status === "ok") ? [{ key: "track", node: <TrackRecordCard row={proven.row} loading={proven.loading} /> }] : []),
+                { key: "lookalikes", node: <LookalikesCard symbol={data.symbol} onOpen={(s) => { setInput(s); setOwn(s); onSymbolChange?.(s); }} /> },
+                { key: "limits", node: <LimitsCard p={data} proven={proven.row} /> },
+                { key: "industry", node: <IndustryCard p={data} /> },
+              ] : []),
+            ]} />
+           </>}
 
             <footer className={`space-y-1 pb-2 text-[10.5px] leading-snug text-muted-foreground ${wide ? "pt-2" : ""}`}>
               {he ? <>

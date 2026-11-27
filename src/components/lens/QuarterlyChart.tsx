@@ -185,9 +185,9 @@ export function QuarterlyChart({ periods, field, label }: {
         <span><span style={{ color: CHART.negative }}>↓</span> {downLabel}</span>
         <span>{t('Arrows mark a crossover with no growth %.', 'החצים מסמנים מעבר ללא שיעור צמיחה.')}</span>
       </div>}
-      <div className="mt-3 flex flex-wrap gap-1" role="group" aria-label={t(label + ' quarter details', label + ' בחירת רבעון')}>
+      <div className="mt-3 grid gap-1" style={{ gridTemplateColumns: `repeat(${rows.length}, minmax(0, 1fr))` }} role="group" aria-label={t(label + ' quarter details', label + ' בחירת רבעון')}>
         {rows.map((row, i) => <button key={row.id} onClick={() => setSelected(row.id)} aria-pressed={chosen === i}
-          className={'rounded px-2 py-1 font-mono text-[11px] ' + (chosen === i ? 'bg-primary/20 text-primary' : 'bg-muted/30 text-muted-foreground')}>
+          className={'rounded px-0 py-1 text-center font-mono text-[10.5px] tabular-nums ' + (chosen === i ? 'bg-primary/20 text-primary' : 'bg-muted/30 text-muted-foreground')}>
           {row.end.slice(2, 7)}
         </button>)}
       </div>
