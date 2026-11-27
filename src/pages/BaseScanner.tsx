@@ -18,6 +18,7 @@ import {
   ALL_LABELS, ALL_STATES, BREAKDOWN_PARTS, CHART_CHECKS, EARN_LABELS, LABEL_NAMES, STATE_NAMES,
   passesStrict, tighteningGrade, type BaseLabel, type BaseState, type StockBase,
 } from "@/lib/bases";
+import { chartClick } from "@/lib/chart";
 
 const PRESET_KEY = "base_scanner_preset_v1";
 type ViewKey = "buy" | "breakouts" | "building" | "all";
@@ -360,7 +361,7 @@ export default function BaseScanner() {
                             <div className="flex items-center gap-1">
                               {isOpen ? <ChevronDown size={11} /> : <ChevronRight size={11} className="text-muted-foreground" />}
                               <a href={`https://www.tradingview.com/chart/?symbol=${encodeURIComponent(r.symbol)}`} target="_blank" rel="noopener noreferrer"
-                                onClick={(e) => e.stopPropagation()} className="font-mono font-semibold hover:text-primary hover:underline" title="Open TradingView chart">
+                                onClick={chartClick(r.symbol)} className="font-mono font-semibold hover:text-primary hover:underline" title="Chart (Ctrl+click: TradingView)">
                                 {r.symbol}
                               </a>
                               {r.tier === 1 && <span className="rounded bg-primary/15 px-1 text-[9px] text-primary" title="Tier 1: score 85+, within 3% of the pivot, no critical warning">T1</span>}

@@ -5,6 +5,7 @@ import { Segmented } from "@/components/Explainer";
 import { GROUP_MODE_LABEL, groupKeyForIndustry, type GroupMode } from "@/lib/groupColors";
 import { EXPORT_FORMAT_LABEL, tvSectionsText, type ExportFormat } from "@/lib/tvSections";
 import GroupStageTag from "@/components/shared/GroupStageTag";
+import { chartClick } from "@/lib/chart";
 
 /**
  * RS Alpha — new 52-week highs and lows in one panel with one timeframe (Industry Leaders styling).
@@ -282,7 +283,7 @@ export default function HighsLowsPanel({ stocks, loading, range, onRange, mode, 
                             </div>
                             <div className="flex flex-wrap gap-1">
                               {list.map((s) => (
-                                <a key={s.symbol} href={tv(s.symbol)} target="_blank" rel="noopener noreferrer" title={s.name ?? s.symbol}
+                                <a key={s.symbol} href={tv(s.symbol)} target="_blank" rel="noopener noreferrer" onClick={chartClick(s.symbol)} title={s.name ?? s.symbol}
                                   className="inline-flex items-baseline gap-1 rounded border border-border bg-card px-1.5 py-0.5 hover:border-primary/60">
                                   <span className="font-mono text-[11px] font-semibold">{s.symbol}</span>
                                   <span className={`font-mono text-[10px] ${rsCls(s.rating)}`}>{s.rating ?? "—"}</span>
@@ -347,7 +348,7 @@ function Spotlight({ g, kind }: { g: GroupRow; kind: "highs" | "lows" }) {
       <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-muted/50"><div className={`h-full rounded-full ${hi ? "bg-[hsl(222,82%,63%)]" : "bg-[hsl(330,72%,57%)]"}`} style={{ width: `${share}%` }} /></div>
       <div className="mt-2 flex flex-wrap gap-1">
         {list.slice(0, 6).map((s) => (
-          <a key={s.symbol} href={tv(s.symbol)} target="_blank" rel="noopener noreferrer" title={s.name ?? s.symbol}
+          <a key={s.symbol} href={tv(s.symbol)} target="_blank" rel="noopener noreferrer" onClick={chartClick(s.symbol)} title={s.name ?? s.symbol}
             className="inline-flex items-baseline gap-1 rounded border border-border bg-card px-1.5 py-0.5 hover:border-primary/60">
             <span className="font-mono text-[11px] font-semibold">{s.symbol}</span>
             <span className={`font-mono text-[10px] ${rsCls(s.rating)}`}>{s.rating ?? "—"}</span>
@@ -395,7 +396,7 @@ function StockTable({ list, side, onSide, counts, groupLabel, groupOf, narrow }:
         <div key={s.symbol} className={`grid ${cols} items-center gap-x-2 border-b border-border/40 px-2 py-1.5`}>
           {!narrow && <span className="text-[11px] text-muted-foreground">{i + 1}</span>}
           <span className="min-w-0">
-            <a href={tv(s.symbol)} target="_blank" rel="noopener noreferrer" className="font-mono text-[12.5px] font-bold hover:text-primary hover:underline">{s.symbol}</a>
+            <a href={tv(s.symbol)} target="_blank" rel="noopener noreferrer" onClick={chartClick(s.symbol)} className="font-mono text-[12.5px] font-bold hover:text-primary hover:underline">{s.symbol}</a>
             {s.name && <span className="block truncate text-[10.5px] text-muted-foreground">{s.name}</span>}
           </span>
           <span className="truncate text-[11.5px] text-muted-foreground">{groupOf(s)}</span>

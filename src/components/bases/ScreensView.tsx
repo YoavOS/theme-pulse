@@ -6,6 +6,7 @@ import { StageBadge, StageChartPanel, WeekSpark } from "@/components/stages/Stag
 import { downloadTradingViewList, stageWeeksAgo, type StockStage } from "@/lib/stageAnalysis";
 import { STATE_NAMES, type StockBase } from "@/lib/bases";
 import { PickCard, SectionHead } from "@/components/Explainer";
+import { chartClick } from "@/lib/chart";
 
 /**
  * Ready-made screens over the whole stock list (Deepvue-style presets), built from the weekly
@@ -275,7 +276,7 @@ export default function ScreensView({ stageRows, baseBy, nameOf, groupOf }: {
                       <div className="flex items-center gap-1">
                         {isOpen ? <ChevronDown size={11} /> : <ChevronRight size={11} className="text-muted-foreground" />}
                         <a href={`https://www.tradingview.com/chart/?symbol=${encodeURIComponent(r.symbol)}`} target="_blank" rel="noopener noreferrer"
-                          onClick={(e) => e.stopPropagation()} className="font-mono font-semibold hover:text-primary hover:underline">{r.symbol}</a>
+                          onClick={chartClick(r.symbol)} title="Chart (Ctrl+click: TradingView)" className="font-mono font-semibold hover:text-primary hover:underline">{r.symbol}</a>
                       </div>
                       <div className="max-w-[150px] truncate pl-4 text-[10px] text-muted-foreground">{nameOf(r.symbol) ?? ""}</div>
                     </td>

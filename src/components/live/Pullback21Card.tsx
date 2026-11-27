@@ -3,6 +3,7 @@ import { Check, Info, Loader2, Search, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { ZONE, analyzePullback, type Bar, type PullbackResult } from "@/lib/pullback21";
+import { ChartButton } from "@/components/chart/ChartHost";
 
 /**
  * 21 EMA pullback check — enter a ticker, get a light:
@@ -108,7 +109,7 @@ export default function Pullback21Card({ symbol }: { symbol: string | null }) {
             <span className={`mt-1 h-4 w-4 shrink-0 rounded-full ${L.dot}`} aria-hidden="true" />
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-baseline gap-x-2">
-                <span className="font-mono text-base font-bold">{sym}</span>
+                <span className="font-mono text-base font-bold">{sym}</span><ChartButton symbol={sym} />
                 <span className={`text-base font-bold ${L.text}`}>{res.headline}</span>
                 {res.barInProgress && <span className="text-[11px] text-muted-foreground">· today's candle still forming</span>}
               </div>
