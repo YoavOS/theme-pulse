@@ -9,6 +9,7 @@ import ReviewView from "./ReviewView";
 import { dueQuestions } from "@/lib/lens/review";
 import TrackRecordCard from "@/components/proven/TrackRecordCard";
 const ValuationView = lazy(() => import("./ValuationView"));
+const CompareView = lazy(() => import("./CompareView"));
 const FinancialStatements = lazy(() => import("./FinancialStatements"));
 const CompanyOverview = lazy(() => import("./CompanyOverview"));
 import LimitsCard from "./LimitsCard";
@@ -493,7 +494,7 @@ export default function LensPanel({ symbol: symbolProp, onSymbolChange, onClose,
   const pillarInfo = he ? HE_PILLAR : PILLAR_INFO;
   const stageLabel = data?.lifeCycle?.label ?? null;
   const [reviewing, setReviewing] = useState(false);
-  const [section, setSection] = useState<"overview"|"statements"|"valuation"|"evidence"|"learn">("overview");
+  const [section, setSection] = useState<"overview"|"statements"|"valuation"|"compare"|"evidence"|"learn">("overview");
   const bodyRef = useRef<HTMLDivElement>(null);
   useEffect(() => { bodyRef.current?.scrollTo({top:0}); }, [data?.symbol,section]);
   const marketAge = data?.market.asOf ? (Date.now()-Date.parse(data.market.asOf))/86400000 : Infinity;
@@ -557,7 +558,7 @@ export default function LensPanel({ symbol: symbolProp, onSymbolChange, onClose,
       </div>
 
       {data && <nav aria-label={tx("Company sections","חלקי הניתוח")} className="flex shrink-0 gap-1 overflow-x-auto border-b border-border px-3 py-2 sm:px-6">
-        {([['overview','Company story','סיפור החברה'],['statements','Statements','דוחות'],['valuation','Valuation','הערכת שווי'],['evidence','Evidence','ראיות'],['learn','Learn','למידה']] as const).map(([id,en,h])=><button key={id} aria-current={section===id?'page':undefined} onClick={()=>{setSection(id);setReviewing(false);}} className={`min-h-10 whitespace-nowrap rounded-lg px-4 text-sm font-medium transition-colors ${section===id?'bg-primary/15 text-primary':'text-muted-foreground hover:bg-muted/40'}`}>{tx(en,h)}</button>)}
+        {([['overview','Company story','סיפור החברה'],['statements','Statements','דוחות'],['valuation','Valuation','הערכת שווי'],['compare','vs Leader','מול המוביל'],['evidence','Evidence','ראיות'],['learn','Learn','למידה']] as const).map(([id,en,h])=><button key={id} aria-current={section===id?'page':undefined} onClick={()=>{setSection(id);setReviewing(false);}} className={`min-h-10 whitespace-nowrap rounded-lg px-4 text-sm font-medium transition-colors ${section===id?'bg-primary/15 text-primary':'text-muted-foreground hover:bg-muted/40'}`}>{tx(en,h)}</button>)}
       </nav>}
       {/* Body */}
       <div ref={bodyRef} className={`min-h-0 flex-1 overflow-y-auto ${wide ? "px-6 py-5" : "px-3 py-3"}`}>
@@ -614,6 +615,7 @@ export default function LensPanel({ symbol: symbolProp, onSymbolChange, onClose,
              </section>
            )}
            {section === 'statements' && <Suspense fallback={<p>{tx("Loading statements…","טעינת דוחות…")}</p>}><div className="space-y-5"><StatementsHero p={data} /><div id="st-flow" className="scroll-mt-4"><FinancialStatements key={data.symbol} p={data}/></div></div></Suspense>}
+           {section === 'compare' && <Suspense fallback={<p>{tx("Loading comparison…","טעינת ההשוואה…")}</p>}><CompareView key={data.symbol} p={data} /></Suspense>}
            {section === 'valuation' && <Suspense fallback={<p>{tx("Loading valuation…","טעינת תמחור…")}</p>}><ValuationView key={data.symbol} p={data} proven={proven.row} /></Suspense>}
            {section === 'overview' && <Suspense fallback={<p>{tx("Loading company story…","טעינת סיפור החברה…")}</p>}><CompanyOverview key={data.symbol} p={data} proven={proven.row} onExplore={setSection}/></Suspense>}
            {(section==='evidence'||section==='learn') && <>
