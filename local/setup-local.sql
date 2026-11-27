@@ -38,6 +38,20 @@ BEGIN
   RETURN '-infinity';
 END $$;
 
+-- Both scheduled pipelines share a lock and cooldown. Manual scans are unaffected.
+CREATE OR REPLACE FUNCTION public.local_background_ready()
+RETURNS boolean LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, extensions AS $$
+DECLARE until_at text;
+BEGIN
+  IF NOT pg_try_advisory_xact_lock(72111821) THEN RETURN false; END IF;
+  SELECT value INTO until_at FROM public.local_settings WHERE key = 'background_not_before';
+  IF until_at IS NOT NULL AND now() < until_at::timestamptz THEN RETURN false; END IF;
+  IF EXISTS (SELECT 1 FROM public.local_runs WHERE last_done > now() - interval '3 minutes') THEN RETURN false; END IF;
+  IF EXISTS (SELECT 1 FROM public.ai_jobs WHERE status = 'running' AND created_at > now() - interval '16 minutes') THEN RETURN false; END IF;
+  RETURN true;
+END $$;
+REVOKE ALL ON FUNCTION public.local_background_ready() FROM PUBLIC, anon, authenticated;
+
 -- One tick: fire the first job step that is due and hasn't run since its slot. Steps of the nightly
 -- run are spaced by the 5-minute tick, like the old fixed schedule (≈ 1 hour for the whole night).
 CREATE OR REPLACE FUNCTION public.local_tick()
@@ -69,8 +83,10 @@ DECLARE
   );
   s jsonb; last timestamptz;
 BEGIN
+  IF NOT public.local_background_ready() THEN RETURN 'startup quiet period or another job is busy'; END IF;
   IF NOT EXISTS (SELECT 1 FROM public.local_settings WHERE key = 'anon_key') THEN RETURN 'not configured'; END IF;
   FOR s IN SELECT * FROM jsonb_array_elements(steps) LOOP
+    IF s->>'fn' = 'ai-analyst' AND NOT EXISTS (SELECT 1 FROM public.local_settings WHERE key = 'background_ai' AND value = 'on') THEN CONTINUE; END IF;
     SELECT last_done INTO last FROM public.local_runs WHERE step = s->>'step';
     -- the yearly Damodaran load also runs whenever its tables are still empty (first start)
     IF s->>'step' = 'damodaran' AND last IS NOT NULL AND EXISTS (SELECT 1 FROM public.damodaran_loads) THEN CONTINUE; END IF;
@@ -113,6 +129,7 @@ BEGIN
   IF NOT EXISTS (SELECT 1 FROM cron.job WHERE jobname = 'superperf-refresh-every-20-min') THEN
     PERFORM cron.schedule('superperf-refresh-every-20-min', '*/20 22-23 * * 1-5', $j$SELECT public.local_call('superperf-refresh', '{"trigger":"cron"}'::jsonb)$j$);
   END IF;
+  PERFORM cron.alter_job(job_id := (SELECT jobid FROM cron.job WHERE jobname = 'superperf-refresh-every-20-min'), active := false);
   PERFORM cron.schedule('local-tick', '*/5 * * * *', 'SELECT public.local_tick()');
 END $$;
 
@@ -122,7 +139,7 @@ CREATE OR REPLACE FUNCTION public.local_cleanup() RETURNS void LANGUAGE sql SECU
 $$;
 SELECT cron.schedule('local-cleanup', '17 3 * * *', $$SELECT public.local_cleanup()$$);
 
--- Price history and Today's lists (every 2 minutes, one thing at a time):
+-- Price history and Today's lists (every 10 minutes, one small batch at a time):
 --   1. download missing daily prices (the first time: ~5 years per stock, in the background)
 --   2. once the last session is in for the market, build Today's lists
 --   3. then the AI writes one line per listed stock (English, then Hebrew)
@@ -132,6 +149,7 @@ DECLARE
   sess date := public.last_closed_session();
   busy timestamptz;
 BEGIN
+  IF NOT public.local_background_ready() THEN RETURN 'startup quiet period or another job is busy'; END IF;
   IF NOT EXISTS (SELECT 1 FROM public.local_settings WHERE key = 'anon_key') THEN RETURN 'not configured'; END IF;
   IF NOT EXISTS (SELECT 1 FROM public.qualified_rs_universe LIMIT 1) THEN RETURN 'waiting for the universe'; END IF;
   -- something started in the last 4 minutes is still running
@@ -151,6 +169,7 @@ BEGIN
     INSERT INTO public.local_runs(step, last_done) VALUES ('lists', now()) ON CONFLICT (step) DO UPDATE SET last_done = excluded.last_done;
     RETURN 'lists';
   END IF;
+  IF NOT EXISTS (SELECT 1 FROM public.local_settings WHERE key = 'background_ai' AND value = 'on') THEN RETURN 'automatic AI is off'; END IF;
   IF EXISTS (SELECT 1 FROM public.today_list WHERE day = sess AND rank <= 15 AND ai_line IS NULL)
      AND coalesce((SELECT last_done FROM public.local_runs WHERE step = 'lines-en'), '-infinity') < now() - interval '30 minutes' THEN
     PERFORM public.local_call('ai-analyst', '{"action":"lines","lang":"en"}'::jsonb);
@@ -166,7 +185,7 @@ BEGIN
   RETURN 'nothing due';
 END $$;
 REVOKE ALL ON FUNCTION public.local_lists_tick() FROM anon, authenticated, PUBLIC;
-SELECT cron.schedule('local-lists-tick', '*/2 * * * *', 'SELECT public.local_lists_tick()');
+SELECT cron.schedule('local-lists-tick', '2-59/10 * * * *', 'SELECT public.local_lists_tick()');
 
 -- PC-model jobs (see migration 20261118160000_ai_jobs): once a minute, hand every answered job back to the
 -- function that submitted it so it can store the result (the page also does this when it asks for the result).

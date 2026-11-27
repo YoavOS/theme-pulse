@@ -34,3 +34,4 @@ supabase/.temp/
 supabase/.branches/
 local/ai.env
 graphify-out/
+local/run/

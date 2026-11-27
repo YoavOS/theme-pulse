@@ -1,0 +1,13 @@
+const fs=require('fs'),ts=require('typescript'),assert=require('node:assert/strict');
+function compile(file,requireFn){const m={exports:{}};new Function('require','module','exports',ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{target:ts.ScriptTarget.ES2020,module:ts.ModuleKind.CommonJS}}).outputText)(requireFn,m,m.exports);return m.exports;}
+const helper=compile('supabase/functions/_shared/earningsCalendar.ts',()=>{});
+const date='2026-11-23',raw=Array.from({length:134},(_,i)=>({symbol:i===106?'SMTC':'T'+i,date,hour:'amc',epsEstimate:'1.149'}));
+let rows=helper.normalizeCalendar([...raw,{symbol:'SMTC',date,revenueEstimate:123},{symbol:'BRK.B',date},{symbol:'BAD',date:'2026-11-24'}],date);
+assert.equal(rows.length,135);assert.equal(rows.find(x=>x.symbol==='SMTC').revenueEstimate,123);assert.equal(rows.find(x=>x.symbol==='SMTC').epsEstimate,1.149);
+assert.equal(helper.filterCalendar(rows,null,1e9).length,135);assert.equal(helper.filterCalendar(rows,[],0).length,0);assert.equal(helper.filterCalendar(rows,['SMTC'],1e9).length,1);
+assert.equal(helper.filterCalendar([{symbol:'SMTC',marketCap:9e9},{symbol:'SMALL',marketCap:1e6},{symbol:'UNKNOWN',marketCap:null}],null,1e9).length,2);
+let handler,fail=false;
+global.Deno={env:{get:k=>({FINNHUB_API_KEY:'test',FMP_API_KEY:'test',SUPABASE_URL:'http://local',SUPABASE_SERVICE_ROLE_KEY:'test'})[k]}};
+global.fetch=async url=>fail?new Response('{}',{status:503}):new Response(JSON.stringify(String(url).includes('finnhub')?{earningsCalendar:raw}:[{symbol:'SMTC',date}]),{status:200});
+compile('supabase/functions/earnings-calendar/index.ts',id=>id.includes('earningsCalendar')?helper:id.includes('/http/server')?{serve:h=>{handler=h}}:{createClient:()=>({from:()=>({select:()=>({in:async()=>({data:[{symbol:'SMTC',company_name:'Semtech',market_cap:9827}],error:null})})})})});
+(async()=>{let r=await handler(new Request('http://local',{method:'POST',body:JSON.stringify({date,minMarketCap:1e9})}));let j=await r.json();assert.equal(r.status,200);assert.equal(j.rows.length,134);assert.equal(j.rows.find(x=>x.symbol==='SMTC').marketCap,9827e6);assert.equal(j.coverage.calendarTotal,134);r=await handler(new Request('http://local',{method:'POST',body:JSON.stringify({date,universe:[]})}));assert.equal((await r.json()).rows.length,0);fail=true;const original=console.error;console.error=()=>{};r=await handler(new Request('http://local',{method:'POST',body:JSON.stringify({date})}));console.error=original;assert.equal(r.status,500);console.log('PASS: all 134 reporters retained, SMTC beyond position 40, cached cap units, unknown caps, explicit empty scope, source merge, share-class symbols, date filter and provider-outage errors.');})().catch(e=>{console.error(e);process.exitCode=1});
