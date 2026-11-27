@@ -19,6 +19,7 @@ import { BUCKET_INFO, LEADER_PCT, MIN_COVERAGE, PILLARS, buildLeaderInputs, rank
 import { TIMEFRAMES, rankGroups, type GroupRank, type RsInput, type Timeframe } from "@/lib/industryRanking";
 import IndustryExportTab from "@/components/rs/IndustryExportTab";
 import GroupStageTag from "@/components/shared/GroupStageTag";
+import { chartClick } from "@/lib/chart";
 
 /**
  * Industry Leaders — the best businesses in each industry, ranked against their own peers.
@@ -291,7 +292,7 @@ export default function IndustryLeadersModal({ open, onOpenChange, stocks, isOtc
                       </td>
                       <td className="px-2 py-1.5">
                         <span className="inline-flex flex-wrap items-center gap-1.5">
-                          <a href={tv(L.symbol)} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} className="font-mono font-bold hover:text-primary">{L.symbol}</a>
+                          <a href={tv(L.symbol)} target="_blank" rel="noopener noreferrer" onClick={chartClick(L.symbol)} className="font-mono font-bold hover:text-primary">{L.symbol}</a>
                           <InsiderBuyBadge info={insiders.get(L.symbol)} /><ProvenBadge row={proven.get(L.symbol)} />
                           <BucketChip b={L.bucket} />
                         </span>
@@ -373,7 +374,7 @@ export default function IndustryLeadersModal({ open, onOpenChange, stocks, isOtc
                           <td className="px-2 py-1.5">
                             <span className="inline-flex items-center gap-1.5">
                               {r.rank === 1 && <Crown size={12} className="text-[hsl(40,90%,60%)]" />}
-                              <a href={tv(r.symbol)} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} className="font-mono font-bold hover:text-primary">{r.symbol}</a>
+                              <a href={tv(r.symbol)} target="_blank" rel="noopener noreferrer" onClick={chartClick(r.symbol)} className="font-mono font-bold hover:text-primary">{r.symbol}</a>
                               <InsiderBuyBadge info={insiders.get(r.symbol)} /><ProvenBadge row={proven.get(r.symbol)} />
                             </span>
                             <div className="max-w-[200px] truncate text-[11px] text-muted-foreground">{bySym.get(r.symbol)?.companyName}</div>

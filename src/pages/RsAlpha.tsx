@@ -48,6 +48,7 @@ import {
   passesONeil,
 } from "@/lib/growthFilters";
 import { moveBox, toneBox } from "@/lib/moveTint";
+import { ChartButton } from "@/components/chart/ChartHost";
 
 // Strongest-first: Rocket (High Growth) > Fire (Growth) > Diamond (O'Neil).
 function growthBadge(f: ReturnType<typeof useStockFundamentalsMap>["map"] extends Map<string, infer T> ? T | undefined : never): { emoji: string; label: string } | null {
@@ -1363,6 +1364,7 @@ export default function RsAlpha() {
                           <td className="px-3 py-2 font-mono font-semibold text-foreground">
                             <span className="inline-flex items-center gap-1.5">
                               {stock.symbol}
+                              <ChartButton symbol={stock.symbol} />
                               {badge && (
                                 <span title={badge.label} className="text-[13px] leading-none">
                                   {badge.emoji}

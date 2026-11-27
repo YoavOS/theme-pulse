@@ -14,21 +14,23 @@ export interface Step { label: string; question: string; target?: string }
 const toneColor = (k: Kpi) => k.tone === "neutral" ? undefined : k.tone === "warn" ? CHART.growth
   : /^[-−]/.test(k.value) ? CHART.negative : k.value === "—" ? undefined : CHART.positive;
 
-export function Hero({ eyebrow, title, meta, children, aside, steps }: {
+export function Hero({ eyebrow, title, meta, children, aside, steps, compact = false }: {
   eyebrow: string; title: string; meta?: ReactNode; children?: ReactNode;
   aside?: { title: string; subtitle?: string; items: Kpi[]; footer?: ReactNode };
   steps?: Step[];
+  /** smaller type and padding, key figures in one row — for pages whose tables should show above the fold */
+  compact?: boolean;
 }) {
   return (
     <section className="overflow-hidden rounded-2xl border border-primary/25 bg-gradient-to-br from-primary/10 via-card to-card">
-      <div className={`grid gap-6 p-5 lg:p-7 ${aside ? "lg:grid-cols-[minmax(0,1.7fr)_minmax(280px,1fr)]" : ""}`}>
+      <div className={`grid ${compact ? "gap-4 p-4 lg:px-5" : "gap-6 p-5 lg:p-7"} ${aside ? compact ? "lg:grid-cols-[minmax(0,1.3fr)_minmax(420px,1fr)]" : "lg:grid-cols-[minmax(0,1.7fr)_minmax(280px,1fr)]" : ""}`}>
         <div>
           <p className="text-xs font-semibold uppercase tracking-widest text-primary">{eyebrow}</p>
-          <h1 className="mt-3 max-w-4xl text-2xl font-semibold leading-tight lg:text-3xl">{title}</h1>
-          {meta && <p className="mt-3 text-sm text-muted-foreground">{meta}</p>}
-          {children && <div className="mt-5 space-y-3 text-[15px] leading-relaxed">{children}</div>}
+          <h1 className={`max-w-4xl font-semibold leading-tight ${compact ? "mt-2 text-lg lg:text-xl" : "mt-3 text-2xl lg:text-3xl"}`}>{title}</h1>
+          {meta && <p className={`${compact ? "mt-1.5 text-xs" : "mt-3 text-sm"} text-muted-foreground`}>{meta}</p>}
+          {children && <div className={compact ? "mt-2.5 space-y-1.5 text-[13px] leading-relaxed" : "mt-5 space-y-3 text-[15px] leading-relaxed"}>{children}</div>}
         </div>
-        {aside && <KpiPanel {...aside} />}
+        {aside && <KpiPanel {...aside} compact={compact} />}
       </div>
       {steps && steps.length > 0 && (
         <div className={`grid gap-px border-t border-border bg-border ${steps.length === 4 ? "md:grid-cols-4" : "md:grid-cols-3"}`}>
@@ -45,17 +47,17 @@ export function Hero({ eyebrow, title, meta, children, aside, steps }: {
   );
 }
 
-export function KpiPanel({ title, subtitle, items, footer }: { title: string; subtitle?: string; items: Kpi[]; footer?: ReactNode }) {
+export function KpiPanel({ title, subtitle, items, footer, compact = false }: { title: string; subtitle?: string; items: Kpi[]; footer?: ReactNode; compact?: boolean }) {
   return (
-    <aside className="rounded-xl border border-border bg-background/40 p-4">
-      <h2 className="font-semibold">{title}</h2>
-      {subtitle && <p className="mt-1 text-xs text-muted-foreground">{subtitle}</p>}
-      <div className="mt-4 grid grid-cols-2 gap-4">
+    <aside className={`rounded-xl border border-border bg-background/40 ${compact ? "self-start p-3" : "p-4"}`}>
+      {!compact && <h2 className="font-semibold">{title}</h2>}
+      {subtitle && !compact && <p className="mt-1 text-xs text-muted-foreground">{subtitle}</p>}
+      <div className={compact ? "grid grid-cols-2 gap-3 sm:grid-cols-4" : "mt-4 grid grid-cols-2 gap-4"}>
         {items.map((k) => (
           <div key={k.label}>
             <p className="text-xs text-muted-foreground"><AutoTerms text={k.label} /></p>
-            <p className="mt-1 font-mono text-xl" dir="ltr" style={{ color: toneColor(k) }}>{k.value}</p>
-            {k.caption && <p className="mt-1 text-xs text-muted-foreground">{k.caption}</p>}
+            <p className={`mt-1 font-mono ${compact ? "text-lg" : "text-xl"}`} dir="ltr" style={{ color: toneColor(k) }}>{k.value}</p>
+            {k.caption && <p className={`mt-1 ${compact ? "text-[10.5px]" : "text-xs"} text-muted-foreground`}>{k.caption}</p>}
           </div>
         ))}
       </div>

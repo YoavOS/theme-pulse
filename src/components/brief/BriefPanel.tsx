@@ -9,6 +9,7 @@ import {
 } from "@/hooks/useBrief";
 import type { Breadth } from "@/components/dashboard/IndexBreadthStrip";
 import { toneBox, type Tone } from "@/lib/moveTint";
+import { chartClick } from "@/lib/chart";
 
 /* ───────────── helpers ───────────── */
 
@@ -401,7 +402,7 @@ function EarningsBlock({ rows, loading, leading, groupOf }: { rows: EarningsRow[
               const lead = leading.has(r.symbol);
               const g = groupOf.get(r.symbol);
               return (
-                <a key={r.symbol} href={`https://www.tradingview.com/chart/?symbol=${encodeURIComponent(r.symbol)}`} target="_blank" rel="noopener noreferrer"
+                <a key={r.symbol} href={`https://www.tradingview.com/chart/?symbol=${encodeURIComponent(r.symbol)}`} target="_blank" rel="noopener noreferrer" onClick={chartClick(r.symbol)}
                   title={[r.company, g ? `Group: ${g.theme_name} ${pctTxt(g.performance_pct)}` : null, r.gapPct !== null ? `Gap ${pctTxt(r.gapPct)}` : null].filter(Boolean).join(" · ")}
                   className={`rounded border px-1.5 py-0.5 font-mono text-[11px] hover:bg-accent ${lead ? "border-[hsl(222,82%,63%)] text-gain-medium" : "border-border text-foreground/85"}`}>
                   {lead && "● "}{r.symbol}

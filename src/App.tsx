@@ -24,6 +24,7 @@ import AppErrorBoundary from "@/components/AppErrorBoundary";
 import { scheduleStorageCleanup } from "@/lib/storageHygiene";
 import { autoRunClassificationOncePerDay } from "@/lib/classification";
 import SleepOverlay from "@/components/SleepOverlay";
+import { ChartHost } from "@/components/chart/ChartHost";
 import { useTodayListNotifier } from "@/hooks/useTodayListNotifier";
 
 const queryClient = new QueryClient();
@@ -52,6 +53,7 @@ const App = () => (
         <ClassificationAutoRunner />
         <SleepOverlay />
         <BrowserRouter>
+          <ChartHost />
           <AppErrorBoundary>
           <Suspense fallback={<PageLoading />}>
           <Routes>
