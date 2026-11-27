@@ -43,11 +43,31 @@ function writeStore(s: Store) {
   try { localStorage.setItem(LS_KEY, JSON.stringify(s)); } catch { /* quota — ignore */ }
 }
 
+interface DbRow { symbol: string; high52w: number | null; low52w: number | null; latest_close: number | null; last_high_d: string | null; last_low_d: string | null; fresh: boolean | null }
+
+/** Unix seconds of 9:30 New York on a session date — the same reference the backend uses for "days ago". */
+function sessionTs(d: string | null | undefined): number | null {
+  if (!d) return null;
+  const [y, m, day] = d.split("-").map(Number);
+  const nyNoon = Number(new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", hour: "numeric", hourCycle: "h23" }).format(new Date(Date.UTC(y, m - 1, day, 12))));
+  const offset = 12 - nyNoon; // 4 in summer, 5 in winter
+  return Date.UTC(y, m - 1, day, 9 + offset, 30) / 1000;
+}
+
+/** Regular US session in progress (holidays not known). */
+function nyMarketOpen(now = new Date()): boolean {
+  const p = Object.fromEntries(new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", weekday: "short", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).formatToParts(now).map((x) => [x.type, x.value]));
+  if (p.weekday === "Sat" || p.weekday === "Sun") return false;
+  const mins = +p.hour * 60 + +p.minute;
+  return mins >= 570 && mins < 960;
+}
+
 /**
  * Fetches 52-week high info for a list of symbols with heavy caching.
  * - Reads localStorage first (4h per symbol; 20 min for rows built from stale history).
- * - Only fetches missing/expired symbols via the `fifty-two-week-highs` edge function,
- *   which refreshes any cached history older than the latest market close.
+ * - Missing/expired symbols come from the PC's daily price table (`fifty_two_week_stats`); the
+ *   `fifty-two-week-highs` backend function (Yahoo) is asked only for stocks not in that table or behind,
+ *   and during the session for stocks near a high or low.
  */
 export function useFiftyTwoWeekHighs(symbols: string[], enabled = true) {
   const [map, setMap] = useState<Map<string, FiftyTwoWeekHigh>>(new Map());
@@ -77,28 +97,58 @@ export function useFiftyTwoWeekHighs(symbols: string[], enabled = true) {
 
     need.forEach(s => inflight.current.add(s));
     setLoading(true);
+    const store2 = readStore();
+    const put = (sym: string, e: StoredEntry) => { fresh.set(sym, fromStore(e)); store2[sym] = e; };
     try {
-      const CHUNK = 400;
-      for (let i = 0; i < need.length; i += CHUNK) {
-        const slice = need.slice(i, i + CHUNK);
-        const { data, error } = await supabase.functions.invoke("fifty-two-week-highs", { body: { symbols: slice } });
-        if (error) throw new Error(error.message);
+      // 1) Final daily bars from the PC's own price table — one quick database call per 500 symbols.
+      const fromDb = new Map<string, { hi: number | null; lo: number | null; close: number | null; fresh: boolean }>();
+      for (let i = 0; i < need.length; i += 500) {
+        const { data, error } = await supabase.rpc("fifty_two_week_stats" as never, { syms: need.slice(i, i + 500) } as never);
+        if (error) break; // older database without the function: everything goes to the fallback below
+        const at = Date.now();
+        for (const r of (data ?? []) as DbRow[]) {
+          const sym = String(r.symbol).toUpperCase();
+          const hi = r.high52w ?? null, close = r.latest_close ?? null;
+          put(sym, {
+            high52w: hi, latestClose: close, lastHighDaysAgo: null, lastLowDaysAgo: null,
+            pctBelowHigh: hi && close ? Math.round((close / hi - 1) * 10000) / 100 : null,
+            highTs: sessionTs(r.last_high_d), lowTs: sessionTs(r.last_low_d), at, weak: !r.fresh,
+          });
+          fromDb.set(sym, { hi, lo: r.low52w ?? null, close, fresh: !!r.fresh });
+        }
+      }
+      setMap(new Map(fresh));
+
+      // 2) Yahoo, through the backend function, only where it adds something: stocks missing or behind
+      //    in the price table, and — while the market is open — stocks within 5% of a high or low, so
+      //    "Today" catches highs made during the session. Small batches; a failed batch doesn't stop the rest.
+      const open = nyMarketOpen();
+      const viaYahoo = need.filter((s) => {
+        const d = fromDb.get(s);
+        if (!d || !d.fresh) return true;
+        if (!open || !d.close) return false;
+        return (d.hi != null && d.close >= d.hi * 0.95) || (d.lo != null && d.close <= d.lo * 1.05);
+      });
+      let failed = 0;
+      for (let i = 0; i < viaYahoo.length; i += 100) {
+        const slice = viaYahoo.slice(i, i + 100);
+        const { data, error } = await supabase.functions.invoke("fifty-two-week-highs", { body: { symbols: slice } }).catch((e) => ({ data: null, error: e }));
+        if (error) { failed += slice.length; continue; }
         const rows = (data as { rows?: Array<{ symbol: string; lastHighTs?: number | null; lastLowTs?: number | null; stale?: boolean; error?: string } & FiftyTwoWeekHigh> })?.rows ?? [];
-        const nowInner = Date.now();
-        const store2 = readStore();
+        const at = Date.now();
         for (const r of rows) {
-          const entry: StoredEntry = {
+          if (r.high52w === null && fromDb.has(r.symbol)) continue; // keep the database row
+          put(r.symbol, {
             high52w: r.high52w, latestClose: r.latestClose, lastHighDaysAgo: r.lastHighDaysAgo, pctBelowHigh: r.pctBelowHigh, lastLowDaysAgo: r.lastLowDaysAgo ?? null,
-            highTs: r.lastHighTs ?? null, lowTs: r.lastLowTs ?? null, at: nowInner,
+            highTs: r.lastHighTs ?? null, lowTs: r.lastLowTs ?? null, at,
             // Re-check soon when the server had to use an old history or had nothing.
             weak: !!r.stale || r.high52w === null,
-          };
-          fresh.set(r.symbol, fromStore(entry));
-          store2[r.symbol] = entry;
+          });
         }
-        writeStore(store2);
         setMap(new Map(fresh));
       }
+      if (failed) console.warn(`[52w] ${failed} symbols could not be refreshed from Yahoo; using the last daily close for them`);
+      writeStore(store2);
     } catch {
       // fail soft
     } finally {

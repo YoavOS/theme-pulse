@@ -323,8 +323,7 @@ export function useRsAlpha() {
     const PER_BATCH_TIMEOUT_MS = 120_000; // 2 min per batch
 
     const callBatch = async (offset: number) => {
-      const { data: sessionData } = await supabase.auth.getSession();
-      const accessToken = sessionData?.session?.access_token ?? ANON_KEY;
+      const accessToken = ANON_KEY; // personal app: no sign-in
       const ctrl = new AbortController();
       const timer = setTimeout(() => ctrl.abort(), PER_BATCH_TIMEOUT_MS);
       try {
