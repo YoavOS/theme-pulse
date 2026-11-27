@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { BarChart3, Briefcase, ExternalLink, GraduationCap, Loader2 } from "lucide-react";
+import { BarChart3, Briefcase, ExternalLink, GraduationCap, Loader2, Trophy } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { supabase } from "@/integrations/supabase/client";
 import { nextEarnings, type Bars, type Context, type EarnRow, type Quote } from "@/lib/portfolio/engine";
@@ -87,6 +87,7 @@ export function ChartHost() {
                   <span className="ms-auto flex gap-2">
                     <a href={`https://www.tradingview.com/chart/?symbol=${encodeURIComponent(symbol)}`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 hover:text-primary"><ExternalLink size={12} />TradingView</a>
                     <Link to={`/lens?symbol=${symbol}`} onClick={() => setSymbol(null)} className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 hover:text-primary"><GraduationCap size={12} />Fundamentals</Link>
+                    <Link to={`/minervini?symbol=${symbol}`} onClick={() => setSymbol(null)} className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 hover:text-primary"><Trophy size={12} />Minervini</Link>
                     <Link to={`/portfolio?add=${symbol}`} onClick={() => setSymbol(null)} className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 hover:text-primary"><Briefcase size={12} />Add to portfolio</Link>
                   </span>
                 </div>

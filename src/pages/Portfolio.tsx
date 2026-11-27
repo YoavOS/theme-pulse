@@ -93,12 +93,12 @@ export default function Portfolio() {
                 </>}
             </Hero>
 
-            <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_340px]">
+            <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_300px] 2xl:grid-cols-[minmax(0,1fr)_340px]">
               <div className="min-w-0 space-y-5">
                 {s.positions > 0 && (
                   <>
                     <div>
-                      <SectionHead id="pf-holdings" title="Positions" subtitle="Click a row for the chart, earnings history, your buys and news; ⋯ to close or delete." />
+                      <SectionHead id="pf-holdings" title="Positions" subtitle="Click a row for the chart, earnings history, your buys and news; ⋯ to close or delete." action={<span className="text-xs text-muted-foreground">{s.positions} open · {usd(s.marketValue)}</span>} />
                       <div className="mt-3"><HoldingsTable p={p} onOpen={setOpen} onClose={setClosingAll} onDelete={setDeletingAll} /></div>
                     </div>
                     <AttentionPanel alerts={p.alerts} onOpen={setOpen} />
