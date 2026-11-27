@@ -16,6 +16,7 @@ const StageAnalysis = lazyPage(() => import("./pages/StageAnalysis"));
 const BaseScanner = lazyPage(() => import("./pages/BaseScanner"));
 const FundamentalsLens = lazyPage(() => import("./pages/FundamentalsLens"));
 const AiAnalyst = lazyPage(() => import("./pages/AiAnalyst"));
+const Portfolio = lazyPage(() => import("./pages/Portfolio"));
 const NotFound = lazyPage(() => import("./pages/NotFound"));
 import { Suspense, useEffect } from "react";
 import { lazyPage } from "@/lib/lazyPage";
@@ -70,6 +71,7 @@ const App = () => (
             <Route path="/stages" element={<StageAnalysis />} />
             <Route path="/bases" element={<BaseScanner />} />
             <Route path="/ai" element={<AiAnalyst />} />
+            <Route path="/portfolio" element={<Portfolio />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
           </Suspense>

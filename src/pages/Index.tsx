@@ -7,7 +7,7 @@ import ValidateTickersDialog from "@/components/ValidateTickersDialog";
 import {
   RefreshCw, Download, Wifi, WifiOff, Loader2, Settings, ScanLine, X,
   ShieldCheck, ChevronDown, LayoutDashboard, AlertTriangle,
-  Zap, Activity, DollarSign, Sun, Trophy,
+  Zap, Activity, DollarSign, Sun, Trophy, Briefcase,
   Share2, Flag, Layers, Boxes, GraduationCap,
   Bot,
 } from "lucide-react";
@@ -380,6 +380,7 @@ export default function Index() {
 
   const dashboardTabs = [
     { to: "/", label: "Dashboard", icon: <LayoutDashboard size={14} />, active: true, color: "" },
+    { to: "/portfolio", label: "Portfolio", icon: <Briefcase size={14} />, active: false, color: "text-[hsl(160,70%,50%)]" },
     { to: "/market-flag", label: "Market Flag", icon: <Flag size={14} />, active: false, color: "text-[hsl(222,82%,66%)]" },
     { to: "/rs-alpha", label: "RS Alpha", icon: <Zap size={14} />, active: false, color: "text-[hsl(280,70%,60%)]" },
     { to: "/stages", label: "Stages", icon: <Layers size={14} />, active: false, color: "text-[hsl(222,82%,64%)]" },
