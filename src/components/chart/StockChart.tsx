@@ -1,4 +1,5 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Minus, Plus, RotateCcw } from "lucide-react";
 import { emaSeries, smaSeries, type Bars } from "@/lib/portfolio/engine";
 import { CHART } from "@/components/lens/QuarterlyChart";
 
@@ -27,13 +28,41 @@ export function StockChart({ bars, levels = [], markers = [], height = 360, rang
   const setRange = onRange ?? setRangeState;
   const [hover, setHover] = useState<number | null>(null);
   const all = useMemo(() => ({ e9: emaSeries(bars.c, 9), e21: emaSeries(bars.c, 21), s200: smaSeries(bars.c, 200) }), [bars]);
+  // zoom/pan window: `count` bars ending at bar `end` (exclusive). Range buttons reset it.
+  const N = bars.c.length;
+  const [view, setView] = useState(() => ({ end: N, count: Math.min(N, RANGE_BARS[range]) }));
+  useEffect(() => { setView({ end: N, count: Math.min(N, RANGE_BARS[range]) }); }, [range, N]);
+  const clampView = (end: number, count: number) => {
+    const c = Math.max(15, Math.min(N, Math.round(count)));
+    return { count: c, end: Math.max(c, Math.min(N, Math.round(end))) };
+  };
+  const zoom = (factor: number, anchor = 1) => setView((v) => {
+    // anchor: 0 = left edge stays, 1 = right edge stays
+    const c = Math.max(15, Math.min(N, Math.round(v.count * factor)));
+    const left = v.end - v.count + (v.count - c) * anchor;
+    return clampView(left + c, c);
+  });
+  const svgRef = useRef<SVGSVGElement>(null);
+  const drag = useRef<{ x: number; end: number } | null>(null);
   const data = useMemo(() => {
-    const start = Math.max(0, bars.c.length - RANGE_BARS[range]);
-    return Array.from({ length: bars.c.length - start }, (_, k) => {
+    const start = Math.max(0, view.end - view.count);
+    return Array.from({ length: view.end - start }, (_, k) => {
       const i = start + k;
       return { d: bars.d[i], o: bars.o[i], h: bars.h[i], l: bars.l[i], c: bars.c[i], v: bars.v[i], prev: i > 0 ? bars.c[i - 1] : null, e9: all.e9[i], e21: all.e21[i], s200: all.s200[i] };
     });
-  }, [bars, range, all]);
+  }, [bars, view, all]);
+  useEffect(() => {
+    const el = svgRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const r = el.getBoundingClientRect();
+      const frac = Math.max(0, Math.min(1, (e.clientX - r.left) / Math.max(1, r.width * 0.93)));
+      zoom(e.deltaY > 0 ? 1.15 : 1 / 1.15, frac);
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }); // eslint-disable-line react-hooks/exhaustive-deps
   if (!data.length) return <p className="py-10 text-center text-sm text-muted-foreground">No daily prices.</p>;
 
   const W = 900, H = height, padL = 6, padR = 64, padT = 8, volH = Math.round(H * 0.16), padB = 18;
@@ -61,7 +90,8 @@ export function StockChart({ bars, levels = [], markers = [], height = 360, rang
   const ticks = monthly.length > 9 ? monthly.filter((_, k) => k % 2 === 0) : monthly;
   const yTicks = (() => { const n = 5, raw = (hi - lo) / n, mag = 10 ** Math.floor(Math.log10(raw)), s = [1, 2, 2.5, 5, 10].map((m) => m * mag).find((m) => m >= raw) ?? raw; const out: number[] = []; for (let v = Math.ceil(lo / s) * s; v <= hi; v += s) out.push(v); return out; })();
   const fmt = (v: number) => v >= 1000 ? v.toFixed(0) : v >= 100 ? v.toFixed(1) : v.toFixed(2);
-  const hi_ = hover ?? data.length - 1, hb = data[hi_];
+  const hov = hover != null && hover < data.length ? hover : null;
+  const hi_ = hov ?? data.length - 1, hb = data[hi_];
   const chg = hb.prev ? (hb.c / hb.prev - 1) * 100 : null;
   const tag = (v: number, color: string, text: string, key: string, dash?: string, line = true) => v < lo || v > hi ? null : (
     <g key={key}>
@@ -79,15 +109,30 @@ export function StockChart({ bars, levels = [], markers = [], height = 360, rang
           {chg != null && <span className="ms-1.5" style={{ color: chg >= 0 ? CHART.positive : CHART.negative }}>{chg >= 0 ? "+" : ""}{chg.toFixed(2)}%</span>}</span>
         <span className="font-mono text-muted-foreground">Vol {Intl.NumberFormat("en-US", { notation: "compact" }).format(hb.v)}</span>
         {MA.map((m) => <span key={m.key} className="font-mono" style={{ color: m.color }}>{m.label} {hb[m.key] != null ? fmt(hb[m.key] as number) : "—"}</span>)}
-        <div className="ms-auto flex overflow-hidden rounded-md border border-border" role="group" aria-label="Range">
+        <div className="ms-auto flex items-center gap-1" role="group" aria-label="Zoom">
+          <button type="button" onClick={() => zoom(1 / 1.4)} disabled={view.count <= 15} title="Zoom in (or scroll on the chart)" className="rounded border border-border p-0.5 text-muted-foreground hover:text-foreground disabled:opacity-30"><Plus size={13} /></button>
+          <button type="button" onClick={() => zoom(1.4)} disabled={view.count >= N} title="Zoom out" className="rounded border border-border p-0.5 text-muted-foreground hover:text-foreground disabled:opacity-30"><Minus size={13} /></button>
+          <button type="button" onClick={() => setView({ end: N, count: Math.min(N, RANGE_BARS[range]) })} title="Reset (or double-click the chart)" className="rounded border border-border p-0.5 text-muted-foreground hover:text-foreground"><RotateCcw size={12} /></button>
+          <span className="ms-1 font-mono text-[10.5px] text-muted-foreground">{view.count}d</span>
+        </div>
+        <div className="flex overflow-hidden rounded-md border border-border" role="group" aria-label="Range">
           {(Object.keys(RANGE_BARS) as Range[]).map((r) => (
             <button key={r} onClick={() => setRange(r)} aria-pressed={range === r} disabled={bars.c.length < RANGE_BARS[r] * 0.6 && r !== "3M"}
               className={`px-2 py-0.5 font-mono text-[11px] disabled:opacity-30 ${range === r ? "bg-primary/20 font-semibold text-primary" : "text-muted-foreground hover:text-foreground"}`}>{r}</button>
           ))}
         </div>
       </div>
-      <div className="relative" onPointerLeave={() => setHover(null)}>
-        <svg viewBox={`0 0 ${W} ${H}`} className="w-full" role="img" aria-label="Daily candles with 9 EMA, 21 EMA and 200 SMA">
+      <div className="relative" onPointerLeave={() => { setHover(null); drag.current = null; }}>
+        <svg ref={svgRef} viewBox={`0 0 ${W} ${H}`} className={`w-full touch-none ${drag.current ? "cursor-grabbing" : "cursor-crosshair"}`} role="img" aria-label="Daily candles with 9 EMA, 21 EMA and 200 SMA — scroll to zoom, drag to move"
+          onPointerDown={(e) => { drag.current = { x: e.clientX, end: view.end }; (e.target as Element).setPointerCapture?.(e.pointerId); }}
+          onPointerMove={(e) => {
+            if (!drag.current || !svgRef.current) return;
+            const px = svgRef.current.getBoundingClientRect().width * ((W - padL - padR) / W) / view.count;
+            const moved = Math.round((e.clientX - drag.current.x) / Math.max(0.5, px));
+            if (moved) setView((v) => clampView(drag.current!.end - moved, v.count));
+          }}
+          onPointerUp={() => { drag.current = null; }}
+          onDoubleClick={() => setView({ end: N, count: Math.min(N, RANGE_BARS[range]) })}>
           {yTicks.map((v) => <g key={v}><line x1={padL} x2={W - padR} y1={y(v)} y2={y(v)} stroke="hsl(var(--border))" strokeWidth={0.5} opacity={0.6} />
             <text x={W - padR + 5} y={y(v) + 3} fontSize={9.5} fill="hsl(var(--muted-foreground))" className="font-mono">{fmt(v)}</text></g>)}
           {ticks.map((t) => <text key={t.m} x={x(t.i) - step / 2 + 2} y={H - 4} fontSize={9.5} fill="hsl(var(--muted-foreground))">{new Date(`${t.m}-15T12:00:00Z`).toLocaleDateString("en-US", { month: "short", ...(t.m.endsWith("-01") ? { year: "2-digit" } : {}), timeZone: "UTC" })}</text>)}
@@ -109,15 +154,15 @@ export function StockChart({ bars, levels = [], markers = [], height = 360, rang
             const up = m.kind === "buy";
             return <path key={`m${k}`} d={up ? `M${x(i)},${y(data[i].l) + 5} l-5,9 h10 z` : `M${x(i)},${y(data[i].h) - 5} l-5,-9 h10 z`} fill={up ? "hsl(var(--primary))" : CHART.negative}><title>{m.title ?? m.kind}</title></path>;
           })}
-          {hover != null && <>
-            <line x1={x(hover)} x2={x(hover)} y1={padT} y2={H - padB} stroke="hsl(var(--muted-foreground))" strokeWidth={0.6} strokeDasharray="3 3" />
+          {hov != null && <>
+            <line x1={x(hov)} x2={x(hov)} y1={padT} y2={H - padB} stroke="hsl(var(--muted-foreground))" strokeWidth={0.6} strokeDasharray="3 3" />
             {tag(hb.c, "hsl(var(--foreground))", fmt(hb.c), "hc", "3 3")}
           </>}
-          {hover == null && tag(data[data.length - 1].c, data[data.length - 1].c >= (data[data.length - 1].prev ?? 0) ? CHART.positive : CHART.negative, fmt(data[data.length - 1].c), "last", undefined, false)}
+          {hov == null && tag(data[data.length - 1].c, data[data.length - 1].c >= (data[data.length - 1].prev ?? 0) ? CHART.positive : CHART.negative, fmt(data[data.length - 1].c), "last", undefined, false)}
           {data.map((b, i) => <rect key={`h${b.d}`} x={x(i) - step / 2} y={padT} width={step} height={H - padT - padB} fill="transparent" onPointerEnter={() => setHover(i)} onPointerMove={() => hover !== i && setHover(i)} />)}
         </svg>
       </div>
-      {note && <p className="mt-1 text-[11px] text-muted-foreground">{note}</p>}
+      <p className="mt-1 text-[10.5px] text-muted-foreground">Scroll on the chart to zoom · drag to move back in time · double-click to reset.{note ? ` ${note}` : ""}</p>
     </div>
   );
 }

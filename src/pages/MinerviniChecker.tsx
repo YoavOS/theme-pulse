@@ -1,5 +1,5 @@
-import { Fragment, useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 import { BottomLine, HowItWorks, SectionHead } from "@/components/Explainer";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useStockStages } from "@/hooks/useStockStages";
@@ -359,6 +359,17 @@ export default function MinerviniChecker() {
       setLoading(false);
     }
   };
+  // /minervini?symbol=NVDA (from the chart pop-up or Portfolio) analyses that stock straight away
+  const [params, setParams] = useSearchParams();
+  const opened = useRef<string | null>(null);
+  useEffect(() => {
+    const s = params.get("symbol")?.toUpperCase();
+    if (!s || opened.current === s) return;
+    opened.current = s;
+    void runAnalysis(false, s);
+    setParams({}, { replace: true });
+  }, [params]); // eslint-disable-line react-hooks/exhaustive-deps
+
 
 
   const header = multi ? Object.values(multi.reports)[0] : null;

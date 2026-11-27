@@ -1,6 +1,6 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
-import { ArrowDown, ArrowUp, BarChart3, CheckCircle2, ExternalLink, GraduationCap, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, BarChart3, CheckCircle2, ExternalLink, GraduationCap, MoreHorizontal, Pencil, Trash2, Trophy } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { openChart } from "@/lib/chart";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
@@ -52,7 +52,7 @@ export function EarningsBadge({ plan, warn }: { plan: EarningsPlan | null | unde
   const urgent = plan.sessionsLeft <= 2, soon = plan.sessionsLeft <= warn;
   return (
     <div className="leading-tight" title={`Reports ${dayLabel(plan.date)}, ${bellText(plan.bell)}. Last full session before the report: ${dayLabel(plan.lastSession)}.`}>
-      <p className={`font-mono text-[12px] ${urgent ? "text-rose-300" : soon ? "text-amber-200" : ""}`}>{plan.date.slice(5)} <span className="text-[10px] text-muted-foreground">{bellShort(plan.bell)}</span></p>
+      <p className={`font-mono text-[13px] ${urgent ? "text-rose-300" : soon ? "text-amber-200" : ""}`}>{plan.date.slice(5)} <span className="text-[10px] text-muted-foreground">{bellShort(plan.bell)}</span></p>
       <p className={`whitespace-nowrap text-[10px] ${urgent ? "text-rose-300" : soon ? "text-amber-200" : "text-muted-foreground"}`}>{plan.sessionsLeft <= 0 ? "in the price" : `${plan.sessionsLeft} session${plan.sessionsLeft === 1 ? "" : "s"} left`}</p>
     </div>
   );
@@ -104,15 +104,15 @@ export function HoldingsTable({ p, onOpen, onClose, onDelete }: { p: PortfolioDa
     return [...p.holdings].sort((a, b) => { const x = val(a), y = val(b); const r = typeof x === "string" ? x.localeCompare(y as string) : (x as number) - (y as number); return sort.asc ? r : -r; });
   }, [p.holdings, p.tech, p.ctx, p.plans, sort]);
   const H = ({ k, children, className = "" }: { k?: SortKey; children?: ReactNode; className?: string }) => (
-    <th className={`whitespace-nowrap px-1.5 py-2 font-medium ${className}`}>
-      {k ? <button onClick={() => setSort((s) => ({ k, asc: s.k === k ? !s.asc : k === "earn" || k === "symbol" }))} className="inline-flex items-center gap-0.5 hover:text-foreground">
+    <th className={`whitespace-nowrap px-2 py-2.5 font-medium ${className}`}>
+      {k ? <button onClick={() => setSort((s) => ({ k, asc: s.k === k ? !s.asc : k === "earn" || k === "symbol" }))} className="inline-flex items-center gap-0.5 uppercase tracking-wide hover:text-foreground">
         {children}{sort.k === k && (sort.asc ? <ArrowUp size={10} /> : <ArrowDown size={10} />)}</button> : children}
     </th>
   );
   return (
     <div className="overflow-x-auto rounded-2xl border border-border bg-card/40">
-      <table className="w-full min-w-[900px] text-[12px]">
-        <thead className="border-b border-border text-[11px] text-muted-foreground">
+      <table className="w-full min-w-[960px] text-[13.5px]">
+        <thead className="border-b border-border bg-muted/20 text-[11.5px] uppercase tracking-wide text-muted-foreground">
           <tr className="text-end">
             <H k="symbol" className="text-start">Symbol</H>
             <H>Invested</H><H>Last</H><H k="dayPct">Today</H><H k="weight">Weight</H>
@@ -127,29 +127,31 @@ export function HoldingsTable({ p, onOpen, onClose, onDelete }: { p: PortfolioDa
             const group = c?.themes?.[0] ?? c?.industry ?? c?.sector ?? "";
             return (
               <tr key={h.symbol} onClick={() => onOpen(h.symbol)} className="cursor-pointer whitespace-nowrap border-b border-border/60 text-end transition-colors last:border-0 hover:bg-muted/30">
-                <td className="px-1.5 py-1.5 text-start">
-                  <div className="flex items-center gap-1"><span className="font-mono text-sm font-semibold">{h.symbol}</span>{h.lots.length > 1 && <span className="text-[10px] text-muted-foreground">×{h.lots.length}</span>}</div>
-                  <p className="max-w-[170px] truncate text-[10.5px] text-muted-foreground" title={[c?.company, c?.themes?.join(", "), c?.industry].filter(Boolean).join(" · ")}>{group || c?.company || ""}</p>
+                <td className="px-2 py-3 text-start">
+                  <div className="flex items-center gap-1"><span className="font-mono text-base font-semibold">{h.symbol}</span>{h.lots.length > 1 && <span className="text-[11px] text-muted-foreground">×{h.lots.length}</span>}</div>
+                  <p className="max-w-[190px] truncate text-[11.5px] text-muted-foreground" title={[c?.company, c?.themes?.join(", "), c?.industry].filter(Boolean).join(" · ")}>{group || c?.company || ""}</p>
                 </td>
-                <td className="px-1.5 py-1.5 font-mono">{usd(h.cost)}<p className="text-[10px] text-muted-foreground">@ {px(h.avgCost)}</p></td>
-                <td className="px-1.5 py-1.5 font-mono">{px(h.price)}{!h.priceIsLive && <span className="ms-0.5 text-[9px] text-muted-foreground" title="Last daily close (no live quote)">c</span>}</td>
-                <td className="px-1.5 py-1.5 font-mono" style={{ color: tone(h.dayPct) }}>{pctS(h.dayPct, 2)}<p className="text-[10px]">{usdSigned(h.dayPnl)}</p></td>
-                <td className="px-1.5 py-1.5"><div className="flex items-center justify-end gap-1.5"><div className="h-1.5 w-10 overflow-hidden rounded bg-muted"><div className="h-full bg-primary/70" style={{ width: `${Math.min(100, h.weight ?? 0)}%` }} /></div><span className="w-10 font-mono">{h.weight != null ? `${h.weight.toFixed(1)}%` : "—"}</span></div></td>
-                <td className="px-1.5 py-1.5 font-mono" style={{ color: tone(h.openPnl) }}>{usdSigned(h.openPnl)}<p className="text-[10px]">{pctS(h.openPct)}</p></td>
-                <td className="px-1.5 py-1.5 font-mono" style={{ color: tone(h.rMultiple) }}>{h.rMultiple != null ? `${h.rMultiple >= 0 ? "+" : "−"}${Math.abs(h.rMultiple).toFixed(1)}R` : "—"}</td>
-                <td className="px-1.5 py-1.5 font-mono">{h.stop != null ? <>{px(h.stop)}<p className="text-[10px] text-muted-foreground">{pctS(h.stopDistPct)}</p></> : <span className="text-muted-foreground">—</span>}</td>
-                <td className="px-1.5 py-1.5 text-center font-mono" style={{ color: c?.rs_rating == null ? undefined : c.rs_rating >= 80 ? CHART.positive : c.rs_rating < 40 ? CHART.negative : undefined }}>
+                <td className="px-2 py-3 font-mono">{usd(h.cost)}<p className="text-[11px] text-muted-foreground">@ {px(h.avgCost)}</p></td>
+                <td className="px-2 py-3 font-mono">{px(h.price)}{!h.priceIsLive && <span className="ms-0.5 text-[9px] text-muted-foreground" title="Last daily close (no live quote)">c</span>}</td>
+                <td className="px-2 py-3 font-mono" style={{ color: tone(h.dayPct) }}>{pctS(h.dayPct, 2)}<p className="text-[11px]">{usdSigned(h.dayPnl)}</p></td>
+                <td className="px-2 py-3"><div className="flex items-center justify-end gap-1.5"><div className="h-2 w-12 overflow-hidden rounded bg-muted"><div className="h-full bg-primary/70" style={{ width: `${Math.min(100, h.weight ?? 0)}%` }} /></div><span className="w-10 font-mono">{h.weight != null ? `${h.weight.toFixed(1)}%` : "—"}</span></div></td>
+                <td className="px-2 py-3 font-mono" style={{ color: tone(h.openPnl) }}>{usdSigned(h.openPnl)}<p className="text-[11px]">{pctS(h.openPct)}</p></td>
+                <td className="px-2 py-3 font-mono" style={{ color: tone(h.rMultiple) }}>{h.rMultiple != null ? `${h.rMultiple >= 0 ? "+" : "−"}${Math.abs(h.rMultiple).toFixed(1)}R` : "—"}</td>
+                <td className="px-2 py-3 font-mono">{h.stop != null ? <>{px(h.stop)}<p className="text-[11px] text-muted-foreground">{pctS(h.stopDistPct)}</p></> : <span className="text-muted-foreground">—</span>}</td>
+                <td className="px-2 py-3 text-center font-mono" style={{ color: c?.rs_rating == null ? undefined : c.rs_rating >= 80 ? CHART.positive : c.rs_rating < 40 ? CHART.negative : undefined }}>
                   {c?.rs_rating ?? "—"}{t?.rs?.newHigh && <span className="ms-0.5" title="RS line at a new 52-week high" style={{ color: "hsl(222,82%,66%)" }}>●</span>}</td>
-                <td className="px-1.5 py-1.5 text-center"><StageTag c={c} /></td>
-                <td className="px-1.5 py-1.5 font-mono" style={{ color: tone(t?.vsEma21) }}>{pctS(t?.vsEma21)}</td>
-                <td className="px-1.5 py-1.5 font-mono" style={{ color: tone(t?.vsSma50) }}>{pctS(t?.vsSma50)}{t?.atrAbove50 != null && <p className="text-[10px] text-muted-foreground">{t.atrAbove50.toFixed(1)} ATR</p>}</td>
-                <td className="px-1.5 py-1.5 text-start"><EarningsBadge plan={p.plans[h.symbol]} warn={p.settings.warnSessions} /></td>
+                <td className="px-2 py-3 text-center"><StageTag c={c} /></td>
+                <td className="px-2 py-3 font-mono" style={{ color: tone(t?.vsEma21) }}>{pctS(t?.vsEma21)}</td>
+                <td className="px-2 py-3 font-mono" style={{ color: tone(t?.vsSma50) }}>{pctS(t?.vsSma50)}{t?.atrAbove50 != null && <p className="text-[11px] text-muted-foreground">{t.atrAbove50.toFixed(1)} ATR</p>}</td>
+                <td className="px-2 py-3 text-start"><EarningsBadge plan={p.plans[h.symbol]} warn={p.settings.warnSessions} /></td>
                 <td className="px-1 py-1.5" onClick={(e) => e.stopPropagation()}>
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild><button className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground" aria-label={`${h.symbol} actions`}><MoreHorizontal size={14} /></button></DropdownMenuTrigger>
                     <DropdownMenuContent align="end" className="w-48 text-[12.5px]">
                       <DropdownMenuItem onSelect={() => openChart(h.symbol)} className="gap-2"><BarChart3 size={13} />Chart</DropdownMenuItem>
                       <DropdownMenuItem onSelect={() => onOpen(h.symbol)} className="gap-2"><Pencil size={13} />Details and edit</DropdownMenuItem>
+                      <DropdownMenuItem asChild className="gap-2"><Link to={`/lens?symbol=${h.symbol}`}><GraduationCap size={13} />Fundamentals</Link></DropdownMenuItem>
+                      <DropdownMenuItem asChild className="gap-2"><Link to={`/minervini?symbol=${h.symbol}`}><Trophy size={13} />Minervini</Link></DropdownMenuItem>
                       <DropdownMenuSeparator />
                       <DropdownMenuItem onSelect={() => onClose(h.symbol)} className="gap-2"><CheckCircle2 size={13} />Close position…</DropdownMenuItem>
                       <DropdownMenuItem onSelect={() => onDelete(h.symbol)} className="gap-2 text-rose-300 focus:text-rose-200"><Trash2 size={13} />Delete (not recorded)…</DropdownMenuItem>
@@ -332,6 +334,8 @@ export function PositionSheet({ symbol, p, onClose, onEdit, onSell, onDelete, on
               <div className="flex flex-wrap gap-2 pt-2 text-xs">
                 <a href={tv(symbol)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 hover:text-primary"><ExternalLink size={12} />TradingView</a>
                 <Link to={`/lens?symbol=${symbol}`} className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 hover:text-primary"><GraduationCap size={12} />Fundamentals</Link>
+                <Link to={`/minervini?symbol=${symbol}`} className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 hover:text-primary"><Trophy size={12} />Minervini</Link>
+                <button onClick={() => openChart(symbol)} className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 hover:text-primary"><BarChart3 size={12} />Full chart</button>
                 <button onClick={() => onAddMore(symbol)} className="rounded-md border border-border px-2 py-1 hover:text-primary">Buy more</button>
                 <span className="ms-auto flex gap-2">
                   <button onClick={() => onCloseAll(symbol)} className="inline-flex items-center gap-1 rounded-md border border-primary/40 bg-primary/10 px-2 py-1 text-primary hover:bg-primary/20"><CheckCircle2 size={12} />Close position</button>
