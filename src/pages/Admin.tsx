@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
 import { invalidateThemeCatalog } from "@/lib/themeCatalog";
-import { useAuth } from "@/hooks/useAuth";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -8,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
-  ArrowLeft, Plus, Trash2, Loader2, LogOut, ChevronDown, ChevronRight, Search,
+  ArrowLeft, Plus, Trash2, Loader2, ChevronDown, ChevronRight, Search,
 } from "lucide-react";
 
 interface Theme {
@@ -26,7 +25,6 @@ interface ThemeTicker {
 }
 
 export default function Admin() {
-  const { user, isLoading: authLoading, signOut } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
 
@@ -58,12 +56,6 @@ export default function Admin() {
   // Theme edits here: make every other screen reload the theme list afterwards.
   useEffect(() => () => invalidateThemeCatalog(), []);
 
-  useEffect(() => {
-    if (!authLoading && !user) {
-      navigate("/login");
-    }
-  }, [authLoading, user, navigate]);
-
   const fetchData = useCallback(async () => {
     setLoading(true);
     const [{ data: t }, { data: tk }] = await Promise.all([
@@ -76,8 +68,8 @@ export default function Admin() {
   }, []);
 
   useEffect(() => {
-    if (user) fetchData();
-  }, [user, fetchData]);
+    fetchData();
+  }, [fetchData]);
 
   const createTheme = async () => {
     const name = newThemeName.trim();
@@ -202,14 +194,6 @@ export default function Admin() {
     ? themes.filter((t) => t.name.toLowerCase().includes(searchQuery.toLowerCase()))
     : themes;
 
-  if (authLoading || (!user && !authLoading)) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-background">
-        <Loader2 className="animate-spin text-primary" size={32} />
-      </div>
-    );
-  }
-
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
@@ -223,12 +207,6 @@ export default function Admin() {
               <ArrowLeft size={16} /> Dashboard
             </button>
             <h1 className="text-xl font-bold text-foreground">Manage Themes & Tickers</h1>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-muted-foreground">{user?.email}</span>
-            <Button variant="ghost" size="sm" onClick={signOut}>
-              <LogOut size={16} />
-            </Button>
           </div>
         </div>
       </header>
