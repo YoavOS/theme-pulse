@@ -119,6 +119,7 @@ function verdictClasses(verdict: string) {
 }
 
 import { ProfileRadar, QuarterTrends, ScoreStack, SurpriseBars } from "@/components/minervini/MinerviniVisuals";
+import { ChartButton } from "@/components/chart/ChartHost";
 
 function VerdictBadge({ verdict, score, label, tone }: { verdict: string; score: number; label?: string; tone?: string }) {
   return (
@@ -720,7 +721,7 @@ function SepaCandidates({ items, leadBy, onPick, loading, collapsed }: {
                   const e = b?.features.earn;
                   return (
                     <tr key={r.symbol} className="cursor-pointer border-b border-border/30 hover:bg-accent/30" onClick={() => !loading && onPick(r.symbol)}>
-                      <td className="px-2 py-1 font-mono font-semibold">{r.symbol}</td>
+                      <td className="px-2 py-1 font-mono font-semibold"><span className="inline-flex items-center gap-1">{r.symbol}<ChartButton symbol={r.symbol} /></span></td>
                       <td className="px-2 py-1"><WeekSpark r={r} /></td>
                       <td className="px-2 py-1 text-right font-mono">{rs}</td>
                       <td className="px-2 py-1 font-mono">{r.substage}</td>

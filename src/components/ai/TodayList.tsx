@@ -7,6 +7,7 @@ import { TvExportButton } from "./TvExportButton";
 import { supabase } from "@/integrations/supabase/client";
 import type { AiLang } from "@/lib/ai";
 import { touchLab } from "@/lib/labs";
+import { ChartButton } from "@/components/chart/ChartHost";
 
 /**
  * Today's lists, built every night from the price history on your PC:
@@ -145,7 +146,7 @@ export default function TodayList({ lang }: { lang: AiLang }) {
                   <tr key={r.symbol} className="border-t border-border/60 align-top">
                     <Td>{r.rank}</Td>
                     {tab !== "redday_group" ? (
-                      <Td><Link to={`/ai?tab=stock&symbol=${r.symbol}`} className="font-mono font-semibold hover:text-primary">{r.symbol}</Link><div className="max-w-[160px] truncate text-[11px] text-muted-foreground">{e.name}</div></Td>
+                      <Td><Link to={`/ai?tab=stock&symbol=${r.symbol}`} className="font-mono font-semibold hover:text-primary">{r.symbol}</Link><ChartButton symbol={r.symbol} className="ms-1" /><div className="max-w-[160px] truncate text-[11px] text-muted-foreground">{e.name}</div></Td>
                     ) : <Td><span className="font-semibold">{r.symbol}</span><div className="text-[11px] text-muted-foreground">{r.grp}</div></Td>}
                     {tab === "ema21" && <>
                       <Td><div className="max-w-[170px] truncate">{r.grp ?? "—"}</div><div className="text-[11px] text-muted-foreground">{e.industryPctS2 != null ? `${e.industryPctS2}% stage 2 · top ${100 - (e.industryPctile ?? 0)}%` : ""}{e.themes?.length ? ` · ${e.themes.slice(0, 2).join(", ")}` : ""}</div></Td>

@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import EarningsAnalysisPanel, { type EarningsAnalysisContext } from "@/components/earnings/EarningsAnalysisPanel";
 import { moveBox } from "@/lib/moveTint";
+import { ChartButton } from "@/components/chart/ChartHost";
 
 // ────────────────────────────────────────────────────────────────────
 // Types matching the two edge functions
@@ -346,7 +347,7 @@ export default function Earnings() {
                       })}
                       className="cursor-pointer border-b border-border/50 transition-colors hover:bg-accent/40"
                     >
-                      <td className="px-3 py-1.5 font-mono font-bold text-foreground">{r.symbol}</td>
+                      <td className="px-3 py-1.5 font-mono font-bold text-foreground"><span className="inline-flex items-center gap-1">{r.symbol}<ChartButton symbol={r.symbol} /></span></td>
                       <td className="px-3 py-1.5 text-foreground/90 truncate max-w-[200px]">{r.company ?? "—"}</td>
                       <td className="px-3 py-1.5 text-right font-mono">{fmtMcap(r.marketCap)}</td>
                       <td className="px-3 py-1.5 text-center">{reportTimeBadge(r.reportTime)}</td>
@@ -472,7 +473,7 @@ export default function Earnings() {
                           >
                             <div className="flex flex-wrap items-center justify-between gap-3">
                               <div className="flex min-w-0 items-center gap-2">
-                                <span className="font-mono text-sm font-bold text-foreground">{g.symbol}</span>
+                                <span className="font-mono text-sm font-bold text-foreground">{g.symbol}</span><ChartButton symbol={g.symbol} />
                                 {reportTimeBadge(g.reportTime)}
                                 <span className="truncate max-w-[280px] text-xs text-muted-foreground">{g.company ?? ""}</span>
                                 {g.sector && <span className="rounded border border-border bg-muted/40 px-1.5 py-0.5 text-[10px] text-muted-foreground">{g.sector}</span>}

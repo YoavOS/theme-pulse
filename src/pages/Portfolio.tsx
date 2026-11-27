@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { ArrowLeft, Briefcase, Loader2, Plus, RefreshCw, Settings2 } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
@@ -9,8 +9,8 @@ import { GlossaryProvider } from "@/components/lens/GlossaryBrowser";
 import { TvExportButton } from "@/components/ai/TvExportButton";
 import { usePortfolio } from "@/hooks/usePortfolio";
 import { headline, marketOpen, type PositionRow } from "@/lib/portfolio/engine";
-import { AttentionPanel, ClosedPanel, EarningsPanel, ExposurePanel, HoldingsTable, NewsFeed, PositionSheet, dayLabel, pctS, usd, usdSigned } from "@/components/portfolio/PortfolioViews";
-import { PositionDialog, SellDialog } from "@/components/portfolio/PositionForms";
+import { AttentionPanel, EarningsPanel, ExposurePanel, HoldingsTable, NewsFeed, PositionSheet, RecordPanel, dayLabel, pctS, usd, usdSigned } from "@/components/portfolio/PortfolioViews";
+import { CloseAllDialog, PositionDialog, SellDialog } from "@/components/portfolio/PositionForms";
 
 /**
  * Portfolio — the positions you type in, with everything the app knows about each one:
@@ -25,15 +25,20 @@ export default function Portfolio() {
   const [edit, setEdit] = useState<PositionRow | null>(null);
   const [selling, setSelling] = useState<PositionRow | null>(null);
   const [deleting, setDeleting] = useState<PositionRow | null>(null);
+  const [closingAll, setClosingAll] = useState<string | null>(null);
+  const [deletingAll, setDeletingAll] = useState<string | null>(null);
+  const [params, setParams] = useSearchParams();
   useEffect(() => { document.title = "Portfolio"; }, []);
+  // /portfolio?add=NVDA (from the chart pop-up) opens the add form for that symbol
+  useEffect(() => { const a = params.get("add"); if (a) { setPrefill(a.toUpperCase()); setAddOpen(true); setParams({}, { replace: true }); } }, [params, setParams]);
 
   const s = p.summary, warn = p.settings.warnSessions;
   const soon = s.reportsSoon.filter((r) => r.plan.sessionsLeft <= warn);
   const kpis: Kpi[] = [
     { label: "Market value", value: usd(s.marketValue), caption: s.invested != null ? `${s.invested.toFixed(0)}% of the account invested` : `${s.positions} position${s.positions === 1 ? "" : "s"}`, tone: "neutral" },
     { label: "Today", value: usdSigned(s.dayPnl), caption: pctS(s.dayPct, 2) },
-    { label: "Open P&L", value: usdSigned(s.openPnl), caption: `${pctS(s.openPct)} on ${usd(s.cost)} cost` },
-    { label: "Open risk", value: s.openRisk != null ? usd(s.openRisk) : "—", caption: s.openRiskPct != null ? `${s.openRiskPct.toFixed(2)}% of the account if every stop is hit` : "if every stop is hit", tone: "warn" },
+    { label: "Open P&L", value: usdSigned(s.openPnl), caption: `${pctS(s.openPct)} on ${usd(s.cost)} invested` },
+    { label: "Open risk", value: s.openRisk != null ? usd(s.openRisk) : "—", caption: s.openRiskPct != null ? `${s.openRiskPct.toFixed(2)}% of the account, if every stop hits` : "if every stop hits", tone: "warn" },
   ];
   const paras: string[] = [];
   if (s.positions) {
@@ -77,44 +82,57 @@ export default function Portfolio() {
         {p.error && <Watch>{p.error}</Watch>}
         {p.loading ? <p className="py-20 text-center text-sm text-muted-foreground">Loading…</p> : (
           <>
-            <Hero eyebrow={`Portfolio · ${new Date().toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" })}`} title={headline(s, warn)}
+            <Hero compact eyebrow={`Portfolio · ${new Date().toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" })}`} title={headline(s, warn)}
               meta={s.positions ? `${s.positions} holding${s.positions === 1 ? "" : "s"} · ${p.closed.length} closed trade${p.closed.length === 1 ? "" : "s"}${s.cash != null ? ` · cash ${usd(s.cash)}` : ""}` : undefined}
-              aside={s.positions ? { title: "The account right now", subtitle: "Live quotes; daily closes when the market is shut", items: kpis } : undefined}
-              steps={s.positions ? [
-                { label: "01 · Positions", question: "What do I hold, and how is each doing?", target: "pf-holdings" },
-                { label: "02 · Earnings", question: "When does each one report?", target: "pf-earnings" },
-                { label: "03 · News", question: "What's being said about them?", target: "pf-news" },
-              ] : undefined}>
+              aside={s.positions ? { title: "The account right now", items: kpis } : undefined}>
               {s.positions ? paras.map((t, i) => <p key={i} className={i === paras.length - 1 && paras.length > 1 ? "text-muted-foreground" : ""}><AutoTerms text={t} /></p>)
                 : <>
-                  <p>Type in what you bought: symbol, shares, price and date. A stop and target are optional.</p>
-                  <p className="text-muted-foreground">Each holding then gets its live P&amp;L, risk to the stop, RS rating and stage, distance from the 21-day EMA and 50-day average, the next earnings date with the last full session before it, the last reports and how the stock reacted, and its news.</p>
+                  <p>Type in what you bought: the amount, the price and the date. A stop and target are optional.</p>
+                  <p className="text-muted-foreground">Each holding then gets its live P&amp;L, risk to the stop, RS rating and stage, distance from its averages, the next earnings date with the last full session before it, the last reports and how the stock reacted, and its news.</p>
                   <button onClick={() => setAddOpen(true)} className="inline-flex items-center gap-1 rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground"><Plus size={14} />Add your first position</button>
                 </>}
             </Hero>
 
-            {s.positions > 0 && (
-              <>
-                <AttentionPanel alerts={p.alerts} onOpen={setOpen} />
-                <SectionHead id="pf-holdings" title="Positions" subtitle="Click a row for the chart, earnings history, your buys and news. Sort by any column." />
-                <HoldingsTable p={p} onOpen={setOpen} />
-                <div className="grid gap-5 xl:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]">
-                  <EarningsPanel p={p} onOpen={setOpen} />
-                  <ExposurePanel s={s} groupBy={p.settings.groupBy} onGroupBy={(g) => void p.setSettings({ groupBy: g })} />
-                </div>
-                <div className="grid gap-5 xl:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]">
-                  <NewsFeed p={p} onOpen={setOpen} />
-                  <ClosedPanel p={p} onEdit={setEdit} onDelete={setDeleting} />
-                </div>
-              </>
-            )}
-            {s.positions === 0 && p.closed.length > 0 && <ClosedPanel p={p} onEdit={setEdit} onDelete={setDeleting} />}
+            <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_340px]">
+              <div className="min-w-0 space-y-5">
+                {s.positions > 0 && (
+                  <>
+                    <div>
+                      <SectionHead id="pf-holdings" title="Positions" subtitle="Click a row for the chart, earnings history, your buys and news; ⋯ to close or delete." />
+                      <div className="mt-3"><HoldingsTable p={p} onOpen={setOpen} onClose={setClosingAll} onDelete={setDeletingAll} /></div>
+                    </div>
+                    <AttentionPanel alerts={p.alerts} onOpen={setOpen} />
+                    <EarningsPanel p={p} onOpen={setOpen} />
+                    <NewsFeed p={p} onOpen={setOpen} />
+                  </>
+                )}
+              </div>
+              <aside className="space-y-5 lg:sticky lg:top-[64px] lg:max-h-[calc(100vh-80px)] lg:overflow-y-auto lg:pe-1">
+                {s.positions > 0 && <ExposurePanel s={s} groupBy={p.settings.groupBy} onGroupBy={(g) => void p.setSettings({ groupBy: g })} />}
+                <RecordPanel p={p} onEdit={setEdit} onDelete={setDeleting} />
+              </aside>
+            </div>
           </>
         )}
       </main>
 
       <PositionSheet symbol={open} p={p} onClose={() => setOpen(null)} onEdit={setEdit} onSell={setSelling} onDelete={setDeleting}
-        onAddMore={(sym) => { setPrefill(sym); setAddOpen(true); }} />
+        onAddMore={(sym) => { setPrefill(sym); setAddOpen(true); }} onCloseAll={setClosingAll} onDeleteAll={setDeletingAll} />
+      <CloseAllDialog open={!!closingAll} onOpenChange={(o) => !o && setClosingAll(null)} symbol={closingAll} lots={p.rows.filter((r) => r.status === "open" && r.symbol === closingAll)}
+        price={closingAll ? p.holdings.find((h) => h.symbol === closingAll)?.price ?? null : null}
+        onClose={async (sym, price, date, note) => { const ok = await p.closeSymbol(sym, price, date, note); if (ok) setOpen(null); return ok; }} />
+      <AlertDialog open={!!deletingAll} onOpenChange={(o) => !o && setDeletingAll(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete the {deletingAll} position?</AlertDialogTitle>
+            <AlertDialogDescription>Removes {p.rows.filter((r) => r.status === "open" && r.symbol === deletingAll).length} open buy{p.rows.filter((r) => r.status === "open" && r.symbol === deletingAll).length === 1 ? "" : "s"} for good and does <b>not</b> add anything to your record — use it for tests or mistakes. To record a real exit, use Close position instead.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Keep it</AlertDialogCancel>
+            <AlertDialogAction onClick={async () => { if (deletingAll) { await p.deleteSymbol(deletingAll); setDeletingAll(null); setOpen(null); } }} className="bg-rose-600 hover:bg-rose-500">Delete</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       <PositionDialog open={addOpen} onOpenChange={setAddOpen} prefill={prefill ? { symbol: prefill } : undefined} onSave={(np) => p.add(np)} />
       <PositionDialog open={!!edit} onOpenChange={(o) => !o && setEdit(null)} row={edit}
         onSave={(np, stop) => p.update(edit!.id, { entry_price: np.entry_price, shares: np.shares, entry_date: np.entry_date, initial_stop: np.initial_stop, stop, target: np.target, setup: np.setup, notes: np.notes })} />
@@ -123,7 +141,7 @@ export default function Portfolio() {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete this {deleting?.status === "closed" ? "trade" : "buy"}?</AlertDialogTitle>
-            <AlertDialogDescription>{deleting ? `${deleting.symbol}: ${deleting.shares} shares at ${deleting.entry_price} on ${deleting.entry_date}.` : ""} This removes it for good — to record a sale, use Sell instead.</AlertDialogDescription>
+            <AlertDialogDescription>{deleting ? `${deleting.symbol}: ${deleting.shares} shares at ${deleting.entry_price} on ${deleting.entry_date}.` : ""} This removes it for good and nothing is recorded. To record a real exit, use Close instead.</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Keep it</AlertDialogCancel>

@@ -17,6 +17,7 @@ import {
   type MatchMode, type ProfileKey,
 } from "@/lib/superperfProfiles";
 import GroupStageTag from "@/components/shared/GroupStageTag";
+import { chartClick } from "@/lib/chart";
 
 /**
  * Leaders shortlist: the few stocks that are strong on every front at once —
@@ -340,7 +341,7 @@ export default function LeadersShortlistModal({ open, onOpenChange, stocks, isOt
                       <tr key={r.s.symbol} className="border-b border-border/40 hover:bg-muted/30">
                         <td className="px-2 py-1.5 font-mono text-xs text-muted-foreground">{i + 1}</td>
                         <td className="px-2 py-1.5">
-                          <a href={`https://www.tradingview.com/symbols/${r.s.symbol}/`} target="_blank" rel="noopener noreferrer" className="group inline-flex items-baseline gap-2">
+                          <a href={`https://www.tradingview.com/symbols/${r.s.symbol}/`} target="_blank" rel="noopener noreferrer" onClick={chartClick(r.s.symbol)} className="group inline-flex items-baseline gap-2">
                             <span className="font-mono font-bold group-hover:text-primary">{r.s.symbol}</span>
                             {r.s.companyName && <span className="hidden max-w-[140px] truncate text-xs text-muted-foreground lg:inline">{r.s.companyName}</span>}
                           </a>

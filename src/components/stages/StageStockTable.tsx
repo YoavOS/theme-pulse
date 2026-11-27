@@ -8,6 +8,7 @@ import {
 import WeeklyChart from "@/components/stages/WeeklyChart";
 import { tint } from "@/lib/colorTint";
 import { toneBox } from "@/lib/moveTint";
+import { chartClick } from "@/lib/chart";
 
 export function StageBadge({ r, compact = false }: { r: Pick<StockStage, "stage" | "substage">; compact?: boolean }) {
   const color = STAGE_COLORS[r.stage as StageNum];
@@ -134,7 +135,7 @@ export default function StageStockTable({
                     className="cursor-pointer border-b border-border/25 transition-colors hover:bg-accent/30"
                     style={{ boxShadow: `inset 3px 0 0 ${c}`, background: isOpen ? tint(c, 0.08) : undefined }}>
                     <td className="whitespace-nowrap py-1.5 pl-3 pr-2">
-                      <a onClick={(e) => e.stopPropagation()} href={`https://www.tradingview.com/chart/?symbol=${encodeURIComponent(r.symbol)}`}
+                      <a onClick={chartClick(r.symbol)} href={`https://www.tradingview.com/chart/?symbol=${encodeURIComponent(r.symbol)}`}
                         target="_blank" rel="noopener noreferrer" className="font-mono font-bold hover:text-primary hover:underline"
                         title={`${nameOf?.(r.symbol) ?? r.symbol} — open chart in TradingView`}>
                         {r.symbol}

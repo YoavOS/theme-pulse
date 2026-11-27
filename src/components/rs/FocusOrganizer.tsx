@@ -17,6 +17,7 @@ import {
   type Bar, type Block, type BaseRead, type EmaRead, type Row, type Status,
 } from "@/lib/focusList";
 import GroupStageTag from "@/components/shared/GroupStageTag";
+import { chartClick } from "@/lib/chart";
 
 /**
  * Organize my focus list: paste the TradingView watchlist → SPY / QQQ / IWM on top, then every stock
@@ -280,7 +281,7 @@ export default function FocusOrganizer({ universe, fundamentalsMap, superperfSet
                     <div className="divide-y divide-border/30">
                       {b.rows.map((r) => (
                         <div key={r.symbol} className={`grid grid-cols-[70px_1fr_auto] items-center gap-x-3 py-1 text-[12px] sm:grid-cols-[70px_1fr_52px_52px_150px] ${r.peer ? "opacity-70" : ""}`}>
-                          <a href={`https://www.tradingview.com/chart/?symbol=${encodeURIComponent(r.symbol)}`} target="_blank" rel="noopener noreferrer"
+                          <a href={`https://www.tradingview.com/chart/?symbol=${encodeURIComponent(r.symbol)}`} target="_blank" rel="noopener noreferrer" onClick={chartClick(r.symbol)}
                             className="font-mono font-bold hover:text-primary hover:underline">{r.symbol}</a>
                           <span className="min-w-0 text-[11.5px] text-muted-foreground">
                             {r.peer && <span className="mr-1 rounded bg-muted px-1 text-[10px] uppercase tracking-wide">peer</span>}

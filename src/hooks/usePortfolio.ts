@@ -141,6 +141,27 @@ export function usePortfolio() {
     await loadRows(); return true;
   }, [loadRows]);
 
+  /** Close every open buy of a symbol at one price — recorded in the record. */
+  const closeSymbol = useCallback(async (symbol: string, price: number, date: string, note: string | null) => {
+    const lots = rows.filter((r) => r.status === "open" && r.symbol === symbol);
+    for (const l of lots) {
+      const { error } = await db.from("trade_positions").update({ status: "closed", exit_price: price, exit_date: date, exit_note: note, updated_at: new Date().toISOString() }).eq("id", l.id);
+      if (error) { toast.error(error.message); await loadRows(); return false; }
+    }
+    toast.success(`${symbol} closed and added to your record`);
+    await loadRows(); return true;
+  }, [rows, loadRows]);
+
+  /** Delete every row of a symbol (open buys, and optionally its closed trades) — for tests and mistakes; nothing is recorded. */
+  const deleteSymbol = useCallback(async (symbol: string, includeClosed = false) => {
+    const ids = rows.filter((r) => r.symbol === symbol && (includeClosed || r.status === "open")).map((r) => r.id);
+    if (!ids.length) return true;
+    const { error } = await db.from("trade_positions").delete().in("id", ids);
+    if (error) { toast.error(error.message); return false; }
+    toast.success(`${symbol} deleted`);
+    await loadRows(); return true;
+  }, [rows, loadRows]);
+
   const setSettings = useCallback(async (patch: Partial<PortfolioSettings>) => {
     setSettingsState((s) => ({ ...s, ...patch }));
     const rowsUp = Object.entries(patch).map(([key, value]) => ({ key, value, updated_at: new Date().toISOString() }));
@@ -156,7 +177,7 @@ export function usePortfolio() {
 
   return {
     loading, liveLoading, error, updatedAt, rows, holdings, ctx, bars, tech, plans, reports, news, alerts, summary, closed, closedSummary,
-    settings, finnhub: live.finnhub, add, update, sell, remove, setSettings, refresh,
+    settings, finnhub: live.finnhub, add, update, sell, remove, closeSymbol, deleteSymbol, setSettings, refresh,
   };
 }
 export type PortfolioData = ReturnType<typeof usePortfolio>;

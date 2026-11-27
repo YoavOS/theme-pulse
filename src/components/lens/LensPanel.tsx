@@ -31,6 +31,7 @@ import { heProvenRow } from "@/lib/lens/he/proven";
 import { HE_COURSE, HE_PILLAR, HE_STAGE } from "@/lib/lens/he/curriculum";
 import { HE_METRIC } from "@/lib/lens/he/metrics";
 import { hePlainReading, heComparison } from "@/lib/lens/he/companyMeaning";
+import { ChartButton } from "@/components/chart/ChartHost";
 
 /**
  * Fundamentals Lens — a full tab that folds into a narrow side-panel column when its window is narrow; it teaches fundamentals on the stock you're
@@ -540,7 +541,7 @@ export default function LensPanel({ symbol: symbolProp, onSymbolChange, onClose,
         {data && (
           <div className={`mt-1.5 space-y-1 ${wide ? "w-full" : ""}`}>
             <div className="flex items-baseline gap-2">
-              <span className={`font-mono font-bold ${wide ? "text-xl" : "text-base"}`}>{data.symbol}</span>
+              <span className={`font-mono font-bold ${wide ? "text-xl" : "text-base"}`}>{data.symbol}</span><ChartButton symbol={data.symbol} />
               <span className={`min-w-0 truncate text-muted-foreground ${wide ? "text-sm" : "text-xs"}`}>{data.company}</span>
             </div>
             <div className="flex flex-wrap gap-1 text-[10.5px]">

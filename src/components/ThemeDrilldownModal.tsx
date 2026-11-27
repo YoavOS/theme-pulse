@@ -15,6 +15,7 @@ import {
 } from "@/lib/groupSignals";
 import { moveBox, toneBox } from "@/lib/moveTint";
 import GroupStageTag from "@/components/shared/GroupStageTag";
+import { chartClick } from "@/lib/chart";
 
 const MONO = "'DM Mono', monospace";
 const TF_COL: Record<string, string> = { Today: "Today", "1W": "1W", "1M": "1M", "3M": "3M", Overall: "Score" };
@@ -420,6 +421,7 @@ export default function ThemeDrilldownModal({
                         <td className="px-2 py-2">
                           <a
                             href={`https://www.tradingview.com/symbols/${t.symbol}/`}
+                            onClick={chartClick(t.symbol)}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="group inline-flex min-w-0 items-baseline gap-2"
