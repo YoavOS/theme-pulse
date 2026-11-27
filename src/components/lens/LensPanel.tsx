@@ -8,7 +8,7 @@ import AdjustCard from "./AdjustCard";
 import ReviewView from "./ReviewView";
 import { dueQuestions } from "@/lib/lens/review";
 import TrackRecordCard from "@/components/proven/TrackRecordCard";
-const MarketValuation = lazy(() => import("./CompanyContext").then(module => ({ default: module.MarketValuation })));
+const ValuationView = lazy(() => import("./ValuationView"));
 const FinancialStatements = lazy(() => import("./FinancialStatements"));
 const CompanyOverview = lazy(() => import("./CompanyOverview"));
 import LimitsCard from "./LimitsCard";
@@ -21,6 +21,8 @@ import { toneBox, type Tone } from "@/lib/moveTint";
 import { AutoTerms, Term, PlainTerms } from "./Term";
 import { GlossaryButton, GlossaryProvider } from "./GlossaryBrowser";
 import { BalancedColumns } from "./BalancedColumns";
+import { SectionHead } from "./LensUI";
+import { BankMeasuresCard, EvidenceHero, LearnHero, StatementsHero } from "./TabHeroes";
 import { TermCompanyContext } from "@/lib/lens/termContext";
 import { companyNote } from "@/lib/lens/companyMeaning";
 import { LensScope, dirOf, ltr, setLensLang, useLensLang, useLensLangSetting, useTx } from "@/lib/lens/i18n";
@@ -287,7 +289,9 @@ function ConceptView({ c, symbol, stageLabel, seen, asOf = null, p }: { c: Conce
   const [level, setLevel] = useState<1 | 2 | 3>(1);
   const [revealed, setRevealed] = useState(false);
   const primary = c.metrics.find((m) => m.id === c.primary) ?? c.metrics[0];
-  const prim = p?.sec.sourceUrl && primary?.value == null ? c.metrics.find(m => m.value !== null) ?? primary : primary;
+  const meaningful = (m: (typeof c.metrics)[number]) => m.display !== "n/m" && m.display !== "n/a";
+  const prim = p?.sec.sourceUrl && primary?.value == null ? c.metrics.find(m => m.value !== null) ?? primary
+    : primary?.display === "n/m" ? c.metrics.find(meaningful) ?? primary : primary;   // e.g. a bank's cash returned: show the dollars, not the n/m ratio
   const toggle = () => { const o = !open; setOpen(o); if (o) markConcept(c.id, symbol, 1); };
   const pick = (l: 1 | 2 | 3) => { setLevel(l); markConcept(c.id, symbol, l); };
   const tone = prim?.peer ? { ...peerTone(prim.peer, c.higherIsBetter, he), words: he ? `${peerTone(prim.peer, c.higherIsBetter, he).words} ב-${prim.peer.group}` : `${peerTone(prim.peer, c.higherIsBetter).words} of ${prim.peer.group}` }
@@ -608,10 +612,13 @@ export default function LensPanel({ symbol: symbolProp, onSymbolChange, onClose,
                  : <AutoTerms text={tx("Income charts use available quarterly releases. Cash flow and valuation require additional filing data.", "תרשימי ההכנסות מבוססים על פרסומים רבעוניים זמינים. תזרים מזומנים והערכת שווי דורשים נתונים נוספים.")}/>}</p>
              </section>
            )}
-           {section === 'statements' && <Suspense fallback={<p>{tx("Loading statements…","טעינת דוחות…")}</p>}><FinancialStatements key={data.symbol} p={data}/></Suspense>}
-           {section === 'valuation' && <Suspense fallback={<p>{tx("Loading valuation…","טעינת תמחור…")}</p>}><MarketValuation key={data.symbol} p={data} /></Suspense>}
+           {section === 'statements' && <Suspense fallback={<p>{tx("Loading statements…","טעינת דוחות…")}</p>}><div className="space-y-5"><StatementsHero p={data} /><div id="st-flow" className="scroll-mt-4"><FinancialStatements key={data.symbol} p={data}/></div></div></Suspense>}
+           {section === 'valuation' && <Suspense fallback={<p>{tx("Loading valuation…","טעינת תמחור…")}</p>}><ValuationView key={data.symbol} p={data} proven={proven.row} /></Suspense>}
            {section === 'overview' && <Suspense fallback={<p>{tx("Loading company story…","טעינת סיפור החברה…")}</p>}><CompanyOverview key={data.symbol} p={data} proven={proven.row} onExplore={setSection}/></Suspense>}
            {(section==='evidence'||section==='learn') && <>
+            {section === "evidence" ? <EvidenceHero p={data} proven={proven.row} /> : <LearnHero p={data} seen={seenCount} total={totalConcepts} />}
+            <SectionHead title={section === "evidence" ? tx("The evidence, card by card", "הראיות, כרטיס אחר כרטיס") : tx("The ideas, by question", "הרעיונות, לפי שאלה")}
+              subtitle={section === "evidence" ? tx("Each card answers one question. Open a metric to see how it is calculated and what it means here.", "כל כרטיס עונה על שאלה אחת. פותחים מדד כדי לראות איך הוא מחושב ומה הוא אומר כאן.") : tx("Open an idea to read it with this company's numbers.", "פותחים רעיון כדי לקרוא אותו עם המספרים של החברה הזו.")} />
             {data.sec.status !== "ok" && <p className="flex gap-1.5 rounded-md border border-border bg-muted/30 p-2 text-xs text-muted-foreground"><Info size={13} className="mt-px shrink-0" />
               {data.sec.sourceUrl ? tx("Evidence uses figures verified in quarterly SEC Form 6-K releases. Cash flow, capital and debt metrics, and the multi-year track record need additional filing data.", "הנתונים מבוססים על פרסומים רבעוניים מאומתים בטופס 6-K. לחישובי תזרים, הון, חוב ורקורד רב־שנתי דרושים נתונים נוספים.") : data.sec.status}
             </p>}
@@ -627,7 +634,10 @@ export default function LensPanel({ symbol: symbolProp, onSymbolChange, onClose,
               ...(section === "evidence" ? [{ key: "read", node: <ReadTogether p={data} proven={proven.row} /> }] : []),
               ...pillars.flatMap((pk) => {
                 const cards = data.cards.filter(c => c.pillar === pk &&
-                  (section !== "evidence" || !data.sec.sourceUrl || c.metrics.some(m => m.value !== null)));
+                  (section !== "evidence" || !data.sec.sourceUrl || c.metrics.some(m => m.value !== null)) &&
+                  // banks: margins, ROIC, free cash flow and the like are "not meaningful" — the notice above says so; Learn keeps them as concepts
+                  !(section === "evidence" && data.financial && c.metrics.length > 0 &&
+                    (c.metrics.every(m => m.display === "n/m") || (pk === "risk" && (c.metrics.find(m => m.id === c.primary) ?? c.metrics[0]).display === "n/m"))));
                 if (!cards.length) return [];
                 return [{ key: `pillar-${pk}`, node: (
                   <div className="space-y-3">
@@ -642,6 +652,7 @@ export default function LensPanel({ symbol: symbolProp, onSymbolChange, onClose,
                   </div>) }];
               }),
               ...(section === "evidence" ? [
+                ...(data.financial ? [{ key: "bank", node: <BankMeasuresCard p={data} /> }] : []),
                 { key: "industry-bars", node: <IndustryBars p={data} /> },
                 ...(data.lifeCycle ? [{ key: "stage", node: <StageCard p={data} /> }] : []),
                 ...(proven.error ? [{ key: "proven-error", node: <p role="alert" className="text-sm">{tx("Track record unavailable.", "הרקורד אינו זמין.")} <button className="underline" onClick={proven.retry}>{tx("Retry", "ניסיון נוסף")}</button></p> }] : []),
