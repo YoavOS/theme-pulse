@@ -19,7 +19,7 @@ import LookalikesCard from "./LookalikesCard";
 import ProvenBadge from "@/components/proven/ProvenBadge";
 import { useProvenOne } from "@/hooks/useProvenStrength";
 import { toneBox, type Tone } from "@/lib/moveTint";
-import { AutoTerms, Term, PlainTerms } from "./Term";
+import { AutoTerms, Term } from "./Term";
 import { GlossaryButton, GlossaryProvider } from "./GlossaryBrowser";
 import { BalancedColumns } from "./BalancedColumns";
 import { SectionHead } from "./LensUI";
@@ -119,7 +119,7 @@ function BenchLine({ b, higherIsBetter, asOf }: { b: Benchmark; higherIsBetter: 
         <span className="whitespace-nowrap font-mono text-muted-foreground">{he ? "ענף" : "industry"} {b.display}{b.market ? ` · ${he ? "שוק" : "market"} ${b.market}` : ""}</span>
       </div>
       {b.smallSample && <p className="text-muted-foreground">{he ? <>רק {ltr(b.n)} חברות בענף הזה — הממוצע רועש.</> : <>Only {b.n} firms in this industry — the average is noisy.</>}</p>}
-      {b.note && <p className="text-muted-foreground">{b.note}</p>}
+      {b.note && <p className="text-muted-foreground"><AutoTerms text={b.note} /></p>}
     </div>
   );
 }
@@ -203,7 +203,7 @@ function MetricLine({ m, higherIsBetter, asOf }: { m: Metric; higherIsBetter: bo
     <div className="space-y-1 py-1.5">
       <div className="flex items-baseline justify-between gap-3">
         <span className="text-xs text-muted-foreground"><AutoTerms text={m.label} />{m.approx && <span title={tx("Uses a fallback figure or assumption — see the worked example", "משתמש בנתון חלופי או בהנחה — פירוט בדוגמה המחושבת")}> *</span>}</span>
-        <span className={`shrink-0 text-sm font-semibold tabular-nums ${/\d/.test(m.display) ? "font-mono" : ""}`}>{m.display}</span>
+        <span className={`shrink-0 text-sm font-semibold tabular-nums ${/\d/.test(m.display) ? "font-mono" : ""}`}><AutoTerms text={m.display} /></span>
       </div>
       {m.peer && <PeerBar p={m.peer} higherIsBetter={higherIsBetter} />}
       {m.peer && peerUsesOther(m) && (
@@ -252,13 +252,13 @@ function IndustryCard({ p }: { p: LensPayload }) {
       </div>
       {d.costOfCapital && !p.financial && (
         <p className="mt-2 text-[12px] leading-snug">{tx(
-          <>The <Term id="cost_of_capital">hurdle</Term>: a business in this industry adds value only if its <Term id="roic">return on capital</Term> beats about <span className="font-mono">{d.costOfCapital}</span>, what investors require for its risk.</>,
+          <>The <Term id="cost_of_capital">hurdle</Term>: a business in this industry adds value only if its <Term id="roic">return on invested capital</Term> beats about <span className="font-mono">{d.costOfCapital}</span>, what investors require for its risk.</>,
           <>ה<Term id="cost_of_capital">רף</Term>: עסק בענף הזה מוסיף ערך רק אם ה<Term id="roic">תשואה על ההון</Term> שלו עולה על כ-<span className="font-mono">{d.costOfCapital}</span> — מה שמשקיעים דורשים בעבור הסיכון שלו.</>)}</p>
       )}
       {d.costOfEquity && p.financial && (
         <p className="mt-2 text-[12px] leading-snug">{tx(
           <>The <Term id="cost_of_capital">hurdle</Term> for a financial company is on equity: <Term id="roe">return on equity</Term> has to beat about <span className="font-mono">{d.costOfEquity}</span>, the industry's <Term id="cost_of_equity">cost of equity</Term>.</>,
-          <>ה<Term id="cost_of_capital">רף</Term> בחברה פיננסית הוא על ההון העצמי: ה<Term id="roe">תשואה על ההון העצמי</Term> צריכה לעלות על כ-<span className="font-mono">{d.costOfEquity}</span>, <Term id="cost_of_equity">עלות ההון העצמי</Term> בענף.</>)}</p>
+          <>ה<Term id="cost_of_capital">רף</Term> בחברה פיננסית הוא על <Term id="equity">ההון העצמי</Term>: ה<Term id="roe">תשואה על ההון העצמי</Term> צריכה לעלות על כ-<span className="font-mono">{d.costOfEquity}</span>, <Term id="cost_of_equity">עלות ההון העצמי</Term> בענף.</>)}</p>
       )}
       {contrasts.length > 0 && (
         <>
@@ -303,10 +303,10 @@ function ConceptView({ c, symbol, stageLabel, seen, asOf = null, p }: { c: Conce
       <button onClick={toggle} aria-expanded={open} className="flex w-full items-center gap-2 px-3 py-2.5 text-start hover:bg-muted/30">
         {!seen && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-primary" title={tx("Not opened yet", "עוד לא נפתח")} />}
         <span className="min-w-0 flex-1">
-          <span className="block truncate text-[13px] font-medium">{c.title}</span>
+          <span className="block truncate text-[13px] font-medium"><AutoTerms text={c.title} /></span>
           {tone && <span className={`block truncate text-[10.5px] ${tone.cls}`}>{tone.words}</span>}
         </span>
-        {prim && <span className={`shrink-0 text-sm tabular-nums ${/\d/.test(prim.display) ? "font-mono" : ""}`}>{prim.display}</span>}
+        {prim && <span className={`shrink-0 text-sm tabular-nums ${/\d/.test(prim.display) ? "font-mono" : ""}`}><AutoTerms text={prim.display} /></span>}
         <ChevronDown size={14} className={`shrink-0 text-muted-foreground transition-transform ${open ? "rotate-180" : ""}`} />
       </button>
       {open && (
@@ -335,7 +335,7 @@ function ConceptView({ c, symbol, stageLabel, seen, asOf = null, p }: { c: Conce
                   {c.metrics.map((m) => <MetricLine key={m.id} m={m} higherIsBetter={c.higherIsBetter} asOf={asOf} />)}
                 </div>
               )}
-              {c.stageNote && stageLabel && <p><span className="font-semibold text-[hsl(40,90%,66%)]">{he ? <>בשלב <AutoTerms text={stageLabel} />: </> : <>At the <AutoTerms text={stageLabel} /> stage: </>}</span><AutoTerms text={c.stageNote} /></p>}
+              {c.stageNote && stageLabel && <p><span className="font-semibold text-[hsl(40,90%,66%)]"><AutoTerms text={he ? `בשלב ${stageLabel}: ` : `At the ${stageLabel} stage: `} /></span><AutoTerms text={c.stageNote} /></p>}
               {c.industry && <p className="text-foreground/85"><span className="font-semibold">{tx("Why industries differ: ", "למה ענפים שונים: ")}</span><AutoTerms text={c.industry} /></p>}
               {c.metrics.length > 0 && <Explain symbol={symbol} conceptId={c.id} p={p} label={he ? `מה זה אומר על ${symbol}` : `What this means for ${symbol}`} />}
             </div>
@@ -391,7 +391,7 @@ function StageCard({ p }: { p: LensPayload }) {
   const idx = STAGE_ORDER.indexOf(lc.stage), lean = lc.leaning ? STAGE_ORDER.indexOf(lc.leaning) : -1;
   return (
     <section className="rounded-lg border border-[hsl(40,90%,55%)]/35 bg-[hsl(40,90%,55%)]/[0.05]">
-      <PlainTerms><button onClick={() => { setOpen(!open); if (!open) markConcept("life_cycle", p.symbol, 1); }} className="w-full px-3 py-2.5 text-start">
+      <><button onClick={() => { setOpen(!open); if (!open) markConcept("life_cycle", p.symbol, 1); }} className="w-full px-3 py-2.5 text-start">
         <div className="flex items-center justify-between gap-2">
           <span className="text-[11px] font-semibold uppercase tracking-wide text-[hsl(40,90%,66%)]"><Term id="life_cycle">{tx("Life-cycle stage", "השלב במחזור החיים")}</Term></span>
           <span className="text-[10.5px] text-muted-foreground">{he ? `כלל אצבע של האפליקציה · ביטחון ${{ high: "גבוה", medium: "בינוני", low: "נמוך" }[lc.confidence]}` : `app rule of thumb · ${lc.confidence} confidence`}</span>
@@ -406,7 +406,7 @@ function StageCard({ p }: { p: LensPayload }) {
         </div>
         <p className="mt-2 text-[13px] leading-snug"><span className="font-semibold"><AutoTerms text={lc.label} />{lc.leaningLabel ? <>{tx(", leaning ", ", עם נטייה ל")}<AutoTerms text={lc.leaningLabel} /></> : ""}.</span> {tx("The question that matters most: ", "השאלה הכי חשובה: ")}<span className="italic"><AutoTerms text={lc.question} /></span></p>
         <span className="mt-1 inline-flex items-center gap-1 text-[11px] text-primary">{open ? tx("Less", "פחות") : tx("How it was placed, and what's normal here", "איך היא מוקמה, ומה נורמלי כאן")} <ChevronDown size={12} className={open ? "rotate-180" : ""} /></span>
-      </button></PlainTerms>
+      </button></>
       {open && (
         <div className="space-y-2.5 border-t border-[hsl(40,90%,55%)]/20 px-3 py-2.5 text-[12.5px] leading-snug">
           <p><span className="font-semibold">{tx("Typical numbers: ", "מספרים אופייניים: ")}</span><AutoTerms text={lc.signature} /></p>
@@ -550,7 +550,7 @@ export default function LensPanel({ symbol: symbolProp, onSymbolChange, onClose,
               {dm && <span className="rounded bg-[hsl(199,85%,62%)]/15 px-1.5 py-0.5 text-[hsl(199,85%,72%)]" title={tx(`Damodaran industry group (${dm.asOf})`, `קבוצת הענף של דמודרן (${dm.asOf})`)}>{dm.name}</span>}
               {data.lifeCycle && <span className="rounded bg-[hsl(40,90%,55%)]/15 px-1.5 py-0.5 text-[hsl(40,90%,68%)]"><AutoTerms text={data.lifeCycle.label} /></span>}
               {proven.row?.status === "ok" && <ProvenBadge row={proven.row} short={false} explain className="!text-[10.5px] !font-normal py-0.5" />}
-              {fmtMoney(data.market.marketCap) && <span className="rounded bg-muted/50 px-1.5 py-0.5"><Term id="market_cap">{tx("cap", "שווי שוק")}</Term> <span className="font-mono">{fmtMoney(data.market.marketCap)}</span></span>}
+              {fmtMoney(data.market.marketCap) && <span className="rounded bg-muted/50 px-1.5 py-0.5"><Term id="market_cap">{tx("market cap", "שווי שוק")}</Term> <span className="font-mono">{fmtMoney(data.market.marketCap)}</span></span>}
               {data.sec.asOf && <span className="rounded bg-muted/50 px-1.5 py-0.5" title={data.sec.filed ? tx(`Filed ${data.sec.filed}`, `הוגש ${data.sec.filed}`) : undefined}><Term id="tenk">{tx("filings", "דוחות")}</Term> {tx("to", "עד")} {ltr(data.sec.asOf)}</span>}
             </div>
           </div>
@@ -669,12 +669,12 @@ export default function LensPanel({ symbol: symbolProp, onSymbolChange, onClose,
 
             <footer className={`space-y-1 pb-2 text-[10.5px] leading-snug text-muted-foreground ${wide ? "pt-2" : ""}`}>
               {he ? <>
-                <p>מספרי החברה: דוחות SEC ({ltr(data.sec.ttmLabel)}), מחושבים על ידי האפליקציה. השוואות לחברות דומות: נתוני ספק הנתונים לחברות ביקום של האפליקציה. שווי שוק{data.market.asOf ? ` נכון ל-${ltr(data.market.asOf.slice(0, 10))}` : ""}.</p>
-                {dm && <p>ממוצעי הענף: אסוואת' דמודרן, <a href={dm.source} target="_blank" rel="noopener noreferrer" className="underline hover:text-foreground">הנתונים שלו ב-NYU Stern</a> ({dm.asOf}, חברות אמריקאיות), שהוא משתף בחינם. זו תמונת מצב מתחילת השנה, כך שהיא מפגרת אחרי הרבעונים האחרונים של החברה.</p>}
+                <p><AutoTerms text={`מספרי החברה: דוחות SEC (${ltr(data.sec.ttmLabel)}), מחושבים על ידי האפליקציה. השוואות לחברות דומות: נתוני ספק הנתונים לחברות ביקום של האפליקציה. שווי שוק${data.market.asOf ? ` נכון ל-${ltr(data.market.asOf.slice(0, 10))}` : ""}.`} /></p>
+                {dm && <p><AutoTerms text="ממוצעי הענף: אסוואת' דמודרן," /> <a href={dm.source} target="_blank" rel="noopener noreferrer" className="underline hover:text-foreground">הנתונים שלו ב-NYU Stern</a> ({dm.asOf}, חברות אמריקאיות), שהוא משתף בחינם. זו תמונת מצב מתחילת השנה, כך שהיא מפגרת אחרי הרבעונים האחרונים של החברה.</p>}
                 <p>המסגרת וההרצאות: אסוואת' דמודרן, NYU Stern (הערכת שווי ומימון תאגידי, אביב 2025). הסיכומים הם במילים של האפליקציה. לימודי — לא ייעוץ השקעות.</p>
               </> : <>
-              <p>Company numbers: SEC filings ({data.sec.ttmLabel}), computed by the app. Peer comparisons: data-provider figures for companies in the app's universe. Market cap{data.market.asOf ? ` as of ${data.market.asOf.slice(0, 10)}` : ""}.</p>
-              {dm && <p>Industry averages: Aswath Damodaran, <a href={dm.source} target="_blank" rel="noopener noreferrer" className="underline hover:text-foreground">NYU Stern data</a> ({dm.asOf}, US firms), shared freely by him. They're a year-start snapshot, so they lag the company's latest quarters.</p>}
+              <p><AutoTerms text={`Company numbers: SEC filings (${data.sec.ttmLabel}), computed by the app. Peer comparisons: data-provider figures for companies in the app's universe. Market cap${data.market.asOf ? ` as of ${data.market.asOf.slice(0, 10)}` : ""}.`} /></p>
+              {dm && <p><AutoTerms text="Industry averages: Aswath Damodaran," /> <a href={dm.source} target="_blank" rel="noopener noreferrer" className="underline hover:text-foreground">NYU Stern data</a> ({dm.asOf}, US firms), shared freely by him. They're a year-start snapshot, so they lag the company's latest quarters.</p>}
               <p>Framework and lectures: Aswath Damodaran, NYU Stern (Valuation and Corporate Finance, Spring 2025). Summaries are the app's own words. Educational — not investment advice.</p>
               </>}
             </footer>

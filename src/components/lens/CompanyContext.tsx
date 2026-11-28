@@ -127,7 +127,7 @@ export function MetricConnections({ p }: { p: LensPayload }) {
       {[[t("Quarterly revenue", "הכנסות רבעוניות"), money(facts ? facts.revenue : q.latest?.revenue), percent(revenueGrowth)], [t("Ending cash balance", "יתרת מזומנים בסוף הרבעון"), money(facts?.cash), cashDelta(x)]].map(([label, value, change]) =>
         <div key={label} className="rounded-xl bg-muted/35 px-3 py-2"><p className="text-xs text-muted-foreground"><AutoTerms text={label}/></p>
           <bdi className="font-mono text-lg" style={{ color: CHART.positive }}>{value}</bdi>
-          <p className="text-xs text-muted-foreground"><bdi>{change}</bdi> {t("vs previous quarter", "מול הרבעון הקודם")}</p></div>)}
+          <p className="text-xs text-muted-foreground"><bdi>{change}</bdi> <AutoTerms text={t("vs previous quarter", "מול הרבעון הקודם")} /></p></div>)}
     </div>}
     <p className="mt-3 max-w-4xl text-sm"><AutoTerms text={summary}/></p>
     <dl className="mt-3 grid gap-2 sm:grid-cols-3">
@@ -136,7 +136,7 @@ export function MetricConnections({ p }: { p: LensPayload }) {
       </div>)}
     </dl>
     {pair === "cash" && <details className="mt-3 text-xs text-muted-foreground" open={advances !== null && advances > 0 || borrowing !== null && borrowing > 0 ? true : undefined}>
-      <summary className="cursor-pointer font-medium text-foreground">{t("Could timing or borrowing explain it?", "האם עיתוי או הלוואות מסבירים את השינוי?")}</summary>
+      <summary className="cursor-pointer font-medium text-foreground"><AutoTerms text={t("Could timing or borrowing explain it?", "האם עיתוי או הלוואות מסבירים את השינוי?")} /></summary>
       <ul className="mt-2 space-y-2">
         <li><AutoTerms text={t("Customer prepayments.", "מקדמות מלקוחות.")}/> {<AutoTerms text={advances === null
           ? t("The filing data has no comparable deferred revenue balances, so upfront payments can’t be checked here.", "אין יתרות הכנסות נדחות בנות השוואה, ולכן אי אפשר לבדוק כאן מקדמות.")
@@ -151,7 +151,7 @@ export function MetricConnections({ p }: { p: LensPayload }) {
     {extra && <div className="mt-3 rounded-lg border border-border/60 bg-muted/20 px-3 py-2 text-xs leading-relaxed text-muted-foreground">
       <strong className="me-1 text-foreground">{t("What can change the picture?", "מה יכול לשנות את התמונה?")}</strong> <AutoTerms text={extra.check}/>
     </div>}
-    <p className="mt-3 text-xs text-muted-foreground">{t("Sources: reported statements. — means unavailable.", "מקור: דוחות מדווחים. — מציין מידע חסר.")}{" "}
+    <p className="mt-3 text-xs text-muted-foreground"><AutoTerms text={t("Sources: reported statements. — means unavailable.", "מקור: דוחות מדווחים. — מציין מידע חסר.")}/>{" "}
       {pair === "cash" && <AutoTerms text={t("The cash-flow categories can differ from the cash-balance change because of currency effects or restricted cash.", "סעיפי התזרים עשויים להיות שונים מהשינוי ביתרת המזומנים בגלל מטבע או מזומנים מוגבלים.")}/>}</p>
   </section>;
 }
@@ -202,11 +202,11 @@ export function MarketValuation({ p, bare = false }: { p: LensPayload; bare?: bo
         <bdi className="font-mono text-xl text-primary">{ratio(value)}</bdi><p className="mt-1 text-sm text-muted-foreground"><AutoTerms text={explanation}/></p></div>)}</div>
     {derivedPb !== null && <p className="text-xs text-muted-foreground"><AutoTerms text={t("P/B — calculated from market cap, twelve months of net profit and return on equity (book equity = net profit ÷ return on equity).", "מכפיל הון — חושב משווי השוק, הרווח הנקי ל־12 חודשים והתשואה על ההון העצמי (הון בספרים = רווח נקי ÷ תשואה על ההון העצמי).")}/></p>}
     {computedPe !== null || computedPs !== null ? <p className="text-xs text-muted-foreground">
-      {computedPe !== null && "P/E"}{computedPe !== null && computedPs !== null && " · "}{computedPs !== null && "P/S"} — {t("Calculated using cached market cap and twelve months of reported results through", "חושב לפי שווי שוק שמור ותוצאות מדווחות ל־12 חודשים עד")} <bdi>{ttm?.end ?? quarters[quarters.length - 1]?.end}</bdi>.
+      <AutoTerms text={`${[computedPe !== null ? "P/E" : null, computedPs !== null ? "P/S" : null].filter(Boolean).join(" · ")} — ${t("Calculated using cached market cap and twelve months of reported results through", "חושב לפי שווי שוק שמור ותוצאות מדווחות ל־12 חודשים עד")}`} /> <bdi>{ttm?.end ?? quarters[quarters.length - 1]?.end}</bdi>.
     </p> : null}
     {pe !== null && computedPe === null && peer && <p className="rounded-lg bg-muted/40 px-3 py-2 text-sm"><AutoTerms text={t("Profitable peer median P/E", "חציון מכפיל הרווח של חברות רווחיות להשוואה")}/> <bdi>{peer.median}</bdi> · <bdi>{peer.group}</bdi> · {peer.n} {t("companies", "חברות")}. {t("A difference can reflect growth, risk or earnings quality.", "פער יכול לשקף צמיחה, סיכון או איכות רווחים.")}</p>}
     <p className="text-xs text-muted-foreground">{hasMultiple
-      ? <>{(profitable && market?.pe != null || market?.ps != null || pb !== null) && <>{t("Provider multiples cached on", "מכפילי הספק נשמרו ב־")} <bdi>{date(market?.multiplesDate)}</bdi>. </>}{t("Snapshot dates can differ and quotes may lag.", "מועדי הנתונים עשויים להיות שונים והמחירים עשויים להתעדכן באיחור.")}</>
+      ? <>{(profitable && market?.pe != null || market?.ps != null || pb !== null) && <><AutoTerms text={t("Provider multiples cached on", "מכפילי הספק נשמרו ב־")} /> <bdi>{date(market?.multiplesDate)}</bdi>. </>}{t("Snapshot dates can differ and quotes may lag.", "מועדי הנתונים עשויים להיות שונים והמחירים עשויים להתעדכן באיחור.")}</>
       : t("No usable multiples in the current market snapshot. A blank figure means the data is unavailable or the ratio is unsuitable.", "אין מכפילים שמישים בתמונת השוק. נתון ריק מציין מידע חסר או מכפיל שאינו מתאים.")}</p>
   </section>;
 }

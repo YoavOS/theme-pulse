@@ -8,6 +8,18 @@
 import type { GlossaryEntry } from "./glossary";
 
 export const NEW_EN: GlossaryEntry[] = [
+  { id: "gaap", term: "GAAP", also: ["US-GAAP", "US GAAP", "generally accepted accounting principles", "non-GAAP", "adjusted earnings"],
+    def: "The US accounting rulebook every listed company must follow in its SEC filings. \"Non-GAAP\" or \"adjusted\" figures are the company's own versions that leave some costs out.",
+    why: "All the numbers in this tab are GAAP figures from the filings, so companies are measured on the same rules — not on each one's preferred adjustments.",
+    read: "When a company's adjusted profit is far above its GAAP profit, look at what it leaves out (often stock pay, restructuring or acquisition costs)." },
+  { id: "guidance", term: "Guidance", also: ["management guidance", "outlook", "company guidance"],
+    def: "The forecast a company's management gives for coming quarters — usually a range for revenue and earnings.",
+    why: "Stocks often move more on guidance than on the quarter just reported, because the price is about the future.",
+    read: "This tab uses reported numbers only; guidance and analyst estimates come from news and earnings calls, not from SEC financial data." },
+  { id: "deposits", term: "Deposits", also: ["customer deposits", "bank deposits"],
+    def: "Money customers keep at a bank. For the bank it is a debt it owes them — and its cheapest source of money to lend out.",
+    why: "A bank earns the gap between what it pays on deposits and what it earns on loans, so cheap, stable deposits are a big advantage.",
+    read: "Deposits flowing in or out swing a bank's cash flow, which is why cash flow says little about a bank's profits." },
   // ── Growth and comparisons
   { id: "qoq", term: "QoQ", also: ["quarter over quarter", "quarter-over-quarter", "versus previous quarter", "vs previous quarter", "QoQ sales", "Revenue growth vs previous quarter"],
     def: "Quarter over quarter: this quarter compared with the quarter just before it.",

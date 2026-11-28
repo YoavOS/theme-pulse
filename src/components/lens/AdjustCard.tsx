@@ -40,10 +40,10 @@ export default function AdjustCard({ a, symbol }: { a: AdjustInputs; symbol: str
     <section className="rounded-lg border border-border">
       <button onClick={() => { const o = !open; setOpen(o); if (o) markConcept("adjustments", symbol, 1); }} aria-expanded={open} className="flex w-full items-center gap-2 px-3 py-2.5 text-start hover:bg-muted/30">
         <span className="min-w-0 flex-1">
-          <span className="block text-[13px] font-semibold">{he ? "מותאם למו\"פ ולחכירות" : "Adjusted for R&D and leases"}</span>
-          <span className="block text-[11px] text-muted-foreground">{he ? "התיקונים של דמודרן לחשבונאות — האם התשואה עדיין מחזיקה?" : "Damodaran's fixes to accounting — does the return still hold up?"}</span>
+          <span className="block text-[13px] font-semibold"><AutoTerms text={he ? "מותאם למו\"פ ולחכירות" : "Adjusted for R&D and leases"} /></span>
+          <span className="block text-[11px] text-muted-foreground"><AutoTerms text={he ? "התיקונים של דמודרן לחשבונאות — האם התשואה עדיין מחזיקה?" : "Damodaran's fixes to accounting — does the return still hold up?"} /></span>
         </span>
-        {!open && r.adjusted.roic !== null && <span className="shrink-0 font-mono text-xs tabular-nums text-muted-foreground" dir="ltr">ROIC {pct(r.reported.roic)} → {pct(r.adjusted.roic)}</span>}
+        {!open && r.adjusted.roic !== null && <span className="shrink-0 font-mono text-xs tabular-nums text-muted-foreground" dir="ltr"><Term id="roic">ROIC</Term> {pct(r.reported.roic)} → {pct(r.adjusted.roic)}</span>}
         <ChevronDown size={14} className={`shrink-0 text-muted-foreground transition-transform ${open ? "rotate-180" : ""}`} />
       </button>
       {open && (
@@ -76,8 +76,8 @@ export default function AdjustCard({ a, symbol }: { a: AdjustInputs; symbol: str
               {rows.map(([k, x, y]) => (
                 <tr key={k} className="border-t border-border/40">
                   <td className="py-1 text-muted-foreground"><AutoTerms text={k} /></td>
-                  <td className="py-1 text-end font-mono tabular-nums">{x}</td>
-                  <td className="py-1 text-end font-mono font-semibold tabular-nums">{y}</td>
+                  <td className="py-1 text-end font-mono tabular-nums"><AutoTerms text={String(x)} /></td>
+                  <td className="py-1 text-end font-mono font-semibold tabular-nums"><AutoTerms text={String(y)} /></td>
                 </tr>
               ))}
             </tbody>
@@ -85,10 +85,10 @@ export default function AdjustCard({ a, symbol }: { a: AdjustInputs; symbol: str
           {verdict && <p className="text-[12.5px] leading-snug">{typeof verdict === "string" ? <AutoTerms text={verdict} /> : verdict}</p>}
           {a.industryAdjMargin && a.industryMargin && (
             <p className="text-[11px] leading-snug text-muted-foreground">{he
-              ? <>השוואה זהה: שיעור הרווח התפעולי של {a.industry} הוא {ltr(a.industryMargin)} כפי שדווח, ו-{ltr(a.industryAdjMargin)} אחרי התאמות החכירה והמו"פ של דמודרן עצמו (נתוני ינואר).</>
-              : <>Like for like: {a.industry}'s operating margin is {a.industryMargin} as reported and {a.industryAdjMargin} after Damodaran's own lease and R&D adjustments (January data).</>}</p>
+              ? <AutoTerms text={`השוואה זהה: שיעור הרווח התפעולי של ${a.industry} הוא ${a.industryMargin} כפי שדווח, ו-${a.industryAdjMargin} אחרי התאמות החכירה והמו"פ של דמודרן עצמו (נתוני ינואר).`} />
+              : <AutoTerms text={`Like for like: ${a.industry}'s operating margin is ${a.industryMargin} as reported and ${a.industryAdjMargin} after Damodaran's own lease and R&D adjustments (January data).`} />}</p>
           )}
-          {r.notes.map((n) => <p key={n} className="text-[11px] leading-snug text-[hsl(40,90%,66%)]">{he ? heAdjustText(n) : n}</p>)}
+          {r.notes.map((n) => <p key={n} className="text-[11px] leading-snug text-[hsl(40,90%,66%)]"><AutoTerms text={he ? heAdjustText(n) : n} /></p>)}
 
           {(r.rnd || r.lease) && (
             <button onClick={() => setSteps(!steps)} className="flex items-center gap-1 text-[11.5px] text-primary hover:underline">

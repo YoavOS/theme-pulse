@@ -69,7 +69,7 @@ export default function TrackRecordCard({ row, loading }: { row: ProvenRow | nul
   if (loading && !row) return <section className="rounded-lg border border-border p-3 text-xs text-muted-foreground">{he ? "קורא עשר שנים של דוחות שנתיים…" : "Reading ten years of annual reports…"}</section>;
   if (!row) return null;
   if (row.status !== "ok") {
-    return <section className="rounded-lg border border-border p-3 text-xs text-muted-foreground"><span className="font-semibold text-foreground">{he ? "רקורד: " : "Track record: "}</span>{row.sentence ?? row.error ?? (he ? "לא זמין." : "not available.")}</section>;
+    return <section className="rounded-lg border border-border p-3 text-xs text-muted-foreground"><span className="font-semibold text-foreground"><Term id="track_record">{he ? "רקורד" : "Track record"}</Term>: </span>{row.sentence ?? row.error ?? (he ? "לא זמין." : "not available.")}</section>;
   }
   const young = row.track === "young";
   return (
