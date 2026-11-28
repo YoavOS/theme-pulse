@@ -27,6 +27,7 @@ export function StockChart({ bars, levels = [], markers = [], height = 360, rang
   const range = rangeProp ?? rangeState;
   const setRange = onRange ?? setRangeState;
   const [hover, setHover] = useState<number | null>(null);
+  const [cursorY, setCursorY] = useState<number | null>(null); // mouse height in chart units — the crosshair follows it
   const all = useMemo(() => ({ e9: emaSeries(bars.c, 9), e21: emaSeries(bars.c, 21), s200: smaSeries(bars.c, 200) }), [bars]);
   // zoom/pan window: `count` bars ending at bar `end` (exclusive). Range buttons reset it.
   const N = bars.c.length;
@@ -122,11 +123,20 @@ export function StockChart({ bars, levels = [], markers = [], height = 360, rang
           ))}
         </div>
       </div>
-      <div className="relative" onPointerLeave={() => { setHover(null); drag.current = null; }}>
+      <div className="relative" onPointerLeave={() => { setHover(null); setCursorY(null); drag.current = null; }}>
         <svg ref={svgRef} viewBox={`0 0 ${W} ${H}`} className={`w-full touch-none ${drag.current ? "cursor-grabbing" : "cursor-crosshair"}`} role="img" aria-label="Daily candles with 9 EMA, 21 EMA and 200 SMA — scroll to zoom, drag to move"
           onPointerDown={(e) => { drag.current = { x: e.clientX, end: view.end }; (e.target as Element).setPointerCapture?.(e.pointerId); }}
           onPointerMove={(e) => {
-            if (!drag.current || !svgRef.current) return;
+            if (!svgRef.current) return;
+            // which candle and which price the mouse is on: anywhere in a candle's column counts, wick included
+            const r = svgRef.current.getBoundingClientRect();
+            const sx = ((e.clientX - r.left) / r.width) * W, sy = ((e.clientY - r.top) / r.height) * H;
+            if (!drag.current) {
+              const i = Math.floor((sx - padL) / step);
+              setHover(i >= 0 && i < data.length ? i : null);
+              setCursorY(sy >= padT && sy <= padT + plotH ? sy : null);
+              return;
+            }
             const px = svgRef.current.getBoundingClientRect().width * ((W - padL - padR) / W) / view.count;
             const moved = Math.round((e.clientX - drag.current.x) / Math.max(0.5, px));
             if (moved) setView((v) => clampView(drag.current!.end - moved, v.count));
@@ -136,6 +146,7 @@ export function StockChart({ bars, levels = [], markers = [], height = 360, rang
           {yTicks.map((v) => <g key={v}><line x1={padL} x2={W - padR} y1={y(v)} y2={y(v)} stroke="hsl(var(--border))" strokeWidth={0.5} opacity={0.6} />
             <text x={W - padR + 5} y={y(v) + 3} fontSize={9.5} fill="hsl(var(--muted-foreground))" className="font-mono">{fmt(v)}</text></g>)}
           {ticks.map((t) => <text key={t.m} x={x(t.i) - step / 2 + 2} y={H - 4} fontSize={9.5} fill="hsl(var(--muted-foreground))">{new Date(`${t.m}-15T12:00:00Z`).toLocaleDateString("en-US", { month: "short", ...(t.m.endsWith("-01") ? { year: "2-digit" } : {}), timeZone: "UTC" })}</text>)}
+          {hov != null && <line x1={x(hov)} x2={x(hov)} y1={padT} y2={H - padB} stroke="hsl(var(--muted-foreground))" strokeWidth={0.6} strokeDasharray="3 3" opacity={0.7} />}
           {data.map((b, i) => {
             const up = b.c >= b.o, col = up ? CHART.positive : CHART.negative, bw = Math.max(1, step * 0.66);
             return (
@@ -154,12 +165,15 @@ export function StockChart({ bars, levels = [], markers = [], height = 360, rang
             const up = m.kind === "buy";
             return <path key={`m${k}`} d={up ? `M${x(i)},${y(data[i].l) + 5} l-5,9 h10 z` : `M${x(i)},${y(data[i].h) - 5} l-5,-9 h10 z`} fill={up ? "hsl(var(--primary))" : CHART.negative}><title>{m.title ?? m.kind}</title></path>;
           })}
-          {hov != null && <>
-            <line x1={x(hov)} x2={x(hov)} y1={padT} y2={H - padB} stroke="hsl(var(--muted-foreground))" strokeWidth={0.6} strokeDasharray="3 3" />
-            {tag(hb.c, "hsl(var(--foreground))", fmt(hb.c), "hc", "3 3")}
-          </>}
+          {hov != null && cursorY != null && (() => {
+            const price = lo + (1 - (cursorY - padT) / plotH) * (hi - lo);
+            return <g pointerEvents="none">
+              <line x1={padL} x2={W - padR} y1={cursorY} y2={cursorY} stroke="hsl(var(--muted-foreground))" strokeWidth={0.6} strokeDasharray="3 3" opacity={0.8} />
+              <rect x={W - padR + 2} y={cursorY - 8} width={padR - 4} height={16} rx={3} fill="hsl(var(--foreground))" />
+              <text x={W - padR + 5} y={cursorY + 4} fontSize={10} fill="hsl(var(--background))" className="font-mono">{fmt(price)}</text>
+            </g>;
+          })()}
           {hov == null && tag(data[data.length - 1].c, data[data.length - 1].c >= (data[data.length - 1].prev ?? 0) ? CHART.positive : CHART.negative, fmt(data[data.length - 1].c), "last", undefined, false)}
-          {data.map((b, i) => <rect key={`h${b.d}`} x={x(i) - step / 2} y={padT} width={step} height={H - padT - padB} fill="transparent" onPointerEnter={() => setHover(i)} onPointerMove={() => hover !== i && setHover(i)} />)}
         </svg>
       </div>
       <p className="mt-1 text-[10.5px] text-muted-foreground">Scroll on the chart to zoom · drag to move back in time · double-click to reset.{note ? ` ${note}` : ""}</p>
