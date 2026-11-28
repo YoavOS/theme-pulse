@@ -49,16 +49,17 @@ const hideHover = () => { clear(); current = null; if (hoverState) setHover(null
  */
 export function useHoverChart() {
   useEffect(() => {
+    const evs = ["blur", "tp:open-stock", "tp:open-chart"];
     window.addEventListener("scroll", hideHover, true);
-    window.addEventListener("blur", hideHover);
-    return () => { window.removeEventListener("scroll", hideHover, true); window.removeEventListener("blur", hideHover); hideHover(); };
+    evs.forEach((e) => window.addEventListener(e, hideHover));
+    return () => { window.removeEventListener("scroll", hideHover, true); evs.forEach((e) => window.removeEventListener(e, hideHover)); hideHover(); };
   }, []);
   const bind = useCallback((symbol: string, name?: string | null) => ({
     onMouseEnter: (e: MouseEvent) => {
       clear(); current = symbol; pos.x = e.clientX; pos.y = e.clientY;
       if (hoverState && hoverState.symbol !== symbol) setHover(null);
       timer = window.setTimeout(() => {
-        if (current !== symbol) return;
+        if (current !== symbol || document.querySelector('[role="dialog"]')) return; // not over an open panel
         setHover({ symbol, name, x: pos.x, y: pos.y, bars: undefined });
         void quickBars(symbol).then((bars) => { if (hoverState && hoverState.symbol === symbol) setHover({ ...hoverState, bars }); });
       }, DELAY);
@@ -82,7 +83,7 @@ function HoverLayer() {
   const top = Math.min(Math.max(8, state.y - H / 2), vh - H - 8);
   const b = state.bars;
   return createPortal(
-    <div role="tooltip" className="pointer-events-none fixed z-[90] rounded-xl border border-border bg-popover p-3 text-popover-foreground shadow-2xl" style={{ left, top, width: W }}>
+    <div role="tooltip" className="pointer-events-none fixed z-40 rounded-xl border border-border bg-popover p-3 text-popover-foreground shadow-lg" style={{ left, top, width: W }}>
       <Preview symbol={state.symbol} name={state.name} bars={b} />
     </div>, document.body);
 }

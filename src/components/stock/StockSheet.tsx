@@ -108,7 +108,7 @@ export function StockSheetHost() {
 
   return (
     <Sheet open={!!symbol} onOpenChange={(o) => !o && setReq(null)}>
-      <SheetContent side="right" className="w-full overflow-y-auto sm:max-w-[860px]">
+      <SheetContent side="right" className="w-full overflow-y-auto sm:max-w-[860px] data-[state=open]:animate-none data-[state=closed]:animate-none">
         {symbol && (
           <PanelBoundary key={opened}>
           <div className="space-y-5">
@@ -127,7 +127,7 @@ export function StockSheetHost() {
                 <a href={`https://www.tradingview.com/chart/?symbol=${encodeURIComponent(symbol)}`} target="_blank" rel="noreferrer" className={link}><ExternalLink size={12} />TradingView</a>
                 <Link to={`/lens?symbol=${symbol}`} onClick={() => setReq(null)} className={link}><GraduationCap size={12} />Fundamentals</Link>
                 <Link to={`/minervini?symbol=${symbol}`} onClick={() => setReq(null)} className={link}><Trophy size={12} />Minervini</Link>
-                <button onClick={() => openChart(symbol)} className={link}><BarChart3 size={12} />Full chart</button>
+                <button onClick={() => { setReq(null); window.setTimeout(() => openChart(symbol), 0); }} className={link}><BarChart3 size={12} />Full chart</button>
                 <Link to={`/portfolio?add=${symbol}`} onClick={() => setReq(null)} className={`${link} ms-auto border-primary/40 bg-primary/10 text-primary hover:bg-primary/20`}><Briefcase size={12} />Add to portfolio</Link>
               </div>
             </SheetHeader>
