@@ -1,6 +1,6 @@
 // Metrics that only make sense together. Each "read" combines a few of the Lens metrics the way
 // Damodaran links them, and says in plain words what they mean as a set for this company.
-//   1. The return engine:  after-tax margin × sales to capital = return on capital, against what capital costs
+//   1. The return engine:  after-tax margin × revenue to capital = return on capital, against what capital costs
 //   2. The growth engine:  reinvestment × return on that reinvestment ≈ the growth the business can fund itself
 //   3. Profit into cash:   net margin vs free-cash-flow margin, capital spending, stock-based pay
 //   4. The owners' share:  cash returned vs free cash flow, and what happened to the share count
@@ -45,12 +45,12 @@ export function linkedReads(p: LensPayload, he: boolean): LinkedRead[] {
     const tone: ReadTone = spread === null ? "neutral" : spread > 5 ? "good" : spread > 0 ? "mixed" : "weak";
     const body: string[] = [];
     body.push(t(
-      `${p.symbol} keeps about ${P(atm)} of each sales dollar after tax, and each dollar of capital brings in ${X(s2c)} in sales. Multiply the two and you get its return on capital: about ${P(roic)}.`,
-      `${S} שומרת כ-${P(atm)} מכל דולר מכירות אחרי מס, וכל דולר הון מכניס ${X(s2c)} במכירות. מכפלה של השניים נותנת את התשואה שלה על ההון: כ-${P(roic)}.`));
+      `${p.symbol} keeps about ${P(atm)} of each revenue dollar after tax, and each dollar of capital brings in ${X(s2c)} in revenue. Multiply the two and you get its return on capital: about ${P(roic)}.`,
+      `${S} שומרת כ-${P(atm)} מכל דולר הכנסות אחרי מס, וכל דולר הון מכניס ${X(s2c)} בהכנסות. מכפלה של השניים נותנת את התשואה שלה על ההון: כ-${P(roic)}.`));
     if (route) body.push(route === "both"
       ? t(`It wins on both routes: its margin and its use of capital are both well above its industry (${P(indM!)} and ${X(indT!)}).`, `היא מנצחת בשתי הדרכים: גם שיעור הרווח וגם השימוש בהון גבוהים בהרבה מהענף (${P(indM!)} ו-${X(indT!)}).`)
       : route === "margin"
-      ? t(`Its edge comes mostly from margin — it keeps more of each sale than its industry (${P(indM!)}) — so the question is what lets it charge more or spend less, and whether that lasts.`, `היתרון שלה בא בעיקר משיעור הרווח — היא שומרת יותר מכל מכירה מהענף (${P(indM!)}) — אז השאלה היא מה מאפשר לה לגבות יותר או להוציא פחות, והאם זה יחזיק.`)
+      ? t(`Its edge comes mostly from margin — it keeps more of each dollar of revenue than its industry (${P(indM!)}) — so the question is what lets it charge more or spend less, and whether that lasts.`, `היתרון שלה בא בעיקר משיעור הרווח — היא שומרת יותר מכל דולר הכנסות מהענף (${P(indM!)}) — אז השאלה היא מה מאפשר לה לגבות יותר או להוציא פחות, והאם זה יחזיק.`)
       : t(`Its edge comes mostly from how hard it works its capital (${X(s2c)} vs ${X(indT!)} for its industry) rather than from margin — a capital-light model; the question is whether growth will need much more capital.`, `היתרון שלה בא בעיקר מכמה ביעילות היא מנצלת את ההון (${X(s2c)} לעומת ${X(indT!)} בענף), ולא משיעור הרווח — מודל דל הון; השאלה היא אם הצמיחה תדרוש הרבה יותר הון.`));
     if (spread !== null) body.push(spread > 0
       ? t(`Against a cost of capital of about ${P(coc!, 1)}, that's ${P(spread)} points of value created on every dollar invested${roic > 100 ? " — a return this high usually means the business needs very little capital, so growth is cheap for it" : ""}.`,
@@ -91,11 +91,11 @@ export function linkedReads(p: LensPayload, he: boolean): LinkedRead[] {
   if (fin(nm) && fin(fm)) {
     const body: string[] = [];
     const conv = nm > 0 ? fm / nm : null;
-    body.push(t(`Of each sales dollar, ${P(nm)} shows up as profit and ${P(fm)} as free cash flow.`, `מכל דולר מכירות, ${P(nm)} נרשמים כרווח נקי ו-${P(fm)} כתזרים מזומנים חופשי.`));
+    body.push(t(`Of each revenue dollar, ${P(nm)} shows up as profit and ${P(fm)} as free cash flow.`, `מכל דולר הכנסות, ${P(nm)} נרשמים כרווח נקי ו-${P(fm)} כתזרים מזומנים חופשי.`));
     if (conv !== null) body.push(conv >= 0.9
       ? t("Profits are turning into cash — a sign the earnings are real.", "הרווחים הופכים למזומנים — סימן שהרווח אמיתי.")
       : conv >= 0.5
-      ? t(`About ${P(conv * 100)} of profit turns into cash; the rest goes back into the business (capital spending is ${fin(capex) ? P(capex) : "n/a"} of sales) or is tied up in working capital.`, `בערך ${P(conv * 100)} מהרווח הופכים למזומנים; השאר חוזר לעסק (השקעות ההון הן ${fin(capex) ? P(capex) : "—"} מהמכירות) או נתקע בהון החוזר.`)
+      ? t(`About ${P(conv * 100)} of profit turns into cash; the rest goes back into the business (capital spending is ${fin(capex) ? P(capex) : "n/a"} of revenue) or is tied up in working capital.`, `בערך ${P(conv * 100)} מהרווח הופכים למזומנים; השאר חוזר לעסק (השקעות ההון הן ${fin(capex) ? P(capex) : "—"} מההכנסות) או נתקע בהון החוזר.`)
       : t("Little of the profit is turning into cash. That's normal for a company investing heavily to grow, but worth checking: profits that never become cash are a warning sign.", "מעט מהרווח הופך למזומנים. זה רגיל לחברה שמשקיעה הרבה כדי לצמוח, אבל כדאי לבדוק: רווחים שאף פעם לא הופכים למזומנים הם סימן אזהרה."));
     if (fin(sbc) && sbc >= 3) body.push(t(`Stock-based pay is ${P(sbc)} of revenue. It doesn't use cash, but it is a real cost — owners pay it through dilution — so the cash figure flatters by about that much.`, `התגמול במניות הוא ${P(sbc)} מההכנסות. הוא לא יוצא מהקופה, אבל זו עלות אמיתית — הבעלים משלמים אותה בדילול — ולכן נתון המזומנים נראה טוב יותר בערך בשיעור הזה.`));
     const tone: ReadTone = conv === null ? "weak" : conv >= 0.9 && !(fin(sbc) && sbc >= 8) ? "good" : conv >= 0.5 ? "mixed" : "weak";

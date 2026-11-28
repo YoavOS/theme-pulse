@@ -393,7 +393,7 @@ export default function MinerviniChecker() {
               Fundamentals Checker
             </h1>
           </div>
-          <div className="text-xs text-muted-foreground">SEPA · earnings, sales, margins, cash, quality · red flags · Minervini</div>
+          <div className="text-xs text-muted-foreground">SEPA · earnings, revenue, margins, cash, quality · red flags · Minervini</div>
         </div>
       </header>
 
@@ -458,7 +458,7 @@ export default function MinerviniChecker() {
             <Tabs value={tab} onValueChange={setTab}>
               <TabsList className="h-auto flex-wrap justify-start gap-1 bg-muted/30 p-1">
                 <TabsTrigger value="overview" className="text-xs">Overview</TabsTrigger>
-                <TabsTrigger value="earnings" className="text-xs">Earnings &amp; sales</TabsTrigger>
+                <TabsTrigger value="earnings" className="text-xs">Earnings &amp; revenue</TabsTrigger>
                 <TabsTrigger value="history" className="text-xs">Long history</TabsTrigger>
                 <TabsTrigger value="checklist" className="text-xs">Minervini checklist{multi.reports.minervini ? ` · ${multi.reports.minervini.overallScore}` : ""}</TabsTrigger>
                 <TabsTrigger value="data" className="text-xs">Data{multi.dataQuality?.warnings?.length ? ` · ${multi.dataQuality.warnings.length} note${multi.dataQuality.warnings.length === 1 ? "" : "s"}` : ""}</TabsTrigger>
@@ -602,7 +602,7 @@ function QuarterTable({ s }: { s: Series }) {
       <SectionHead
         title="Quarter by quarter"
         sub={<>Growth vs the same quarter a year earlier, newest first. <span className="text-gain-medium">Green</span> is 25% or more; ▲▼ means faster or slower than the quarter before.</>}
-        right={s.code33 ? <span className="rounded border border-border px-2 py-1 text-[11px]">Code 33: EPS {s.code33.eps ? "✓" : "✗"} · sales {s.code33.sales ? "✓" : "✗"} · margin {s.code33.margin ? "✓" : "✗"}</span> : undefined}
+        right={s.code33 ? <span className="rounded border border-border px-2 py-1 text-[11px]">Code 33: EPS {s.code33.eps ? "✓" : "✗"} · revenue {s.code33.sales ? "✓" : "✗"} · margin {s.code33.margin ? "✓" : "✗"}</span> : undefined}
       />
       <GrowthBars q={q} />
       <div className="overflow-x-auto">
@@ -610,8 +610,8 @@ function QuarterTable({ s }: { s: Series }) {
           <thead>
             <tr className="border-b border-border text-[10.5px] text-muted-foreground">
               <th className="px-2 py-1.5 text-left font-medium">Quarter end</th>
-              <th className="px-2 py-1.5 text-right font-medium">Sales</th>
-              <th className="px-2 py-1.5 text-right font-medium">Sales YoY</th>
+              <th className="px-2 py-1.5 text-right font-medium">Revenue</th>
+              <th className="px-2 py-1.5 text-right font-medium">Revenue YoY</th>
               <th className="px-2 py-1.5 text-right font-medium">EPS</th>
               <th className="px-2 py-1.5 text-right font-medium">EPS YoY</th>
               <th className="px-2 py-1.5 text-right font-medium">Margin</th>
@@ -636,11 +636,11 @@ function QuarterTable({ s }: { s: Series }) {
   );
 }
 
-/** Sales and EPS growth per quarter as bars (oldest → newest) — acceleration is visible at a glance. */
+/** Revenue and EPS growth per quarter as bars (oldest → newest) — acceleration is visible at a glance. */
 function GrowthBars({ q }: { q: Series["quarters"] }) {
   const rows = [...q].reverse();
   const series: { label: string; vals: (number | null)[]; turn?: boolean[] }[] = [
-    { label: "Sales growth vs a year ago", vals: rows.map((r) => r.revenueYoY) },
+    { label: "Revenue growth vs a year ago", vals: rows.map((r) => r.revenueYoY) },
     { label: "EPS growth vs a year ago", vals: rows.map((r) => (r.turnaround ? null : r.epsYoY)), turn: rows.map((r) => r.turnaround) },
   ];
   const all = series.flatMap((s) => s.vals).filter((x): x is number => x !== null);
@@ -786,7 +786,7 @@ function ExtrasCard({ s }: { s: Series }) {
         <div>EPS surprises: <span className="font-mono">{s.surprises.length ? s.surprises.slice(0, 6).map((x) => `${x >= 0 ? "+" : ""}${x.toFixed(0)}%`).join(" ") : "—"}</span></div>
         <div className="mt-1">Revenue surprises: <span className="font-mono">{s.revSurprises?.length ? s.revSurprises.slice(0, 6).map((x) => `${x >= 0 ? "+" : ""}${x.toFixed(1)}%`).join(" ") : "—"}</span></div>
         <div className="mt-1">Next report: <b>{s.nextEarnings ?? "—"}</b></div>
-        <p className="mt-2 text-[10.5px] text-muted-foreground">Beats on both EPS and sales have been the more durable kind. Holding through a report is a sizing decision: a gap can jump past your stop.</p>
+        <p className="mt-2 text-[10.5px] text-muted-foreground">Beats on both EPS and revenue has been the more durable kind. Holding through a report is a sizing decision: a gap can jump past your stop.</p>
       </Card>
       <Card className="p-4 text-xs">
         <h3 className="mb-2 font-display text-[15px] font-semibold tracking-tight">Float &amp; short interest</h3>
@@ -829,7 +829,7 @@ function ScoreBuild({ s }: { s: Series }) {
 // the comparisons between groups are what matter.
 const EVIDENCE: Record<string, string> = {
   turnaround:
-    "Scored only for companies that lost money (or had a negative operating margin) in the last two years. Checks whether EPS flipped positive, the last 12 months are profitable, margins and cash flow are improving and sales are growing. Rule-based, not backtested.",
+    "Scored only for companies that lost money (or had a negative operating margin) in the last two years. Checks whether EPS flipped positive, the last 12 months are profitable, margins and cash flow are improving and revenue is growing. Rule-based, not backtested.",
   st_momentum:
     "Price strength over the last 1–4 weeks, from the weekly Stages scan's daily snapshot: return vs the market, RS rating, distance from the 52-week high, position vs the 21-day EMA (not stretched) and volume. Rule-based, not backtested.",
   setup:
@@ -990,7 +990,7 @@ function ProfileCards({ p, extra = [] }: { p: Profiles; extra?: HProfile[] }) {
                 <div className="pl-5 text-[11px] text-muted-foreground">{f.detail}{FLAG_EVIDENCE[f.key] ? ` · tested: ${FLAG_EVIDENCE[f.key]}` : ""}</div>
               </div>
             ))}
-            {!flags.length && <div className="text-muted-foreground">None of the tested warning signs: price above 20× sales, assets up 50%+, shares up 10%+, losses with cash burn, or years of 25%+ growth already priced in.</div>}
+            {!flags.length && <div className="text-muted-foreground">None of the tested warning signs: price above 20× revenue, assets up 50%+, shares up 10%+, losses with cash burn, or years of 25%+ growth already priced in.</div>}
           </div>
           <Tooltip>
             <TooltipTrigger asChild>
@@ -1004,11 +1004,11 @@ function ProfileCards({ p, extra = [] }: { p: Profiles; extra?: HProfile[] }) {
         <p>
         Backtest: ~450 US companies from your list, 16 dates (Nov 2021 – Aug 2025), filings as they stood on each date, returns vs SPY.
         Only names on today's list were tested (survivorship bias), so treat the absolute numbers loosely and compare the groups with each other.
-        Dropped because they failed the test: sales-growth level and consistency, multi-year growth records, accruals, debt / equity.
+        Dropped because they failed the test: revenue-growth level and consistency, multi-year growth records, accruals, debt / equity.
       </p>
       <p>
         Second test (Oct 2026): 619 companies, 24 quarterly dates from Nov 2019 to Aug 2025, 13,008 stock-dates, returns vs SPY 26 weeks later.
-        A new profile was kept only if it ranked stocks the right way in both 2019–22 and 2023–25: sales acceleration, margin expansion and cash flow passed.
+        A new profile was kept only if it ranked stocks the right way in both 2019–22 and 2023–25: revenue acceleration, margin expansion and cash flow passed.
         Dropped: a turnaround profile (mostly the same stocks earnings momentum already flags, and no better when the two disagreed) and a steady-compounder
         profile (ranked stocks the wrong way in 2019–22). The honest limit: about 1 in 10 stocks beat SPY by 50+ points over 26 weeks whatever their scores —
         big winners came mostly from small or loss-making companies, where these scores barely changed the odds.
@@ -1066,7 +1066,7 @@ function AgreementCard({ set, strongN }: { set: HProfile[]; strongN: number }) {
     <Card className="p-4">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <div className="text-[11px] text-muted-foreground">Agreement · earnings, sales, margins, cash</div>
+          <div className="text-[11px] text-muted-foreground">Agreement · earnings, revenue, margins, cash</div>
           <div className="mt-0.5 font-display text-lg font-semibold tracking-tight">Strong on {strongN} of {set.length}</div>
           <div className="flex flex-wrap gap-1 pt-1">
             {set.map((h) => <span key={h.key} className={`rounded border px-1.5 py-[1px] text-[10.5px] ${VERDICT_CLS[h.verdict]}`}>{h.label}: {h.verdict}</span>)}
@@ -1114,7 +1114,7 @@ function HistoryCard({ h }: { h: History }) {
       </div>
       {view === "quarters" ? (
         <>
-          <svg viewBox={`0 0 ${W} ${H}`} className="h-40 w-full" preserveAspectRatio="none" aria-label="Quarterly sales (bars) and sales growth year over year (line)">
+          <svg viewBox={`0 0 ${W} ${H}`} className="h-40 w-full" preserveAspectRatio="none" aria-label="Quarterly revenue (bars) and revenue growth year over year (line)">
             {q.map((x, i) => {
               const hgt = ((x.revenue ?? 0) / revMax) * (H - 30);
               return <rect key={x.end} x={pad + bw * i + bw * 0.15} y={H - 18 - hgt} width={bw * 0.7} height={hgt} fill="hsl(222,70%,60%)" opacity={0.35} />;
@@ -1124,8 +1124,8 @@ function HistoryCard({ h }: { h: History }) {
             {q.map((x, i) => (i % 4 === 0 ? <text key={x.end} x={pad + bw * i} y={H - 4} fontSize="10" fill="currentColor" opacity={0.55}>{x.end.slice(0, 7)}</text> : null))}
           </svg>
           <div className="mt-1 flex flex-wrap gap-x-4 text-[10.5px] text-muted-foreground">
-            <span><span className="text-[hsl(222,70%,70%)]">■</span> quarterly sales</span>
-            <span><span className="text-gain-medium">—</span> sales growth vs a year earlier (range {yLo.toFixed(0)}% to {yHi.toFixed(0)}%)</span>
+            <span><span className="text-[hsl(222,70%,70%)]">■</span> quarterly revenue</span>
+            <span><span className="text-gain-medium">—</span> revenue growth vs a year earlier (range {yLo.toFixed(0)}% to {yHi.toFixed(0)}%)</span>
             <span>Acceleration = the line rising; a peak and roll-over often comes before the stock tops.</span>
           </div>
         </>
@@ -1135,7 +1135,7 @@ function HistoryCard({ h }: { h: History }) {
             <thead>
               <tr className="border-b border-border text-[10.5px] text-muted-foreground">
                 <th className="px-2 py-1.5 text-left font-medium">Fiscal year end</th>
-                <th className="px-2 py-1.5 text-right font-medium">Sales</th>
+                <th className="px-2 py-1.5 text-right font-medium">Revenue</th>
                 <th className="px-2 py-1.5 text-right font-medium">Growth</th>
                 <th className="px-2 py-1.5 text-right font-medium">EPS</th>
                 <th className="px-2 py-1.5 text-right font-medium">Op. margin</th>

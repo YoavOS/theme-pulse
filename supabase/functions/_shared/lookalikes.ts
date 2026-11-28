@@ -16,7 +16,7 @@ export const TRAITS = ["spread", "spread3", "consistency", "margin", "turnover",
 export type Trait = typeof TRAITS[number];
 export const TRAIT_TEXT: Record<Trait, string> = {
   spread: "return above its cost of capital (latest year)", spread3: "return above its cost of capital (3-year median)",
-  consistency: "years above its cost of capital (of the last 5)", margin: "after-tax operating margin", turnover: "sales per $ of capital",
+  consistency: "years above its cost of capital (of the last 5)", margin: "after-tax operating margin", turnover: "revenue per $ of capital",
   growth3: "revenue growth (3-year average)", reinvest: "share of profit reinvested", grossMargin: "gross margin", rnd: "R&D as % of revenue", debt: "net debt / EBITDA",
 };
 const WEIGHT: Record<Trait, number> = { spread: 1, spread3: 1.4, consistency: 1.2, margin: 1, turnover: 0.8, growth3: 1, reinvest: 0.6, grossMargin: 0.8, rnd: 0.6, debt: 0.5 };

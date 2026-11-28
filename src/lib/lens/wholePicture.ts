@@ -86,7 +86,7 @@ export function wholePicture(p: LensPayload, he = false): Picture | null {
           : t(`It spent ${listed} — more than its gross profit, so the business ran at an operating loss of ${money(Math.abs(op))} (${usd100(Math.abs(op), rev)} for every $100 of revenue).`, `היא הוציאה ${listed} — יותר מהרווח הגולמי, ולכן העסק פעל בהפסד תפעולי של ${money(Math.abs(op))} (${usd100(Math.abs(op), rev)} על כל $100 הכנסות).`),
         tone: op >= 0 ? "neutral" : "bad" });
       if (rnd) per100.push({ key: "rnd", label: t("R&D", "מו\"פ"), amount: rnd, per100: (rnd / rev) * 100, kind: "cost" });
-      if (sga) per100.push({ key: "sga", label: t("Selling & admin", "מכירות ומטה"), amount: sga, per100: (sga / rev) * 100, kind: "cost" });
+      if (sga) per100.push({ key: "sga", label: t("Selling & admin", "שיווק ומטה"), amount: sga, per100: (sga / rev) * 100, kind: "cost" });
       if (other > rev * 0.01) per100.push({ key: "other", label: t("Other operating", "תפעול אחר"), amount: other, per100: (other / rev) * 100, kind: "cost" });
       if (net != null && op - net > 0) per100.push({ key: "tax", label: t("Tax & other", "מס ואחרות"), amount: op - net, per100: ((op - net) / rev) * 100, kind: "cost" });
     }

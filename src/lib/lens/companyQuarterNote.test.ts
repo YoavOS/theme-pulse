@@ -28,9 +28,9 @@ describe("company lines from the latest quarter", () => {
     expect(qoq[0]).toContain("+4.0%");
     expect(qoq[1]).toContain("+30.0%");
   });
-  it("puts costs per $100 of sales and flags net above operating profit", () => {
+  it("puts costs per $100 of revenue and flags net above operating profit", () => {
     expect(quarterNote("cost_of_revenue", payload, "en")![0]).toContain("$40.0 of every $100");
-    expect(quarterNote("operating_income", payload, "en")![0]).toContain("(20.0% of sales)");
+    expect(quarterNote("operating_income", payload, "en")![0]).toContain("(20.0% of revenue)");
     expect(quarterNote("net_income", payload, "en")![1]).toContain("above operating profit");
   });
   it("compares EPS with the same quarter a year earlier", () => {

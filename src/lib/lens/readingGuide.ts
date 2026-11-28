@@ -18,22 +18,22 @@ export const READING_GUIDE: GuideEntry[] = [
   },
   {
     id: "margin", name: "Operating margin",
-    says: "How much of each dollar of sales is left after running the business. One of the two routes to a high return.",
+    says: "How much of each dollar of revenue is left after running the business. One of the two routes to a high return.",
     misleads: [
       "Means very different things by industry — a 10% margin is excellent for a retailer and weak for software. Always read it against the industry.",
       "Heavy R&D or marketing that is really investment pushes it down today.",
       "A peak-of-cycle margin for a cyclical company is not the normal level.",
     ],
-    pairWith: "Sales to capital (the other route) and the industry's margin.",
+    pairWith: "Revenue to capital (the other route) and the industry's margin.",
   },
   {
-    id: "turnover", name: "Sales to capital",
-    says: "How many dollars of sales each dollar of capital produces — the other route to a high return (a low-margin business can still earn a lot by turning its capital fast).",
+    id: "turnover", name: "Revenue to capital",
+    says: "How many dollars of revenue each dollar of capital produces — the other route to a high return (a low-margin business can still earn a lot by turning its capital fast).",
     misleads: [
       "Leases and acquisitions change the capital base, so compare like with like.",
-      "For a young company, capital spent now pays off in later sales — today's ratio understates it.",
+      "For a young company, capital spent now pays off in later revenue — today's ratio understates it.",
     ],
-    pairWith: "Operating margin: return on capital ≈ after-tax margin × sales to capital.",
+    pairWith: "Operating margin: return on capital ≈ after-tax margin × revenue to capital.",
   },
   {
     id: "growth", name: "Revenue growth",
@@ -73,7 +73,7 @@ export const READING_GUIDE: GuideEntry[] = [
   },
   {
     id: "multiples", name: "P/E, EV/EBITDA and other multiples",
-    says: "What the market pays for each dollar of earnings or sales — a quick price check.",
+    says: "What the market pays for each dollar of earnings or revenue — a quick price check.",
     misleads: [
       "A low multiple is often low for a reason (risk, weak growth, poor returns); a high one may be justified by growth at high returns.",
       "Accounting differences (R&D, leases) make multiples hard to compare across industries.",

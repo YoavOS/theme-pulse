@@ -34,20 +34,20 @@ function plainReading(S: string, m: Metric): string | null {
   if (v === null || !Number.isFinite(v)) return m.display && m.display !== "n/a" ? `${S}: ${m.display}.` : null;
   switch (m.id) {
     case "rev_growth_ttm": case "rev_growth_q": case "rev_cagr_3y":
-      return v >= 0 ? `${S}'s sales grew ${r1(v)}%${m.id === "rev_cagr_3y" ? " a year over the last three years" : m.id === "rev_growth_q" ? " in the latest quarter versus a year earlier" : " over the last twelve months versus the twelve before"}.`
-        : `${S}'s sales shrank ${r1(v)}%${m.id === "rev_cagr_3y" ? " a year over three years" : " versus a year earlier"}.`;
+      return v >= 0 ? `${S}'s revenue grew ${r1(v)}%${m.id === "rev_cagr_3y" ? " a year over the last three years" : m.id === "rev_growth_q" ? " in the latest quarter versus a year earlier" : " over the last twelve months versus the twelve before"}.`
+        : `${S}'s revenue shrank ${r1(v)}%${m.id === "rev_cagr_3y" ? " a year over three years" : " versus a year earlier"}.`;
     case "opinc_growth_ttm": case "ni_growth_ttm":
       return `${S}'s ${m.id === "ni_growth_ttm" ? "net income" : "operating income"} changed ${v >= 0 ? "+" : "−"}${r1(v)}% versus the prior twelve months${Math.abs(v) > 200 ? " — a swing this big usually means profits were close to zero in one of the two years, so the % says little" : ""}.`;
     case "gross_margin":
-      return `${S}'s gross margin is ${m.display}: about ${r0(v)} cents of every sales dollar are left after the direct cost of what it sells.`;
+      return `${S}'s gross margin is ${m.display}: about ${r0(v)} cents of every revenue dollar are left after the direct cost of what it sells.`;
     case "op_margin":
-      return v >= 0 ? `${S}'s operating margin is ${m.display}: it keeps about ${r0(v)} cents of operating profit from each sales dollar, before interest and taxes.`
-        : `${S}'s operating margin is ${m.display}: it loses about ${r0(v)} cents on every sales dollar from running the business, before interest and taxes.`;
+      return v >= 0 ? `${S}'s operating margin is ${m.display}: it keeps about ${r0(v)} cents of operating profit from each revenue dollar, before interest and taxes.`
+        : `${S}'s operating margin is ${m.display}: it loses about ${r0(v)} cents on every revenue dollar from running the business, before interest and taxes.`;
     case "net_margin":
-      return v >= 0 ? `${S}'s net margin is ${m.display}: about ${r0(v)} cents of every sales dollar end up as profit for shareholders.`
-        : `${S}'s net margin is ${m.display}: after every cost it loses about ${r0(v)} cents per sales dollar.`;
+      return v >= 0 ? `${S}'s net margin is ${m.display}: about ${r0(v)} cents of every revenue dollar end up as profit for shareholders.`
+        : `${S}'s net margin is ${m.display}: after every cost it loses about ${r0(v)} cents per revenue dollar.`;
     case "rnd_intensity":
-      return `${S} spends about ${r0(v)} cents of every sales dollar on research and development.`;
+      return `${S} spends about ${r0(v)} cents of every revenue dollar on research and development.`;
     case "sbc_intensity":
       return `${S} pays its staff in shares worth ${m.display} of revenue — a real cost to owners even though no cash leaves.`;
     case "roic":
@@ -59,14 +59,14 @@ function plainReading(S: string, m: Metric): string | null {
       return v >= 0 ? `${S} earns ${r1(v)} percentage points more than its capital costs — it creates value as it grows.`
         : `${S} earns ${r1(v)} percentage points less than its capital costs — for now, growth destroys value.`;
     case "fcf_margin":
-      return v >= 0 ? `${S} turns about ${r0(v)} cents of each sales dollar into spare cash after investing in itself.`
-        : `${S} burns about ${r0(v)} cents of cash per sales dollar after investing in itself.`;
+      return v >= 0 ? `${S} turns about ${r0(v)} cents of each revenue dollar into spare cash after investing in itself.`
+        : `${S} burns about ${r0(v)} cents of cash per revenue dollar after investing in itself.`;
     case "capex_intensity":
-      return `${S} spends about ${r0(v)} cents of each sales dollar on long-lived assets (capex).`;
+      return `${S} spends about ${r0(v)} cents of each revenue dollar on long-lived assets (capex).`;
     case "reinvestment_rate":
       return `${S} puts ${m.display} of its after-tax operating income back into the business to grow.`;
     case "sales_to_capital":
-      return `Each $1 of capital in ${S} produces about $${v.toFixed(2)} of sales a year${v >= 2 ? " — growth comes cheap" : v < 0.8 ? " — growth needs a lot of capital" : ""}.`;
+      return `Each $1 of capital in ${S} produces about $${v.toFixed(2)} of revenue a year${v >= 2 ? " — growth comes cheap" : v < 0.8 ? " — growth needs a lot of capital" : ""}.`;
     case "interest_coverage":
       return v >= 0 ? `${S}'s operating profit covers its interest bill about ${v.toFixed(1)} times.` : `${S}'s operating profit doesn't cover its interest bill (it's negative).`;
     case "debt_to_capital":
@@ -83,7 +83,7 @@ function plainReading(S: string, m: Metric): string | null {
     case "pe":
       return v > 0 ? `Investors pay about $${v.toFixed(0)} for each $1 of ${S}'s yearly profit.` : `${S} has no profit, so a P/E can't be read.`;
     case "ps":
-      return `Investors pay about $${v.toFixed(1)} for each $1 of ${S}'s yearly sales.`;
+      return `Investors pay about $${v.toFixed(1)} for each $1 of ${S}'s yearly revenue.`;
     case "ev_ebit":
       return v > 0 ? `Buying all of ${S} (debt included) costs about ${v.toFixed(0)} years of its operating profit.` : `${S}'s operating profit is negative, so this ratio can't be read.`;
     default:

@@ -21,7 +21,7 @@
 //  Added Oct 2026 after a second, larger test (619 companies, 24 quarterly dates Nov 2019 – Aug 2025,
 //  26 weeks ahead vs SPY). Kept only if the score ranked stocks the right way in BOTH halves
 //  (2019–22 and 2023–25):
-//  Sales acceleration "Is growth speeding up?"   — IC +0.044 / +0.057.
+//  Revenue acceleration "Is growth speeding up?"   — IC +0.044 / +0.057.
 //  Margin expansion   "Are margins widening?"    — IC +0.039 / +0.069; Strong 21% big losses vs Weak 24%.
 //  Cash flow          "Is the cash real?"         — IC +0.044 / +0.039; Strong 19% big losses vs Weak 28%.
 //  Dropped in that test: turnaround (losses turning to profits — mostly the same stocks earnings
@@ -31,7 +31,7 @@
 //  big win or a big loss, because big winners came mostly from small or loss-making companies, where
 //  the fundamental scores barely changed the odds.
 //
-//  Dropped after testing: sales-growth level and consistency, multi-year sales/EPS growth
+//  Dropped after testing: revenue-growth level and consistency, multi-year revenue/EPS growth
 //  (high past growth did WORSE afterwards — expectations already priced, Lakonishok-Shleifer-
 //  Vishny 1994), accruals, debt/equity, ROA change.
 // ─────────────────────────────────────────────────────────────
@@ -186,7 +186,7 @@ export function momentumProfile(F: Features, x: Extras = {}): Profile {
   const p: (Part | null)[] = [];
   if (nn(F.epsChg)) { const v = F.epsChg; p.push(part("EPS vs the same quarter last year", 25, v >= 0.5 ? 25 : v >= 0.2 ? 18 : v > 0 ? 10 : 0, `${v >= 0 ? "+" : ""}${(v * 100).toFixed(0)}%${F.epsYoY === null ? " (from a loss)" : ""}`, v >= 0.2 ? true : v < 0 ? false : null)); }
   if (nn(F.sue)) { const v = F.sue; p.push(part("Earnings surprise vs its own history (SUE)", 20, v >= 2 ? 20 : v >= 1 ? 14 : v > 0 ? 7 : 0, v.toFixed(1), v >= 1 ? true : v < 0 ? false : null)); }
-  if (nn(F.opLeverage)) { const v = F.opLeverage; p.push(part("Operating profit growing faster than sales", 20, v >= 10 ? 20 : v > 0 ? 12 : 0, `${v >= 0 ? "+" : ""}${v.toFixed(0)} pts`, v > 0 ? true : v < -10 ? false : null)); }
+  if (nn(F.opLeverage)) { const v = F.opLeverage; p.push(part("Operating profit growing faster than revenue", 20, v >= 10 ? 20 : v > 0 ? 12 : 0, `${v >= 0 ? "+" : ""}${v.toFixed(0)} pts`, v > 0 ? true : v < -10 ? false : null)); }
   if (nn(F.marginChg)) { const v = F.marginChg; p.push(part("Operating margin vs a year ago", 15, v >= 2 ? 15 : v > 0 ? 9 : 0, `${v >= 0 ? "+" : ""}${v.toFixed(1)} pts`, v > 0 ? true : v < -2 ? false : null)); }
   if (nn(F.epsAcc)) { const v = F.epsAcc; p.push(part("EPS growth accelerating", 10, v > 0 ? 10 : 0, `${v >= 0 ? "+" : ""}${v.toFixed(0)} pts vs last quarter`, v > 0 ? true : v < -20 ? false : null)); }
   if (nn(F.epsUpShare)) { const v = F.epsUpShare; p.push(part("Quarters with EPS up year over year (last 8)", 10, v * 10, `${Math.round(v * 8)}/8`, v >= 0.75 ? true : v <= 0.25 ? false : null)); }
@@ -195,7 +195,7 @@ export function momentumProfile(F: Features, x: Extras = {}): Profile {
   if (rv.length) p.push(part("Analysts raising estimates (90 days)", 12, rv.every((v) => v > 0) ? 12 : rv.some((v) => v > 0) ? 6 : 0, rv.map((v) => pf(v, 1)).join(" / "), rv.every((v) => v > 0) ? true : rv.every((v) => v < 0) ? false : null, false));
   if (nn(x.reactionPct)) { const v = x.reactionPct; p.push(part("Stock's reaction to the last report", 8, v >= 5 ? 8 : v >= 0 ? 5 : v >= -5 ? 2 : 0, `${pf(v, 1)} vs SPY`, v >= 2 ? true : v <= -5 ? false : null, false)); }
   if (nn(x.epsSurprisePct)) { const v = x.epsSurprisePct; p.push(part("Beat on EPS (last report)", 6, v >= 10 ? 6 : v >= 3 ? 4 : v > 0 ? 2 : 0, pf(v, 1), v >= 3 ? true : v < 0 ? false : null, false)); }
-  if (nn(x.revSurprisePct)) { const v = x.revSurprisePct; p.push(part("Beat on sales (last report)", 4, v > 1 ? 4 : v > 0 ? 2 : 0, pf(v, 1), v > 1 ? true : v < 0 ? false : null, false)); }
+  if (nn(x.revSurprisePct)) { const v = x.revSurprisePct; p.push(part("Beat on revenue (last report)", 4, v > 1 ? 4 : v > 0 ? 2 : 0, pf(v, 1), v > 1 ? true : v < 0 ? false : null, false)); }
   return finish("momentum", "Earnings momentum", "next 3–12 months", "Is earning power rising?", p);
 }
 
@@ -210,15 +210,15 @@ export function qualityProfile(F: Features): Profile {
   return finish("quality", "Quality", "protection in sell-offs", "How well does it hold up?", p);
 }
 
-/** Is sales growth speeding up? (Second test: IC +0.044 in 2019–22, +0.057 in 2023–25.) */
+/** Is revenue growth speeding up? (Second test: IC +0.044 in 2019–22, +0.057 in 2023–25.) */
 export function growthProfile(F: Features): Profile {
   const p: (Part | null)[] = [];
-  if (nn(F.revYoY0)) { const v = F.revYoY0; p.push(part("Sales vs the same quarter last year", 30, v >= 25 ? 30 : v >= 15 ? 20 : v >= 5 ? 10 : 0, pf(v), v >= 15 ? true : v < 0 ? false : null)); }
-  if (nn(F.revYoY0) && nn(F.revYoY1)) { const d = F.revYoY0 - F.revYoY1; p.push(part("Sales growth faster than last quarter's", 25, d >= 5 ? 25 : d > 0 ? 15 : 0, `${d >= 0 ? "+" : ""}${d.toFixed(0)} pts`, d > 0 ? true : d < -10 ? false : null)); }
+  if (nn(F.revYoY0)) { const v = F.revYoY0; p.push(part("Revenue vs the same quarter last year", 30, v >= 25 ? 30 : v >= 15 ? 20 : v >= 5 ? 10 : 0, pf(v), v >= 15 ? true : v < 0 ? false : null)); }
+  if (nn(F.revYoY0) && nn(F.revYoY1)) { const d = F.revYoY0 - F.revYoY1; p.push(part("Revenue growth faster than last quarter's", 25, d >= 5 ? 25 : d > 0 ? 15 : 0, `${d >= 0 ? "+" : ""}${d.toFixed(0)} pts`, d > 0 ? true : d < -10 ? false : null)); }
   if (nn(F.revYoY0) && nn(F.revYoY2)) { const d = F.revYoY0 - F.revYoY2; p.push(part("Faster than two quarters ago", 15, d > 0 ? 15 : 0, `${d >= 0 ? "+" : ""}${d.toFixed(0)} pts`, d > 0 ? true : null)); }
-  if (nn(F.revSeq)) { const v = F.revSeq; p.push(part("Sales up from the previous quarter", 15, v > 0 ? 15 : 0, pf(v, 1), v > 0 ? true : v < -5 ? false : null)); }
+  if (nn(F.revSeq)) { const v = F.revSeq; p.push(part("Revenue up from the previous quarter", 15, v > 0 ? 15 : 0, pf(v, 1), v > 0 ? true : v < -5 ? false : null)); }
   if (nn(F.gm0) && nn(F.gm4)) { const d = F.gm0 - F.gm4; p.push(part("Gross margin vs a year ago", 15, d > 0 ? 15 : 0, `${d >= 0 ? "+" : ""}${d.toFixed(1)} pts`, d > 0 ? true : d < -2 ? false : null)); }
-  return finish("growth", "Sales acceleration", "next 6 months", "Is growth speeding up?", p);
+  return finish("growth", "Revenue acceleration", "next 6 months", "Is growth speeding up?", p);
 }
 
 /** Are margins widening? (Second test: IC +0.039 / +0.069; fewer big losses when Strong.) */
@@ -270,7 +270,7 @@ export function turnaroundProfile(F: Features): Profile {
       nowPos ? (nn(prev) && prev <= 0 ? "yes, after a loss the year before" : "yes") : nn(prev) && F.netIncomeTTM > prev ? "loss is shrinking" : "no", nowPos ? true : nn(prev) && F.netIncomeTTM > prev ? null : false));
   }
   if (nn(F.opMargin) && nn(F.om4)) { const d = F.opMargin - F.om4; p.push(part("Operating margin vs a year ago", 20, d >= 5 ? 20 : d >= 2 ? 12 : d > 0 ? 6 : 0, `${d >= 0 ? "+" : ""}${d.toFixed(1)} pts`, d >= 2 ? true : d < 0 ? false : null)); }
-  if (nn(F.revYoY0)) { const v = F.revYoY0, acc = nn(F.revYoY1) ? v - F.revYoY1 : null; p.push(part("Sales growing (and speeding up)", 15, v >= 10 && acc !== null && acc > 0 ? 15 : v >= 5 ? 9 : v > 0 ? 4 : 0, `${pf(v)}${acc !== null ? `, ${acc >= 0 ? "+" : ""}${acc.toFixed(0)} pts vs last quarter` : ""}`, v >= 5 ? true : v < 0 ? false : null)); }
+  if (nn(F.revYoY0)) { const v = F.revYoY0, acc = nn(F.revYoY1) ? v - F.revYoY1 : null; p.push(part("Revenue growing (and speeding up)", 15, v >= 10 && acc !== null && acc > 0 ? 15 : v >= 5 ? 9 : v > 0 ? 4 : 0, `${pf(v)}${acc !== null ? `, ${acc >= 0 ? "+" : ""}${acc.toFixed(0)} pts vs last quarter` : ""}`, v >= 5 ? true : v < 0 ? false : null)); }
   if (nn(F.ocfTTM) && nn(F.ocfPrevTTM)) { const up = F.ocfTTM > F.ocfPrevTTM, pos = F.ocfTTM > 0; p.push(part("Operating cash flow improving", 15, pos && up ? 15 : up ? 8 : 0, pos ? (up ? "positive and rising" : "positive") : up ? "negative but improving" : "negative and falling", up ? true : false)); }
   if (nn(F.shareIssue1y)) { const v = F.shareIssue1y; p.push(part("Not funding itself by selling shares", 5, v <= 3 ? 5 : v <= 10 ? 2 : 0, pf(v, 1), v <= 3 ? true : v > 10 ? false : null)); }
   return finish("turnaround", "Turnaround", "next 6–12 months", "Is a struggling business recovering?", p);
@@ -284,19 +284,19 @@ export interface CompanyType { key: "speculative" | "established" | "large"; lab
 export function companyType(F: Features): CompanyType | null {
   if (!nn(F.salesTTM) || !nn(F.netIncomeTTM)) return null;
   if (F.netIncomeTTM <= 0 || F.salesTTM < 5e8)
-    return { key: "speculative", label: "Speculative", detail: F.netIncomeTTM <= 0 ? "losing money over the last 12 months" : "under $500M in yearly sales", winPct: 15, lossPct: 27, medianVsSpy: -4 };
-  if (F.salesTTM >= 1e10) return { key: "large", label: "Large and profitable", detail: "$10B+ in yearly sales and profitable", winPct: 3, lossPct: 12, medianVsSpy: -1 };
-  return { key: "established", label: "Established and profitable", detail: "profitable, $0.5–10B in yearly sales", winPct: 5, lossPct: 19, medianVsSpy: -5 };
+    return { key: "speculative", label: "Speculative", detail: F.netIncomeTTM <= 0 ? "losing money over the last 12 months" : "under $500M in yearly revenue", winPct: 15, lossPct: 27, medianVsSpy: -4 };
+  if (F.salesTTM >= 1e10) return { key: "large", label: "Large and profitable", detail: "$10B+ in yearly revenue and profitable", winPct: 3, lossPct: 12, medianVsSpy: -1 };
+  return { key: "established", label: "Established and profitable", detail: "profitable, $0.5–10B in yearly revenue", winPct: 5, lossPct: 19, medianVsSpy: -5 };
 }
 
-/** Tested warning signs. priceNow: latest close (for price / sales). */
+/** Tested warning signs. priceNow: latest close (for price / revenue). */
 export function redFlags(F: Features, priceNow: number | null): RedFlag[] {
   const out: RedFlag[] = [];
   const mcap = nn(priceNow) && nn(F.shares) && F.shares > 0 ? priceNow * F.shares : null;
-  if (nn(mcap) && nn(F.salesTTM) && F.salesTTM > 0 && mcap / F.salesTTM > 20) out.push({ key: "ps", label: "Priced above 20× sales", detail: `about ${(mcap / F.salesTTM).toFixed(0)}× last-12-month sales`, tested: true });
+  if (nn(mcap) && nn(F.salesTTM) && F.salesTTM > 0 && mcap / F.salesTTM > 20) out.push({ key: "ps", label: "Priced above 20× revenue", detail: `about ${(mcap / F.salesTTM).toFixed(0)}× last-12-month revenue`, tested: true });
   if (nn(F.assetGrowth) && F.assetGrowth > 50) out.push({ key: "assets", label: "Balance sheet grew over 50% in a year", detail: `assets ${pf(F.assetGrowth)} (often acquisitions or capital raises)`, tested: true });
   if (nn(F.shareIssue1y) && F.shareIssue1y > 10) out.push({ key: "dilution", label: "Share count up over 10% in a year", detail: `diluted shares ${pf(F.shareIssue1y, 1)}`, tested: true });
   if (nn(F.netIncomeTTM) && nn(F.fcfTTM) && F.netIncomeTTM < 0 && F.fcfTTM < 0) out.push({ key: "burn", label: "Losing money and burning cash", detail: "net loss and negative free cash flow over the last 12 months", tested: true });
-  if (nn(F.salesCagr) && F.salesCagr >= 25) out.push({ key: "expect", label: "Years of 25%+ sales growth — expectations are high", detail: `sales ${pf(F.salesCagr, 0)} a year; past fast growers lagged afterwards on average`, tested: true });
+  if (nn(F.salesCagr) && F.salesCagr >= 25) out.push({ key: "expect", label: "Years of 25%+ revenue growth — expectations are high", detail: `revenue ${pf(F.salesCagr, 0)} a year; past fast growers lagged afterwards on average`, tested: true });
   return out;
 }

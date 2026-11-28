@@ -114,7 +114,7 @@ function buildFacts(p: LensPayload, proven: ProvenRow | null, reads: LinkedRead[
     price = {
       enterpriseValue: ev, marketCap: v.marketCap, costOfCapital: v.costOfCapital, pastGrowth3y: v.pastGrowth3y, industryGrowth5y: v.industryGrowth5y,
       impliedSalesGrowthNext5y: Object.fromEntries(sc.map((s) => [s.id, s.implied.kind === "ok" ? Math.round(s.implied.growth * 10) / 10 : s.implied.kind])),
-      note: "implied growth = the yearly sales growth the price needs under each story (negative = the price works even if sales shrink)",
+      note: "implied growth = the yearly revenue growth the price needs under each story (negative = the price works even if revenue shrinks)",
     };
   }
   return {

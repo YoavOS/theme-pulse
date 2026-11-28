@@ -6,7 +6,7 @@
 // standard 10-year free-cash-flow model:
 //   revenue grows at g for 5 years, then fades to the risk-free rate by year 10
 //   operating margin moves from today's to the target margin over 5 years
-//   reinvestment = new revenue ÷ sales-to-capital   (growth has to be paid for)
+//   reinvestment = new revenue ÷ revenue-to-capital   (growth has to be paid for)
 //   FCFF = operating income × (1 − tax) − reinvestment, discounted at the cost of capital
 //   terminal: growth = risk-free rate, return on new capital = cost of capital + edge
 //             (edge 0 = competition erodes excess returns to zero — his default)
@@ -53,7 +53,7 @@ export type Implied =
   | { kind: "shrink" }                               // value exceeds price even if revenue shrinks
   | { kind: "growth_destroys"; valueAtZero: number }; // new capital earns less than it costs: growth lowers value
 
-/** Return on the capital new growth needs, after tax (%): target margin × (1−t) × sales-to-capital. */
+/** Return on the capital new growth needs, after tax (%): target margin × (1−t) × revenue-to-capital. */
 export const returnOnNewCapital = (s: Story) => s.targetMargin * (1 - s.taxRate) * s.salesToCapital;
 
 /** Solve for the 5-year revenue growth that makes value = enterprise value. */
@@ -113,7 +113,7 @@ export function buildScenarios(v: StoryInputs, ev: number, riskFree = 4.2): Scen
       { ...base, targetMargin: v.opMargin, salesToCapital: todayS2C }],
     ["typical", "Industry economics", ind !== null ? `moves toward its industry operating margin (${ind.toFixed(0)}%)` : `keeps its current operating margin (${typicalMargin.toFixed(0)}%)`,
       { ...base, targetMargin: typicalMargin, salesToCapital: indS2C }],
-    ["optimistic", "Stronger economics", `improves its operating margin and generates more sales per dollar of new capital`,
+    ["optimistic", "Stronger economics", `improves its operating margin and generates more revenue per dollar of new capital`,
       { ...base, targetMargin: strongerMargin, salesToCapital: Math.min(6, Math.max(todayS2C, indS2C) * 1.25), terminalEdge: 0 }],
   ];
   return defs.map(([id, name, plain, story]) => ({ id, name, plain, story, implied: impliedGrowth(story, ev) }));

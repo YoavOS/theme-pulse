@@ -891,7 +891,7 @@ function summarizeTrend(values: (number | null)[]) {
   return "stable";
 }
 
-/** Minervini's "Code 33": EPS growth, sales growth and profit margin each up for 3 quarters in a row. */
+/** Minervini's "Code 33": EPS growth, revenue growth and profit margin each up for 3 quarters in a row. */
 function code33(q: QuarterTrend[]) {
   const up3 = (vals: (number | null)[]) => vals.length >= 4 && vals.slice(0, 4).every((v) => v !== null) &&
     (vals[0] as number) > (vals[1] as number) && (vals[1] as number) > (vals[2] as number) && (vals[2] as number) > (vals[3] as number);
@@ -953,15 +953,15 @@ function makeReport(symbol: string, profile: any, derived: any): MinerviniReport
       comment: `Latest ${latest?.date ?? "quarter"}; YoY trend is ${epsAccel}, QoQ trend is ${epsQoqAccel}.${latest?.epsTurnaround ? " Turnaround: profit vs a loss a year ago (growth % not meaningful)." : ""} Uses normalized/non-GAAP EPS where available.`,
     },
     {
-      name: "Quarterly Sales Growth Trend",
+      name: "Quarterly Revenue Growth Trend",
       value: `YoY ${fmtTrend(revTrend)} | QoQ ${fmtTrend(revQoqTrend)}`, target: "≥20% YoY, consistent/accelerating",
       status: statusFrom(revTrend[0], (revTrend[0] ?? -999) >= 20 || ((revTrend[0] ?? -999) >= 8 && revAccel === "accelerating"), (revTrend[0] ?? 999) < 0),
       comment: `Latest ${latest?.date ?? "quarter"}; YoY trend is ${revAccel}, QoQ trend is ${revQoqAccel} across available reported quarters.`,
     },
     {
       name: "Code 33 (3 quarters of acceleration)",
-      value: `EPS ${derived.code33.eps ? "✓" : "✗"} · Sales ${derived.code33.sales ? "✓" : "✗"} · Margin ${derived.code33.margin ? "✓" : "✗"}`,
-      target: "EPS growth, sales growth and margins each rising 3 quarters in a row",
+      value: `EPS ${derived.code33.eps ? "✓" : "✗"} · Revenue ${derived.code33.sales ? "✓" : "✗"} · Margin ${derived.code33.margin ? "✓" : "✗"}`,
+      target: "EPS growth, revenue growth and margins each rising 3 quarters in a row",
       status: derived.code33.count === 3 ? "pass" : derived.code33.count === 0 ? "fail" : "neutral",
       comment: "Minervini's strongest fundamental tell: acceleration in all three at once. Few stocks have it at any time.",
     },
@@ -972,7 +972,7 @@ function makeReport(symbol: string, profile: any, derived: any): MinerviniReport
       comment: "Annual trend uses normalized EPS when Yahoo exposes it; GAAP EPS is the fallback.",
     },
     {
-      name: "Annual Sales Growth",
+      name: "Annual Revenue Growth",
       value: fmtTrend(annRev), target: "Positive and preferably accelerating",
       status: statusFrom(annRev[0], (annRev[0] ?? -999) > 10 || annRev.filter(v => (v ?? -1) > 0).length >= 2, (annRev[0] ?? 999) < 0),
       comment: "Annual revenue growth is calculated from reported annual statements.",
@@ -1024,7 +1024,7 @@ function makeReport(symbol: string, profile: any, derived: any): MinerviniReport
     {
       name: "Revenue surprises",
       value: derived.revSurprises?.length ? (derived.revSurprises as number[]).slice(0, 4).map((v) => `${v >= 0 ? "+" : ""}${v.toFixed(1)}%`).join(" / ") : "N/A",
-      target: "Sales beating estimates along with EPS",
+      target: "Revenue beating estimates along with EPS",
       status: !derived.revSurprises?.length ? "neutral" : (derived.revSurprises as number[]).slice(0, 4).filter((v) => v > 0).length >= 3 ? "pass" : (derived.revSurprises as number[]).slice(0, 4).filter((v) => v < 0).length >= 3 ? "fail" : "neutral",
       comment: "EPS beats backed by revenue beats have been the more durable kind (Jegadeesh & Livnat 2006).",
     },
@@ -1037,13 +1037,13 @@ function makeReport(symbol: string, profile: any, derived: any): MinerviniReport
   ];
 
   const bullCase = [
-    revTrend[0] !== null ? `Latest quarterly sales growth is ${fmtPct(revTrend[0])}; the multi-quarter trend is ${revAccel}.` : "Revenue trend data is limited and should be verified against filings.",
+    revTrend[0] !== null ? `Latest quarterly revenue growth is ${fmtPct(revTrend[0])}; the multi-quarter trend is ${revAccel}.` : "Revenue trend data is limited and should be verified against filings.",
     epsTrend[0] !== null ? `Latest normalized EPS growth is ${fmtPct(epsTrend[0])}; the trend is ${epsAccel}.` : "EPS trend data is limited or distorted by losses/one-time items.",
     opMarginTrend[0] !== null ? `Operating margin is ${fmtPct(opMarginTrend[0])}.` : "Margin data is incomplete.",
   ];
   const bearCase = [
     derived.debtToEquity !== null && derived.debtToEquity > 1.5 ? `Debt/equity is elevated at ${fmtRatio(derived.debtToEquity)}.` : null,
-    revAccel === "decelerating" || epsAccel === "decelerating" ? `Growth is slowing (${revAccel === "decelerating" ? "sales" : ""}${revAccel === "decelerating" && epsAccel === "decelerating" ? " and " : ""}${epsAccel === "decelerating" ? "EPS" : ""}).` : null,
+    revAccel === "decelerating" || epsAccel === "decelerating" ? `Growth is slowing (${revAccel === "decelerating" ? "revenue" : ""}${revAccel === "decelerating" && epsAccel === "decelerating" ? " and " : ""}${epsAccel === "decelerating" ? "EPS" : ""}).` : null,
     opMarginTrend[0] !== null && opMarginTrend[3] !== null && opMarginTrend[3] !== undefined && opMarginTrend[0] < opMarginTrend[3] - 2 ? `Operating margin fell from ${fmtPct(opMarginTrend[3])} to ${fmtPct(opMarginTrend[0])} over three quarters.` : null,
     derived.warnings.length ? `Data caution: ${derived.warnings[0]}` : null,
   ].filter((x): x is string => !!x);
@@ -1058,7 +1058,7 @@ function makeReport(symbol: string, profile: any, derived: any): MinerviniReport
     overallScore: derived.score,
     coverage: derived.scoreCoveragePct ?? undefined,
     verdict,
-    headline: `${symbol} scores ${derived.score}/100: ${derived.qualityLabel}. Latest quarter ${latest?.date ?? "N/A"} shows sales ${fmtPct(revTrend[0])} and normalized EPS ${fmtPct(epsTrend[0])}.`,
+    headline: `${symbol} scores ${derived.score}/100: ${derived.qualityLabel}. Latest quarter ${latest?.date ?? "N/A"} shows revenue ${fmtPct(revTrend[0])} and normalized EPS ${fmtPct(epsTrend[0])}.`,
     criteria,
     bullCase,
     bearCase,
@@ -1118,10 +1118,10 @@ function makeOneilReport(symbol: string, profile: any, derived: any): MinerviniR
     { name: "Annual EPS Growth (Consistency)", value: fmtTrend(annEps), target: "≥25% across multiple years",
       status: statusFrom(annEps[0], annEpsConsistent >= 2, annEpsConsistent === 0 && (annEps[0] ?? 99) < 10),
       comment: `${annEpsConsistent} of ${annEps.length} reported years cleared 25%.` },
-    { name: "Quarterly Sales Growth", value: fmtPct(revTrend[0]), target: "Strong & accelerating",
+    { name: "Quarterly Revenue Growth", value: fmtPct(revTrend[0]), target: "Strong & accelerating",
       status: statusFrom(revTrend[0], (revTrend[0] ?? -1) >= 20 && revAccel !== "decelerating", (revTrend[0] ?? 99) < 5),
-      comment: `Sales trend ${revAccel}. Series: ${fmtTrend(revTrend)}.` },
-    { name: "Annual Sales Growth", value: fmtTrend(annRev), target: "Positive & consistent",
+      comment: `Revenue trend ${revAccel}. Series: ${fmtTrend(revTrend)}.` },
+    { name: "Annual Revenue Growth", value: fmtTrend(annRev), target: "Positive & consistent",
       status: statusFrom(annRev[0], annRevConsistent >= 2, (annRev[0] ?? 99) < 0),
       comment: `${annRevConsistent} of ${annRev.length} years grew ≥15%.` },
     { name: "ROE", value: fmtPct(derived.roePct), target: "≥17%",
@@ -1156,7 +1156,7 @@ function makeOneilReport(symbol: string, profile: any, derived: any): MinerviniR
     symbol, companyName: profile.name ?? symbol, sector: profile.sector ?? null,
     profile: "oneil", profileLabel: "William O'Neil (CAN SLIM Fundamentals)",
     overallScore: score, verdict, coverage: coverageO,
-    headline: `${symbol} scores ${score}/100 on CAN SLIM fundamentals. EPS ${fmtPct(epsTrend[0])} (${epsAccel}), sales ${fmtPct(revTrend[0])} (${revAccel}), ROE ${fmtPct(derived.roePct)}.`,
+    headline: `${symbol} scores ${score}/100 on CAN SLIM fundamentals. EPS ${fmtPct(epsTrend[0])} (${epsAccel}), revenue ${fmtPct(revTrend[0])} (${revAccel}), ROE ${fmtPct(derived.roePct)}.`,
     criteria, bullCase, bearCase,
     finalVerdict: verdict === "PASS"
       ? "Passes O'Neil CAN SLIM fundamentals with strong growth, profitability, and sponsorship."
@@ -1224,7 +1224,7 @@ function makeRyanReport(symbol: string, profile: any, derived: any): MinerviniRe
     { name: "Latest EPS Growth Magnitude", value: fmtPct(epsTrend[0]), target: "Strong (≥25%, ideal ≥50%)",
       status: statusFrom(epsTrend[0], (epsTrend[0] ?? -1) >= 25, (epsTrend[0] ?? 99) < 10),
       comment: `Trend label: ${epsAccel}.` },
-    { name: "Sales Acceleration", value: `${fmtPct(revTrend[0])} (${revAccel})`, target: "Clear acceleration in recent quarters",
+    { name: "Revenue Acceleration", value: `${fmtPct(revTrend[0])} (${revAccel})`, target: "Clear acceleration in recent quarters",
       status: statusFrom(revTrend[0], revAccel === "accelerating" && (revTrend[0] ?? -1) >= 10, revAccel === "decelerating"),
       comment: `Series: ${fmtTrend(revTrend)}.` },
     { name: "Big Earnings Surprises", value: surprisesCount ? `${bigSurprises}/${surprisesCount} ≥10%` : "N/A", target: "Consistent ≥10% positive surprises",
@@ -1256,7 +1256,7 @@ function makeRyanReport(symbol: string, profile: any, derived: any): MinerviniRe
     symbol, companyName: profile.name ?? symbol, sector: profile.sector ?? null,
     profile: "ryan", profileLabel: "David Ryan (Earnings Momentum & Acceleration)",
     overallScore: score, verdict, coverage: coverageR,
-    headline: `${symbol} scores ${score}/100 on Ryan momentum: ${consecutiveAccelQ} consecutive accelerating EPS quarters, latest EPS ${fmtPct(epsTrend[0])}, sales ${revAccel}.`,
+    headline: `${symbol} scores ${score}/100 on Ryan momentum: ${consecutiveAccelQ} consecutive accelerating EPS quarters, latest EPS ${fmtPct(epsTrend[0])}, revenue ${revAccel}.`,
     criteria, bullCase, bearCase,
     finalVerdict: verdict === "PASS"
       ? "Passes David Ryan momentum criteria with clear earnings acceleration, big surprises, and improving fundamentals."
@@ -1317,14 +1317,14 @@ function makeCurrentReport(symbol: string, profile: any, derived: any): Minervin
   const beatRatio = recentSurprises.length ? goodBeats / recentSurprises.length : null;
 
   // ----------------- Recent Momentum (recentMax) -----------------
-  // Allocation within recent: EPS 35%, Sales 30%, Beat 15%, Margin/Accel 20%
+  // Allocation within recent: EPS 35%, Revenue 30%, Beat 15%, Margin/Accel 20%
   let recent = 0;
   const w = (frac: number) => frac * recentMax;
   // EPS strength
   if ((qEps0 ?? -999) >= 25) recent += w(0.35);
   else if ((qEps0 ?? -999) >= 10) recent += w(0.20);
   else if ((qEps0 ?? -999) > 0) recent += w(0.08);
-  // Sales strength
+  // Revenue strength
   if ((qRev0 ?? -999) >= 20) recent += w(0.30);
   else if ((qRev0 ?? -999) >= 10) recent += w(0.18);
   else if ((qRev0 ?? -999) > 0) recent += w(0.07);
@@ -1348,7 +1348,7 @@ function makeCurrentReport(symbol: string, profile: any, derived: any): Minervin
   recent = Math.min(recentMax, Math.round(recent));
 
   // ----------------- Core Quality (coreMax) -----------------
-  // Allocation: Ann EPS 22%, Ann Sales 18%, ROE 22%, D/E 20%, OCF 18%
+  // Allocation: Ann EPS 22%, Ann Revenue 18%, ROE 22%, D/E 20%, OCF 18%
   let core = 0;
   const cw = (frac: number) => frac * coreMax;
   if ((annEpsAvg ?? -999) >= 20) core += cw(0.22);
@@ -1399,7 +1399,7 @@ function makeCurrentReport(symbol: string, profile: any, derived: any): Minervin
       comment: usableQuarters >= 2 ? `Series: ${fmtTrend(qEpsAll.slice(0, Math.min(4, usableQuarters)))}. Trend ${epsAccel}.` : "Single quarter — no trend yet.",
     },
     {
-      name: "Latest Quarterly Sales Growth (YoY)",
+      name: "Latest Quarterly Revenue Growth (YoY)",
       value: fmtPct(qRev0),
       target: "≥+20% Strong",
       status: statusFrom(qRev0, (qRev0 ?? -999) >= 20, (qRev0 ?? 999) < 10),
@@ -1429,7 +1429,7 @@ function makeCurrentReport(symbol: string, profile: any, derived: any): Minervin
       comment: `Across ${annEps.filter(v => v !== null).length} years.`,
     },
     {
-      name: "Annual Sales Growth (Avg)",
+      name: "Annual Revenue Growth (Avg)",
       value: fmtPct(annRevAvg),
       target: "≥+15%",
       status: statusFrom(annRevAvg, (annRevAvg ?? -999) >= 15, (annRevAvg ?? 999) < 8),
@@ -1470,8 +1470,8 @@ function makeCurrentReport(symbol: string, profile: any, derived: any): Minervin
   const weaknesses: string[] = [];
   if ((qEps0 ?? -1) >= 25) strengths.push(`strong quarterly EPS growth (${fmtPct(qEps0)})`);
   else if ((qEps0 ?? 99) < 10 && qEps0 !== null) weaknesses.push(`weak quarterly EPS growth (${fmtPct(qEps0)})`);
-  if ((qRev0 ?? -1) >= 20) strengths.push(`strong sales growth (${fmtPct(qRev0)})`);
-  else if ((qRev0 ?? 99) < 10 && qRev0 !== null) weaknesses.push(`soft sales growth (${fmtPct(qRev0)})`);
+  if ((qRev0 ?? -1) >= 20) strengths.push(`strong revenue growth (${fmtPct(qRev0)})`);
+  else if ((qRev0 ?? 99) < 10 && qRev0 !== null) weaknesses.push(`soft revenue growth (${fmtPct(qRev0)})`);
   if (usableQuarters >= 2 && marginAccel === "accelerating") strengths.push("expanding margins");
   else if (usableQuarters >= 2 && marginAccel === "decelerating") weaknesses.push("compressing margins");
   if (beatRatio !== null && beatRatio >= 0.5) strengths.push("consistent earnings beats");
@@ -1544,11 +1544,11 @@ function scoreDerived(derived: any) {
   add("Quarterly EPS growth", 18, e0 !== null ? (e0 >= 50 ? 18 : e0 >= 25 ? 14 : e0 > 0 ? 8 : 0) : latest?.epsTurnaround ? 12 : null);
   add("EPS acceleration", 7, epsTrend.filter((v: number | null) => v !== null).length >= 3 ? (epsAccel === "accelerating" ? 7 : epsAccel === "stable" ? 4 : 0) : null);
   const r0 = revTrend[0] ?? null;
-  add("Quarterly sales growth", 16, r0 !== null ? (r0 >= 20 ? 16 : r0 >= 8 ? 10 : r0 > 0 ? 5 : 0) : null);
-  add("Sales acceleration", 7, revTrend.filter((v: number | null) => v !== null).length >= 3 ? (revAccel === "accelerating" ? 7 : revAccel === "stable" ? 4 : 0) : null);
+  add("Quarterly revenue growth", 16, r0 !== null ? (r0 >= 20 ? 16 : r0 >= 8 ? 10 : r0 > 0 ? 5 : 0) : null);
+  add("Revenue acceleration", 7, revTrend.filter((v: number | null) => v !== null).length >= 3 ? (revAccel === "accelerating" ? 7 : revAccel === "stable" ? 4 : 0) : null);
   const annRev = derived.annual.slice(0, 3).map((x: AnnualTrend) => x.revenueYoY).filter((v: number | null) => v !== null);
   const annEps = derived.annual.slice(0, 3).map((x: AnnualTrend) => x.normalizedEpsYoY ?? x.epsYoY).filter((v: number | null) => v !== null);
-  add("Annual sales record", 8, annRev.length ? Math.min(8, annRev.filter((v: number) => v > 0).length * 3) : null);
+  add("Annual revenue record", 8, annRev.length ? Math.min(8, annRev.filter((v: number) => v > 0).length * 3) : null);
   add("Annual EPS record", 8, annEps.length ? Math.min(8, annEps.filter((v: number) => v > 0).length * 3) : null);
   const margin = latest?.operatingMargin ?? latest?.normalizedNetMargin ?? latest?.netMargin ?? null;
   add("Margin level", 10, margin !== null ? (margin >= 20 ? 10 : margin >= 10 ? 7 : margin > 0 ? 4 : 0) : null);
@@ -1805,7 +1805,7 @@ async function buildBundle(symbol: string, force: boolean) {
   // Cross-check the latest quarter against Finnhub's own computed growth (catches period mix-ups).
   const fhRevYoY = num(fhMetric.revenueGrowthQuarterlyYoy);
   if (fhRevYoY !== null && quarters[0]?.revenueYoY !== null && quarters[0]?.revenueYoY !== undefined && Math.abs(quarters[0].revenueYoY - fhRevYoY) > 15) {
-    quality.warnings.push(`Latest quarterly sales growth ${quarters[0].revenueYoY.toFixed(1)}% differs from Finnhub's ${fhRevYoY.toFixed(1)}% — check the filing.`);
+    quality.warnings.push(`Latest quarterly revenue growth ${quarters[0].revenueYoY.toFixed(1)}% differs from Finnhub's ${fhRevYoY.toFixed(1)}% — check the filing.`);
   }
   if ((quality.coverage?.quarterlyRevenueYoY ?? 0) < MIN_QUARTER_TREND_COUNT || (quality.coverage?.quarterlyEpsYoY ?? 0) < MIN_QUARTER_TREND_COUNT) {
     quality.warnings.push(`Historical coverage below target: revenue YoY ${quality.coverage?.quarterlyRevenueYoY ?? 0}/${TARGET_QUARTER_TREND_COUNT}, EPS YoY ${quality.coverage?.quarterlyEpsYoY ?? 0}/${TARGET_QUARTER_TREND_COUNT}.`);

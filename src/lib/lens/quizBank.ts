@@ -41,7 +41,7 @@ export const QUIZ_BANK: QuizQ[] = [
 
   // ── Profitability
   { id: "gm1", concept: "gross_margin", q: "Why can a 30% gross margin be excellent in one industry and weak in another?",
-    choices: ["Accounting rules differ by industry", "Business models differ: direct costs are a big share of sales in retail, small in software", "Gross margin isn't comparable at all", "Only the trend matters"], answer: 1,
+    choices: ["Accounting rules differ by industry", "Business models differ: direct costs are a big share of revenue in retail, small in software", "Gross margin isn't comparable at all", "Only the trend matters"], answer: 1,
     why: "Gross margin reflects the economics of the product. Compare it with the industry, then ask whether the company's position explains the gap." },
   { id: "om1", concept: "operating_margin", q: "A high-growth company's operating margin rose from 2% to 8% in a year. Damodaran would read this as…",
     choices: ["Irrelevant until margins are mature", "Evidence that scale is starting to pay off — a key input to the story", "A one-off", "A reason to expect falling growth"], answer: 1,
@@ -75,7 +75,7 @@ export const QUIZ_BANK: QuizQ[] = [
   { id: "ri1", concept: "reinvestment", q: "In Damodaran's framework, expected growth in operating income ≈ …",
     choices: ["Revenue growth × P/E", "Reinvestment rate × return on capital", "Dividend yield + inflation", "Market growth"], answer: 1,
     why: "Growth has to be paid for: a firm that reinvests 50% of after-tax operating income at a 20% return can grow operating income about 10% a year." },
-  { id: "s2c1", concept: "sales_to_capital", q: "A sales-to-capital ratio of 3 means…",
+  { id: "s2c1", concept: "sales_to_capital", q: "A revenue-to-capital ratio of 3 means…",
     choices: ["Revenue tripled", "Each $1 of invested capital supports about $3 of revenue", "Margins are 33%", "Debt is 3× equity"], answer: 1,
     why: "It measures how capital-light growth is. Higher means less reinvestment is needed per dollar of new revenue." },
   { id: "sbc1", concept: "sbc", q: "Damodaran's view of stock-based compensation is that it…",
@@ -109,8 +109,8 @@ export const QUIZ_BANK: QuizQ[] = [
     choices: ["Nothing in particular", "High growth or rising margins — the price is betting on the future", "A dividend", "Low risk only"], answer: 1,
     why: "High multiples are bets on growth, margins or both. The question is whether the company's numbers make that bet plausible." },
   { id: "pr2", concept: "pricing", q: "Why does a P/E only make sense for profitable companies?",
-    choices: ["SEC rules", "With losses the ratio is negative or meaningless — use sales or EV multiples instead", "It's always fine", "Losses lower the P/E"], answer: 1,
-    why: "Earnings near zero or negative break the ratio. EV/Sales or EV/EBIT, compared within the industry, work better." },
+    choices: ["SEC rules", "With losses the ratio is negative or meaningless — use revenue or EV multiples instead", "It's always fine", "Losses lower the P/E"], answer: 1,
+    why: "Earnings near zero or negative break the ratio. EV/Revenue or EV/EBIT, compared within the industry, work better." },
 
   // ── Adjustments
   { id: "adj1", concept: "adjustments", q: "Capitalising R&D for a fast-growing software firm usually…",

@@ -10,7 +10,7 @@
 //   Reinvestment rate= reinvestment / after-tax operating income
 //   FCFF             = after-tax operating income − reinvestment     (stock-based comp is NOT added back)
 //   Interest coverage= EBIT / interest expense  → synthetic rating (his January 2026 table)
-// Sales-to-capital  = revenue / invested capital — the app's reading; Damodaran publishes the ratio
+// Revenue-to-capital  = revenue / invested capital — the app's reading; Damodaran publishes the ratio
 //   by industry without a formula. Operating leases and R&D capitalisation are NOT applied here
 //   (the comparable industry column is the unadjusted one); the lessons explain both adjustments.
 // Every metric carries the formula, the inputs that went in, and a display string; numbers shown in
@@ -380,7 +380,7 @@ export function computeMetrics(h: CompanyHistory, mkt: MarketData, opts: { finan
       inputs: [{ label: "Reinvestment", display: fmtUsd(reinvest) }, { label: "After-tax operating income", display: fmtUsd(nopat) }],
       note: rr === null && fin(nopat) && nopat <= 0 ? "Not meaningful while operating income is negative — the company is reinvesting money it doesn't earn yet." : undefined });
     const s2c = fin(rev) && fin(icBase) && icBase > 0 ? rev / icBase : null;
-    add({ id: "sales_to_capital", pillar: "reinvestment", label: "Sales to invested capital", unit: "x", value: s2c, period: ttmLabel, display: fin(s2c) ? fmtX(s2c, 2) : "n/m",
+    add({ id: "sales_to_capital", pillar: "reinvestment", label: "Revenue to invested capital", unit: "x", value: s2c, period: ttmLabel, display: fin(s2c) ? fmtX(s2c, 2) : "n/m",
       formula: "Revenue TTM ÷ invested capital a year earlier (the app's reading of Damodaran's ratio)",
       inputs: [{ label: "Revenue TTM", display: fmtUsd(rev) }, { label: "Invested capital a year earlier", display: fmtUsd(icBase) }] });
     const fcff = fin(nopat) && fin(reinvest) ? nopat - reinvest : null;
@@ -448,7 +448,7 @@ export function computeMetrics(h: CompanyHistory, mkt: MarketData, opts: { finan
   // ── Pricing (what the market pays)
   const mc = mkt.marketCap;
   const ev = fin(mc) && (!releaseHistory || (fin(debt) && fin(cash))) ? mc + (debt ?? 0) - (cash ?? 0) : null;
-  add({ id: "ps", pillar: "pricing", label: "Price to sales", unit: "x", value: fin(mc) && fin(rev) && rev > 0 ? mc / rev : null, period: ttmLabel, formula: "Market cap ÷ revenue TTM",
+  add({ id: "ps", pillar: "pricing", label: "Price to revenue", unit: "x", value: fin(mc) && fin(rev) && rev > 0 ? mc / rev : null, period: ttmLabel, formula: "Market cap ÷ revenue TTM",
     inputs: [{ label: "Market cap", display: fmtUsd(mc) }, { label: "Revenue TTM", display: fmtUsd(rev) }] });
   add({ id: "pe", pillar: "pricing", label: "Price to earnings", unit: "x", value: fin(mc) && fin(ni) && ni > 0 ? mc / ni : null, period: ttmLabel, formula: "Market cap ÷ net income TTM",
     inputs: [{ label: "Market cap", display: fmtUsd(mc) }, { label: "Net income TTM", display: fmtUsd(ni) }], note: fin(ni) && ni <= 0 ? "Not meaningful: no profits." : undefined });

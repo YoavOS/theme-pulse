@@ -33,7 +33,7 @@ describe("tab stories", () => {
   });
   it("valuation: NVDA's price turned into the growth it needs, and the cap/price mismatch is flagged", () => {
     const s = valuationStory(NVDA, false);
-    expect(s.title).toMatch(/keeps today's margins, the price needs about \d+% sales growth/);
+    expect(s.title).toMatch(/keeps today's margins, the price needs about \d+% revenue growth/);
     expect(s.kpis[3].value).toMatch(/^\d+%\/yr$/);
     const c = capPriceCheck(NVDA)!;
     expect(Math.round(c.gapPct)).toBe(23);              // $3.76T ÷ $125.53 = 30.0B shares vs 24.3B reported
