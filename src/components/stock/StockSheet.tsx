@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { Component, useCallback, useEffect, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { BarChart3, Briefcase, ExternalLink, GraduationCap, Loader2, Trophy } from "lucide-react";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
@@ -37,6 +37,17 @@ const ago = (unix: number | null) => {
 const toBars = (r: { d: string[]; o: unknown[]; h: unknown[]; l: unknown[]; c: unknown[]; v: unknown[] } | undefined): Bars | null =>
   r ? { d: r.d, o: r.o.map(Number), h: r.h.map(Number), l: r.l.map(Number), c: r.c.map(Number), v: r.v.map(Number) } : null;
 
+/** Keeps a problem inside the panel: shows a message there instead of blanking the whole app. */
+class PanelBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
+  state = { error: null as Error | null };
+  static getDerivedStateFromError(error: Error) { return { error }; }
+  componentDidCatch(error: Error) { console.error("Stock panel error:", error); }
+  render() {
+    if (!this.state.error) return this.props.children;
+    return <div className="rounded-lg border border-rose-400/30 bg-rose-400/10 p-4 text-sm">Part of this panel couldn't be shown. Close it and try again; if it keeps happening, send Claude this message:<pre className="mt-2 whitespace-pre-wrap font-mono text-[11px]">{this.state.error.message}</pre></div>;
+  }
+}
+
 function Stat({ k, v, c, sub }: { k: string; v: ReactNode; c?: string; sub?: ReactNode }) {
   return <div><p className="text-[11px] text-muted-foreground"><AutoTerms text={k} /></p><p className="font-mono text-base" style={{ color: c }}>{v}</p>{sub && <p className="text-[10.5px] text-muted-foreground">{sub}</p>}</div>;
 }
@@ -44,6 +55,7 @@ function Stat({ k, v, c, sub }: { k: string; v: ReactNode; c?: string; sub?: Rea
 /** The stock side panel — the same layout as a Portfolio position, for any ticker. Mounted once in App. */
 export function StockSheetHost() {
   const [req, setReq] = useState<StockSheetRequest | null>(null);
+  const [opened, setOpened] = useState(0);
   const [ctx, setCtx] = useState<Context | null>(null);
   const [bars, setBars] = useState<Bars | null>(null);
   const [spy, setSpy] = useState<Bars | null>(null);
@@ -68,12 +80,16 @@ export function StockSheetHost() {
     supabase.functions.invoke("portfolio-live", { body: { symbols: [s] } }).then(({ data }) => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const d = data as any;
-      setQuote(d?.quotes?.[s] ?? null); setEarn(d?.earnings?.[s]?.rows ?? []); setNews(d?.news?.[s] ?? []);
+      // earnings and news arrive wrapped: { rows: [...] } and { items: [...] }
+      const n = d?.news?.[s];
+      setQuote(d?.quotes?.[s] ?? null);
+      setEarn(Array.isArray(d?.earnings?.[s]?.rows) ? d.earnings[s].rows : []);
+      setNews(Array.isArray(n) ? n : Array.isArray(n?.items) ? n.items : []);
     }).catch(() => setNews([]));
   }, []);
 
   useEffect(() => {
-    const on = (e: Event) => { const r = (e as CustomEvent<StockSheetRequest>).detail; setReq(r); void load(r.symbol); };
+    const on = (e: Event) => { const r = (e as CustomEvent<StockSheetRequest>).detail; setReq(r); setOpened((n) => n + 1); void load(r.symbol); };
     window.addEventListener("tp:open-stock", on);
     return () => window.removeEventListener("tp:open-stock", on);
   }, [load]);
@@ -94,6 +110,7 @@ export function StockSheetHost() {
     <Sheet open={!!symbol} onOpenChange={(o) => !o && setReq(null)}>
       <SheetContent side="right" className="w-full overflow-y-auto sm:max-w-[860px]">
         {symbol && (
+          <PanelBoundary key={opened}>
           <div className="space-y-5">
             <SheetHeader className="space-y-1 text-start">
               <p className="text-xs font-semibold uppercase tracking-widest text-primary">{[req?.source, ctx?.industry ?? ctx?.sector, ctx?.themes?.slice(0, 2).join(", ")].filter(Boolean).join(" · ") || "Stock"}</p>
@@ -170,6 +187,7 @@ export function StockSheetHost() {
                 </ul>}
             </section>
           </div>
+          </PanelBoundary>
         )}
       </SheetContent>
     </Sheet>
