@@ -40,5 +40,10 @@ Fundamentals tab → "vs Leader" (`CompareView.tsx`, lazy). Leader = Industry Le
 - `src/lib/lens/businessWords.ts`: what the company sells and spends on, in its industry's words (chips, clothes, loans…), matched from the most specific classification first.
 - `src/lib/lens/wholePicture.ts` + `components/lens/WholePicture.tsx`: "The whole picture" on the Company story — where each $100 of revenue goes, then one chain: what it sells → making it → running it → what reaches the owners and cash → the capital behind it (ROIC vs cost of capital) → growth it can fund → what the price assumes, plus a one-line summary. Bank and loss-maker variants. The income flow map's hover cards and step panel now add the same company-specific sentence (`flowStepNote`).
 
+## Stock panel + hover charts (Nov 28)
+- RS Alpha: hovering a row shows a small 3-month chart (`components/stock/HoverChart.tsx`, `useHoverChart()`; reads the PC prices only, never starts a download). Clicking a row opens the full stock side panel.
+- `components/stock/StockSheet.tsx`: `<StockSheetHost/>` is mounted once in App; any screen opens it with `openStockSheet({ symbol, source, facts })`. Same layout as a Portfolio position (header with TradingView / Fundamentals / Minervini / Full chart / Add to portfolio, the calling screen's facts, RS / stage / moving-average stats, chart, earnings, news).
+- `StockChart` has a `mini` mode (no zoom controls or hints) for previews.
+
 ## Other work
 EMA gain: peak high within the uninterrupted on/above-EMA streak. The optional pre-crossover close uses a confirmed first strict close above EMA and excludes earlier highs. Closing below resets. Test: `local/test-ema-peak.cjs`. Theme recovery incomplete (1,558 stocks, zero themes at last check). `docs/CODE-MAP.md` and `docs/DECISIONS.md` provide pointers/preferences. Do not reopen old chats by default.

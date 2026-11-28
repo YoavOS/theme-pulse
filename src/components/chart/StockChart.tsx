@@ -20,8 +20,10 @@ const RANGE_BARS: Record<Range, number> = { "3M": 63, "6M": 126, "1Y": 252, "2Y"
 export interface Level { price: number; label: string; color: string; dash?: string }
 export interface Marker { date: string; kind: "buy" | "earnings" | "sell"; title?: string }
 
-export function StockChart({ bars, levels = [], markers = [], height = 360, range: rangeProp, onRange, note }: {
+export function StockChart({ bars, levels = [], markers = [], height = 360, range: rangeProp, onRange, note, mini = false }: {
   bars: Bars; levels?: Level[]; markers?: Marker[]; height?: number; range?: Range; onRange?: (r: Range) => void; note?: string | null;
+  /** compact preview: just the candles and averages — no controls or hints */
+  mini?: boolean;
 }) {
   const [rangeState, setRangeState] = useState<Range>("6M");
   const range = rangeProp ?? rangeState;
@@ -110,6 +112,7 @@ export function StockChart({ bars, levels = [], markers = [], height = 360, rang
           {chg != null && <span className="ms-1.5" style={{ color: chg >= 0 ? CHART.positive : CHART.negative }}>{chg >= 0 ? "+" : ""}{chg.toFixed(2)}%</span>}</span>
         <span className="font-mono text-muted-foreground">Vol {Intl.NumberFormat("en-US", { notation: "compact" }).format(hb.v)}</span>
         {MA.map((m) => <span key={m.key} className="font-mono" style={{ color: m.color }}>{m.label} {hb[m.key] != null ? fmt(hb[m.key] as number) : "—"}</span>)}
+        {!mini && <>
         <div className="ms-auto flex items-center gap-1" role="group" aria-label="Zoom">
           <button type="button" onClick={() => zoom(1 / 1.4)} disabled={view.count <= 15} title="Zoom in (or scroll on the chart)" className="rounded border border-border p-0.5 text-muted-foreground hover:text-foreground disabled:opacity-30"><Plus size={13} /></button>
           <button type="button" onClick={() => zoom(1.4)} disabled={view.count >= N} title="Zoom out" className="rounded border border-border p-0.5 text-muted-foreground hover:text-foreground disabled:opacity-30"><Minus size={13} /></button>
@@ -122,6 +125,7 @@ export function StockChart({ bars, levels = [], markers = [], height = 360, rang
               className={`px-2 py-0.5 font-mono text-[11px] disabled:opacity-30 ${range === r ? "bg-primary/20 font-semibold text-primary" : "text-muted-foreground hover:text-foreground"}`}>{r}</button>
           ))}
         </div>
+        </>}
       </div>
       <div className="relative" onPointerLeave={() => { setHover(null); setCursorY(null); drag.current = null; }}>
         <svg ref={svgRef} viewBox={`0 0 ${W} ${H}`} className={`w-full touch-none ${drag.current ? "cursor-grabbing" : "cursor-crosshair"}`} role="img" aria-label="Daily candles with 9 EMA, 21 EMA and 200 SMA — scroll to zoom, drag to move"
@@ -176,7 +180,7 @@ export function StockChart({ bars, levels = [], markers = [], height = 360, rang
           {hov == null && tag(data[data.length - 1].c, data[data.length - 1].c >= (data[data.length - 1].prev ?? 0) ? CHART.positive : CHART.negative, fmt(data[data.length - 1].c), "last", undefined, false)}
         </svg>
       </div>
-      <p className="mt-1 text-[10.5px] text-muted-foreground">Scroll on the chart to zoom · drag to move back in time · double-click to reset.{note ? ` ${note}` : ""}</p>
+      {!mini && <p className="mt-1 text-[10.5px] text-muted-foreground">Scroll on the chart to zoom · drag to move back in time · double-click to reset.{note ? ` ${note}` : ""}</p>}
     </div>
   );
 }
