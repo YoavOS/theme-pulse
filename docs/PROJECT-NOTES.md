@@ -45,5 +45,9 @@ Fundamentals tab → "vs Leader" (`CompareView.tsx`, lazy). Leader = Industry Le
 - `components/stock/StockSheet.tsx`: `<StockSheetHost/>` is mounted once in App; any screen opens it with `openStockSheet({ symbol, source, facts })`. Same layout as a Portfolio position (header with TradingView / Fundamentals / Minervini / Full chart / Add to portfolio, the calling screen's facts, RS / stage / moving-average stats, chart, earnings, news).
 - `StockChart` has a `mini` mode (no zoom controls or hints) for previews.
 
+## Refresh to update + chart controls (Nov 28)
+- `local/watch-build.mjs` runs as the "watch" service (Worker.ps1; started by Start Theme Pulse, stopped by Stop Theme Pulse, low priority): when src/, public/, index.html or the Vite/Tailwind config change it rebuilds dist (keeping old files), so refreshing the page shows updates. Database migrations still need Stop + Start. Its log: local/logs/watch-*.log.
+- StockChart: drag past the last candle (empty days on the right, at least 5 candles stay); "Auto" switch locks the price scale (drag up/down moves it, dragging the price axis stretches it; remembered in localStorage "chart-autoscale"); double-click resets both. Drag start is read before the state update (fixed crash).
+
 ## Other work
 EMA gain: peak high within the uninterrupted on/above-EMA streak. The optional pre-crossover close uses a confirmed first strict close above EMA and excludes earlier highs. Closing below resets. Test: `local/test-ema-peak.cjs`. Theme recovery incomplete (1,558 stocks, zero themes at last check). `docs/CODE-MAP.md` and `docs/DECISIONS.md` provide pointers/preferences. Do not reopen old chats by default.

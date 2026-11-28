@@ -4,6 +4,7 @@ Set-Location $Root
 . (Join-Path $PSScriptRoot 'Runtime.ps1')
 Write-Host "Stopping the app services..."
 Stop-ThemeWorker 'app'
+Stop-ThemeWorker 'watch'
 Stop-ThemeWorker 'backend'
 # Also handle windows left by the previous launcher.
 Get-Process powershell -ErrorAction SilentlyContinue | Where-Object {

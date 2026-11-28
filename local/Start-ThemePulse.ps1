@@ -18,8 +18,9 @@ $Log = Join-Path $LogDir ("start-" + (Get-Date -Format "yyyy-MM-dd_HH-mm-ss") + 
 Start-Transcript -Path $Log -Append | Out-Null
 Write-Host 'Checking Theme Pulse. The browser opens when the app is ready.' -ForegroundColor Cyan
 if ((Test-ThemeWorker 'backend') -and (Test-ThemeWorker 'app') -and (Test-ThemeBackend) -and (Test-ThemeWebsite)) {
+  Start-ThemeWorker 'watch'   # keeps the website up to date; refresh the page to see updates
   Start-Process 'http://localhost:8080'
-  Write-Host 'Reusing the running app. Use Stop before applying updates.'
+  Write-Host 'Reusing the running app. Updates appear when you refresh the page.'
   Stop-Transcript | Out-Null
   exit 0
 }
@@ -269,6 +270,7 @@ if (-not (Test-Path $builtFile) -or (Get-Content $builtFile -ErrorAction Silentl
 }
 if (-not (Test-Path $builtFile)) { Fail 'No production build is available. See the build log.' }
 Start-ThemeWorker 'app'
+Start-ThemeWorker 'watch'   # rebuilds after updates, so refreshing the page is enough
 Say 'Waiting for the website and backend to be ready (up to 90 seconds)'
 $ready = $false
 for ($i = 0; $i -lt 45; $i++) {
