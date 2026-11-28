@@ -1,5 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Minus, Plus, RotateCcw } from "lucide-react";
+
+/** How far past the last candle you can pull the chart: up to all but MIN_REAL of the visible slots can be empty. */
+const MIN_REAL = 5;
+const AUTO_KEY = "chart-autoscale";
 import { emaSeries, smaSeries, type Bars } from "@/lib/portfolio/engine";
 import { CHART } from "@/components/lens/QuarterlyChart";
 
@@ -35,9 +39,22 @@ export function StockChart({ bars, levels = [], markers = [], height = 360, rang
   const N = bars.c.length;
   const [view, setView] = useState(() => ({ end: N, count: Math.min(N, RANGE_BARS[range]) }));
   useEffect(() => { setView({ end: N, count: Math.min(N, RANGE_BARS[range]) }); }, [range, N]);
+  // `end` may run past the last candle (N): the extra slots on the right stay empty.
   const clampView = (end: number, count: number) => {
     const c = Math.max(15, Math.min(N, Math.round(count)));
-    return { count: c, end: Math.max(c, Math.min(N, Math.round(end))) };
+    return { count: c, end: Math.max(c, Math.min(N - Math.min(MIN_REAL, N) + c, Math.round(end))) };
+  };
+  // Auto-scale (default on): the price scale follows the visible candles. Off: the scale stays where it is;
+  // drag up/down to move it, drag on the price axis to stretch it. Remembered across charts.
+  const [autoScale, setAutoScaleState] = useState<boolean>(() => { try { return localStorage.getItem(AUTO_KEY) !== "off"; } catch { return true; } });
+  const [manual, setManual] = useState<{ lo: number; hi: number } | null>(null);
+  // with auto-scale off, lock whatever scale is showing (also after a reset or for a new stock)
+  const shown = useRef({ lo: 0, hi: 1 });
+  useEffect(() => { setManual(null); }, [bars]);
+  useEffect(() => { if (!autoScale && !manual && !mini) setManual({ ...shown.current }); }, [autoScale, manual, mini, view]);
+  const setAutoScale = (on: boolean, current?: { lo: number; hi: number }) => {
+    setAutoScaleState(on); setManual(on ? null : current ?? null);
+    try { localStorage.setItem(AUTO_KEY, on ? "on" : "off"); } catch { /* ignore */ }
   };
   const zoom = (factor: number, anchor = 1) => setView((v) => {
     // anchor: 0 = left edge stays, 1 = right edge stays
@@ -46,10 +63,10 @@ export function StockChart({ bars, levels = [], markers = [], height = 360, rang
     return clampView(left + c, c);
   });
   const svgRef = useRef<SVGSVGElement>(null);
-  const drag = useRef<{ x: number; end: number } | null>(null);
+  const drag = useRef<{ x: number; y: number; end: number; lo: number; hi: number; axis: boolean } | null>(null);
   const data = useMemo(() => {
     const start = Math.max(0, view.end - view.count);
-    return Array.from({ length: view.end - start }, (_, k) => {
+    return Array.from({ length: Math.max(0, Math.min(N, view.end) - start) }, (_, k) => {
       const i = start + k;
       return { d: bars.d[i], o: bars.o[i], h: bars.h[i], l: bars.l[i], c: bars.c[i], v: bars.v[i], prev: i > 0 ? bars.c[i - 1] : null, e9: all.e9[i], e21: all.e21[i], s200: all.s200[i] };
     });
@@ -57,7 +74,7 @@ export function StockChart({ bars, levels = [], markers = [], height = 360, rang
   // The wheel listener is attached once per chart; it reads the latest zoom through a ref.
   const zoomRef = useRef(zoom);
   zoomRef.current = zoom;
-  const hasData = view.end - Math.max(0, view.end - view.count) > 0;
+  const hasData = data.length > 0;
   useEffect(() => {
     const el = svgRef.current;
     if (!el || mini) return;
@@ -91,7 +108,11 @@ export function StockChart({ bars, levels = [], markers = [], height = 360, rang
   const near = (v: number) => v >= dataLo * 0.7 && v <= dataHi * 1.3;
   let lo = Math.min(dataLo, ...lvl.filter(near), ...maVals.filter(near)), hi = Math.max(dataHi, ...lvl.filter(near), ...maVals.filter(near));
   const span = hi - lo || 1; lo -= span * 0.04; hi += span * 0.06;
-  const step = (W - padL - padR) / data.length;
+  const scaleOff = !autoScale && !mini;
+  if (scaleOff && manual && manual.hi > manual.lo) { lo = manual.lo; hi = manual.hi; }
+  // one slot per visible day — slots past the last candle stay empty
+  const step = (W - padL - padR) / view.count;
+  shown.current = { lo, hi };
   const x = (i: number) => padL + step * (i + 0.5);
   const y = (v: number) => padT + (1 - (v - lo) / (hi - lo)) * plotH;
   const maxV = Math.max(1, ...data.map((b) => b.v));
@@ -104,7 +125,7 @@ export function StockChart({ bars, levels = [], markers = [], height = 360, rang
   const idx = new Map(data.map((b, i) => [b.d, i]));
   const monthly = data.map((b, i) => ({ i, m: b.d.slice(0, 7) })).filter((t, k, a) => k === 0 || t.m !== a[k - 1].m).slice(1);
   const ticks = monthly.length > 9 ? monthly.filter((_, k) => k % 2 === 0) : monthly;
-  const yTicks = (() => { const n = 5, raw = (hi - lo) / n, mag = 10 ** Math.floor(Math.log10(raw)), s = [1, 2, 2.5, 5, 10].map((m) => m * mag).find((m) => m >= raw) ?? raw; const out: number[] = []; for (let v = Math.ceil(lo / s) * s; v <= hi; v += s) out.push(v); return out; })();
+  const yTicks = (() => { const n = 5, raw = (hi - lo) / n || 1, mag = 10 ** Math.floor(Math.log10(raw)), s = [1, 2, 2.5, 5, 10].map((m) => m * mag).find((m) => m >= raw) ?? raw; const out: number[] = []; for (let v = Math.ceil(lo / s) * s; v <= hi; v += s) out.push(v); return out; })();
   const fmt = (v: number) => v >= 1000 ? v.toFixed(0) : v >= 100 ? v.toFixed(1) : v.toFixed(2);
   const hov = hover != null && hover < data.length ? hover : null;
   const hi_ = hov ?? data.length - 1, hb = data[hi_];
@@ -129,8 +150,11 @@ export function StockChart({ bars, levels = [], markers = [], height = 360, rang
         <div className="ms-auto flex items-center gap-1" role="group" aria-label="Zoom">
           <button type="button" onClick={() => zoom(1 / 1.4)} disabled={view.count <= 15} title="Zoom in (or scroll on the chart)" className="rounded border border-border p-0.5 text-muted-foreground hover:text-foreground disabled:opacity-30"><Plus size={13} /></button>
           <button type="button" onClick={() => zoom(1.4)} disabled={view.count >= N} title="Zoom out" className="rounded border border-border p-0.5 text-muted-foreground hover:text-foreground disabled:opacity-30"><Minus size={13} /></button>
-          <button type="button" onClick={() => setView({ end: N, count: Math.min(N, RANGE_BARS[range]) })} title="Reset (or double-click the chart)" className="rounded border border-border p-0.5 text-muted-foreground hover:text-foreground"><RotateCcw size={12} /></button>
+          <button type="button" onClick={() => { setView({ end: N, count: Math.min(N, RANGE_BARS[range]) }); setManual(null); }} title="Back to today (or double-click the chart)" className="rounded border border-border p-0.5 text-muted-foreground hover:text-foreground"><RotateCcw size={12} /></button>
           <span className="ms-1 font-mono text-[10.5px] text-muted-foreground">{view.count}d</span>
+          <button type="button" onClick={() => setAutoScale(!autoScale, { lo, hi })} aria-pressed={autoScale}
+            title={autoScale ? "Auto-scale is on: the price scale follows the candles. Click to lock it." : "Auto-scale is off: drag up/down to move the price scale, drag the price axis to stretch it. Click to turn it back on."}
+            className={`ms-1 rounded border px-1.5 py-0.5 font-mono text-[10.5px] ${autoScale ? "border-primary/50 bg-primary/15 text-primary" : "border-border text-muted-foreground hover:text-foreground"}`}>Auto</button>
         </div>
         <div className="flex overflow-hidden rounded-md border border-border" role="group" aria-label="Range">
           {(Object.keys(RANGE_BARS) as Range[]).map((r) => (
@@ -142,7 +166,12 @@ export function StockChart({ bars, levels = [], markers = [], height = 360, rang
       </div>
       <div className="relative" onPointerLeave={() => { if (frame.current) { cancelAnimationFrame(frame.current); frame.current = 0; } setHover(null); setCursorY(null); drag.current = null; }}>
         <svg ref={svgRef} viewBox={`0 0 ${W} ${H}`} className={`w-full touch-none ${drag.current ? "cursor-grabbing" : "cursor-crosshair"}`} role="img" aria-label="Daily candles with 9 EMA, 21 EMA and 200 SMA — scroll to zoom, drag to move"
-          onPointerDown={(e) => { drag.current = { x: e.clientX, end: view.end }; (e.target as Element).setPointerCapture?.(e.pointerId); }}
+          onPointerDown={(e) => {
+            const r = svgRef.current?.getBoundingClientRect();
+            const sx = r ? ((e.clientX - r.left) / r.width) * W : 0;
+            drag.current = { x: e.clientX, y: e.clientY, end: view.end, lo, hi, axis: !mini && sx > W - padR };
+            (e.target as Element).setPointerCapture?.(e.pointerId);
+          }}
           onPointerMove={(e) => {
             if (!svgRef.current) return;
             // which candle and which price the mouse is on: anywhere in a candle's column counts, wick included
@@ -153,14 +182,23 @@ export function StockChart({ bars, levels = [], markers = [], height = 360, rang
               queueHover(i >= 0 && i < data.length ? i : null, sy >= padT && sy <= padT + plotH ? sy : null);
               return;
             }
-            const px = svgRef.current.getBoundingClientRect().width * ((W - padL - padR) / W) / view.count;
-            const moved = Math.round((e.clientX - drag.current.x) / Math.max(0.5, px));
             // read the drag start now — by the time React applies the update the drag may already be over
-            const startEnd = drag.current.end;
-            if (moved) setView((v) => clampView(startEnd - moved, v.count));
+            const d0 = drag.current;
+            const dy = ((e.clientY - d0.y) / r.height) * H; // in chart units
+            if (d0.axis) {
+              // dragging the price axis stretches the scale (down = wider) and turns auto-scale off
+              const f = Math.exp(dy * 0.006), mid = (d0.lo + d0.hi) / 2, half = ((d0.hi - d0.lo) / 2) * f;
+              if (autoScale) { setAutoScaleState(false); try { localStorage.setItem(AUTO_KEY, "off"); } catch { /* ignore */ } }
+              setManual({ lo: mid - half, hi: mid + half });
+              return;
+            }
+            const px = r.width * ((W - padL - padR) / W) / view.count;
+            const moved = Math.round((e.clientX - d0.x) / Math.max(0.5, px));
+            if (moved) setView((v) => clampView(d0.end - moved, v.count));
+            if (scaleOff) { const shift = (dy / plotH) * (d0.hi - d0.lo); setManual({ lo: d0.lo + shift, hi: d0.hi + shift }); }
           }}
           onPointerUp={() => { drag.current = null; }}
-          onDoubleClick={() => setView({ end: N, count: Math.min(N, RANGE_BARS[range]) })}>
+          onDoubleClick={() => { setView({ end: N, count: Math.min(N, RANGE_BARS[range]) }); setAutoScale(true); }}>
           {yTicks.map((v) => <g key={v}><line x1={padL} x2={W - padR} y1={y(v)} y2={y(v)} stroke="hsl(var(--border))" strokeWidth={0.5} opacity={0.6} />
             <text x={W - padR + 5} y={y(v) + 3} fontSize={9.5} fill="hsl(var(--muted-foreground))" className="font-mono">{fmt(v)}</text></g>)}
           {ticks.map((t) => <text key={t.m} x={x(t.i) - step / 2 + 2} y={H - 4} fontSize={9.5} fill="hsl(var(--muted-foreground))">{new Date(`${t.m}-15T12:00:00Z`).toLocaleDateString("en-US", { month: "short", ...(t.m.endsWith("-01") ? { year: "2-digit" } : {}), timeZone: "UTC" })}</text>)}
@@ -194,7 +232,7 @@ export function StockChart({ bars, levels = [], markers = [], height = 360, rang
           {hov == null && tag(data[data.length - 1].c, data[data.length - 1].c >= (data[data.length - 1].prev ?? 0) ? CHART.positive : CHART.negative, fmt(data[data.length - 1].c), "last", undefined, false)}
         </svg>
       </div>
-      {!mini && <p className="mt-1 text-[10.5px] text-muted-foreground">Scroll on the chart to zoom · drag to move back in time · double-click to reset.{note ? ` ${note}` : ""}</p>}
+      {!mini && <p className="mt-1 text-[10.5px] text-muted-foreground">Scroll on the chart to zoom · drag to move in time (also past today) · Auto off: drag up/down to move prices, drag the price axis to stretch · double-click to reset.{note ? ` ${note}` : ""}</p>}
     </div>
   );
 }
