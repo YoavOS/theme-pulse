@@ -28,7 +28,7 @@ export function StatementsHero({ p }: { p: LensPayload }) {
   const bank = p.financial && !!ttm && ttm.nonIntExp != null;
   return <StoryHero eyebrow={`${t("The statements, explained", "הדוחות, במילים פשוטות")} · ${p.symbol}`} story={story}
     meta={`${name(p)} · ${t("Last 12 months to", "12 חודשים עד")} ${ttm?.end ?? "—"} · USD`}
-    asideTitle={t("The last twelve months", "12 החודשים האחרונים")} asideSubtitle={t("Each line answers: how much of the sales is left?", "כל שורה עונה: כמה מהמכירות נשאר?")}
+    asideTitle={t("The last twelve months", "12 החודשים האחרונים")} asideSubtitle={t("Each line answers: how much of the revenue is left?", "כל שורה עונה: כמה מההכנסות נשאר?")}
     steps={[
       { label: t("01 · Income", "01 · הכנסות"), question: t("Where does each dollar go?", "לאן הולך כל דולר?"), target: "st-flow" },
       bank ? { label: t("02 · Credit", "02 · אשראי"), question: t("How much is set aside for bad loans?", "כמה מופרש להלוואות רעות?"), target: "st-flow" }

@@ -34,7 +34,7 @@ export const PRINCIPLES: Principle[] = [
     sources: [MYTH53, DATA6] },
   { id: "growth_value", question: "Does growth add value here, or just size?",
     idea: "Growth has to be paid for with reinvestment, and sustainable growth is reinvestment × return on capital. If the return is above the cost of capital, growth adds value; equal, it adds nothing; below, more growth makes the company worth less.",
-    seeIt: "Growth lab below; Lens → Reinvestment, sales-to-capital and “new capital earns …” in the stage check.",
+    seeIt: "Growth lab below; Lens → Reinvestment, revenue-to-capital and “new capital earns …” in the stage check.",
     trap: "Rewarding any growth, whatever it costs to buy.",
     sources: [MYTH53] },
   { id: "life_cycle", question: "Which stage of life is it in — and what should matter at this stage?",

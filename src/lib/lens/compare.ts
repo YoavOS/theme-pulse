@@ -29,7 +29,7 @@ export interface GroupDef { key: string; kind: GroupKind; en: string; he: string
 export const GROUPS: GroupDef[] = [
   { key: "growth", kind: "business", en: "Growth", he: "צמיחה", qEn: "Who is getting bigger faster?", qHe: "מי גדלה מהר יותר?", rows: [
     { id: "rev_growth_q", dir: "up" }, { id: "rev_growth_ttm", dir: "up" }, { id: "rev_cagr_3y", dir: "up" }, { id: "opinc_growth_ttm", dir: "up" }, { id: "ni_growth_ttm", dir: "up" }] },
-  { key: "profit", kind: "business", en: "Profitability", he: "רווחיות", qEn: "Who keeps more of each sales dollar?", qHe: "מי משאירה יותר מכל דולר מכירות?", rows: [
+  { key: "profit", kind: "business", en: "Profitability", he: "רווחיות", qEn: "Who keeps more of each revenue dollar?", qHe: "מי משאירה יותר מכל דולר הכנסות?", rows: [
     { id: "gross_margin", dir: "up" }, { id: "op_margin", dir: "up" }, { id: "net_margin", dir: "up" }, { id: "op_margin_change", dir: "up" },
     { id: "bank_efficiency", dir: "down", en: "Efficiency ratio (expenses ÷ revenue)", he: "יחס יעילות (הוצאות ÷ הכנסות)", unit: "pct" },
     { id: "bank_provisions", dir: "down", en: "Credit-loss provisions as % of revenue", he: "הפרשות להפסדי אשראי כאחוז מההכנסות", unit: "pct" }] },
@@ -157,13 +157,13 @@ export function compareStory(A: Side, B: Side, groups: Group[], he = false): Com
   }
   const mA = v(A, mid), mB = v(B, mid);
   if (mA != null && mB != null && Math.abs(mA - mB) >= 1) parts.push(mA > mB
-    ? t(`keeps more of each sales dollar (${pct(mA, 0)} vs ${pct(mB, 0)} ${bank ? "net" : "operating"} margin)`, `משאירה יותר מכל דולר מכירות (${pct(mA, 0)} מול ${pct(mB, 0)} מרווח ${bank ? "נקי" : "תפעולי"})`)
-    : t(`keeps less of each sales dollar (${pct(mA, 0)} vs ${pct(mB, 0)} ${bank ? "net" : "operating"} margin)`, `משאירה פחות מכל דולר מכירות (${pct(mA, 0)} מול ${pct(mB, 0)} מרווח ${bank ? "נקי" : "תפעולי"})`));
+    ? t(`keeps more of each revenue dollar (${pct(mA, 0)} vs ${pct(mB, 0)} ${bank ? "net" : "operating"} margin)`, `משאירה יותר מכל דולר הכנסות (${pct(mA, 0)} מול ${pct(mB, 0)} מרווח ${bank ? "נקי" : "תפעולי"})`)
+    : t(`keeps less of each revenue dollar (${pct(mA, 0)} vs ${pct(mB, 0)} ${bank ? "net" : "operating"} margin)`, `משאירה פחות מכל דולר הכנסות (${pct(mA, 0)} מול ${pct(mB, 0)} מרווח ${bank ? "נקי" : "תפעולי"})`));
   const pid = bank ? "pb" : v(A, "ps") != null && v(B, "ps") != null ? "ps" : "pe";
   const pA = v(A, pid), pB = v(B, pid);
   let tail = "";
   if (pA != null && pB != null && pA > 0 && pB > 0 && ratio(pA, pB) >= 1.1) {
-    const what = pid === "ps" ? t("each dollar of its sales", "כל דולר מכירות שלה") : pid === "pb" ? t("each dollar of its book value", "כל דולר הון עצמי שלה") : t("each dollar of its profit", "כל דולר רווח שלה");
+    const what = pid === "ps" ? t("each dollar of its revenue", "כל דולר הכנסות שלה") : pid === "pb" ? t("each dollar of its book value", "כל דולר הון עצמי שלה") : t("each dollar of its profit", "כל דולר רווח שלה");
     tail = pA > pB ? t(`; the market pays more for ${what} (${times(pA)} vs ${times(pB)})`, `; השוק משלם יותר על ${what} (${times(pA)} מול ${times(pB)})`)
       : t(`; the market pays less for ${what} (${times(pA)} vs ${times(pB)})`, `; השוק משלם פחות על ${what} (${times(pA)} מול ${times(pB)})`);
   }
@@ -197,9 +197,9 @@ export function whatItTakes(A: Side, B: Side, he = false): Take[] {
   const mA = cell(A, "op_margin").value, mB = cell(B, "op_margin").value;
   if (!A.p.financial && isNumber(revA) && revA > 0 && mA != null && mB != null && mB - mA >= 2) {
     const extra = (revA * (mB - mA)) / 100;
-    out.push({ title: t(`${b}'s margins on ${a}'s sales`, `המרווחים של ${b} על המכירות של ${a}`),
-      text: t(`At ${b}'s ${pct(mB, 0)} operating margin, ${a}'s ${money(revA)} of sales would earn about ${money(extra)} more operating profit a year${isNumber(opA) && opA > 0 ? ` — ${((extra / opA) * 100).toFixed(0)}% more than today` : ""}. Whether ${a} can get there is the question: margins usually rise with scale, pricing power or a better mix.`,
-        `במרווח התפעולי של ${b} ‏(${pct(mB, 0)}), המכירות של ${a} ‏(${money(revA)}) היו מרוויחות כ־${money(extra)} יותר רווח תפעולי בשנה${isNumber(opA) && opA > 0 ? ` — ${((extra / opA) * 100).toFixed(0)}% יותר מהיום` : ""}. השאלה היא אם ${a} יכולה להגיע לשם: מרווחים עולים בדרך כלל עם גודל, כוח תמחור או תמהיל טוב יותר.`) });
+    out.push({ title: t(`${b}'s margins on ${a}'s revenue`, `המרווחים של ${b} על ההכנסות של ${a}`),
+      text: t(`At ${b}'s ${pct(mB, 0)} operating margin, ${a}'s ${money(revA)} of revenue would earn about ${money(extra)} more operating profit a year${isNumber(opA) && opA > 0 ? ` — ${((extra / opA) * 100).toFixed(0)}% more than today` : ""}. Whether ${a} can get there is the question: margins usually rise with scale, pricing power or a better mix.`,
+        `במרווח התפעולי של ${b} ‏(${pct(mB, 0)}), ההכנסות של ${a} ‏(${money(revA)}) היו מרוויחות כ־${money(extra)} יותר רווח תפעולי בשנה${isNumber(opA) && opA > 0 ? ` — ${((extra / opA) * 100).toFixed(0)}% יותר מהיום` : ""}. השאלה היא אם ${a} יכולה להגיע לשם: מרווחים עולים בדרך כלל עם גודל, כוח תמחור או תמהיל טוב יותר.`) });
   }
   const gA = cell(A, "rev_growth_ttm").value, gB = cell(B, "rev_growth_ttm").value;
   if (gA != null && gB != null && gB - gA >= 3) out.push({ title: t(`Matching ${b}'s growth`, `להשתוות לצמיחה של ${b}`),
@@ -207,8 +207,8 @@ export function whatItTakes(A: Side, B: Side, he = false): Take[] {
       `‏${a} הייתה צריכה עוד כ־${(gB - gA).toFixed(0)} נקודות צמיחה בהכנסות בשנה (${pct(gA, 0)} ← ${pct(gB, 0)}). צמיחה מהירה יותר מוסיפה ערך רק כשהתשואה על ההון החדש עולה על עלותו.`) });
   const iA = cell(A, "implied_growth").value, iB = cell(B, "implied_growth").value;
   if (iA != null && iB != null) out.push({ title: t("What each price is betting on", "על מה כל מחיר מהמר"),
-    text: t(`At today's margins, ${a}'s price needs about ${pct(iA, 0)} sales growth a year for five years; ${b}'s needs about ${pct(iB, 0)}. The better business is not automatically the better investment — it depends on how much of that edge the price already assumes.`,
-      `במרווחים של היום, המחיר של ${a} דורש כ־${pct(iA, 0)} צמיחה במכירות בשנה לחמש שנים; של ${b} כ־${pct(iB, 0)}. העסק הטוב יותר אינו בהכרח ההשקעה הטובה יותר — זה תלוי בכמה מהיתרון המחיר כבר מניח.`) });
+    text: t(`At today's margins, ${a}'s price needs about ${pct(iA, 0)} revenue growth a year for five years; ${b}'s needs about ${pct(iB, 0)}. The better business is not automatically the better investment — it depends on how much of that edge the price already assumes.`,
+      `במרווחים של היום, המחיר של ${a} דורש כ־${pct(iA, 0)} צמיחה בהכנסות בשנה לחמש שנים; של ${b} כ־${pct(iB, 0)}. העסק הטוב יותר אינו בהכרח ההשקעה הטובה יותר — זה תלוי בכמה מהיתרון המחיר כבר מניח.`) });
   else out.push({ title: t("Good company, good investment?", "חברה טובה, השקעה טובה?"),
     text: t(`Damodaran's point: a great business can be a poor investment if the price already assumes everything goes right. Compare the scorecard above with the "What the market pays" rows before deciding which edge matters.`,
       `הנקודה של דמודרן: עסק מצוין יכול להיות השקעה חלשה אם המחיר כבר מניח שהכול ילך טוב. כדאי להשוות את הטבלה למעלה לשורות "כמה השוק משלם" לפני שמחליטים איזה יתרון חשוב.`) });

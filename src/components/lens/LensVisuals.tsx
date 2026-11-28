@@ -7,7 +7,7 @@ import { AutoTerms, Term } from "./Term";
 
 /**
  * Pictures for the Fundamentals Lens:
- *  ReturnMap     — the two routes to a high return: margin (across) × sales per $ of capital (up), with lines of equal
+ *  ReturnMap     — the two routes to a high return: margin (across) × revenue per $ of capital (up), with lines of equal
  *                  return on capital; the company, its industry and the whole market as dots.
  *  IndustryBars  — the key measures side by side: the company, its industry, the market.
  *  GrowthAsk     — the growth the price needs in each story, next to the growth it actually delivered.
@@ -42,7 +42,7 @@ export function ReturnMap({ p }: { p: LensPayload }) {
   ].map((d) => ({ ...d, x: Math.min(xMax, Math.max(0, d.x)), y: Math.min(yMax, Math.max(0, d.y)) }));
   return (
     <div className="px-3 pb-2">
-      <div className="text-[11.5px] text-muted-foreground">{<AutoTerms text={he ? "שתי הדרכים לתשואה גבוהה: שיעור רווח (לרוחב) × מכירות לכל דולר הון (לגובה). הקווים: תשואה שווה על ההון — הנמוך הוא עלות ההון." : "The two routes to a high return: margin (across) × sales per $ of capital (up). Lines = equal return on capital; the lowest is the cost of capital."}/>}</div>
+      <div className="text-[11.5px] text-muted-foreground">{<AutoTerms text={he ? "שתי הדרכים לתשואה גבוהה: שיעור רווח (לרוחב) × הכנסות לכל דולר הון (לגובה). הקווים: תשואה שווה על ההון — הנמוך הוא עלות ההון." : "The two routes to a high return: margin (across) × revenue per $ of capital (up). Lines = equal return on capital; the lowest is the cost of capital."}/>}</div>
       <div className="h-56" dir="ltr">
         <ResponsiveContainer>
           <ComposedChart data={curve} margin={{ top: 8, right: 12, left: 0, bottom: 4 }}>
@@ -119,7 +119,7 @@ export function GrowthAsk({ p }: { p: LensPayload }) {
   if (data.filter((d) => d.kind === "need").length === 0) return null;
   return (
     <div>
-      <div className="mb-1 text-[11.5px] text-muted-foreground"><AutoTerms text={he ? "צמיחת מכירות בשנה: מה שהמחיר צריך בכל סיפור, מול מה שהחברה והענף עשו." : "Sales growth a year: what the price needs in each story, against what the company and its industry did."} /></div>
+      <div className="mb-1 text-[11.5px] text-muted-foreground"><AutoTerms text={he ? "צמיחת הכנסות בשנה: מה שהמחיר צריך בכל סיפור, מול מה שהחברה והענף עשו." : "Revenue growth a year: what the price needs in each story, against what the company and its industry did."} /></div>
       <div className="h-44" dir="ltr">
         <ResponsiveContainer>
           <BarChart data={data} layout="vertical" margin={{ top: 0, right: 34, left: 4, bottom: 0 }}>

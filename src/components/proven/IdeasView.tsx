@@ -96,8 +96,8 @@ function ComparePairs({ rows, onOpen }: { rows: Row[]; onOpen: (s: string) => vo
   const pa = prof(pair.a), pb = prof(pair.b);
   const route = pa.margin !== null && pb.margin !== null && pa.turn !== null && pb.turn !== null
     ? (pa.margin / Math.max(0.1, pb.margin) >= pa.turn / Math.max(0.01, pb.turn)
-      ? (he ? "שיעור רווח — היא שומרת הרבה יותר מכל מכירה (כוח תמחור, בידול, יתרונות גודל)" : "margin — it keeps much more of each sale (pricing power, differentiation, scale costs)")
-      : (he ? "יעילות הון — היא צריכה הרבה פחות הון על כל דולר מכירות" : "capital efficiency — it needs far less capital for each dollar of sales"))
+      ? (he ? "שיעור רווח — היא שומרת הרבה יותר מכל דולר הכנסות (כוח תמחור, בידול, יתרונות גודל)" : "margin — it keeps much more of each dollar of revenue (pricing power, differentiation, scale costs)")
+      : (he ? "יעילות הון — היא צריכה הרבה פחות הון על כל דולר הכנסות" : "capital efficiency — it needs far less capital for each dollar of revenue"))
     : null;
   return (
     <div className="space-y-2 rounded-lg border border-border p-3">
@@ -124,7 +124,7 @@ function ComparePairs({ rows, onOpen }: { rows: Row[]; onOpen: (s: string) => vo
           <div className="grid grid-cols-3 gap-1 text-[11px]">
             <span /> <span className="text-center font-mono">{pair.a.symbol}</span><span className="text-center font-mono">{pair.b.symbol}</span>
             <span className="text-muted-foreground"><Term id="operating_margin">{he ? "שיעור רווח אחרי מס" : "after-tax margin"}</Term></span><span className="text-center font-mono">{pa.margin?.toFixed(1) ?? "n/a"}%</span><span className="text-center font-mono">{pb.margin?.toFixed(1) ?? "n/a"}%</span>
-            <span className="text-muted-foreground"><Term id="sales_to_capital">{he ? "מכירות לכל דולר הון" : "sales per $ capital"}</Term></span><span className="text-center font-mono">{pa.turn?.toFixed(2) ?? "n/a"}×</span><span className="text-center font-mono">{pb.turn?.toFixed(2) ?? "n/a"}×</span>
+            <span className="text-muted-foreground"><Term id="sales_to_capital">{he ? "הכנסות לכל דולר הון" : "revenue per $ of capital"}</Term></span><span className="text-center font-mono">{pa.turn?.toFixed(2) ?? "n/a"}×</span><span className="text-center font-mono">{pb.turn?.toFixed(2) ?? "n/a"}×</span>
           </div>
           {route && (he
             ? <p className="text-[12.5px] leading-snug"><span className="font-semibold">העיקרון: </span>תשואה על ההון = שיעור רווח × יעילות הון. {ltr(pair.a.symbol)} מנצחת בעיקר ב{route}. אותו ענף, אותה עלות הון — ההבדל הוא העסק.</p>

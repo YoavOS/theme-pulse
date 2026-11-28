@@ -57,7 +57,7 @@ const CHECK_LABEL: Record<string, string> = {
   "Created value in total over the period": "יצרה ערך בסך הכול לאורך התקופה",
   "Growing fast (revenue ≥ 15%/yr)": "צומחת מהר (הכנסות ≥ 15% בשנה)",
   "Operating margin rising as it grows": "הרווחיות התפעולית עולה ככל שהיא גדלה",
-  "Capital-efficient growth (sales per $ of capital ≥ industry)": "צמיחה יעילה בהון (מכירות לכל דולר הון ≥ הענף)",
+  "Capital-efficient growth (revenue per $ of capital ≥ industry)": "צמיחה יעילה בהון (הכנסות לכל דולר הון ≥ הענף)",
   "New capital earning more than it costs": "הון חדש מרוויח יותר ממה שהוא עולה",
   "Acting its age (young): funded by equity, not debt, and not paying dividends yet": "מתנהגת בהתאם לגילה (צעירה): ממומנת בהון עצמי ולא בחוב, ועוד לא משלמת דיבידנדים",
   "Acting its age (high growth): new capital earns more than it costs, so reinvesting adds value": "מתנהגת בהתאם לגילה (צמיחה מהירה): הון חדש מרוויח יותר ממה שהוא עולה, ולכן השקעה מחדש מוסיפה ערך",

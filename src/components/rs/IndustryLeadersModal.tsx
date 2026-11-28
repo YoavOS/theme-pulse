@@ -162,7 +162,7 @@ export default function IndustryLeadersModal({ open, onOpenChange, stocks, isOtc
 
   const raw = (sym: string) => {
     const f = fundamentalsMap.get(sym), row = savedBy.get(sym);
-    const prof: [ProfileKey, string][] = [["current", "Current"], ["momentum", "Earn. momentum"], ["growth", "Sales accel."], ["margins", "Margins"], ["quality", "Quality"]];
+    const prof: [ProfileKey, string][] = [["current", "Current"], ["momentum", "Earn. momentum"], ["growth", "Revenue accel."], ["margins", "Margins"], ["quality", "Quality"]];
     return (
       <div className="grid gap-3 px-3 py-2 text-xs sm:grid-cols-2">
         <div className="space-y-1">

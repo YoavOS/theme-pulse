@@ -78,7 +78,7 @@ export function extraComparison(pair: ExtraPair, p: LensPayload, t: Translate) {
       [t("Cash left after that spending", "מזומן שנשאר אחרי ההשקעה"), cash(remaining)],
       [t("Change in cash left vs previous quarter", "שינוי במזומן שנותר מול הרבעון הקודם"), cash(delta)],
       [t("Cash spent on acquisitions, separate", "מזומן ששימש לרכישות, בנפרד"), cash(f?.acquisitions)],
-    ], check: t("A factory build can pull cash forward before it generates sales. These totals cannot distinguish expansion from maintenance. Acquisitions and financing sit outside this free-cash calculation.", "הקמת מפעל יכולה לצרוך מזומן לפני תחילת המכירות. הנתונים אינם מפרידים בין הרחבה לתחזוקה. רכישות ומימון אינם כלולים בחישוב הזה.") };
+    ], check: t("A factory build can pull cash forward before it generates revenue. These totals cannot distinguish expansion from maintenance. Acquisitions and financing sit outside this free-cash calculation.", "הקמת מפעל יכולה לצרוך מזומן לפני תחילת ההכנסות. הנתונים אינם מפרידים בין הרחבה לתחזוקה. רכישות ומימון אינם כלולים בחישוב הזה.") };
   }
   if (pair === "perShare") {
     const earningsGrowth = percentageChange(q?.net ?? null, yearAgo?.net ?? null);
@@ -133,7 +133,7 @@ export function extraComparison(pair: ExtraPair, p: LensPayload, t: Translate) {
     [t("Net profit", "רווח נקי"), cash(q?.net)],
     [t("Net profit less operating profit", "רווח נקי פחות רווח תפעולי"), cash(opToNet)],
   ], check: tax !== null && tax < 0
-    ? t("The filing reports a tax benefit. This can lift net income even without a change in sales. Use the filing notes to see whether it arose from a one-time event.", "הדוח מציג הטבת מס. היא יכולה להעלות את הרווח הנקי גם בלי שינוי במכירות. ביאורי הדוח מסבירים אם מדובר באירוע חד־פעמי.")
-    : t("Interest, investment gains, asset sales, taxes and other items can move net profit. These totals show the size and direction of the gap. The filing notes identify individual one-off items.", "ריבית, רווחי השקעה, מכירת נכסים, מסים וסעיפים אחרים יכולים להזיז את הרווח הנקי. הסכומים מראים את הפער, והביאורים מפרטים אירועים חד־פעמיים.") };
+    ? t("The filing reports a tax benefit. This can lift net income even without a change in revenue. Use the filing notes to see whether it arose from a one-time event.", "הדוח מציג הטבת מס. היא יכולה להעלות את הרווח הנקי גם בלי שינוי בהכנסות. ביאורי הדוח מסבירים אם מדובר באירוע חד־פעמי.")
+    : t("Interest, investment gains, asset revenue, taxes and other items can move net profit. These totals show the size and direction of the gap. The filing notes identify individual one-off items.", "ריבית, רווחי השקעה, מכירת נכסים, מסים וסעיפים אחרים יכולים להזיז את הרווח הנקי. הסכומים מראים את הפער, והביאורים מפרטים אירועים חד־פעמיים.") };
 }
 

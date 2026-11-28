@@ -70,9 +70,9 @@ export function statementsStory(p: LensPayload, he: boolean): TabStory {
   const r = ttmRow(p), bank = !!(p.financial && r && isNumber(r.nonIntExp));
   const rev = r?.revenue ?? null, net = r?.net ?? null;
   const netPer = per100(net, rev);
-  const title = netPer === null ? t("Follow each dollar of sales down to profit", "עוקבים אחרי כל דולר מכירות עד לרווח")
-    : netPer >= 0 ? t(`Of every $100 of ${bank ? "revenue" : "sales"}, about $${netPer.toFixed(0)} ends up as net profit`, `מכל $100 ${bank ? "הכנסות" : "מכירות"}, בערך $${netPer.toFixed(0)} נשארים כרווח נקי`)
-    : t(`For every $100 of sales, the company loses about $${Math.abs(netPer).toFixed(0)}`, `על כל $100 מכירות, החברה מפסידה בערך $${Math.abs(netPer).toFixed(0)}`);
+  const title = netPer === null ? t("Follow each dollar of revenue down to profit", "עוקבים אחרי כל דולר הכנסות עד לרווח")
+    : netPer >= 0 ? t(`Of every $100 of ${bank ? "revenue" : "revenue"}, about $${netPer.toFixed(0)} ends up as net profit`, `מכל $100 ${bank ? "הכנסות" : "הכנסות"}, בערך $${netPer.toFixed(0)} נשארים כרווח נקי`)
+    : t(`For every $100 of revenue, the company loses about $${Math.abs(netPer).toFixed(0)}`, `על כל $100 הכנסות, החברה מפסידה בערך $${Math.abs(netPer).toFixed(0)}`);
   const paras: string[] = [];
   if (bank && r) {
     const e = per100(r.nonIntExp, rev), pv = per100(r.provision, rev), pre = per100(r.pretax, rev);
@@ -83,8 +83,8 @@ export function statementsStory(p: LensPayload, he: boolean): TabStory {
     paras.push(t("For a bank, cash flow mostly reflects lending and deposits, so profit and return on equity are the better guides.", "בבנק, תזרים המזומנים משקף בעיקר הלוואות ופיקדונות, ולכן הרווח והתשואה על ההון העצמי הם המדריכים הטובים יותר."));
   } else if (r) {
     const c = per100(r.cost, rev), opx = per100(isNumber(r.gross) && isNumber(r.operating) ? r.gross - r.operating : null, rev), op = per100(r.operating, rev);
-    if (c !== null || opx !== null) paras.push(t(`Over the last twelve months, direct costs took about $${c?.toFixed(0) ?? "—"} of every $100 of sales and running the business another $${opx?.toFixed(0) ?? "—"}, leaving about $${op?.toFixed(0) ?? "—"} as operating profit.`,
-      `ב־12 החודשים האחרונים, עלויות ישירות לקחו כ־$${c?.toFixed(0) ?? "—"} מכל $100 מכירות והפעלת העסק עוד כ־$${opx?.toFixed(0) ?? "—"}, כך שנשארו כ־$${op?.toFixed(0) ?? "—"} כרווח תפעולי.`));
+    if (c !== null || opx !== null) paras.push(t(`Over the last twelve months, direct costs took about $${c?.toFixed(0) ?? "—"} of every $100 of revenue and running the business another $${opx?.toFixed(0) ?? "—"}, leaving about $${op?.toFixed(0) ?? "—"} as operating profit.`,
+      `ב־12 החודשים האחרונים, עלויות ישירות לקחו כ־$${c?.toFixed(0) ?? "—"} מכל $100 הכנסות והפעלת העסק עוד כ־$${opx?.toFixed(0) ?? "—"}, כך שנשארו כ־$${op?.toFixed(0) ?? "—"} כרווח תפעולי.`));
     if (isNumber(r.ocf) && isNumber(net) && net > 0) {
       const conv = r.ocf / net;
       paras.push(t(`Operations brought in $${conv.toFixed(2)} of cash for every $1 of net profit. ${conv < 0.8 ? "Cash trailing profit is worth a look: receivables, inventory or prepaid costs can explain it." : "Profit is turning into cash."}`,
@@ -108,7 +108,7 @@ export function statementsStory(p: LensPayload, he: boolean): TabStory {
     { label: t("Net margin", "שיעור רווח נקי"), value: pct(netPer), caption: t("after interest and tax", "אחרי ריבית ומס") },
   ];
   const fcf = r && isNumber(r.ocf) && isNumber(r.capex) ? r.ocf - r.capex : null;
-  return { title, paras, kpis, footer: !bank && fcf !== null ? t(`Free cash flow over the same 12 months: ${money(fcf)} (${pct(per100(fcf, rev))} of sales).`, `תזרים חופשי באותם 12 חודשים: ${money(fcf)} (${pct(per100(fcf, rev))} מהמכירות).`) : undefined };
+  return { title, paras, kpis, footer: !bank && fcf !== null ? t(`Free cash flow over the same 12 months: ${money(fcf)} (${pct(per100(fcf, rev))} of revenue).`, `תזרים חופשי באותם 12 חודשים: ${money(fcf)} (${pct(per100(fcf, rev))} מההכנסות).`) : undefined };
 }
 
 // ── Valuation ────────────────────────────────────────────────────────────────────────
@@ -145,12 +145,12 @@ export function valuationStory(p: LensPayload, he: boolean): TabStory {
       `אם התשואה הזו הייתה נמשכת והבנק היה צומח ב־${STABLE_G}% בשנה לנצח, מכפיל הון הוגן היה כ־פי ${f.justifiedPb.toFixed(1)}. השוק משלם פי ${f.pb.toFixed(1)}: ${f.pb > f.justifiedPb * 1.15 ? "הוא מצפה לתשואה או לצמיחה גבוהות מזה" : f.pb < f.justifiedPb * 0.85 ? "הוא מצפה שהתשואה תשחק, או רואה יותר סיכון" : "קרוב למדד הפשוט הזה"}.`));
   } else if (cur && v) {
     const im = cur.implied, past = v.pastGrowth3y;
-    title = im.kind === "ok" ? t(`If ${p.symbol} keeps today's margins, the price needs about ${pct(im.growth, 0)} sales growth a year for five years`, `אם ${p.symbol} תשמור על שיעורי הרווח של היום, המחיר צריך צמיחת מכירות של כ־${pct(im.growth, 0)} בשנה במשך חמש שנים`)
-      : im.kind === "shrink" ? t(`Today's profits already cover the price, even if sales shrink`, `הרווחים של היום כבר מכסים את המחיר, גם אם המכירות יתכווצו`)
+    title = im.kind === "ok" ? t(`If ${p.symbol} keeps today's margins, the price needs about ${pct(im.growth, 0)} revenue growth a year for five years`, `אם ${p.symbol} תשמור על שיעורי הרווח של היום, המחיר צריך צמיחת הכנסות של כ־${pct(im.growth, 0)} בשנה במשך חמש שנים`)
+      : im.kind === "shrink" ? t(`Today's profits already cover the price, even if revenue shrinks`, `הרווחים של היום כבר מכסים את המחיר, גם אם ההכנסות יתכווצו`)
       : im.kind === "beyond" ? t(`Even very fast growth doesn't reach this price at today's margins`, `גם צמיחה מהירה מאוד לא מגיעה למחיר הזה בשיעורי הרווח של היום`)
       : t(`At today's returns, growth doesn't add value — the price needs better economics`, `בתשואות של היום צמיחה לא מוסיפה ערך — המחיר צריך כלכלה טובה יותר`);
-    paras.push(t(`Damodaran's way to read a price: turn it into the story it implies. A simple 10-year cash-flow model, at ${p.symbol}'s cost of capital (${pct(v.costOfCapital)}), asks what sales growth makes the business worth today's market value.`,
-      `הדרך של דמודרן לקרוא מחיר: להפוך אותו לסיפור שהוא מניח. מודל תזרים פשוט ל־10 שנים, בעלות ההון של ${p.symbol} (${pct(v.costOfCapital)}), שואל איזו צמיחה במכירות הופכת את העסק לשווה את שווי השוק של היום.`));
+    paras.push(t(`Damodaran's way to read a price: turn it into the story it implies. A simple 10-year cash-flow model, at ${p.symbol}'s cost of capital (${pct(v.costOfCapital)}), asks what revenue growth makes the business worth today's market value.`,
+      `הדרך של דמודרן לקרוא מחיר: להפוך אותו לסיפור שהוא מניח. מודל תזרים פשוט ל־10 שנים, בעלות ההון של ${p.symbol} (${pct(v.costOfCapital)}), שואל איזו צמיחה בהכנסות הופכת את העסק לשווה את שווי השוק של היום.`));
     if (im.kind === "ok") {
       const d = demandVsHistory(im.growth, past);
       const word = d === "less" ? t("less than", "פחות מ") : d === "same" ? t("about the same as", "בערך כמו") : d === "more" ? t("more than", "יותר מ") : d === "much_more" ? t("far more than", "הרבה יותר מ") : null;
@@ -167,7 +167,7 @@ export function valuationStory(p: LensPayload, he: boolean): TabStory {
     { label: t("Market cap", "שווי שוק"), value: money2(p.market.marketCap), caption: t("all shares", "כל המניות") },
     { label: "P/E", value: times(f.pe), caption: t("price ÷ yearly profit", "מחיר ÷ רווח שנתי"), tone: "neutral" },
     p.financial ? { label: "P/B", value: times(f.pb), caption: t("price ÷ book equity", "מחיר ÷ הון בספרים"), tone: "neutral" }
-      : { label: "P/S", value: times(f.ps), caption: t("price ÷ yearly sales", "מחיר ÷ מכירות שנתיות"), tone: "neutral" },
+      : { label: "P/S", value: times(f.ps), caption: t("price ÷ yearly revenue", "מחיר ÷ הכנסות שנתיות"), tone: "neutral" },
     p.financial ? { label: t("Return on equity", "תשואה על ההון העצמי"), value: pct(f.roe), caption: t("what the price buys", "מה שהמחיר קונה") }
       : { label: t("Growth the price needs", "הצמיחה שהמחיר צריך"), value: cur?.implied.kind === "ok" ? `${pct(cur.implied.growth, 0)}/yr` : "—", caption: t("at today's margins", "בשיעורי הרווח של היום"), tone: "warn" },
   ];

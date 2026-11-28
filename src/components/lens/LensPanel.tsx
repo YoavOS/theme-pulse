@@ -52,7 +52,7 @@ const SHORT: Record<string, string> = {
   rev_growth_ttm: "Revenue growth, 1 yr", rev_growth_q: "Revenue growth, last qtr", rev_cagr_3y: "Revenue growth, 3 yr/yr",
   op_margin: "Operating margin", op_margin_change: "Op. margin change, 1 yr", gross_margin: "Gross margin", net_margin: "Net margin",
   roic: "Return on capital", roe: "Return on equity", fcf_margin: "Free cash flow margin", reinvestment_rate: "Reinvestment rate",
-  sales_to_capital: "Sales to capital", sbc_intensity: "Stock comp % of revenue", cash_runway: "Cash runway", share_change: "Share count, 1 yr",
+  sales_to_capital: "Revenue to capital", sbc_intensity: "Stock comp % of revenue", cash_runway: "Cash runway", share_change: "Share count, 1 yr",
   interest_coverage: "Interest coverage", cash_return_vs_fcf: "Cash returned / FCF", cash_return: "Cash returned, 1 yr",
   excess_return: "Return − cost of capital", equity_spread: "ROE − cost of equity",
 };

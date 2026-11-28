@@ -39,13 +39,13 @@ describe("vs leader", () => {
   });
   it("writes the headline from the numbers", () => {
     const s = compareStory(A, B, groups);
-    expect(s.title).toMatch(/^CRDO grows 2\.0× faster than NVDA \(210% vs 106%\) and keeps less of each sales dollar \(20% vs 65% operating margin\); the market pays more for each dollar of its sales \(25\.0× vs 12\.4×\)$/);
+    expect(s.title).toMatch(/^CRDO grows 2\.0× faster than NVDA \(210% vs 106%\) and keeps less of each revenue dollar \(20% vs 65% operating margin\); the market pays more for each dollar of its revenue \(25\.0× vs 12\.4×\)$/);
     expect(s.paras.join(" ")).toMatch(/NVDA is 40× CRDO's size by revenue/);
     expect(compareStory(A, B, groups, true).title).toMatch(/^CRDO גדלה פי 2\.0 מהר יותר מ־NVDA/);
   });
-  it("what it would take: the leader's margins on the challenger's sales", () => {
+  it("what it would take: the leader's margins on the challenger's revenue", () => {
     const t = whatItTakes(A, B);
-    expect(t[0].title).toBe("NVDA's margins on CRDO's sales");
+    expect(t[0].title).toBe("NVDA's margins on CRDO's revenue");
     expect(t[0].text).toMatch(/would earn about \$[\d.]+[BM] more operating profit a year/);
   });
   it("size, quarterly series and bank rows", () => {

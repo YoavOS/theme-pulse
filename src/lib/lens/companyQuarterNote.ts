@@ -4,7 +4,7 @@ import { ltr } from "@/lib/lens/i18n";
 
 /**
  * "For SYMBOL" lines for terms that have no ready-made Lens metric: built from the company's latest
- * reported quarter (sales, QoQ/YoY, acceleration, costs, profit, EPS) or its market snapshot.
+ * reported quarter (revenue, QoQ/YoY, acceleration, costs, profit, EPS) or its market snapshot.
  * Returns null when the data needed for that term is missing — never a guess.
  */
 const money = (n: number) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", notation: "compact", maximumFractionDigits: 1 }).format(n);
@@ -23,37 +23,37 @@ export function quarterNote(entryId: string, p: LensPayload, lang: "en" | "he"):
   switch (entryId) {
     case "revenue":
       if (rev === null) return null;
-      return [he ? `ההכנסות של ${S} ברבעון שהסתיים ב-${end}: ${L(money(rev))}.` : `${S}'s sales in the quarter ended ${end}: ${money(rev)}.`,
+      return [he ? `ההכנסות של ${S} ברבעון שהסתיים ב-${end}: ${L(money(rev))}.` : `${S}'s revenue in the quarter ended ${end}: ${money(rev)}.`,
         ...(isNumber(q.yoy) ? [he ? `שינוי שנתי (מול אותו רבעון אשתקד): ${L(pct(q.yoy))}.` : `Versus the same quarter a year earlier: ${pct(q.yoy)}.`] : [])];
     case "qoq":
       if (!isNumber(q.qoq)) return null;
-      return [he ? `ההכנסות של ${S} ברבעון שהסתיים ב-${end} השתנו ב-${L(pct(q.qoq))} מול הרבעון הקודם.` : `${S}'s sales in the quarter ended ${end} changed ${pct(q.qoq)} from the previous quarter.`,
+      return [he ? `ההכנסות של ${S} ברבעון שהסתיים ב-${end} השתנו ב-${L(pct(q.qoq))} מול הרבעון הקודם.` : `${S}'s revenue in the quarter ended ${end} changed ${pct(q.qoq)} from the previous quarter.`,
         ...(isNumber(q.yoy) ? [he ? `לשם השוואה, השינוי השנתי: ${L(pct(q.yoy))}. כשהשניים חלוקים, העונה יכולה להסביר את הפער.` : `For comparison, year over year: ${pct(q.yoy)}. When the two disagree, the season can explain the gap.`] : [])];
     case "yoy":
       if (!isNumber(q.yoy)) return null;
-      return [he ? `ההכנסות של ${S} ברבעון שהסתיים ב-${end} השתנו ב-${L(pct(q.yoy))} מול אותו רבעון אשתקד.` : `${S}'s sales in the quarter ended ${end} changed ${pct(q.yoy)} versus the same quarter a year earlier.`,
+      return [he ? `ההכנסות של ${S} ברבעון שהסתיים ב-${end} השתנו ב-${L(pct(q.yoy))} מול אותו רבעון אשתקד.` : `${S}'s revenue in the quarter ended ${end} changed ${pct(q.yoy)} versus the same quarter a year earlier.`,
         ...(isNumber(q.priorYoy) ? [he ? `ברבעון שלפניו השינוי השנתי היה ${L(pct(q.priorYoy))}.` : `The quarter before, it was ${pct(q.priorYoy)}.`] : [])];
     case "acceleration": {
       if (!isNumber(q.acceleration) || !isNumber(q.yoy) || !isNumber(q.priorYoy)) return null;
       const a = q.acceleration, pts = L(`${Math.abs(a).toFixed(1)}`);
       return [he
         ? `הצמיחה השנתית בהכנסות של ${S} עברה מ-${L(pct(q.priorYoy))} ל-${L(pct(q.yoy))}: ${a >= 0 ? "האצה" : "האטה"} של ${pts} נקודות אחוז.`
-        : `${S}'s year-over-year sales growth went from ${pct(q.priorYoy)} to ${pct(q.yoy)}: ${Math.abs(a).toFixed(1)} percentage points ${a >= 0 ? "faster" : "slower"}.`,
+        : `${S}'s year-over-year revenue growth went from ${pct(q.priorYoy)} to ${pct(q.yoy)}: ${Math.abs(a).toFixed(1)} percentage points ${a >= 0 ? "faster" : "slower"}.`,
         he ? "רבעון אחד הוא רמז; כדאי לבדוק אם זה חוזר ברבעונים הבאים." : "One quarter is a hint; check whether it repeats in the next ones."];
     }
     case "cost_of_revenue":
       if (rev === null || !isNumber(last?.cost)) return null;
-      return [he ? `ברבעון שהסתיים ב-${end}, עלות ההכנסות של ${S} הייתה ${L(money(last!.cost!))} — ${L(per100(last!.cost!, rev))} מכל $100 מכירות.`
-        : `In the quarter ended ${end}, ${S}'s cost of revenue was ${money(last!.cost!)} — ${per100(last!.cost!, rev)} of every $100 of sales.`];
+      return [he ? `ברבעון שהסתיים ב-${end}, עלות ההכנסות של ${S} הייתה ${L(money(last!.cost!))} — ${L(per100(last!.cost!, rev))} מכל $100 הכנסות.`
+        : `In the quarter ended ${end}, ${S}'s cost of revenue was ${money(last!.cost!)} — ${per100(last!.cost!, rev)} of every $100 of revenue.`];
     case "opex":
       if (rev === null || !isNumber(last?.gross) || !isNumber(last?.operating)) return null;
-      return [he ? `ברבעון שהסתיים ב-${end}, הוצאות התפעול של ${S} היו בערך ${L(money(last!.gross! - last!.operating!))} — ${L(per100(last!.gross! - last!.operating!, rev))} מכל $100 מכירות.`
-        : `In the quarter ended ${end}, ${S}'s operating expenses were about ${money(last!.gross! - last!.operating!)} — ${per100(last!.gross! - last!.operating!, rev)} of every $100 of sales.`];
+      return [he ? `ברבעון שהסתיים ב-${end}, הוצאות התפעול של ${S} היו בערך ${L(money(last!.gross! - last!.operating!))} — ${L(per100(last!.gross! - last!.operating!, rev))} מכל $100 הכנסות.`
+        : `In the quarter ended ${end}, ${S}'s operating expenses were about ${money(last!.gross! - last!.operating!)} — ${per100(last!.gross! - last!.operating!, rev)} of every $100 of revenue.`];
     case "operating_income": {
       if (!isNumber(last?.operating)) return null;
       const v = last!.operating!, m = rev !== null ? `${(100 * v / rev).toFixed(1)}%` : null;
       return [he ? `${v < 0 ? "ההפסד" : "הרווח"} התפעולי של ${S} ברבעון שהסתיים ב-${end}: ${L(money(v))}${m ? `, ${L(m)} מההכנסות` : ""}.`
-        : `${S}'s operating ${v < 0 ? "loss" : "profit"} in the quarter ended ${end}: ${money(v)}${m ? ` (${m} of sales)` : ""}.`];
+        : `${S}'s operating ${v < 0 ? "loss" : "profit"} in the quarter ended ${end}: ${money(v)}${m ? ` (${m} of revenue)` : ""}.`];
     }
     case "net_income": {
       if (!isNumber(last?.net)) return null;
@@ -85,7 +85,7 @@ export function quarterNote(entryId: string, p: LensPayload, lang: "en" | "he"):
       const pb = p.marketPricing?.pb;
       if (!isNumber(pb)) return null;
       return [he ? `מכפיל ההון של ${S}: ${L(`${pb.toFixed(1)}×`)}.` : `${S}'s price to book: ${pb.toFixed(1)}×.`,
-        p.financial ? (he ? "בחברה פיננסית כדאי לקרוא אותו יחד עם התשואה על ההון העצמי." : "For a financial company, read it together with return on equity.") : (he ? "בחברה שאינה פיננסית הוא אומר פחות; מכפיל רווח ומכפיל מכירות שימושיים יותר." : "For a non-financial company it says less; P/E and P/S are usually more useful.")];
+        p.financial ? (he ? "בחברה פיננסית כדאי לקרוא אותו יחד עם התשואה על ההון העצמי." : "For a financial company, read it together with return on equity.") : (he ? "בחברה שאינה פיננסית הוא אומר פחות; מכפיל רווח ומכפיל הכנסות שימושיים יותר." : "For a non-financial company it says less; P/E and P/S are usually more useful.")];
     }
     default:
       return null;

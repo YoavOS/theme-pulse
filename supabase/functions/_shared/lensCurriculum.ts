@@ -186,7 +186,7 @@ export const CONCEPTS: Concept[] = [
   {
     id: "gross_margin", pillar: "profitability", title: "Gross margin", metricIds: ["gross_margin", "gross_margin_change"], primary: "gross_margin",
     question: "What does gross margin tell you that operating margin doesn't?",
-    what: "The share of each sales dollar left after paying the direct cost of the product or service.",
+    what: "The share of each revenue dollar left after paying the direct cost of the product or service.",
     why: "It shows pricing power and the economics of the product itself, before the company spends on growth (R&D, marketing). A high gross margin with a negative operating margin means the product works but the company is spending heavily to grow.",
     industry: "Software and drug makers keep most of each dollar; retailers, distributors and manufacturers keep a small slice. A 30% gross margin is weak for software and strong for a grocer.",
     stages: {
@@ -316,11 +316,11 @@ export const CONCEPTS: Concept[] = [
     lectures: [L.v9, L.v10], higherIsBetter: null,
   },
   {
-    id: "sales_to_capital", pillar: "reinvestment", title: "Sales to capital", metricIds: ["sales_to_capital"], primary: "sales_to_capital",
+    id: "sales_to_capital", pillar: "reinvestment", title: "Revenue to capital", metricIds: ["sales_to_capital"], primary: "sales_to_capital",
     question: "How much does it cost this company to add a dollar of revenue?",
     what: "Revenue per dollar of capital invested in the business.",
     why: "In Damodaran's story-to-numbers approach this ratio sets how much reinvestment a growth forecast needs: a high ratio means growth is cheap; a low one means every dollar of new revenue requires heavy investment.",
-    industry: "Retailers and distributors turn capital over quickly (high ratio); utilities and telecom need lots of capital per dollar of sales (low ratio).",
+    industry: "Retailers and distributors turn capital over quickly (high ratio); utilities and telecom need lots of capital per dollar of revenue (low ratio).",
     stages: { high_growth: "The ratio decides how much cash growth will burn.", mature_stable: "Stable — changes usually come from acquisitions or write-downs." },
     caveats: ["Damodaran publishes this ratio by industry without a written formula; revenue ÷ invested capital is the app's reading.", "For forecasts he uses the marginal version — new revenue ÷ new capital — which can differ a lot from the average."],
     lectures: [L.v13, L.v11], higherIsBetter: true,

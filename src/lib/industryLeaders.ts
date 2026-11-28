@@ -8,7 +8,7 @@
 //
 // Four pillars, each the average industry percentile of its inputs:
 //   Growth   — quarterly EPS growth, quarterly revenue growth, Earnings-momentum profile
-//   Trend    — Sales-acceleration and Margin-expansion profiles
+//   Trend    — Revenue-acceleration and Margin-expansion profiles
 //   Quality  — Quality profile, ROE, net margin
 //   Strength — Current-fundamentals profile
 // Fundamental score = weighted mean of the pillars it has (35 / 20 / 25 / 20).
@@ -22,7 +22,7 @@ import { savedScore, type ProfileKey, type SavedRow } from "@/lib/superperfProfi
 export type PillarKey = "growth" | "trend" | "quality" | "strength";
 export const PILLARS: { key: PillarKey; label: string; weight: number; tip: string }[] = [
   { key: "growth", label: "Growth", weight: 0.35, tip: "Quarterly EPS and revenue growth vs last year, and the Earnings-momentum profile — ranked within the industry." },
-  { key: "trend", label: "Trend", weight: 0.2, tip: "Is it getting better? Sales-acceleration and Margin-expansion profiles, ranked within the industry." },
+  { key: "trend", label: "Trend", weight: 0.2, tip: "Is it getting better? Revenue-acceleration and Margin-expansion profiles, ranked within the industry." },
   { key: "quality", label: "Quality", weight: 0.25, tip: "Quality profile (gross profit / assets, cash conversion, dilution…), ROE and net margin, ranked within the industry." },
   { key: "strength", label: "Strength", weight: 0.2, tip: "Current-fundamentals profile score, ranked within the industry." },
 ];

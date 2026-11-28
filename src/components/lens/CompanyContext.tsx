@@ -45,7 +45,7 @@ export function MetricConnections({ p }: { p: LensPayload }) {
   ] : [
     { key: "cash", label: t("Revenue & cash", "הכנסות ומזומנים") },
     { key: "profit", label: t("Profit & cash flow", "רווח ותזרים") },
-    { key: "margin", label: t("Sales & margin", "מכירות ושיעור רווח") },
+    { key: "margin", label: t("Revenue & margin", "הכנסות ושיעור רווח") },
     { key: "netProfit", label: t("Operating profit & net profit", "רווח תפעולי ורווח נקי") },
     { key: "perShare", label: t("Profit & earnings per share", "רווח ורווח למניה") },
   ];
@@ -80,19 +80,19 @@ export function MetricConnections({ p }: { p: LensPayload }) {
     summary = extra.summary;
   } else if (pair === "cash") {
     summary = x === null ? t("A comparable cash balance is missing. Revenue alone can’t tell us how cash changed.", "חסרה יתרת מזומנים להשוואה. מההכנסות לבדן אי אפשר לדעת כיצד המזומנים השתנו.")
-      : x > 0 && isNumber(fin) && fin > 0 && (!isNumber(op) || fin >= op) ? t("Financing supplied cash this quarter. Check the borrowing line before attributing that increase to customer sales.", "פעילות המימון הוסיפה מזומנים ברבעון. בדקו את סעיף ההלוואות לפני שמייחסים את העלייה למכירות.")
+      : x > 0 && isNumber(fin) && fin > 0 && (!isNumber(op) || fin >= op) ? t("Financing supplied cash this quarter. Check the borrowing line before attributing that increase to customer revenue.", "פעילות המימון הוסיפה מזומנים ברבעון. בדקו את סעיף ההלוואות לפני שמייחסים את העלייה להכנסות.")
       : x > 0 && isNumber(op) && op > 0 && isNumber(fin) && fin <= 0 && isNumber(inv) && inv <= 0 ? t("Operations were the positive source among the three reported cash-flow categories. Investing and financing used cash or were flat.", "הפעילות השוטפת הייתה המקור החיובי מבין שלוש קטגוריות התזרים. ההשקעה והמימון צרכו מזומנים או נותרו ללא שינוי.")
       : x > 0 && isNumber(op) && op > 0 ? t("Operations generated cash. The other cash-flow lines help determine how much of the increase came from elsewhere.", "הפעילות השוטפת ייצרה מזומנים. סעיפי התזרים האחרים עוזרים להבין מה הגיע ממקורות נוספים.")
-      : t("Read the cash-flow sources below. Sales are recognized when earned, while the cash balance also reflects spending, financing and collection timing.", "בדקו את מקורות התזרים למטה. הכנסות מוכרות כשהן נצברות, ואילו יתרת המזומנים מושפעת גם מהוצאות, מימון ועיתוי הגבייה.");
+      : t("Read the cash-flow sources below. Revenue is recognized when earned, while the cash balance also reflects spending, financing and collection timing.", "בדקו את מקורות התזרים למטה. הכנסות מוכרות כשהן נצברות, ואילו יתרת המזומנים מושפעת גם מהוצאות, מימון ועיתוי הגבייה.");
   } else if (pair === "profit") {
     summary = !isNumber(facts?.net) || op === null ? t("Reported profit and operating cash are both needed for a same-quarter comparison.", "להשוואה באותו רבעון דרושים רווח מדווח ותזרים מפעילות.")
       : op < facts.net ? t("Operating cash was below reported profit. Receivables, inventory and other timing effects can help explain the gap.", "תזרים מפעילות היה נמוך מהרווח המדווח. לקוחות חייבים, מלאי והבדלי עיתוי עשויים להסביר את הפער.")
       : t("Operating cash kept pace with or exceeded reported profit. Collection timing and non-cash expenses can still affect the comparison.", "התזרים מפעילות היה גבוה מהרווח המדווח או שווה לו. עיתוי גבייה והוצאות שאינן במזומן עדיין משפיעים על ההשוואה.");
   } else {
     summary = marginDelta === null ? t("Two comparable quarters with revenue and operating profit are needed to judge the margin change.", "דרושים שני רבעונים בני השוואה עם הכנסות ורווח תפעולי.")
-      : marginDelta > 0 ? t("More of each sales dollar stayed as operating profit. Compare the gross margin and operating expense branches to see where the difference arose.", "חלק גדול יותר מכל דולר מכירות נשאר כרווח תפעולי. השוו את הרווח הגולמי והוצאות התפעול להבנת המקור.")
-      : marginDelta < 0 ? t("Less of each sales dollar stayed as operating profit. Higher sales can coincide with higher costs or a less profitable mix.", "חלק קטן יותר מכל דולר מכירות נשאר כרווח תפעולי. הכנסות גבוהות יותר יכולות לבוא עם עלויות גבוהות או תמהיל פחות רווחי.")
-      : t("The share of sales kept as operating profit was steady.", "חלק ההכנסות שנשאר כרווח תפעולי נותר יציב.");
+      : marginDelta > 0 ? t("More of each revenue dollar stayed as operating profit. Compare the gross margin and operating expense branches to see where the difference arose.", "חלק גדול יותר מכל דולר הכנסות נשאר כרווח תפעולי. השוו את הרווח הגולמי והוצאות התפעול להבנת המקור.")
+      : marginDelta < 0 ? t("Less of each revenue dollar stayed as operating profit. Higher revenue can coincide with higher costs or a less profitable mix.", "חלק קטן יותר מכל דולר הכנסות נשאר כרווח תפעולי. הכנסות גבוהות יותר יכולות לבוא עם עלויות גבוהות או תמהיל פחות רווחי.")
+      : t("The share of revenue kept as operating profit was steady.", "חלק ההכנסות שנשאר כרווח תפעולי נותר יציב.");
   }
   const rows = extra?.rows ?? (pair === "cash" ? [
     [t("Operating cash flow", "תזרים מפעילות"), money(op)],
@@ -110,7 +110,7 @@ export function MetricConnections({ p }: { p: LensPayload }) {
     [t("Operating margin", "שיעור רווח תפעולי"), percent(currentMargin)],
     [t("Operating margin change", "שינוי בשיעור הרווח התפעולי"), changeInMargin],
     [t("Gross margin change", "שינוי בשיעור הרווח הגולמי"), pp(grossChange)],
-    [t("Operating expenses as share of sales · change", "שינוי בחלקן של הוצאות התפעול מתוך המכירות"), pp(grossChange !== null && marginDelta !== null ? grossChange - marginDelta : null)],
+    [t("Operating expenses as share of revenue · change", "שינוי בחלקן של הוצאות התפעול מתוך ההכנסות"), pp(grossChange !== null && marginDelta !== null ? grossChange - marginDelta : null)],
   ]);
   // The two cash indicators compare the same end dates, but revenue is a
   // period total and cash is a balance at the period end.
@@ -144,7 +144,7 @@ export function MetricConnections({ p }: { p: LensPayload }) {
           : t("Deferred revenue did not rise. There’s no net build in that line, although it can hide receipts and revenue recognized during the quarter.", "ההכנסות הנדחות לא עלו. אין עלייה נטו בסעיף, אך התקבלו אולי מקדמות והוכרו הכנסות במהלך הרבעון.")}/>}</li>
         <li><AutoTerms text={t("Loans.", "הלוואות.")}/> {<AutoTerms text={borrowing === null
           ? t("New long-term borrowing is unavailable as a separate figure. Net financing may include borrowing, repayments and shareholder payments.", "הלוואות חדשות לטווח ארוך אינן זמינות בנפרד. תזרים המימון נטו עשוי לכלול הלוואות, החזרים ותשלומים לבעלי מניות.")
-          : borrowing > 0 ? t("The filing shows proceeds from new long-term debt. Loans bring in cash without creating sales. Compare repayments and net financing to see what remained.", "הדוח מציג תקבולים מחוב חדש לטווח ארוך. הלוואות מגדילות מזומנים בלי ליצור מכירות. השוו החזרי חוב ותזרים מימון נטו.")
+          : borrowing > 0 ? t("The filing shows proceeds from new long-term debt. Loans bring in cash without creating revenue. Compare repayments and net financing to see what remained.", "הדוח מציג תקבולים מחוב חדש לטווח ארוך. הלוואות מגדילות מזומנים בלי ליצור הכנסות. השוו החזרי חוב ותזרים מימון נטו.")
           : t("This long-term borrowing line reports zero proceeds. Short-term borrowing and other financing may still affect cash.", "בסעיף הלוואות לטווח ארוך לא דווחו תקבולים. הלוואות קצרות ומימון אחר עדיין עשויים להשפיע.")}/>}</li>
       </ul>
     </details>}
@@ -183,7 +183,7 @@ export function MarketValuation({ p, bare = false }: { p: LensPayload; bare?: bo
     [t("P/E", "מכפיל רווח"), pe, !profitable
       ? t("The latest twelve-month reported result is a loss or zero, so a positive P/E would be misleading.", "הרווח המדווח ל־12 חודשים שלילי או אפס, ולכן מכפיל רווח חיובי מטעה.")
       : t("What investors pay for one dollar of annual profit. Higher values can reflect growth expectations or unusually low current earnings.", "כמה משקיעים משלמים על דולר רווח שנתי. מכפיל גבוה עשוי לשקף ציפיות צמיחה או רווח שוטף נמוך במיוחד.")],
-    [t("P/S", "מכפיל מכירות"), ps, t("What investors pay for one dollar of annual sales. Compare margins before comparing this ratio across companies.", "כמה משקיעים משלמים על דולר מכירות שנתי. השוו שיעורי רווח לפני השוואת המכפיל בין חברות.")],
+    [t("P/S", "מכפיל הכנסות"), ps, t("What investors pay for one dollar of annual revenue. Compare margins before comparing this ratio across companies.", "כמה משקיעים משלמים על דולר הכנסות שנתי. השוו שיעורי רווח לפני השוואת המכפיל בין חברות.")],
     [t("P/B", "מכפיל הון"), pb, t("What investors pay for one dollar of book equity. Often more useful for banks when read alongside return on equity.", "כמה משקיעים משלמים על דולר הון בספרים. בבנקים שימושי במיוחד לצד תשואה על ההון.")],
   ] as const;
   const peer = market?.peerPe;

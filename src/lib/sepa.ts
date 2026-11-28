@@ -63,7 +63,7 @@ export function sepaPillars(opts: {
     out.push({
       key: "fund", label: "Fundamentals", mark: f >= 80 ? "pass" : f >= 60 ? "partial" : "fail",
       value: `${f}/100${opts.code33Count !== null ? ` · Code 33 ${opts.code33Count}/3` : ""}`,
-      detail: "Minervini profile score below; Code 33 = EPS growth, sales growth and margins all rising 3 quarters in a row.",
+      detail: "Minervini profile score below; Code 33 = EPS growth, revenue growth and margins all rising 3 quarters in a row.",
     });
   } else out.push({ key: "fund", label: "Fundamentals", mark: "unknown", value: "not run", detail: "Run the analysis to score the fundamentals." });
   // 4. Setup (base / VCP)
