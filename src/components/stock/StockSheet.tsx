@@ -150,8 +150,8 @@ export function StockSheetHost() {
             </div>
 
             {state === "ready" && bars
-              ? <StockChart bars={bars} height={380} markers={markers} levels={levels} range={range} onRange={setRange}
-                  note={plan ? `Next report ${dayLabel(plan.date)}, ${bellText(plan.bell)}.` : bars.c.length < 200 ? `Only ${bars.c.length} days of history — the 200 SMA needs 200.` : null} />
+              ? <PanelBoundary key={`${symbol}-${opened}`}><StockChart bars={bars} height={380} markers={markers} levels={levels} range={range} onRange={setRange}
+                  note={plan ? `Next report ${dayLabel(plan.date)}, ${bellText(plan.bell)}.` : bars.c.length < 200 ? `Only ${bars.c.length} days of history — the 200 SMA needs 200.` : null} /></PanelBoundary>
               : state === "none" ? <p className="py-16 text-center text-sm text-muted-foreground">No daily prices found for {symbol}.</p>
               : <p className="flex items-center justify-center gap-2 py-16 text-sm text-muted-foreground"><Loader2 size={15} className="animate-spin" />{state === "downloading" ? "Downloading 5 years of daily prices (first time only)…" : "Loading…"}</p>}
 

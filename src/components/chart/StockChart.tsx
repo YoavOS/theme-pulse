@@ -155,7 +155,9 @@ export function StockChart({ bars, levels = [], markers = [], height = 360, rang
             }
             const px = svgRef.current.getBoundingClientRect().width * ((W - padL - padR) / W) / view.count;
             const moved = Math.round((e.clientX - drag.current.x) / Math.max(0.5, px));
-            if (moved) setView((v) => clampView(drag.current!.end - moved, v.count));
+            // read the drag start now — by the time React applies the update the drag may already be over
+            const startEnd = drag.current.end;
+            if (moved) setView((v) => clampView(startEnd - moved, v.count));
           }}
           onPointerUp={() => { drag.current = null; }}
           onDoubleClick={() => setView({ end: N, count: Math.min(N, RANGE_BARS[range]) })}>
