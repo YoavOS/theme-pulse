@@ -49,6 +49,8 @@ import {
 } from "@/lib/growthFilters";
 import { moveBox, toneBox } from "@/lib/moveTint";
 import { ChartButton } from "@/components/chart/ChartHost";
+import { useHoverChart } from "@/components/stock/HoverChart";
+import { openStockSheet } from "@/components/stock/StockSheet";
 
 // Strongest-first: Rocket (High Growth) > Fire (Growth) > Diamond (O'Neil).
 function growthBadge(f: ReturnType<typeof useStockFundamentalsMap>["map"] extends Map<string, infer T> ? T | undefined : never): { emoji: string; label: string } | null {
@@ -174,6 +176,7 @@ export default function RsAlpha() {
   const fundScan = useFundamentalsScan();
   const { map: fundamentalsMap } = useStockFundamentalsMap();
   const [activeTab, setActiveTab] = useState<TabId>("overall");
+  const hoverChart = useHoverChart();
   const [showAll, setShowAll] = useState(false);
   const [sortField, setSortField] = useState<SortField>("rs");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
@@ -1359,7 +1362,24 @@ export default function RsAlpha() {
                       const nh52 = nh52wMap.get(stock.symbol);
                       const nh52Fresh = nh52 && nh52.lastHighDaysAgo !== null && nh52.lastHighDaysAgo <= nh52wWindowDays;
                       return (
-                        <tr key={stock.symbol} className={`border-b border-border/50 transition-colors hover:bg-muted/20 ${rsBg(rs)}`}>
+                        <tr key={stock.symbol} {...hoverChart.bind(stock.symbol, stock.companyName)} tabIndex={0}
+                          title="Click for the full panel"
+                          onClick={(e) => {
+                            if ((e.target as HTMLElement).closest("a,button")) return;
+                            const tabLabel = TABS.find((x) => x.id === activeTab)?.label ?? "";
+                            openStockSheet({ symbol: stock.symbol, source: "RS Alpha", facts: [
+                              { label: `RS vs SPY · ${tabLabel}`, value: pctDisplay(rs), tone: rs },
+                              { label: "RS rank", value: `#${idx + 1}${rating != null ? ` · rating ${rating}` : ""}` },
+                              { label: `Stock · ${tabLabel}`, value: pctDisplay(ret), tone: ret },
+                              { label: `SPY · ${tabLabel}`, value: pctDisplay(spy), tone: spy },
+                              ...(stock.rsNh20d ? [{ label: "RS line", value: `new 20-day high ${stock.rsNh20dDaysAgo ?? 0}d ago` }] : stock.rsNh6m ? [{ label: "RS line", value: `new 6-month high ${stock.rsNh6mDaysAgo ?? 0}d ago` }] : []),
+                              ...(coil?.score != null ? [{ label: "Tight range", value: `${coil.score.toFixed(2)}x`, title: "Recent daily range vs its longer average — below 1 is tighter" }] : []),
+                              ...(nh52Fresh ? [{ label: "52-week high", value: nh52!.lastHighDaysAgo === 0 ? "today" : `${nh52!.lastHighDaysAgo}d ago` }] : []),
+                              ...(badge ? [{ label: "Fundamentals", value: `${badge.emoji} ${badge.label}` }] : []),
+                            ] });
+                          }}
+                          onKeyDown={(e) => { if (e.key === "Enter") (e.currentTarget as HTMLElement).click(); }}
+                          className={`cursor-pointer border-b border-border/50 transition-colors hover:bg-muted/20 focus-visible:outline focus-visible:outline-1 focus-visible:outline-primary ${rsBg(rs)}`}>
                           <td className="px-3 py-2 text-xs text-muted-foreground">{idx + 1}</td>
                           <td className="px-3 py-2 font-mono font-semibold text-foreground">
                             <span className="inline-flex items-center gap-1.5">
@@ -1465,6 +1485,7 @@ export default function RsAlpha() {
           </>
         )}
       </main>
+      {hoverChart.node}
 
       <CustomTradingViewListModal
         open={customListOpen}

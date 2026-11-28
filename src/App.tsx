@@ -25,6 +25,7 @@ import { scheduleStorageCleanup } from "@/lib/storageHygiene";
 import { autoRunClassificationOncePerDay } from "@/lib/classification";
 import SleepOverlay from "@/components/SleepOverlay";
 import { ChartHost } from "@/components/chart/ChartHost";
+import { StockSheetHost } from "@/components/stock/StockSheet";
 import { useTodayListNotifier } from "@/hooks/useTodayListNotifier";
 
 const queryClient = new QueryClient();
@@ -54,6 +55,7 @@ const App = () => (
         <SleepOverlay />
         <BrowserRouter>
           <ChartHost />
+          <StockSheetHost />
           <AppErrorBoundary>
           <Suspense fallback={<PageLoading />}>
           <Routes>
