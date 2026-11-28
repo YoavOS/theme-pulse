@@ -26,6 +26,7 @@ import { autoRunClassificationOncePerDay } from "@/lib/classification";
 import SleepOverlay from "@/components/SleepOverlay";
 import { ChartHost } from "@/components/chart/ChartHost";
 import { StockSheetHost } from "@/components/stock/StockSheet";
+import QuietBoundary from "@/components/QuietBoundary";
 import { useTodayListNotifier } from "@/hooks/useTodayListNotifier";
 
 const queryClient = new QueryClient();
@@ -54,8 +55,8 @@ const App = () => (
         <ClassificationAutoRunner />
         <SleepOverlay />
         <BrowserRouter>
-          <ChartHost />
-          <StockSheetHost />
+          <QuietBoundary name="Chart pop-up"><ChartHost /></QuietBoundary>
+          <QuietBoundary name="Stock panel"><StockSheetHost /></QuietBoundary>
           <AppErrorBoundary>
           <Suspense fallback={<PageLoading />}>
           <Routes>

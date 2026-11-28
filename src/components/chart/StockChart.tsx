@@ -54,18 +54,31 @@ export function StockChart({ bars, levels = [], markers = [], height = 360, rang
       return { d: bars.d[i], o: bars.o[i], h: bars.h[i], l: bars.l[i], c: bars.c[i], v: bars.v[i], prev: i > 0 ? bars.c[i - 1] : null, e9: all.e9[i], e21: all.e21[i], s200: all.s200[i] };
     });
   }, [bars, view, all]);
+  // The wheel listener is attached once per chart; it reads the latest zoom through a ref.
+  const zoomRef = useRef(zoom);
+  zoomRef.current = zoom;
+  const hasData = view.end - Math.max(0, view.end - view.count) > 0;
   useEffect(() => {
     const el = svgRef.current;
-    if (!el) return;
+    if (!el || mini) return;
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
       const r = el.getBoundingClientRect();
       const frac = Math.max(0, Math.min(1, (e.clientX - r.left) / Math.max(1, r.width * 0.93)));
-      zoom(e.deltaY > 0 ? 1.15 : 1 / 1.15, frac);
+      zoomRef.current(e.deltaY > 0 ? 1.15 : 1 / 1.15, frac);
     };
     el.addEventListener("wheel", onWheel, { passive: false });
     return () => el.removeEventListener("wheel", onWheel);
-  }); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [mini, hasData]);
+  // crosshair updates: at most one per screen frame
+  const frame = useRef(0);
+  const pending = useRef<{ i: number | null; y: number | null } | null>(null);
+  useEffect(() => () => { if (frame.current) cancelAnimationFrame(frame.current); }, []);
+  const queueHover = (i: number | null, cy: number | null) => {
+    pending.current = { i, y: cy };
+    if (frame.current) return;
+    frame.current = requestAnimationFrame(() => { frame.current = 0; const p = pending.current; if (p) { setHover(p.i); setCursorY(p.y); } });
+  };
   if (!data.length) return <p className="py-10 text-center text-sm text-muted-foreground">No daily prices.</p>;
 
   const W = 900, H = height, padL = 6, padR = 64, padT = 8, volH = Math.round(H * 0.16), padB = 18;
@@ -127,7 +140,7 @@ export function StockChart({ bars, levels = [], markers = [], height = 360, rang
         </div>
         </>}
       </div>
-      <div className="relative" onPointerLeave={() => { setHover(null); setCursorY(null); drag.current = null; }}>
+      <div className="relative" onPointerLeave={() => { if (frame.current) { cancelAnimationFrame(frame.current); frame.current = 0; } setHover(null); setCursorY(null); drag.current = null; }}>
         <svg ref={svgRef} viewBox={`0 0 ${W} ${H}`} className={`w-full touch-none ${drag.current ? "cursor-grabbing" : "cursor-crosshair"}`} role="img" aria-label="Daily candles with 9 EMA, 21 EMA and 200 SMA — scroll to zoom, drag to move"
           onPointerDown={(e) => { drag.current = { x: e.clientX, end: view.end }; (e.target as Element).setPointerCapture?.(e.pointerId); }}
           onPointerMove={(e) => {
@@ -137,13 +150,14 @@ export function StockChart({ bars, levels = [], markers = [], height = 360, rang
             const sx = ((e.clientX - r.left) / r.width) * W, sy = ((e.clientY - r.top) / r.height) * H;
             if (!drag.current) {
               const i = Math.floor((sx - padL) / step);
-              setHover(i >= 0 && i < data.length ? i : null);
-              setCursorY(sy >= padT && sy <= padT + plotH ? sy : null);
+              queueHover(i >= 0 && i < data.length ? i : null, sy >= padT && sy <= padT + plotH ? sy : null);
               return;
             }
             const px = svgRef.current.getBoundingClientRect().width * ((W - padL - padR) / W) / view.count;
             const moved = Math.round((e.clientX - drag.current.x) / Math.max(0.5, px));
-            if (moved) setView((v) => clampView(drag.current!.end - moved, v.count));
+            // read the drag start now — by the time React applies the update the drag may already be over
+            const startEnd = drag.current.end;
+            if (moved) setView((v) => clampView(startEnd - moved, v.count));
           }}
           onPointerUp={() => { drag.current = null; }}
           onDoubleClick={() => setView({ end: N, count: Math.min(N, RANGE_BARS[range]) })}>

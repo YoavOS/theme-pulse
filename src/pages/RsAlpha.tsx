@@ -1363,7 +1363,6 @@ export default function RsAlpha() {
                       const nh52Fresh = nh52 && nh52.lastHighDaysAgo !== null && nh52.lastHighDaysAgo <= nh52wWindowDays;
                       return (
                         <tr key={stock.symbol} {...hoverChart.bind(stock.symbol, stock.companyName)} tabIndex={0}
-                          title="Click for the full panel"
                           onClick={(e) => {
                             if ((e.target as HTMLElement).closest("a,button")) return;
                             const tabLabel = TABS.find((x) => x.id === activeTab)?.label ?? "";
