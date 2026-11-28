@@ -12,7 +12,7 @@ export const GLOSSARY_GROUPS: GlossaryGroup[] = [
   { key: "income", en: "Income statement", he: "דוח רווח והפסד",
     ids: ["income_statement", "revenue", "cost_of_revenue", "gross_profit", "gross_margin", "opex", "sga", "rnd", "rnd_intensity", "operating_income", "operating_margin", "operating_leverage", "other_income", "interest_expense", "pretax", "income_tax", "tax_rate", "net_income", "net_margin", "eps", "ebitda", "dna", "sbc"] },
   { key: "bank", en: "Banks", he: "בנקים",
-    ids: ["net_interest_income", "noninterest_income", "noninterest_expense", "ppnr", "provision", "efficiency_ratio"] },
+    ids: ["net_interest_income", "noninterest_income", "noninterest_expense", "ppnr", "provision", "efficiency_ratio", "deposits"] },
   { key: "cash", en: "Cash flow", he: "תזרים מזומנים",
     ids: ["cash_flow_statement", "ocf", "investing_cf", "financing_cf", "capex", "net_capex", "fcf", "fcf_margin", "fcff", "fcfe", "working_capital", "receivables", "inventory", "deferred_revenue", "cash_balance", "cash_runway", "liquidity"] },
   { key: "balance", en: "Balance sheet, debt and risk", he: "מאזן, חוב וסיכון",
@@ -28,7 +28,7 @@ export const GLOSSARY_GROUPS: GlossaryGroup[] = [
   { key: "proven", en: "Track record", he: "רקורד",
     ids: ["track_record", "elite", "proven_label", "fading_label", "emerging_label", "was_strong", "not_proven", "provisional", "compounder", "high_margin_route", "high_turnover_route"] },
   { key: "data", en: "Sources and data words", he: "מקורות ומונחי נתונים",
-    ids: ["tenk", "earnings_release", "fiscal_period", "median", "peers", "damodaran_industry", "damodaran"] },
+    ids: ["tenk", "earnings_release", "gaap", "guidance", "fiscal_period", "median", "peers", "damodaran_industry", "damodaran"] },
 ];
 
 /** Terms to read next. Kept short (2–5) so the card stays readable. */

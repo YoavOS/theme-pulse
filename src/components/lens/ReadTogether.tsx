@@ -83,15 +83,15 @@ function ReadRow({ r, open, onToggle }: { r: LinkedRead; open: boolean; onToggle
       <button onClick={onToggle} className="flex w-full items-start gap-2 text-start">
         <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${DOT[r.tone]}`} />
         <span className="min-w-0 flex-1">
-          <span className="block text-[12px] text-muted-foreground">{r.title}</span>
-          <span className="block text-[13px] font-semibold">{r.headline}</span>
+          <span className="block text-[12px] text-muted-foreground"><AutoTerms text={r.title} /></span>
+          <span className="block text-[13px] font-semibold"><AutoTerms text={r.headline} /></span>
         </span>
         <ChevronDown size={13} className={`mt-1 shrink-0 text-muted-foreground transition-transform ${open ? "rotate-180" : ""}`} />
       </button>
       {open && (
         <div className="mt-1.5 space-y-1.5 ps-4 text-[12.5px] leading-relaxed">
           {r.body.map((b, i) => <p key={i} className="text-foreground/90"><AutoTerms text={b} /></p>)}
-          {r.uses.length > 0 && <div className="flex flex-wrap gap-1 pt-0.5">{r.uses.map((u) => <span key={u.label} dir="ltr" className="rounded bg-muted/40 px-1.5 py-0.5 text-[10.5px] text-muted-foreground">{u.label}: <span className="font-mono text-foreground/80">{u.display}</span></span>)}</div>}
+          {r.uses.length > 0 && <div className="flex flex-wrap gap-1 pt-0.5">{r.uses.map((u) => <span key={u.label} dir="ltr" className="rounded bg-muted/40 px-1.5 py-0.5 text-[10.5px] text-muted-foreground"><AutoTerms text={u.label} />: <span className="font-mono text-foreground/80"><AutoTerms text={u.display} /></span></span>)}</div>}
         </div>
       )}
     </div>

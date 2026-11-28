@@ -116,10 +116,10 @@ export function QuarterlyChart({ periods, field, label }: {
       </p>
       <p className="mt-1 text-xs text-muted-foreground">
         {showingLoss
-          ? t('Loss change vs previous quarter’s rate', 'השינוי בהפסד מול קצב הרבעון הקודם')
-          : t('Growth vs previous quarter’s rate', 'קצב הצמיחה מול קצב הרבעון הקודם')}{' · '}
+          ? <AutoTerms text={t('Loss change vs previous quarter’s rate', 'השינוי בהפסד מול קצב הרבעון הקודם')} />
+          : <AutoTerms text={t('Growth vs previous quarter’s rate', 'קצב הצמיחה מול קצב הרבעון הקודם')} />}{' · '}
         <bdi style={{ color: acceleration === null ? undefined : acceleration < 0 ? CHART.negative : CHART.positive }}>
-          {acceleration === null ? '—' : signed(acceleration) + ' pp'}
+          {acceleration === null ? '—' : <>{signed(acceleration)} <Term id="percentage_points">pp</Term></>}
         </bdi>
       </p>
       <div className="relative mt-2" dir="ltr" onPointerLeave={() => setHover(null)}>
@@ -128,7 +128,7 @@ export function QuarterlyChart({ periods, field, label }: {
           'סכומי רבעון מול תקופת ההשוואה ושינויים באחוזים עם קו אפס. נתונים מדויקים בהמשך.')}>
         <text x={plotLeft} y="15" {...textStyle}>{t('Quarterly amounts', 'סכומים רבעוניים')}</text>
         <text x={plotLeft} y="151" fill={hasLoss ? lossColor : CHART.growth} fontSize="14">
-          {hasLoss ? (hasGrowth ? t('Growth and loss change', 'צמיחה ושינוי בהפסד') : t('Loss change', 'שינוי בהפסד')) : t('Growth', 'צמיחה')} · {mode}
+          {hasLoss ? (hasGrowth ? t('Growth and loss change', 'צמיחה ושינוי בהפסד') : t('Loss change', 'שינוי בהפסד')) : t('Growth', 'צמיחה')} · <Term svg id={lag === 1 ? 'qoq' : 'yoy'}>{mode}</Term>
         </text>
         <rect x={x(chosen) - 23} y="23" width="46" height="215" rx="4" fill={CHART.positive} opacity=".08" />
         {hover !== null && hover !== chosen && <rect x={x(hover) - 23} y="23" width="46" height="215" rx="4" fill="currentColor" opacity=".05" />}
@@ -227,7 +227,7 @@ export function QuarterlyChart({ periods, field, label }: {
             <tbody>{rows.map(row => <tr key={row.id}>
               <td><bdi>{row.end}</bdi></td><td><bdi>{formatAmount(row.value)}</bdi></td>
               <td><bdi>{row.priorEnd ? row.priorEnd + ' · ' + formatAmount(row.priorValue) : '—'}</bdi></td>
-              <td><bdi>{row.crossover ? crossoverLabel(row.crossover) : row.lossRate === null ? pct(row.rate) : lossDetail(row.lossRate)}</bdi></td>
+              <td><bdi>{row.crossover ? crossoverLabel(row.crossover) : row.lossRate === null ? pct(row.rate) : <AutoTerms text={lossDetail(row.lossRate)} />}</bdi></td>
             </tr>)}</tbody>
           </table>
         </div>

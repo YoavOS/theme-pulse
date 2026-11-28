@@ -7,6 +7,7 @@ import { GLOSSARY_HE } from "@/lib/lens/he/glossary";
 import { RELATED, groupOf } from "@/lib/lens/glossaryMeta";
 import { useOpenGlossary } from "@/lib/lens/glossaryContext";
 import { isoNums, useLensLang } from "@/lib/lens/i18n";
+import { canon } from "@/lib/lens/canon";
 
 const PlainTermsContext = createContext(false);
 /** Inside headings, buttons and other controls: show terms as plain text (no nested clickable term). */
@@ -19,7 +20,7 @@ export const matcherFor = (lang: "en" | "he") => (lang === "he" ? (heMatcher ??=
  * calculated, why it matters, how to read the number, what it is for this company, and related terms
  * (which open in the same card, with Back). Safe inside rows — it doesn't toggle what it sits in.
  */
-export function Term({ entry, id, children }: { entry?: GlossaryEntry; id?: string; children?: ReactNode }) {
+export function Term({ entry, id, children, svg = false }: { entry?: GlossaryEntry; id?: string; children?: ReactNode; /** inside an SVG <text>: render as a <tspan> */ svg?: boolean }) {
   const lang = useLensLang();
   const g = matcherFor(lang);
   const e = entry ?? (id ? g.byId.get(id) : undefined);
@@ -33,7 +34,12 @@ export function Term({ entry, id, children }: { entry?: GlossaryEntry; id?: stri
   return (
     <Popover open={open} onOpenChange={(o) => { setOpen(o); if (o) setTrail([]); }}>
       <PopoverTrigger asChild>
-        <span
+        {svg ? (
+          <tspan role="button" tabIndex={0} aria-label={he ? `מה זה ${e.term}?` : `What is ${e.term}?`}
+            onClick={(ev) => { ev.stopPropagation(); }} onPointerDown={(ev) => ev.stopPropagation()}
+            onKeyDown={(ev) => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); ev.stopPropagation(); (ev.currentTarget as unknown as HTMLElement).dispatchEvent(new MouseEvent("click", { bubbles: true })); } }}
+            style={{ textDecorationLine: "underline", textDecorationStyle: "dotted", textUnderlineOffset: 4, cursor: "help" }}>{children ?? e.term}</tspan>
+        ) : <span
           role="button" tabIndex={0}
           onClick={(ev) => { ev.stopPropagation(); }}
           onKeyDown={(ev) => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); ev.stopPropagation(); ev.currentTarget.click(); } }}
@@ -41,7 +47,7 @@ export function Term({ entry, id, children }: { entry?: GlossaryEntry; id?: stri
           aria-label={he ? `מה זה ${e.term}?` : `What is ${e.term}?`}
         >
           {children ?? e.term}
-        </span>
+        </span>}
       </PopoverTrigger>
       <PopoverContent dir={he ? "rtl" : "ltr"} lang={he ? "he" : "en"} side="top" align="start" collisionPadding={12}
         className="max-h-[min(70vh,560px)] w-[330px] overflow-y-auto p-3 text-[12.5px] leading-snug" onClick={stop} onPointerDown={stop}>
@@ -134,10 +140,11 @@ function CompanyLines({ id, get, he }: { id: string; get: ((entryId: string) => 
  * `skip` lists entry ids not to link here (e.g. the term a card is already about).
  * In Hebrew it also keeps numbers left-to-right inside the right-to-left text.
  */
-export function AutoTerms({ text, skip }: { text: string | null | undefined; skip?: string[] }) {
+export function AutoTerms({ text, skip, svg = false }: { text: string | null | undefined; skip?: string[]; /** inside an SVG <text> */ svg?: boolean }) {
   const lang = useLensLang();
   const parts = useMemo(() => {
     if (!text) return [] as ReactNode[];
+    text = canon(text, lang); // one name per idea, everywhere
     const g = matcherFor(lang);
     const plain = (s: string) => (g.prefixed ? isoNums(s) : s);
     const out: ReactNode[] = [];
@@ -151,12 +158,12 @@ export function AutoTerms({ text, skip }: { text: string | null | undefined; ski
       seen.add(e.id);
       const start = m.index + (m[1]?.length ?? 0);
       if (start > last) out.push(plain(text.slice(last, start)));
-      out.push(<Term key={k++} entry={e}>{word}</Term>);
+      out.push(<Term key={k++} entry={e} svg={svg}>{word}</Term>);
       last = start + word.length;
     }
     if (last < text.length) out.push(plain(text.slice(last)));
     return out;
-  }, [text, skip, lang]);
+  }, [text, skip, lang, svg]);
   if (!text) return null;
   return <>{parts.map((p, i) => <Fragment key={i}>{p}</Fragment>)}</>;
 }

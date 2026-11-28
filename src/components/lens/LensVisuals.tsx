@@ -119,7 +119,7 @@ export function GrowthAsk({ p }: { p: LensPayload }) {
   if (data.filter((d) => d.kind === "need").length === 0) return null;
   return (
     <div>
-      <div className="mb-1 text-[11.5px] text-muted-foreground">{he ? "צמיחת מכירות בשנה: מה שהמחיר צריך בכל סיפור, מול מה שהחברה והענף עשו." : "Sales growth a year: what the price needs in each story, against what the company and its industry did."}</div>
+      <div className="mb-1 text-[11.5px] text-muted-foreground"><AutoTerms text={he ? "צמיחת מכירות בשנה: מה שהמחיר צריך בכל סיפור, מול מה שהחברה והענף עשו." : "Sales growth a year: what the price needs in each story, against what the company and its industry did."} /></div>
       <div className="h-44" dir="ltr">
         <ResponsiveContainer>
           <BarChart data={data} layout="vertical" margin={{ top: 0, right: 34, left: 4, bottom: 0 }}>

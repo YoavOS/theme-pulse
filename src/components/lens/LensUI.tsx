@@ -26,8 +26,8 @@ export function Hero({ eyebrow, title, meta, children, aside, steps, compact = f
       <div className={`grid ${compact ? "gap-4 p-4 lg:px-5" : "gap-6 p-5 lg:p-7"} ${aside ? compact ? "lg:grid-cols-[minmax(0,1.3fr)_minmax(420px,1fr)]" : "lg:grid-cols-[minmax(0,1.7fr)_minmax(280px,1fr)]" : ""}`}>
         <div>
           <p className="text-xs font-semibold uppercase tracking-widest text-primary">{eyebrow}</p>
-          <h1 className={`max-w-4xl font-semibold leading-tight ${compact ? "mt-2 text-lg lg:text-xl" : "mt-3 text-2xl lg:text-3xl"}`}>{title}</h1>
-          {meta && <p className={`${compact ? "mt-1.5 text-xs" : "mt-3 text-sm"} text-muted-foreground`}>{meta}</p>}
+          <h1 className={`max-w-4xl font-semibold leading-tight ${compact ? "mt-2 text-lg lg:text-xl" : "mt-3 text-2xl lg:text-3xl"}`}><AutoTerms text={title} /></h1>
+          {meta && <p className={`${compact ? "mt-1.5 text-xs" : "mt-3 text-sm"} text-muted-foreground`}>{typeof meta === "string" ? <AutoTerms text={meta} /> : meta}</p>}
           {children && <div className={compact ? "mt-2.5 space-y-1.5 text-[13px] leading-relaxed" : "mt-5 space-y-3 text-[15px] leading-relaxed"}>{children}</div>}
         </div>
         {aside && <KpiPanel {...aside} compact={compact} />}
@@ -35,7 +35,7 @@ export function Hero({ eyebrow, title, meta, children, aside, steps, compact = f
       {steps && steps.length > 0 && (
         <div className={`grid gap-px border-t border-border bg-border ${steps.length === 4 ? "md:grid-cols-4" : "md:grid-cols-3"}`}>
           {steps.map((s) => {
-            const body = <><span className="text-xs text-primary">{s.label}</span><p className="mt-1 text-sm">{s.question}</p></>;
+            const body = <><span className="text-xs text-primary">{s.label}</span><p className="mt-1 text-sm"><AutoTerms text={s.question} /></p></>;
             return s.target
               ? <button key={s.label} onClick={() => document.getElementById(s.target!)?.scrollIntoView({ behavior: "smooth", block: "start" })}
                   className="bg-card px-5 py-3 text-start transition-colors hover:bg-muted/40">{body}</button>
@@ -50,14 +50,14 @@ export function Hero({ eyebrow, title, meta, children, aside, steps, compact = f
 export function KpiPanel({ title, subtitle, items, footer, compact = false }: { title: string; subtitle?: string; items: Kpi[]; footer?: ReactNode; compact?: boolean }) {
   return (
     <aside className={`rounded-xl border border-border bg-background/40 ${compact ? "self-start p-3" : "p-4"}`}>
-      {!compact && <h2 className="font-semibold">{title}</h2>}
-      {subtitle && !compact && <p className="mt-1 text-xs text-muted-foreground">{subtitle}</p>}
+      {!compact && <h2 className="font-semibold"><AutoTerms text={title} /></h2>}
+      {subtitle && !compact && <p className="mt-1 text-xs text-muted-foreground"><AutoTerms text={subtitle} /></p>}
       <div className={compact ? "grid grid-cols-2 gap-3 sm:grid-cols-4" : "mt-4 grid grid-cols-2 gap-4"}>
         {items.map((k) => (
           <div key={k.label}>
             <p className="text-xs text-muted-foreground"><AutoTerms text={k.label} /></p>
-            <p className={`mt-1 font-mono ${compact ? "text-lg" : "text-xl"}`} dir="ltr" style={{ color: toneColor(k) }}>{k.value}</p>
-            {k.caption && <p className={`mt-1 ${compact ? "text-[10.5px]" : "text-xs"} text-muted-foreground`}>{k.caption}</p>}
+            <p className={`mt-1 font-mono ${compact ? "text-lg" : "text-xl"}`} dir="ltr" style={{ color: toneColor(k) }}><AutoTerms text={k.value} /></p>
+            {k.caption && <p className={`mt-1 ${compact ? "text-[10.5px]" : "text-xs"} text-muted-foreground`}><AutoTerms text={k.caption} /></p>}
           </div>
         ))}
       </div>
@@ -71,7 +71,7 @@ export function SectionHead({ id, title, subtitle, action }: { id?: string; titl
   return (
     <div id={id} className="flex scroll-mt-4 flex-wrap items-end justify-between gap-2">
       <div>
-        <h2 className="text-xl font-semibold">{title}</h2>
+        <h2 className="text-xl font-semibold"><AutoTerms text={title} /></h2>
         {subtitle && <p className="mt-1 text-sm text-muted-foreground"><AutoTerms text={subtitle} /></p>}
       </div>
       {action}
@@ -84,7 +84,7 @@ export function Panel({ id, eyebrow, title, children, className = "" }: { id?: s
   return (
     <section id={id} className={`min-w-0 scroll-mt-4 rounded-2xl border border-border bg-card/40 p-5 ${className}`}>
       {eyebrow && <p className="text-xs uppercase tracking-wider text-primary">{eyebrow}</p>}
-      {title && <h2 className={`${eyebrow ? "mt-2" : ""} text-xl font-semibold`}>{title}</h2>}
+      {title && <h2 className={`${eyebrow ? "mt-2" : ""} text-xl font-semibold`}><AutoTerms text={title} /></h2>}
       <div className={title || eyebrow ? "mt-3" : ""}>{children}</div>
     </section>
   );
@@ -101,7 +101,7 @@ export function More({ title, children, defaultOpen = false }: { title: string; 
   return (
     <section className="min-w-0 rounded-xl border border-border bg-card/30">
       <button onClick={() => setOpen(!open)} aria-expanded={open} className="flex w-full justify-between gap-3 p-4 text-start text-sm font-semibold">
-        {title}<span aria-hidden>{open ? "−" : "+"}</span>
+        <span><AutoTerms text={title} /></span><span aria-hidden>{open ? "−" : "+"}</span>
       </button>
       {open && <div className="px-4 pb-4">{children}</div>}
     </section>

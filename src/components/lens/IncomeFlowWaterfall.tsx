@@ -1,5 +1,6 @@
 
 import type { ComponentProps } from "react";
+import { AutoTerms } from "./Term";
 
 const order = [0, 4, 1, 5, 2, 6, 3];
 const stages = [0, 0, 1, 1, 2, 2, 3];
@@ -42,7 +43,7 @@ export function IncomeFlowWaterfall({ values, labels, format, selected, action, 
           <g {...action(id, labels[id])}>
             <rect x={x(i) - 62} y="8" width="124" height="278" rx="7" fill="currentColor"
               className={selected === id ? "opacity-10" : "opacity-0 group-hover:opacity-10 group-focus-visible:opacity-15"} />
-            <text x={x(i)} y="31" textAnchor="middle" fill="currentColor" fontSize="13">{labels[id]}</text>
+            <text x={x(i)} y="31" textAnchor="middle" fill="currentColor" fontSize="13"><AutoTerms svg text={labels[id]} /></text>
             <text x={x(i)} y="52" textAnchor="middle" fill={value === null ? "currentColor" : color} fontSize="15">
               {format(total || value === null ? value : -value)}
             </text>
